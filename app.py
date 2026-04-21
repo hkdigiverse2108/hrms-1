@@ -32,6 +32,19 @@ def main():
     frontend_env = os.environ.copy()
     frontend_env["PORT"] = frontend_port
 
+    # Check and install frontend dependencies if node_modules is missing
+    frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
+    node_modules_path = os.path.join(frontend_dir, "node_modules")
+    
+    if not os.path.exists(node_modules_path):
+        print("-> node_modules not found in frontend. Running 'npm install'...")
+        try:
+            subprocess.run("npm install", cwd=frontend_dir, shell=True, check=True)
+            print("-> frontend dependencies installed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"-> Error installing frontend dependencies: {e}")
+            sys.exit(1)
+
     try:
         # Start backend
         print(f"-> Starting Backend (FastAPI on Port {backend_port})")
