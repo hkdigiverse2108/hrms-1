@@ -35,6 +35,7 @@ import type { JobOpening, Department } from '@/lib/types'
 import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { useApi } from '@/hooks/useApi'
 import { useEffect } from 'react'
+import { API_URL } from '@/lib/config'
 
 export default function RecruitmentPage() {
   const { data, isLoading: apiLoading, refresh } = useApi()
@@ -83,14 +84,14 @@ export default function RecruitmentPage() {
     setIsLoading(true)
     try {
       if (editingJob) {
-        const response = await fetch(`http://localhost:8000/job-openings/${editingJob.id}`, {
+        const response = await fetch(`${API_URL}/job-openings/${editingJob.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
         })
         if (response.ok) refresh()
       } else {
-        const response = await fetch(`http://localhost:8000/job-openings`, {
+        const response = await fetch(`${API_URL}/job-openings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -118,7 +119,7 @@ export default function RecruitmentPage() {
   const handleDeleteConfirm = async () => {
     if (jobToDelete) {
       try {
-        const response = await fetch(`http://localhost:8000/job-openings/${jobToDelete.id}`, {
+        const response = await fetch(`${API_URL}/job-openings/${jobToDelete.id}`, {
           method: 'DELETE',
         })
         if (response.ok) {

@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MoreHorizontal, Eye, Calendar, Mail, FileText, CheckCircle, XCircle, Download, Loader2 } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import type { Application } from '@/lib/types'
+import { API_URL } from '@/lib/config';
 
 export default function ApplicationsPage() {
   const { data, isLoading, refresh } = useApi()
@@ -29,7 +30,7 @@ export default function ApplicationsPage() {
 
   const handleStatusChange = async (id: string, newStatus: Application['status']) => {
     try {
-      const response = await fetch(`http://localhost:8000/applications/${id}`, {
+      const response = await fetch(`${API_URL}/applications/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),

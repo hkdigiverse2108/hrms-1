@@ -19,6 +19,7 @@ import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { useApi } from '@/hooks/useApi'
 import { useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
+import { API_URL } from '@/lib/config'
 
 export default function DepartmentsPage() {
   const { data, isLoading: apiLoading } = useApi()
@@ -52,7 +53,7 @@ export default function DepartmentsPage() {
     setIsLoading(true)
     try {
       if (editingDepartment) {
-        const response = await fetch(`http://localhost:8000/departments/${editingDepartment.id}`, {
+        const response = await fetch(`${API_URL}/departments/${editingDepartment.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
@@ -62,7 +63,7 @@ export default function DepartmentsPage() {
           setDepartments(departments.map((d) => d.id === updated.id ? updated : d))
         }
       } else {
-        const response = await fetch(`http://localhost:8000/departments`, {
+        const response = await fetch(`${API_URL}/departments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
@@ -84,7 +85,7 @@ export default function DepartmentsPage() {
   const handleDeleteConfirm = async () => {
     if (departmentToDelete) {
       try {
-        const response = await fetch(`http://localhost:8000/departments/${departmentToDelete.id}`, {
+        const response = await fetch(`${API_URL}/departments/${departmentToDelete.id}`, {
           method: 'DELETE',
         })
         if (response.ok) {

@@ -12,11 +12,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { useUser } from '@/hooks/useUser'
 
 export function HRMSNavbar() {
   const [searchQuery, setSearchQuery] = useState('')
+  const { user } = useUser();
+  const userName = user?.name || "Guest";
+  const designation = user?.designation || "Employee";
+  const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
 
   return (
     <header className="fixed left-64 right-0 top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-6">
@@ -75,13 +80,14 @@ export function HRMSNavbar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-3 px-2">
               <Avatar className="h-8 w-8">
+                <AvatarImage src={user?.profilePhoto || `https://i.pravatar.cc/150?u=${userName}`} alt={userName} />
                 <AvatarFallback className="bg-primary text-primary-foreground">
-                  AD
+                  {initials}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col items-start text-sm">
-                <span className="font-medium">Admin User</span>
-                <span className="text-xs text-muted-foreground">HR Manager</span>
+                <span className="font-medium">{userName}</span>
+                <span className="text-xs text-muted-foreground">{designation}</span>
               </div>
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </Button>

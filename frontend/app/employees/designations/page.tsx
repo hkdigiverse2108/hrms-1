@@ -32,6 +32,7 @@ import { Plus, MoreHorizontal, Pencil, Trash2, Loader2 } from 'lucide-react'
 import type { Designation, Department } from '@/lib/types'
 import { useApi } from '@/hooks/useApi'
 import { useEffect } from 'react'
+import { API_URL } from '@/lib/config'
 
 export default function DesignationsPage() {
   const { data, isLoading: apiLoading } = useApi()
@@ -69,7 +70,7 @@ export default function DesignationsPage() {
     setIsLoading(true)
     try {
       if (editingDesignation) {
-        const response = await fetch(`http://localhost:8000/designations/${editingDesignation.id}`, {
+        const response = await fetch(`${API_URL}/designations/${editingDesignation.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
@@ -79,7 +80,7 @@ export default function DesignationsPage() {
           setDesignations(designations.map((d) => d.id === updated.id ? updated : d))
         }
       } else {
-        const response = await fetch(`http://localhost:8000/designations`, {
+        const response = await fetch(`${API_URL}/designations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
@@ -101,7 +102,7 @@ export default function DesignationsPage() {
   const handleDeleteConfirm = async () => {
     if (designationToDelete) {
       try {
-        const response = await fetch(`http://localhost:8000/designations/${designationToDelete.id}`, {
+        const response = await fetch(`${API_URL}/designations/${designationToDelete.id}`, {
           method: 'DELETE',
         })
         if (response.ok) {

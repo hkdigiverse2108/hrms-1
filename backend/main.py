@@ -8,7 +8,12 @@ app = FastAPI(title="HRMS API")
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # Next.js default and fallback ports
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3535",
+        "http://localhost:5173", # Vite default
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -122,3 +127,10 @@ async def delete_employee(employee_id: str, db=Depends(database.get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Employee not found")
     return {"message": "Employee deleted successfully"}
+
+@app.post("/login", response_model=schemas.LoginResponse)
+async def login(login_data: schemas.LoginRequest, db=Depends(database.get_db)):
+    user = await crud.authenticate_user(db, login_data)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return {"message": "Login successful", "user": user}

@@ -231,3 +231,9 @@ async def get_kpi_records(db, skip: int = 0, limit: int = 100): return await get
 async def create_kpi_record(db, kpi: schemas.KPICreate): return await create_item(db, "kpi_records", kpi.dict())
 async def update_kpi_record(db, kpi_id: str, update: schemas.KPIUpdate): return await update_item(db, "kpi_records", kpi_id, update.dict(exclude_unset=True))
 async def delete_kpi_record(db, kpi_id: str): return await delete_item(db, "kpi_records", kpi_id)
+
+async def authenticate_user(db, login_data: schemas.LoginRequest):
+    user = await db.employees.find_one({"email": login_data.email})
+    if user and user.get("password") == login_data.password:
+        return fix_id(user)
+    return None

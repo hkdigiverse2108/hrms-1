@@ -1,13 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Lock, Eye, EyeOff, ShieldHalf } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Mail, Lock, Eye, EyeOff, ShieldHalf, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { API_URL } from "@/lib/config";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(`${API_URL}/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Login failed");
+      }
+
+      // Store user info in localStorage
+      localStorage.setItem("user", JSON.stringify(data.user));
+      
+      // Redirect to dashboard
+      router.push("/");
+    } catch (err: any) {
+      setError(err.message || "An error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen w-full">
@@ -50,9 +89,14 @@ export default function LoginPage() {
           <div className="mb-10 text-center lg:text-left">
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3 whitespace-nowrap tracking-tight">Welcome in HK DigiVerse :)</h1>
             <p className="text-muted-foreground text-sm sm:text-base">Please enter your details to sign in to your account.</p>
+            {error && (
+              <div className="mt-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm font-medium border border-destructive/20 animate-in fade-in slide-in-from-top-1">
+                {error}
+              </div>
+            )}
           </div>
 
-          <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); window.location.href="/"; }}>
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Work Email</label>
               <div className="relative">
@@ -62,6 +106,9 @@ export default function LoginPage() {
                   placeholder="sarah.jenkins@hkdigiverse.com" 
                   className="pl-10 pb-2 pt-2 h-12 bg-white" 
                   required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -75,6 +122,9 @@ export default function LoginPage() {
                   placeholder="••••••••••••" 
                   className="pl-10 pr-10 pb-2 pt-2 h-12 bg-white font-mono tracking-widest placeholder:tracking-normal" 
                   required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
                 />
                 <button 
                   type="button"
@@ -99,8 +149,19 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full h-12 bg-brand-teal hover:bg-brand-teal-light text-white font-medium text-[15px] shadow-sm tracking-wide">
-              Sign in to Dashboard
+            <Button 
+              type="submit" 
+              className="w-full h-12 bg-brand-teal hover:bg-brand-teal-light text-white font-medium text-[15px] shadow-sm tracking-wide disabled:opacity-70"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign in to Dashboard"
+              )}
             </Button>
           </form>
 

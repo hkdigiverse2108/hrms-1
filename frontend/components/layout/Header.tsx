@@ -6,10 +6,16 @@ import { SearchBar } from "@/components/common/SearchBar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { SidebarNav } from "./SidebarNav";
+import { useUser } from "@/hooks/useUser";
 
 const { Header: AntHeader } = Layout;
 
 export function Header() {
+  const { user } = useUser();
+  const userName = user?.name || "Guest";
+  const designation = user?.designation || "Employee";
+  const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
+
   return (
     <AntHeader 
       className="bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-10 w-full mb-6"
@@ -43,12 +49,12 @@ export function Header() {
         
         <div className="flex items-center gap-3 ml-2 border-l border-border pl-6 cursor-pointer hover:bg-muted px-2 py-1 rounded-md transition-colors h-10 my-auto">
           <Avatar className="w-8 h-8">
-            <AvatarImage src="https://i.pravatar.cc/150?u=sarah" alt="Sarah Jenkins" />
-            <AvatarFallback>SJ</AvatarFallback>
+            <AvatarImage src={user?.profilePhoto || `https://i.pravatar.cc/150?u=${userName}`} alt={userName} />
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="hidden md:flex flex-col text-sm leading-tight">
-            <span className="font-medium text-foreground">Sarah Jenkins</span>
-            <span className="text-xs text-muted-foreground">HR Manager</span>
+            <span className="font-medium text-foreground">{userName}</span>
+            <span className="text-xs text-muted-foreground">{designation}</span>
           </div>
         </div>
       </div>

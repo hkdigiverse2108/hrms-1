@@ -18,14 +18,14 @@ def seed():
 
     # Mock Data
     employees = [
-        {"employeeId": "EMP001", "name": "John Smith", "email": "john.smith@company.com", "phone": "+1 234 567 8901", "department": "Engineering", "designation": "Senior Developer", "joinDate": "2022-03-15", "status": "active", "salary": 85000.0},
-        {"employeeId": "EMP002", "name": "Sarah Johnson", "email": "sarah.johnson@company.com", "phone": "+1 234 567 8902", "department": "Marketing", "designation": "Marketing Manager", "joinDate": "2021-07-20", "status": "active", "salary": 75000.0},
-        {"employeeId": "EMP003", "name": "Michael Brown", "email": "michael.brown@company.com", "phone": "+1 234 567 8903", "department": "HR", "designation": "HR Specialist", "joinDate": "2023-01-10", "status": "probation", "salary": 55000.0},
-        {"employeeId": "EMP004", "name": "Emily Davis", "email": "emily.davis@company.com", "phone": "+1 234 567 8904", "department": "Finance", "designation": "Financial Analyst", "joinDate": "2022-09-05", "status": "active", "salary": 70000.0},
-        {"employeeId": "EMP005", "name": "David Wilson", "email": "david.wilson@company.com", "phone": "+1 234 567 8905", "department": "Engineering", "designation": "Junior Developer", "joinDate": "2023-06-01", "status": "active", "salary": 55000.0},
-        {"employeeId": "EMP006", "name": "Jennifer Taylor", "email": "jennifer.taylor@company.com", "phone": "+1 234 567 8906", "department": "Sales", "designation": "Sales Executive", "joinDate": "2022-11-15", "status": "active", "salary": 60000.0},
-        {"employeeId": "EMP007", "name": "Robert Martinez", "email": "robert.martinez@company.com", "phone": "+1 234 567 8907", "department": "Operations", "designation": "Operations Manager", "joinDate": "2020-05-20", "status": "active", "salary": 80000.0},
-        {"employeeId": "EMP008", "name": "Lisa Anderson", "email": "lisa.anderson@company.com", "phone": "+1 234 567 8908", "department": "Engineering", "designation": "Tech Lead", "joinDate": "2021-02-10", "status": "active", "salary": 95000.0},
+        {"employeeId": "EMP001", "name": "John Smith", "email": "john.smith@company.com", "password": "password123", "phone": "+1 234 567 8901", "department": "Engineering", "designation": "Senior Developer", "joinDate": "2022-03-15", "status": "active", "salary": 85000.0},
+        {"employeeId": "EMP002", "name": "Sarah Johnson", "email": "sarah.johnson@company.com", "password": "password123", "phone": "+1 234 567 8902", "department": "Marketing", "designation": "Marketing Manager", "joinDate": "2021-07-20", "status": "active", "salary": 75000.0},
+        {"employeeId": "EMP003", "name": "Michael Brown", "email": "michael.brown@company.com", "password": "password123", "phone": "+1 234 567 8903", "department": "HR", "designation": "HR Specialist", "joinDate": "2023-01-10", "status": "probation", "salary": 55000.0},
+        {"employeeId": "EMP004", "name": "Emily Davis", "email": "emily.davis@company.com", "password": "password123", "phone": "+1 234 567 8904", "department": "Finance", "designation": "Financial Analyst", "joinDate": "2022-09-05", "status": "active", "salary": 70000.0},
+        {"employeeId": "EMP005", "name": "David Wilson", "email": "david.wilson@company.com", "password": "password123", "phone": "+1 234 567 8905", "department": "Engineering", "designation": "Junior Developer", "joinDate": "2023-06-01", "status": "active", "salary": 55000.0},
+        {"employeeId": "EMP006", "name": "Jennifer Taylor", "email": "jennifer.taylor@company.com", "password": "password123", "phone": "+1 234 567 8906", "department": "Sales", "designation": "Sales Executive", "joinDate": "2022-11-15", "status": "active", "salary": 60000.0},
+        {"employeeId": "EMP007", "name": "Robert Martinez", "email": "robert.martinez@company.com", "password": "password123", "phone": "+1 234 567 8907", "department": "Operations", "designation": "Operations Manager", "joinDate": "2020-05-20", "status": "active", "salary": 80000.0},
+        {"employeeId": "EMP008", "name": "Lisa Anderson", "email": "lisa.anderson@company.com", "password": "password123", "phone": "+1 234 567 8908", "department": "Engineering", "designation": "Tech Lead", "joinDate": "2021-02-10", "status": "active", "salary": 95000.0},
     ]
 
     attendance = [
