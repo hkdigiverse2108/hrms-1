@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as staticData from '@/lib/data';
 
-const API_URL = 'http://localhost:8000';
+import { API_URL } from '@/lib/config';
 
 export function useApi() {
   const [data, setData] = useState({

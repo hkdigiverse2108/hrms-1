@@ -16,6 +16,7 @@ import { useApi } from '@/hooks/useApi'
 import { Save, Plus, Loader2, Image as ImageIcon, X } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { API_URL } from '@/lib/config'
 
 export interface EmployeeFormData {
   firstName: string
@@ -139,7 +140,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
     formDataUpload.append('file', file)
 
     try {
-      const response = await fetch('http://localhost:8000/upload', {
+      const response = await fetch(`${API_URL}/upload`, {
         method: 'POST',
         body: formDataUpload,
       })
@@ -280,7 +281,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             ) : formData.profilePhoto ? (
               <div className="relative w-full h-full group">
                 <img 
-                  src={`http://localhost:8000/uploads/${formData.profilePhoto}`} 
+                  src={`${API_URL}/uploads/${formData.profilePhoto}`} 
                   alt="Profile" 
                   className="w-full h-full object-cover"
                 />

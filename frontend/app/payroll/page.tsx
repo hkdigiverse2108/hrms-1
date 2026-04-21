@@ -24,6 +24,7 @@ import { DollarSign, Users, CheckCircle, Clock, MoreHorizontal, Eye, FileText, D
 import { useApi } from '@/hooks/useApi'
 import { useEffect } from 'react'
 import type { Payroll } from '@/lib/types'
+import { API_URL } from '@/lib/config'
 
 export default function PayrollPage() {
   const { data, isLoading, refresh } = useApi()
@@ -49,7 +50,7 @@ export default function PayrollPage() {
 
   const handleMarkPaid = async (id: string) => {
     try {
-      const response = await fetch(`http://localhost:8000/payroll/${id}`, {
+      const response = await fetch(`${API_URL}/payroll/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'paid' }),

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { EmployeeForm, EmployeeFormData } from '@/components/hrms/employee-form'
+import { API_URL } from '@/lib/config'
 
 export default function EditEmployeePage() {
   const router = useRouter()
@@ -20,7 +21,7 @@ export default function EditEmployeePage() {
   useEffect(() => {
     const fetchEmployee = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/employees/${employeeId}`)
+        const response = await fetch(`${API_URL}/employees/${employeeId}`)
         if (response.ok) {
           const data = await response.json()
           setEmployeeData(data)
@@ -46,7 +47,7 @@ export default function EditEmployeePage() {
     setIsSubmitting(true)
 
     try {
-      const response = await fetch(`http://localhost:8000/employees/${employeeId}`, {
+      const response = await fetch(`${API_URL}/employees/${employeeId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
