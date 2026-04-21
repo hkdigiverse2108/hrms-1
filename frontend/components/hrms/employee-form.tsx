@@ -147,7 +147,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
       if (response.ok) {
         const data = await response.json()
-        handleChange('profilePhoto', data.filename)
+        // Store the full URL returned by the backend
+        handleChange('profilePhoto', data.url)
       } else {
         alert('Failed to upload image')
       }
@@ -275,13 +276,13 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           >
             {isUploading ? (
               <div className="flex flex-col items-center gap-2">
-                <Loader2 className="h-6 w-6 text-orange-500 animate-spin" />
+                <Loader2 className="h-6 w-6 text-brand-teal animate-spin" />
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Uploading...</span>
               </div>
             ) : formData.profilePhoto ? (
               <div className="relative w-full h-full group">
                 <img 
-                  src={`${API_URL}/uploads/${formData.profilePhoto}`} 
+                  src={formData.profilePhoto.startsWith('http') ? formData.profilePhoto : `${API_URL}/uploads/${formData.profilePhoto}`} 
                   alt="Profile" 
                   className="w-full h-full object-cover"
                 />
@@ -301,8 +302,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
               </div>
             ) : (
               <div className="flex flex-col items-center gap-1 group-hover:scale-110 transition-all duration-300">
-                <div className="bg-gray-100 p-2 rounded-full mb-1 group-hover:bg-orange-50 transition-colors">
-                  <Plus className="h-6 w-6 text-gray-400 group-hover:text-orange-500" />
+                <div className="bg-gray-100 p-2 rounded-full mb-1 group-hover:bg-brand-light transition-colors">
+                  <Plus className="h-6 w-6 text-gray-400 group-hover:text-brand-teal" />
                 </div>
                 <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Upload</span>
               </div>
@@ -322,7 +323,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
       <div className="flex items-center justify-center gap-6 pt-12">
         <Button
           type="submit"
-          className="bg-orange-500 hover:bg-orange-600 text-white min-w-[140px] h-11 text-lg font-bold rounded-lg shadow-lg shadow-orange-500/20 transition-all active:scale-95"
+          className="bg-brand-teal hover:bg-brand-teal-light text-white min-w-[140px] h-11 text-lg font-bold rounded-lg shadow-lg shadow-brand-teal/20 transition-all active:scale-95"
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Saving...' : 'Save'}
@@ -330,7 +331,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         <Link href="/employees">
           <Button
             type="button"
-            className="bg-orange-500 hover:bg-orange-600 text-white min-w-[140px] h-11 text-lg font-bold rounded-lg shadow-lg shadow-orange-500/20 transition-all active:scale-95 border-none"
+            className="bg-brand-teal hover:bg-brand-teal-light text-white min-w-[140px] h-11 text-lg font-bold rounded-lg shadow-lg shadow-brand-teal/20 transition-all active:scale-95 border-none"
           >
             Cancel
           </Button>
@@ -354,7 +355,7 @@ function FormField({ label, id, required, value, onChange, placeholder, type = '
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="flex-1 bg-white border-gray-200 focus-visible:ring-orange-500 h-10 shadow-sm"
+        className="flex-1 bg-white border-gray-200 focus-visible:ring-brand-teal h-10 shadow-sm"
       />
     </div>
   )
@@ -368,7 +369,7 @@ function FormSelect({ label, id, required, value, onValueChange, options, placeh
         {label}:
       </Label>
       <Select value={value || ''} onValueChange={onValueChange} required={required}>
-        <SelectTrigger className="flex-1 bg-white border-gray-200 focus:ring-orange-500 h-10 shadow-sm">
+        <SelectTrigger className="flex-1 bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>

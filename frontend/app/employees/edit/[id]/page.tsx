@@ -77,7 +77,7 @@ export default function EditEmployeePage() {
       <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-10">
         <div className="flex items-center gap-4">
           <Link href="/employees">
-            <Button className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg h-10 w-10 p-0 shadow-md">
+            <Button className="bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg h-10 w-10 p-0 shadow-md">
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
@@ -86,7 +86,7 @@ export default function EditEmployeePage() {
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 gap-4">
-            <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+            <Loader2 className="h-8 w-8 animate-spin text-brand-teal" />
             <p className="text-gray-500 font-medium">Loading employee details...</p>
           </div>
         ) : employeeData ? (

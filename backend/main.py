@@ -1,9 +1,26 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from typing import List
 import crud, schemas, database
+import os
+import shutil
+from bson import ObjectId
 
 app = FastAPI(title="HRMS API")
+
+# Resolve directory paths correctly
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Note: I'm choosing 'uploads' inside the backend root for simplicity
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+
+# Ensure uploads directory exists
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+
+# Mount uploads directory to serve static files
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 
 # CORS configuration
 app.add_middleware(
@@ -18,6 +35,62 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+import uuid
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, GIF, and WEBP are allowed.")
+
+    # Create directory if it doesn't exist
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+
+    # Save file with unique name
+    file_extension = os.path.splitext(file.filename)[1]
+    filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Return the full URL for consistency
+    photo_url = f"http://localhost:8000/uploads/{filename}"
+    return {"filename": filename, "url": photo_url}
+
+@app.post("/upload-profile-photo/{employee_id}")
+async def upload_profile_photo(employee_id: str, file: UploadFile = File(...), db=Depends(database.get_db)):
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, GIF, and WEBP are allowed.")
+
+    # Create directory if it doesn't exist
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+
+    # Save file with unique name
+    file_extension = os.path.splitext(file.filename)[1]
+    filename = f"{employee_id}{file_extension}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Simple photo URL (assuming local dev)
+    photo_url = f"http://localhost:8000/uploads/{filename}"
+
+    # Update database
+    employee_update = schemas.EmployeeUpdate(profilePhoto=photo_url)
+    updated_employee = await crud.update_employee(db, employee_id=employee_id, employee_update=employee_update)
+    
+    if not updated_employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    return updated_employee
 
 @app.get("/")
 def read_root():
@@ -134,3 +207,4 @@ async def login(login_data: schemas.LoginRequest, db=Depends(database.get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     return {"message": "Login successful", "user": user}
+

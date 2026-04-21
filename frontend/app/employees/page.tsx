@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
 
 export default function EmployeeListPage() {
+  const router = useRouter();
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,6 +33,28 @@ export default function EmployeeListPage() {
 
     fetchEmployees();
   }, []);
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/employees/${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setEmployees(employees.filter(emp => emp.id !== id));
+      } else {
+        const data = await response.json();
+        alert(data.detail || "Failed to delete employee");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("An error occurred while deleting the employee");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -147,8 +171,20 @@ export default function EmployeeListPage() {
                     <td className="px-6 py-4 text-muted-foreground">{emp.joinDate}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 text-muted-foreground">
-                        <button className="p-1.5 hover:bg-gray-100 hover:text-brand-teal rounded-md transition-colors"><Pencil className="w-4 h-4" /></button>
-                        <button className="p-1.5 hover:bg-gray-100 hover:text-brand-danger rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        <button 
+                          onClick={() => router.push(`/employees/edit/${emp.id}`)}
+                          className="p-1.5 hover:bg-gray-100 hover:text-brand-teal rounded-md transition-colors"
+                          title="Edit Employee"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(emp.id, emp.name)}
+                          className="p-1.5 hover:bg-gray-100 hover:text-brand-danger rounded-md transition-colors"
+                          title="Delete Employee"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                         <button className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"><MoreVertical className="w-4 h-4" /></button>
                       </div>
                     </td>

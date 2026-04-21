@@ -29,5 +29,6 @@ export function useUser() {
     setIsLoading(false);
   }, []);
 
-  return { user, isLoading };
+  return { user, isLoading, setUser };
 }
+

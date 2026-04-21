@@ -9,11 +9,12 @@ import { Progress } from '@/components/ui/progress'
 import { AlertTriangle, Clock, DollarSign } from 'lucide-react'
 
 const lateEmployees = [
-  { id: '1', name: 'Sarah Johnson', department: 'Marketing', lateCount: 5, penaltyAmount: 50, status: 'warning' },
-  { id: '2', name: 'Lisa Anderson', department: 'Engineering', lateCount: 3, penaltyAmount: 30, status: 'caution' },
-  { id: '3', name: 'John Smith', department: 'Engineering', lateCount: 2, penaltyAmount: 0, status: 'normal' },
-  { id: '4', name: 'Michael Brown', department: 'HR', lateCount: 1, penaltyAmount: 0, status: 'normal' },
+  { id: '1', name: 'Alex Turner', department: 'Marketing', lateCount: 5, penaltyAmount: 50, status: 'warning' },
+  { id: '2', name: 'Maria Garcia', department: 'Engineering', lateCount: 3, penaltyAmount: 30, status: 'caution' },
+  { id: '3', name: 'James Lee', department: 'Engineering', lateCount: 2, penaltyAmount: 0, status: 'normal' },
+  { id: '4', name: 'Jennifer Taylor', department: 'HR', lateCount: 1, penaltyAmount: 0, status: 'normal' },
 ]
+
 
 const penaltyRules = [
   { lateCount: '1-2', deduction: '$0', action: 'Verbal warning' },

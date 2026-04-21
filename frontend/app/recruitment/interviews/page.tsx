@@ -40,7 +40,7 @@ const interviews: Interview[] = [
     date: '2024-01-20',
     time: '2:00 PM',
     type: 'in-person',
-    interviewer: 'Sarah Johnson',
+    interviewer: 'David Wilson',
     status: 'scheduled',
     round: 1,
   },
@@ -51,7 +51,7 @@ const interviews: Interview[] = [
     date: '2024-01-19',
     time: '11:00 AM',
     type: 'phone',
-    interviewer: 'John Smith',
+    interviewer: 'Michael Brown',
     status: 'completed',
     round: 1,
   },
@@ -62,11 +62,12 @@ const interviews: Interview[] = [
     date: '2024-01-18',
     time: '3:00 PM',
     type: 'video',
-    interviewer: 'Michael Brown',
+    interviewer: 'Emily Davis',
     status: 'completed',
     round: 2,
   },
 ]
+
 
 export default function InterviewsPage() {
   const scheduledInterviews = interviews.filter((i) => i.status === 'scheduled')

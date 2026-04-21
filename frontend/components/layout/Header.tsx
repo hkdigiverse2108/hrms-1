@@ -1,20 +1,28 @@
 "use client";
 
-import { Bell, MessageSquare, Menu } from "lucide-react";
+import { Bell, MessageSquare, Menu, LogOut } from "lucide-react";
 import { Layout } from "antd";
+import Link from "next/link";
 import { SearchBar } from "@/components/common/SearchBar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { SidebarNav } from "./SidebarNav";
 import { useUser } from "@/hooks/useUser";
+import { useRouter } from "next/navigation";
 
 const { Header: AntHeader } = Layout;
 
 export function Header() {
+  const router = useRouter();
   const { user } = useUser();
   const userName = user?.name || "Guest";
   const designation = user?.designation || "Employee";
   const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
+
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    router.push("/login");
+  };
 
   return (
     <AntHeader 
@@ -47,18 +55,32 @@ export function Header() {
           <MessageSquare className="w-4 h-4 text-muted-foreground" />
         </button>
         
-        <div className="flex items-center gap-3 ml-2 border-l border-border pl-6 cursor-pointer hover:bg-muted px-2 py-1 rounded-md transition-colors h-10 my-auto">
-          <Avatar className="w-8 h-8">
-            <AvatarImage src={user?.profilePhoto || `https://i.pravatar.cc/150?u=${userName}`} alt={userName} />
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
-          <div className="hidden md:flex flex-col text-sm leading-tight">
-            <span className="font-medium text-foreground">{userName}</span>
-            <span className="text-xs text-muted-foreground">{designation}</span>
+        <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
+          <div className="flex items-center gap-3">
+            <Avatar className="w-8 h-8">
+              <AvatarImage 
+                src={user?.profilePhoto ? (user.profilePhoto.startsWith('http') ? user.profilePhoto : `${API_URL}/uploads/${user.profilePhoto}`) : `https://i.pravatar.cc/150?u=${userName}`} 
+                alt={userName} 
+              />
+              <AvatarFallback>{initials}</AvatarFallback>
+            </Avatar>
+
+            <div className="hidden md:flex flex-col text-sm leading-tight">
+              <span className="font-medium text-foreground">{userName}</span>
+              <span className="text-xs text-muted-foreground">{designation}</span>
+            </div>
           </div>
-        </div>
+        </Link>
+        <button 
+          onClick={handleLogout}
+          className="ml-2 p-1.5 text-muted-foreground hover:text-brand-danger hover:bg-red-50 rounded-md transition-colors"
+          title="Log out"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </AntHeader>
   );
 }
+
 

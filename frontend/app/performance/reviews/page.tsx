@@ -20,11 +20,12 @@ interface Review {
 }
 
 const reviews: Review[] = [
-  { id: '1', employeeName: 'John Smith', department: 'Engineering', reviewType: 'quarterly', dueDate: '2024-01-31', reviewer: 'Lisa Anderson', status: 'pending' },
-  { id: '2', employeeName: 'Sarah Johnson', department: 'Marketing', reviewType: 'annual', dueDate: '2024-01-25', reviewer: 'Admin User', status: 'in-progress' },
-  { id: '3', employeeName: 'Michael Brown', department: 'HR', reviewType: 'probation', dueDate: '2024-02-10', reviewer: 'Admin User', status: 'pending' },
-  { id: '4', employeeName: 'Emily Davis', department: 'Finance', reviewType: 'quarterly', dueDate: '2024-01-20', reviewer: 'James Miller', status: 'completed' },
+  { id: '1', employeeName: 'Alex Turner', department: 'Engineering', reviewType: 'quarterly', dueDate: '2024-01-31', reviewer: 'Lisa Anderson', status: 'pending' },
+  { id: '2', employeeName: 'Maria Garcia', department: 'Marketing', reviewType: 'annual', dueDate: '2024-01-25', reviewer: 'Admin User', status: 'in-progress' },
+  { id: '3', employeeName: 'James Lee', department: 'HR', reviewType: 'probation', dueDate: '2024-02-10', reviewer: 'Admin User', status: 'pending' },
+  { id: '4', employeeName: 'Emma Watson', department: 'Finance', reviewType: 'quarterly', dueDate: '2024-01-20', reviewer: 'James Miller', status: 'completed' },
 ]
+
 
 export default function ReviewsPage() {
   const pendingReviews = reviews.filter((r) => r.status === 'pending')

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { HRMSLayout } from '@/components/hrms/hrms-layout'
 import { PageHeader } from '@/components/hrms/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,7 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Plus, Target, CheckCircle, Clock } from 'lucide-react'
+import { Plus, Target, CheckCircle, Clock, Loader2 } from 'lucide-react'
+import { useApi } from '@/hooks/useApi'
+import { useUser } from '@/hooks/useUser'
 
 interface TargetItem {
   id: string
@@ -19,15 +22,26 @@ interface TargetItem {
   status: 'on-track' | 'at-risk' | 'completed'
 }
 
-const targets: TargetItem[] = [
-  { id: '1', employeeName: 'John Smith', department: 'Engineering', target: 'Complete API redesign', deadline: '2024-02-28', progress: 75, status: 'on-track' },
-  { id: '2', employeeName: 'Sarah Johnson', department: 'Marketing', target: 'Launch Q1 campaign', deadline: '2024-01-31', progress: 90, status: 'on-track' },
-  { id: '3', employeeName: 'Michael Brown', department: 'HR', target: 'Onboard 10 new employees', deadline: '2024-03-31', progress: 40, status: 'at-risk' },
-  { id: '4', employeeName: 'Emily Davis', department: 'Finance', target: 'Q4 audit completion', deadline: '2024-01-15', progress: 100, status: 'completed' },
-  { id: '5', employeeName: 'David Wilson', department: 'Engineering', target: 'Code review training', deadline: '2024-02-15', progress: 60, status: 'on-track' },
-]
-
 export default function TargetsPage() {
+  const { data, isLoading } = useApi()
+  const { user } = useUser()
+  const [targets, setTargets] = useState<TargetItem[]>([])
+
+  useEffect(() => {
+    if (data?.kpiRecords) {
+      const mappedTargets: TargetItem[] = data.kpiRecords.map((kpi: any) => ({
+        id: kpi.id,
+        employeeName: kpi.employeeName,
+        department: kpi.department || 'General',
+        target: `Achieve ${kpi.goals} goals for ${kpi.period}`,
+        deadline: '2024-12-31', // Placeholder or add to schema
+        progress: kpi.goals > 0 ? Math.round((kpi.achieved / kpi.goals) * 100) : 0,
+        status: kpi.achieved >= kpi.goals ? 'completed' : kpi.achieved > kpi.goals * 0.5 ? 'on-track' : 'at-risk'
+      }))
+      setTargets(mappedTargets)
+    }
+  }, [data])
+
   const onTrackCount = targets.filter((t) => t.status === 'on-track').length
   const atRiskCount = targets.filter((t) => t.status === 'at-risk').length
   const completedCount = targets.filter((t) => t.status === 'completed').length

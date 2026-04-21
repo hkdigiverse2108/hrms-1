@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,9 @@ import { API_URL } from "@/lib/config";
 export default function AddEmployeePage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Master Data State
   const [departments, setDepartments] = useState<any[]>([]);
@@ -43,7 +45,8 @@ export default function AddEmployeePage() {
     upiId: "",
     parentName: "",
     parentNumber: "",
-    relation: ""
+    relation: "",
+    profilePhoto: ""
   });
 
   useEffect(() => {
@@ -70,6 +73,34 @@ export default function AddEmployeePage() {
       ...prev,
       [name]: type === 'number' ? parseFloat(value) || 0 : value
     }));
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const formDataUpload = new FormData();
+    formDataUpload.append('file', file);
+
+    try {
+      const response = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: formDataUpload,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setFormData(prev => ({ ...prev, profilePhoto: data.url }));
+      } else {
+        setError("Failed to upload photo");
+      }
+    } catch (err) {
+      console.error("Error uploading file:", err);
+      setError("Error uploading file");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -129,15 +160,39 @@ export default function AddEmployeePage() {
         {/* Photo Upload Section */}
         <div className="p-6 md:p-8 border-b border-border flex flex-col md:flex-row items-center justify-between gap-6 bg-gray-50/30">
           <div className="flex items-center gap-6">
-            <div className="w-24 h-24 rounded-full border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400">
-              <Camera className="w-8 h-8" />
+            <div className="w-24 h-24 rounded-full border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400 overflow-hidden relative">
+              {isUploading ? (
+                <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+              ) : formData.profilePhoto ? (
+                <img 
+                  src={formData.profilePhoto} 
+                  alt="Profile" 
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Camera className="w-8 h-8" />
+              )}
             </div>
             <div>
               <h3 className="font-semibold text-foreground text-sm mb-1">Profile Photo</h3>
               <p className="text-xs text-muted-foreground">Recommended size: 256x256px. Formats: JPG, PNG.</p>
             </div>
           </div>
-          <Button variant="outline" disabled={isLoading}>Upload Photo</Button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept="image/*"
+            onChange={handleFileUpload}
+            disabled={isUploading || isLoading}
+          />
+          <Button 
+            variant="outline" 
+            disabled={isUploading || isLoading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {isUploading ? "Uploading..." : "Upload Photo"}
+          </Button>
         </div>
 
         <div className="p-6 md:p-8 space-y-10">

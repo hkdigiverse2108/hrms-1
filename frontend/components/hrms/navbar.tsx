@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { Bell, Search, ChevronDown, LogOut, User, Settings } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -17,11 +19,17 @@ import { Badge } from '@/components/ui/badge'
 import { useUser } from '@/hooks/useUser'
 
 export function HRMSNavbar() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('')
   const { user } = useUser();
   const userName = user?.name || "Guest";
   const designation = user?.designation || "Employee";
   const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
+
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    router.push("/login");
+  };
 
   return (
     <header className="fixed left-64 right-0 top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-6">
@@ -95,16 +103,18 @@ export function HRMSNavbar() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              Profile
-            </DropdownMenuItem>
+            <Link href="/profile">
+              <DropdownMenuItem className="cursor-pointer">
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </DropdownMenuItem>
+            </Link>
             <DropdownMenuItem>
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Log out
             </DropdownMenuItem>
