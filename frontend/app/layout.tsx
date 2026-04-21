@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
+import { AppLayout } from "@/components/layout/AppLayout"
+import { AntdRegistry } from '@ant-design/nextjs-registry';
+import { ConfigProvider } from 'antd';
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: 'HRMS - Human Resource Management System',
@@ -29,17 +29,46 @@ export const metadata: Metadata = {
   },
 }
 
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="bg-background">
-      <body className="font-sans antialiased bg-background">
-        {children}
+    <html lang="en" className="bg-background" suppressHydrationWarning>
+      <body className="font-sans antialiased bg-background flex min-h-screen text-foreground" suppressHydrationWarning>
+        <AntdRegistry>
+          <ConfigProvider
+            theme={{
+              token: {
+                colorPrimary: '#09A08A',
+                borderRadius: 8,
+                colorBgContainer: '#EAF7F6', // Match sidebar bg
+              },
+              components: {
+                Menu: {
+                  itemSelectedBg: '#09A08A',
+                  itemSelectedColor: '#FFFFFF',
+                  itemHoverBg: '#FFFFFF',
+                  itemMarginInline: 8,
+                  itemPaddingInline: 12,
+                  itemMarginBlock: 4,
+                  itemHeight: 30,
+                },
+              },
+
+            }}
+          >
+            <AppLayout>
+              {children}
+            </AppLayout>
+          </ConfigProvider>
+        </AntdRegistry>
+
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )
 }
+
