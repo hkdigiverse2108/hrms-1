@@ -1,9 +1,18 @@
+"use client";
+
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Plus, Users, Clock, UserX, GraduationCap, Calendar as CalendarIcon, MessageSquare, Gift, ArrowUpRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useUser } from "@/hooks/useUser";
 
 export default function DashboardPage() {
+  const { user } = useUser();
+  const userName = user?.name || "Guest";
+  const firstName = user?.firstName || userName.split(' ')[0];
+  const designation = user?.designation || "Employee";
+  const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -33,15 +42,15 @@ export default function DashboardPage() {
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-4">
                 <Avatar className="w-14 h-14 border border-border">
-                  <AvatarImage src="https://i.pravatar.cc/150?u=sarah" />
-                  <AvatarFallback>SJ</AvatarFallback>
+                  <AvatarImage src={user?.profilePhoto || `https://i.pravatar.cc/150?u=${userName}`} />
+                  <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <div>
                   <div className="text-xs font-semibold text-brand-teal bg-brand-light px-2 py-0.5 rounded-full inline-block mb-1">
-                    Good morning, Sarah
+                    Good morning, {firstName}
                   </div>
-                  <h3 className="font-bold text-lg text-foreground">Sarah Jenkins</h3>
-                  <p className="text-sm text-muted-foreground">HR Manager</p>
+                  <h3 className="font-bold text-lg text-foreground">{userName}</h3>
+                  <p className="text-sm text-muted-foreground">{designation}</p>
                 </div>
               </div>
               <div className="flex flex-col items-end">

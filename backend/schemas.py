@@ -344,3 +344,11 @@ class KPIUpdate(BaseModel):
 
 class KPI(KPIBase):
     id: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class LoginResponse(BaseModel):
+    message: str
+    user: Optional[Employee] = None
