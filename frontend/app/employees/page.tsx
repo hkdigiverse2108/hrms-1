@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SearchBar } from "@/components/common/SearchBar";
-import { PaginationBar } from "@/components/common/PaginationBar";
+import { TablePagination } from "@/components/common/TablePagination";
 import { Button } from "@/components/ui/button";
 import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -196,9 +196,7 @@ export default function EmployeeListPage() {
         </div>
 
         {/* Pagination Setup */}
-        <div className="p-4 border-t border-border">
-          <PaginationBar totalItems={48} itemsPerPage={7} currentPage={1} />
-        </div>
+        <TablePagination totalItems={48} itemsPerPage={7} currentPage={1} itemName="employees" />
       </div>
     </div>
   );

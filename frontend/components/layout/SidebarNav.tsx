@@ -14,6 +14,9 @@ import {
   MonitorPlay,
   Settings,
   ShieldHalf,
+  MessagesSquare,
+  Star,
+  FileText,
 } from "lucide-react";
 
 type MenuItem = Required<MenuProps>["items"][number];
@@ -43,16 +46,23 @@ export function SidebarNav() {
       getItem(<Link href="/employees">Employee List</Link>, "/employees"),
       getItem("Employee Attendance List", "/employees/attendance"),
       getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
-      getItem("Leave Requests", "/employees/leave"),
+      getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
     ]),
-    getItem("Attendance", "attendance", <Clock className="w-5 h-5" />),
-    getItem("Leave", "leave", <Calendar className="w-5 h-5" />),
-    getItem("Task", "task", <ClipboardList className="w-5 h-5" />),
+    getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
+    getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
+    getItem(<Link href="/task">Task</Link>, "/task", <ClipboardList className="w-5 h-5" />),
     getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
       getItem("Blank Canvas", "blank-canvas"),
-      getItem("Seating Arrangement", "seating"),
-      getItem("Resource Management", "resource"),
+      getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
+      getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"),
     ]),
+    getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />),
+    getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />),
+    getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, [
+      getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"),
+      getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"),
+    ]),
+    getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />),
     getItem("Settings", "settings", <Settings className="w-5 h-5" />),
   ];
 
@@ -60,15 +70,24 @@ export function SidebarNav() {
   const getSelectedKeys = () => {
     if (pathname === "/") return ["/"];
     if (pathname.startsWith("/employees")) return [pathname];
+    if (pathname.startsWith("/workspace")) return [pathname];
+    if (pathname.startsWith("/leave")) return ["/leave"];
+    if (pathname.startsWith("/attendance")) return ["/attendance"];
+    if (pathname.startsWith("/task")) return ["/task"];
+    if (pathname.startsWith("/remarks")) return ["/remarks"];
+    if (pathname.startsWith("/review")) return ["/review"];
+    if (pathname.startsWith("/invoice")) return [pathname];
+    if (pathname.startsWith("/chat")) return ["/chat"];
     return [];
   };
 
   const getOpenKeys = () => {
     if (pathname.startsWith("/employees")) return ["employees-sub"];
     if (pathname.startsWith("/workspace")) return ["workspace"];
+    if (pathname.startsWith("/invoice")) return ["invoice"];
     return [];
   };
-
+ 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Logo Area */}
@@ -78,13 +97,10 @@ export function SidebarNav() {
             <ShieldHalf className="w-6 h-6 text-primary" strokeWidth={2.5} />
           </div>
           <div className="flex flex-col">
-            <div className="flex items-baseline gap-1">
-              <span className="leading-tight text-slate-800 font-extrabold text-lg tracking-tight">HK</span>
-              <span className="text-primary font-bold text-[0.95rem]">DigiVerse</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-slate-800 font-extrabold text-[15px] tracking-tight">HariKrushn</span>
+              <span className="text-primary font-bold text-[14px] -mt-1">DigiVerse LLP</span>
             </div>
-            <span className="text-[0.5rem] text-slate-500 uppercase font-black tracking-[0.15em] leading-none opacity-80 mt-1">
-              & IT Consultancy
-            </span>
           </div>
         </div>
       </div>

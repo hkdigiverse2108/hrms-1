@@ -51,9 +51,9 @@ export function Header() {
           <Bell className="w-4 h-4 text-muted-foreground" />
           <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
         </button>
-        <button className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors">
+        <Link href="/chat" className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors">
           <MessageSquare className="w-4 h-4 text-muted-foreground" />
-        </button>
+        </Link>
         
         <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
           <div className="flex items-center gap-3">
