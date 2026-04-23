@@ -17,9 +17,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout className="h-screen overflow-hidden w-full">
       <Sidebar />
-      <Layout className="site-layout">
+      <Layout className="site-layout h-screen overflow-y-auto relative custom-scrollbar">
         <Header />
         <Content className="px-4 sm:px-6 lg:px-8 pb-8 mx-auto w-full max-w-[1600px]">
           {children}
