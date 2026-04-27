@@ -359,3 +359,84 @@ async def break_out(db, employee_id: str):
     )
     result = await db.attendance.find_one({"_id": ObjectId(record["_id"])})
     return fix_id(result)
+
+# Leave Request CRUD
+async def create_leave_request(db, leave: schemas.LeaveRequestCreate):
+    leave_dict = leave.dict()
+    leave_dict["status"] = "Pending"
+    leave_dict["requested_on"] = datetime.now().strftime("%d-%m-%Y")
+    result = await db.leave_requests.insert_one(leave_dict)
+    leave_dict["id"] = str(result.inserted_id)
+    if "_id" in leave_dict:
+        leave_dict.pop("_id")
+    return leave_dict
+
+async def get_all_leave_requests(db, skip: int = 0, limit: int = 100):
+    cursor = db.leave_requests.find().sort("requested_on", -1).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def get_user_leave_requests(db, employee_id: str, skip: int = 0, limit: int = 100):
+    cursor = db.leave_requests.find({"employee_id": employee_id}).sort("requested_on", -1).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def update_leave_request(db, leave_id: str, update_data: dict):
+    # Fetch current leave request
+    leave = await db.leave_requests.find_one({"_id": ObjectId(leave_id)})
+    if not leave:
+        return None
+    
+    # Don't allow updates if already approved/rejected unless it's just a status change by Admin
+    # (Actually, let's just update whatever is passed for now, frontend handles permission)
+    
+    await db.leave_requests.update_one(
+        {"_id": ObjectId(leave_id)},
+        {"$set": update_data}
+    )
+    
+    # Create notification if status changed
+    if "status" in update_data and update_data["status"] in ["Approved", "Rejected", "Cancelled"]:
+        await create_notification(db, schemas.NotificationCreate(
+            employee_id=leave["employee_id"],
+            title=f"Leave Request {update_data['status']}",
+            message=f"Your {leave['type']} request from {leave['start_date']} to {leave['end_date']} has been {update_data['status'].lower()}.",
+            type="leave",
+            created_at=datetime.now().strftime("%d-%m-%Y %H:%M")
+        ))
+        
+    result = await db.leave_requests.find_one({"_id": ObjectId(leave_id)})
+    return fix_id(result)
+
+async def update_leave_request_status(db, leave_id: str, status: str):
+    return await update_leave_request(db, leave_id, {"status": status})
+
+
+# Notification CRUD
+async def create_notification(db, notification: schemas.NotificationCreate):
+    notification_dict = notification.dict()
+    if not notification_dict.get("created_at"):
+        notification_dict["created_at"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+    result = await db.notifications.insert_one(notification_dict)
+    notification_dict["id"] = str(result.inserted_id)
+    if "_id" in notification_dict:
+        notification_dict.pop("_id")
+    return notification_dict
+
+async def get_notifications_by_user(db, employee_id: str, skip: int = 0, limit: int = 50):
+    cursor = db.notifications.find({"employee_id": employee_id}).sort("created_at", -1).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def mark_notification_as_read(db, notification_id: str):
+    await db.notifications.update_one(
+        {"_id": ObjectId(notification_id)},
+        {"$set": {"is_read": True}}
+    )
+    result = await db.notifications.find_one({"_id": ObjectId(notification_id)})
+    return fix_id(result)
+
+async def delete_leave_request(db, leave_id: str):
+    result = await db.leave_requests.delete_one({"_id": ObjectId(leave_id)})
+    return result.deleted_count > 0
+

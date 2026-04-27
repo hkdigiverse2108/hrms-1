@@ -50,6 +50,8 @@ export default function DashboardPage() {
   const [totalBreakTime, setTotalBreakTime] = useState("0m");
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
+  const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+
   
   const punchCardRef = useRef<HTMLDivElement>(null);
  
@@ -57,8 +59,24 @@ export default function DashboardPage() {
     if (user?.id) {
       fetchStatus();
       fetchHistory();
+      if (user.role === "Admin" || user.role === "HR") {
+        fetchLeaveRequests();
+      }
     }
   }, [user?.id]);
+
+  const fetchLeaveRequests = async () => {
+    try {
+      const res = await fetch(`${API_URL}/leaves`);
+      if (res.ok) {
+        const data = await res.json();
+        setLeaveRequests(data);
+      }
+    } catch (err) {
+      console.error("Error fetching leaves:", err);
+    }
+  };
+
  
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -227,8 +245,9 @@ export default function DashboardPage() {
         )}
       </PageHeader>
  
-      {role === "Admin" && <AdminView user={user} />}
-      {role === "HR" && <HRView user={user} />}
+      {role === "Admin" && <AdminView user={user} leaves={leaveRequests} />}
+      {role === "HR" && <HRView user={user} leaves={leaveRequests} />}
+
       {role === "Employee" && (
         <EmployeeView 
           user={user} 
@@ -257,13 +276,15 @@ export default function DashboardPage() {
   );
 }
  
-function AdminView({ user }: { user: any }) {
+function AdminView({ user, leaves }: { user: any, leaves: any[] }) {
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Total Employees" value="48" trend="+12" trendLabel="from last month" icon={<Users className="w-5 h-5 text-muted-foreground" />} />
         <StatCard title="On Time Today" value="16" trend="87%" trendLabel="arrived on schedule" icon={<Clock className="w-5 h-5 text-muted-foreground" />} trendUp/>
-        <StatCard title="Absent Today" value="14" trend="6%" trendLabel="not checked in" icon={<UserX className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
+        <StatCard title="Absent Today" value={leaves.filter(l => l.status === 'Approved').length.toString()} trend="6%" trendLabel="on approved leave" icon={<UserX className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
+
         <StatCard title="Total Interns" value="18" trend="+3" trendLabel="joined this month" icon={<GraduationCap className="w-5 h-5 text-muted-foreground" />} />
       </div>
  
@@ -288,11 +309,19 @@ function AdminView({ user }: { user: any }) {
   );
 }
  
-function HRView({ user }: { user: any }) {
+function HRView({ user, leaves }: { user: any, leaves: any[] }) {
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Pending Leaves" value="08" trend="Action Required" trendLabel="awaiting approval" icon={<CalendarIcon className="w-5 h-5 text-muted-foreground" />} />
+        <StatCard 
+          title="Pending Leaves" 
+          value={leaves.filter(l => l.status === 'Pending').length.toString().padStart(2, '0')} 
+          trend="Action Required" 
+          trendLabel="awaiting approval" 
+          icon={<CalendarIcon className="w-5 h-5 text-muted-foreground" />} 
+        />
+
         <StatCard title="New Applications" value="24" trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
         <StatCard title="Open Positions" value="06" trend="Active" trendLabel="across 4 departments" icon={<Briefcase className="w-5 h-5 text-muted-foreground" />} />
         <StatCard title="Asset Requests" value="03" trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
@@ -306,27 +335,29 @@ function HRView({ user }: { user: any }) {
               <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
             </div>
             <div className="p-0">
-              {[
-                { name: 'Sarah Jenkins', type: 'Sick Leave', days: '2 Days', status: 'Pending' },
-                { name: 'Mia Clark', type: 'Annual Leave', days: '5 Days', status: 'Approved' },
-                { name: 'Aisha Rahman', type: 'Personal', days: '1 Day', status: 'Pending' },
-              ].map((leave, i) => (
+              {leaves.length > 0 ? leaves.slice(0, 5).map((leave, i) => (
                 <div key={i} className="flex items-center justify-between p-4 border-b last:border-0 border-border hover:bg-gray-50 transition-colors">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9">
-                      <AvatarFallback>{leave.name[0]}</AvatarFallback>
+                      <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{leave.employee_name[0]}</AvatarFallback>
                     </Avatar>
                     <div>
-                      <div className="text-sm font-semibold">{leave.name}</div>
-                      <div className="text-xs text-muted-foreground">{leave.type} • {leave.days}</div>
+                      <div className="text-sm font-semibold">{leave.employee_name}</div>
+                      <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
                     </div>
                   </div>
-                  <span className={`text-xs font-semibold px-2 py-1 rounded-md ${leave.status === 'Approved' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-md ${
+                    leave.status === 'Approved' ? 'bg-green-50 text-green-600' : 
+                    leave.status === 'Rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+                  }`}>
                     {leave.status}
                   </span>
                 </div>
-              ))}
+              )) : (
+                <div className="p-8 text-center text-sm text-muted-foreground">No recent leave requests</div>
+              )}
             </div>
+
           </div>
  
           <div className="bg-white border border-border rounded-xl p-6 shadow-sm">

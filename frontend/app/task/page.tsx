@@ -24,7 +24,7 @@ const tasks = [
     title: "Finalize offer letters",
     desc: "Review salary details and upload signed copies",
     assignee: "Sarah Jenkins",
-    avatar: "/avatars/sarah.jpg",
+    avatar: "/placeholder-user.jpg",
     status: "In progress",
     priority: "High",
     dueDate: "Today, 4:30 PM",
@@ -34,7 +34,7 @@ const tasks = [
     title: "Collect attendance exceptions",
     desc: "HR needs to confirm missing punch reports",
     assignee: "Mia Clark",
-    avatar: "/avatars/mia.jpg",
+    avatar: "/placeholder-user.jpg",
     status: "Pending",
     priority: "Medium",
     dueDate: "Apr 19, 2026",
@@ -44,7 +44,7 @@ const tasks = [
     title: "Prepare onboarding checklist",
     desc: "Set laptop, documents, and workspace tasks for new joiners",
     assignee: "Aisha Rahman",
-    avatar: "/avatars/aisha.jpg",
+    avatar: "/placeholder-user.jpg",
     status: "To do",
     priority: "High",
     dueDate: "Apr 20, 2026",
@@ -54,7 +54,7 @@ const tasks = [
     title: "Submit monthly policy notes",
     desc: "Send the monthly task summary to leadership",
     assignee: "Sarah Jenkins",
-    avatar: "/avatars/sarah.jpg",
+    avatar: "/placeholder-user.jpg",
     status: "In progress",
     priority: "Medium",
     dueDate: "Apr 21, 2026",
@@ -64,7 +64,7 @@ const tasks = [
     title: "Approve leave balance update",
     desc: "Close request after payroll confirms adjustment",
     assignee: "Jason Reed",
-    avatar: "/avatars/jason.jpg",
+    avatar: "/placeholder-user.jpg",
     status: "Complete",
     priority: "Low",
     dueDate: "Completed",
@@ -74,7 +74,7 @@ const tasks = [
     title: "Arrange interview panel",
     desc: "Confirm availability with finance and product leads",
     assignee: "Elena Torres",
-    avatar: "/avatars/elena.jpg",
+    avatar: "/placeholder-user.jpg",
     status: "Pending",
     priority: "High",
     dueDate: "Apr 22, 2026",
@@ -202,14 +202,14 @@ export default function TaskManagementPage() {
                   <div className="border border-border rounded-md p-2 flex flex-wrap gap-2 min-h-[42px] items-center bg-white cursor-text">
                     <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded-md text-xs font-medium text-foreground">
                       <Avatar className="w-4 h-4">
-                        <AvatarImage src="/avatars/sarah.jpg" />
+                        <AvatarImage src="/placeholder-user.jpg" />
                       </Avatar>
                       Sarah Jenkins
                       <X className="w-3 h-3 text-muted-foreground hover:text-foreground cursor-pointer ml-0.5" />
                     </div>
                     <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded-md text-xs font-medium text-foreground">
                       <Avatar className="w-4 h-4">
-                        <AvatarImage src="/avatars/aisha.jpg" />
+                        <AvatarImage src="/placeholder-user.jpg" />
                       </Avatar>
                       Aisha Rahman
                       <X className="w-3 h-3 text-muted-foreground hover:text-foreground cursor-pointer ml-0.5" />
@@ -276,7 +276,7 @@ export default function TaskManagementPage() {
                         <SelectItem value="sarah">
                           <div className="flex items-center gap-2">
                             <Avatar className="w-5 h-5">
-                              <AvatarImage src="/avatars/sarah.jpg" />
+                              <AvatarImage src="/placeholder-user.jpg" />
                             </Avatar>
                             Sarah Jenkins
                           </div>

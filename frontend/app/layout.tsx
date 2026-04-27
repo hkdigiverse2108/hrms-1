@@ -5,6 +5,8 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import { ConfigProvider } from 'antd';
 import { UserProvider } from '@/context/UserContext';
+import { Toaster } from "@/components/ui/sonner";
+
  
 export const metadata: Metadata = {
   title: 'HRMS - Human Resource Management System',
@@ -62,6 +64,8 @@ export default function RootLayout({
               <AppLayout>
                 {children}
               </AppLayout>
+              <Toaster position="top-right" expand={true} richColors />
+
             </ConfigProvider>
           </AntdRegistry>
         </UserProvider>

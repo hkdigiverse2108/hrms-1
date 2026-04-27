@@ -381,3 +381,52 @@ class EventUpdate(BaseModel):
 
 class Event(EventBase):
     id: str
+
+# Leave Request Schemas
+class LeaveRequestBase(BaseModel):
+    employee_id: str
+    employee_name: str
+    type: str  # annual, sick, unpaid
+    start_date: str
+    end_date: str
+    duration: str
+    reason: str
+    half_day: bool = False
+    requested_on: str = ""
+
+class LeaveRequestCreate(LeaveRequestBase):
+    pass
+
+class LeaveRequestUpdate(BaseModel):
+    type: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    duration: Optional[str] = None
+    reason: Optional[str] = None
+    half_day: Optional[bool] = None
+    status: Optional[str] = None  # Pending, Approved, Rejected, Cancelled
+
+class LeaveRequest(LeaveRequestBase):
+    id: str
+    status: str = "Pending"
+
+    class Config:
+        from_attributes = True
+
+# Notification Schemas
+class NotificationBase(BaseModel):
+    employee_id: str
+    title: str
+    message: str
+    type: str  # leave, attendance, payroll, etc.
+    is_read: bool = False
+    created_at: str = ""
+
+class NotificationCreate(NotificationBase):
+    pass
+
+class Notification(NotificationBase):
+    id: str
+
+    class Config:
+        from_attributes = True

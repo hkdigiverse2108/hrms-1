@@ -11,6 +11,16 @@ import { SidebarNav } from "./SidebarNav";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
+import { Check, Eye } from "lucide-react";
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+
+
+dayjs.extend(relativeTime);
+
  
 const { Header: AntHeader } = Layout;
  
@@ -18,10 +28,43 @@ export function Header() {
   const router = useRouter();
   const { user, isLoading } = useUser();
   const [mounted, setMounted] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
  
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchNotifications();
+    }
+  }, [user?.id]);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch(`${API_URL}/notifications/${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+        setUnreadCount(data.filter((n: any) => !n.is_read).length);
+      }
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+    }
+  };
+
+  const markAsRead = async (id: string) => {
+    try {
+      const res = await fetch(`${API_URL}/notifications/${id}/read`, { method: 'PUT' });
+      if (res.ok) {
+        fetchNotifications();
+      }
+    } catch (err) {
+      console.error("Error marking read:", err);
+    }
+  };
+
  
   const userName = user?.name || "Guest";
   const designation = user?.designation || "Employee";
@@ -56,10 +99,80 @@ export function Header() {
  
       {/* Right - Profile & Actions */}
       <div className="flex items-center gap-4 h-full">
-        <button className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">
-          <Bell className="w-4 h-4 text-muted-foreground" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-        </button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">
+              <Bell className="w-4 h-4 text-muted-foreground" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white font-bold">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-0 shadow-xl border-border" align="end">
+            <div className="p-4 border-b border-border flex items-center justify-between bg-gray-50/50 rounded-t-lg">
+              <h3 className="font-bold text-sm">Notifications</h3>
+              {unreadCount > 0 && <span className="text-[10px] bg-brand-teal/10 text-brand-teal px-2 py-0.5 rounded-full font-medium">{unreadCount} New</span>}
+            </div>
+            <ScrollArea className="h-[350px]">
+              {notifications.length === 0 ? (
+                <div className="p-10 text-center flex flex-col items-center gap-2">
+                  <div className="bg-gray-100 p-3 rounded-full">
+                    <Bell className="w-6 h-6 text-gray-400" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">No notifications yet</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {notifications.map((n) => (
+                    <div 
+                      key={n.id} 
+                      className={`p-4 hover:bg-gray-50 transition-colors relative group ${!n.is_read ? 'bg-brand-light/10' : ''}`}
+                    >
+                      {!n.is_read && <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-brand-teal rounded-full" />}
+                      <div className="flex flex-col gap-1 pl-2">
+                        <div className="flex justify-between items-start">
+                          <span className="font-semibold text-xs text-foreground">{n.title}</span>
+                          <span className="text-[10px] text-muted-foreground">{dayjs(n.created_at, "DD-MM-YYYY HH:mm").fromNow()}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{n.message}</p>
+                        
+                        <div className="flex items-center gap-2 mt-1">
+                          <button 
+                            onClick={() => {
+                              if (n.type === 'leave') {
+                                router.push(user.role === 'Employee' ? '/leave' : '/employees/leave');
+                              }
+                            }}
+                            className="flex items-center gap-1 text-[10px] font-bold text-brand-teal hover:bg-brand-teal/10 px-2 py-1 rounded transition-colors"
+                          >
+                            <Eye className="w-3 h-3" />
+                            View
+                          </button>
+                          {!n.is_read && (
+                            <button 
+                              onClick={() => markAsRead(n.id)}
+                              className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                            >
+                              <Check className="w-3 h-3" />
+                              Mark as Read
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+            <div className="p-3 border-t border-border text-center">
+              <button className="text-[11px] font-semibold text-brand-teal hover:underline">View All Notifications</button>
+            </div>
+          </PopoverContent>
+        </Popover>
+
         <Link href="/chat" className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors">
           <MessageSquare className="w-4 h-4 text-muted-foreground" />
         </Link>

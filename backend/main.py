@@ -1,27 +1,30 @@
-from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from typing import List
-import crud, schemas, database
 import os
-import shutil
-from bson import ObjectId
-import uuid
-import uvicorn
- 
+
 # Load environment variables manually from root .env if it exists
 def load_env():
     # Go up one level from 'backend' to reach the root where .env is located
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    print(f"DEBUG: Looking for .env at: {env_path}")
     if os.path.exists(env_path):
+        print(f"DEBUG: .env found! Loading...")
         with open(env_path) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, value = line.split("=", 1)
                     os.environ[key] = value
- 
+
 load_env()
+
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from typing import List
+import crud, schemas, database
+import shutil
+from bson import ObjectId
+import uuid
+import uvicorn
  
 app = FastAPI(title="HRMS API")
  
@@ -40,10 +43,13 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
         "http://localhost:3535",
-        "http://localhost:5173", 
+        "http://127.0.0.1:3535",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://0.0.0.0:3535",
+        "http://0.0.0.0:3000",
+
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -260,6 +266,56 @@ async def break_out(request: schemas.PunchRequest, db=Depends(database.get_db)):
     if not record:
         raise HTTPException(status_code=400, detail="Not on break")
     return record
+
+@app.post("/leaves", response_model=schemas.LeaveRequest)
+async def create_leave_request(leave: schemas.LeaveRequestCreate, db=Depends(database.get_db)):
+    return await crud.create_leave_request(db, leave=leave)
+
+@app.get("/leaves", response_model=List[schemas.LeaveRequest])
+async def read_all_leaves(skip: int = 0, limit: int = 100, db=Depends(database.get_db)):
+    print("DEBUG: GET /leaves hit!")
+    leaves = await crud.get_all_leave_requests(db, skip=skip, limit=limit)
+    print(f"DEBUG: Found {len(leaves)} leaves")
+    return leaves
+
+
+@app.get("/leaves/employee/{employee_id}", response_model=List[schemas.LeaveRequest])
+async def read_user_leaves(employee_id: str, skip: int = 0, limit: int = 100, db=Depends(database.get_db)):
+    return await crud.get_user_leave_requests(db, employee_id=employee_id, skip=skip, limit=limit)
+
+@app.put("/leaves/{leave_id}", response_model=schemas.LeaveRequest)
+async def update_leave_status(leave_id: str, status_update: schemas.LeaveRequestUpdate, db=Depends(database.get_db)):
+    # Convert Pydantic model to dict, excluding None values
+    update_data = status_update.dict(exclude_unset=True)
+    updated_leave = await crud.update_leave_request(db, leave_id=leave_id, update_data=update_data)
+
+    if not updated_leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    return updated_leave
+
+@app.delete("/leaves/{leave_id}")
+async def delete_leave(leave_id: str, db=Depends(database.get_db)):
+    success = await crud.delete_leave_request(db, leave_id=leave_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    return {"message": "Leave request deleted successfully"}
+
+    if not updated_leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    return updated_leave
+
+# Notification Endpoints
+@app.get("/notifications/{employee_id}", response_model=List[schemas.Notification])
+async def read_notifications(employee_id: str, skip: int = 0, limit: int = 50, db=Depends(database.get_db)):
+    return await crud.get_notifications_by_user(db, employee_id=employee_id, skip=skip, limit=limit)
+
+@app.put("/notifications/{notification_id}/read", response_model=schemas.Notification)
+async def mark_read(notification_id: str, db=Depends(database.get_db)):
+    updated = await crud.mark_notification_as_read(db, notification_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return updated
+
  
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
