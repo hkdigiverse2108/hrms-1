@@ -14,7 +14,7 @@ class EmployeeBase(BaseModel):
     department: str
     designation: str
     joinDate: str
-    status: str
+    status: Optional[str] = "active"
     salary: float
     company: Optional[str] = None
     role: Optional[str] = None
@@ -69,17 +69,26 @@ class EmployeeUpdate(BaseModel):
 class Employee(EmployeeBase):
     id: str
 
+class Break(BaseModel):
+    startTime: str
+    endTime: Optional[str] = None
+    duration: Optional[str] = None
+ 
 class AttendanceBase(BaseModel):
     employeeId: str
     employeeName: str
     date: str
     checkIn: str
-    checkOut: str
+    checkOut: Optional[str] = None
     status: str
-    workHours: str
-
+    workHours: Optional[str] = None
+    breaks: List[Break] = []
+ 
 class Attendance(AttendanceBase):
     id: str
+ 
+class PunchRequest(BaseModel):
+    employeeId: str
 
 class LeaveRequestBase(BaseModel):
     employeeId: str
@@ -352,3 +361,23 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     message: str
     user: Optional[Employee] = None
+
+class EventBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    date: str
+    time: Optional[str] = None
+    type: str
+
+class EventCreate(EventBase):
+    pass
+
+class EventUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    date: Optional[str] = None
+    time: Optional[str] = None
+    type: Optional[str] = None
+
+class Event(EventBase):
+    id: str

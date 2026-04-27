@@ -1,26 +1,28 @@
 "use client";
-
+ 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, ShieldHalf, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { API_URL } from "@/lib/config";
-
+import { useUserContext } from "@/context/UserContext";
+ 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useUserContext();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-
+ 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
-
+ 
     try {
       const response = await fetch(`${API_URL}/login`, {
         method: "POST",
@@ -29,15 +31,15 @@ export default function LoginPage() {
         },
         body: JSON.stringify({ email, password }),
       });
-
+ 
       const data = await response.json();
-
+ 
       if (!response.ok) {
         throw new Error(data.detail || "Login failed");
       }
-
-      // Store user info in localStorage
-      localStorage.setItem("user", JSON.stringify(data.user));
+ 
+      // Use the global login function to update state and storage
+      login(data.user);
       
       // Redirect to dashboard
       router.push("/");
@@ -47,7 +49,7 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
-
+ 
   return (
     <div className="flex min-h-screen w-full">
       {/* Left Panel - Hidden on mobile */}
@@ -59,7 +61,7 @@ export default function LoginPage() {
             <span className="text-[0.6rem] text-muted-foreground uppercase tracking-widest leading-none">& IT Consultancy</span>
           </div>
         </div>
-
+ 
         {/* Image Illustration */}
         <div className="relative z-10 w-full max-w-lg mt-16 px-8 flex justify-center">
           <img src="/login-page.png" alt="HK DigiVerse Login Graphic" className="w-full h-auto object-contain drop-shadow-xl" />
@@ -72,7 +74,7 @@ export default function LoginPage() {
            </p>
         </div>
       </div>
-
+ 
       {/* Right Panel - Form */}
       <div className="flex w-full lg:w-1/2 justify-center items-center p-8 bg-white">
         <div className="w-full max-w-md px-4 sm:px-8">
@@ -85,7 +87,7 @@ export default function LoginPage() {
               <span className="text-[0.6rem] text-muted-foreground uppercase tracking-widest leading-none">& IT Consultancy</span>
             </div>
           </div>
-
+ 
           <div className="mb-10 text-center lg:text-left">
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3 whitespace-nowrap tracking-tight">Welcome in HK DigiVerse :)</h1>
             <p className="text-muted-foreground text-sm sm:text-base">Please enter your details to sign in to your account.</p>
@@ -95,7 +97,7 @@ export default function LoginPage() {
               </div>
             )}
           </div>
-
+ 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Work Email</label>
@@ -112,7 +114,7 @@ export default function LoginPage() {
                 />
               </div>
             </div>
-
+ 
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Password</label>
               <div className="relative">
@@ -135,7 +137,7 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
-
+ 
             <div className="flex items-center">
               <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setRememberMe(!rememberMe)}>
                 <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${rememberMe ? 'bg-brand-teal border-brand-teal' : 'border-gray-300 group-hover:border-brand-teal'}`}>
@@ -148,7 +150,7 @@ export default function LoginPage() {
                 <span className="text-sm text-foreground">Remember me</span>
               </div>
             </div>
-
+ 
             <Button 
               type="submit" 
               className="w-full h-12 bg-brand-teal hover:bg-brand-teal-light text-white font-medium text-[15px] shadow-sm tracking-wide disabled:opacity-70"
@@ -164,11 +166,11 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-
+ 
           <div className="mt-8 text-center text-sm text-muted-foreground">
             Don't have an account? <a href="#" className="font-medium text-foreground hover:text-brand-teal transition-colors">Contact HR</a>
           </div>
-
+ 
         </div>
       </div>
     </div>

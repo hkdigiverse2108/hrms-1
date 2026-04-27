@@ -1,5 +1,6 @@
-import schemas
 from bson import ObjectId
+from datetime import datetime
+import schemas
 
 def fix_id(doc):
     if doc:
@@ -232,8 +233,129 @@ async def create_kpi_record(db, kpi: schemas.KPICreate): return await create_ite
 async def update_kpi_record(db, kpi_id: str, update: schemas.KPIUpdate): return await update_item(db, "kpi_records", kpi_id, update.dict(exclude_unset=True))
 async def delete_kpi_record(db, kpi_id: str): return await delete_item(db, "kpi_records", kpi_id)
 
+async def get_events(db, skip: int = 0, limit: int = 100): return await get_items(db, "events", skip, limit)
+async def create_event(db, event: schemas.EventCreate): return await create_item(db, "events", event.dict())
+async def update_event(db, event_id: str, update: schemas.EventUpdate): return await update_item(db, "events", event_id, update.dict(exclude_unset=True))
+async def delete_event(db, event_id: str): return await delete_item(db, "events", event_id)
+
 async def authenticate_user(db, login_data: schemas.LoginRequest):
     user = await db.employees.find_one({"email": login_data.email})
     if user and user.get("password") == login_data.password:
         return fix_id(user)
     return None
+
+async def get_attendance_status(db, employee_id: str):
+    today = datetime.now().strftime("%Y-%m-%d")
+    # Find active punch for today (checkIn present, checkOut missing)
+    record = await db.attendance.find_one({
+        "employeeId": employee_id,
+        "date": today,
+        "checkOut": None
+    })
+    return fix_id(record)
+
+async def punch_in(db, employee_id: str):
+    employee = await get_employee(db, employee_id)
+    if not employee:
+        return None
+    
+    today = datetime.now()
+    attendance_data = {
+        "employeeId": employee_id,
+        "employeeName": employee["name"],
+        "date": today.strftime("%Y-%m-%d"),
+        "checkIn": today.strftime("%H:%M:%S"),
+        "checkOut": None,
+        "status": "Active",
+        "workHours": None
+    }
+    
+    result = await db.attendance.insert_one(attendance_data)
+    attendance_data["id"] = str(result.inserted_id)
+    if "_id" in attendance_data:
+        attendance_data.pop("_id")
+    return attendance_data
+
+async def punch_out(db, employee_id: str):
+    status = await get_attendance_status(db, employee_id)
+    if not status:
+        return None
+    
+    now = datetime.now()
+    check_in_time = datetime.strptime(f"{status['date']} {status['checkIn']}", "%Y-%m-%d %H:%M:%S")
+    
+    duration = now - check_in_time
+    hours, remainder = divmod(duration.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    work_hours = f"{hours}h {minutes}m"
+    
+    update_data = {
+        "checkOut": now.strftime("%H:%M:%S"),
+        "workHours": work_hours,
+        "status": "Logged"
+    }
+    
+    await db.attendance.update_one(
+        {"_id": ObjectId(status["id"])},
+        {"$set": update_data}
+    )
+    
+    updated_doc = await db.attendance.find_one({"_id": ObjectId(status["id"])})
+    return fix_id(updated_doc)
+
+async def break_in(db, employee_id: str):
+    status = await get_attendance_status(db, employee_id)
+    if not status or status.get("status") == "On Break":
+        return None
+    
+    new_break = {
+        "startTime": datetime.now().strftime("%H:%M:%S"),
+        "endTime": None,
+        "duration": None
+    }
+    
+    await db.attendance.update_one(
+        {"_id": ObjectId(status["id"])},
+        {
+            "$push": {"breaks": new_break},
+            "$set": {"status": "On Break"}
+        }
+    )
+    result = await db.attendance.find_one({"_id": ObjectId(status["id"])})
+    return fix_id(result)
+
+async def break_out(db, employee_id: str):
+    # Find record where status is 'On Break'
+    today = datetime.now().strftime("%Y-%m-%d")
+    record = await db.attendance.find_one({
+        "employeeId": employee_id,
+        "date": today,
+        "status": "On Break"
+    })
+    
+    if not record or not record.get("breaks"):
+        return None
+    
+    # Get the last break which should have no endTime
+    last_break_idx = len(record["breaks"]) - 1
+    last_break = record["breaks"][last_break_idx]
+    
+    now = datetime.now()
+    start_time = datetime.strptime(f"{record['date']} {last_break['startTime']}", "%Y-%m-%d %H:%M:%S")
+    
+    duration_delta = now - start_time
+    minutes = duration_delta.seconds // 60
+    duration_str = f"{minutes}m"
+    
+    await db.attendance.update_one(
+        {"_id": ObjectId(record["_id"])},
+        {
+            "$set": {
+                f"breaks.{last_break_idx}.endTime": now.strftime("%H:%M:%S"),
+                f"breaks.{last_break_idx}.duration": duration_str,
+                "status": "Active"
+            }
+        }
+    )
+    result = await db.attendance.find_one({"_id": ObjectId(record["_id"])})
+    return fix_id(result)

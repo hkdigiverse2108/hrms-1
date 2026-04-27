@@ -63,7 +63,7 @@ export function SidebarNav() {
       getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"),
     ]),
     getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />),
-    getItem("Settings", "settings", <Settings className="w-5 h-5" />),
+    getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />),
   ];
 
   // Helper to determine open keys and selected keys

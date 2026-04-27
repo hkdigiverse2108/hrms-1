@@ -88,7 +88,7 @@ export default function EmployeeListPage() {
             <div className="grid grid-cols-2 gap-3 w-full sm:w-auto">
               <select className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer">
                 <option>All Roles</option>
-                <option>Manager</option>
+                <option>HR</option>
                 <option>Developer</option>
               </select>
               <select className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer">

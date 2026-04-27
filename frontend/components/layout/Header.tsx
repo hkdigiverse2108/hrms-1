@@ -1,5 +1,6 @@
 "use client";
-
+ 
+import React, { useState, useEffect } from "react";
 import { Bell, MessageSquare, Menu, LogOut } from "lucide-react";
 import { Layout } from "antd";
 import Link from "next/link";
@@ -10,21 +11,28 @@ import { SidebarNav } from "./SidebarNav";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
-
+ 
 const { Header: AntHeader } = Layout;
-
+ 
 export function Header() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, isLoading } = useUser();
+  const [mounted, setMounted] = useState(false);
+ 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+ 
   const userName = user?.name || "Guest";
   const designation = user?.designation || "Employee";
   const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
-
+  const showUserInfo = mounted && !isLoading;
+ 
   const handleLogout = () => {
     localStorage.removeItem("user");
     router.push("/login");
   };
-
+ 
   return (
     <AntHeader 
       className="bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-10 w-full mb-6"
@@ -45,7 +53,7 @@ export function Header() {
         </Sheet>
         <SearchBar placeholder="Search employees, reports..." className="hidden sm:flex" containerClassName="hidden sm:flex" />
       </div>
-
+ 
       {/* Right - Profile & Actions */}
       <div className="flex items-center gap-4 h-full">
         <button className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">
@@ -60,15 +68,24 @@ export function Header() {
           <div className="flex items-center gap-3">
             <Avatar className="w-8 h-8">
               <AvatarImage 
-                src={user?.profilePhoto ? (user.profilePhoto.startsWith('http') ? user.profilePhoto : `${API_URL}/uploads/${user.profilePhoto}`) : `https://i.pravatar.cc/150?u=${userName}`} 
+                src={user?.profilePhoto ? (user.profilePhoto.startsWith('http') ? user.profilePhoto : `${API_URL}/uploads/${user.profilePhoto}`) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}`} 
                 alt={userName} 
               />
-              <AvatarFallback>{initials}</AvatarFallback>
+              <AvatarFallback>{showUserInfo ? initials : ""}</AvatarFallback>
             </Avatar>
-
-            <div className="hidden md:flex flex-col text-sm leading-tight">
-              <span className="font-medium text-foreground">{userName}</span>
-              <span className="text-xs text-muted-foreground">{designation}</span>
+ 
+            <div className="hidden md:flex flex-col text-sm leading-tight min-w-[100px]">
+              {showUserInfo ? (
+                <>
+                  <span className="font-medium text-foreground">{userName}</span>
+                  <span className="text-xs text-muted-foreground">{designation}</span>
+                </>
+              ) : (
+                <div className="space-y-1">
+                  <div className="h-3 w-20 bg-gray-100 animate-pulse rounded"></div>
+                  <div className="h-2 w-16 bg-gray-50 animate-pulse rounded"></div>
+                </div>
+              )}
             </div>
           </div>
         </Link>
@@ -83,5 +100,3 @@ export function Header() {
     </AntHeader>
   );
 }
-
-

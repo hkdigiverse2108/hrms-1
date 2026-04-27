@@ -1,6 +1,6 @@
 'use client'
-
-import { useState } from 'react'
+ 
+import React, { useState, useEffect } from 'react'
 import { Bell, Search, ChevronDown, LogOut, User, Settings } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -17,20 +17,27 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useUser } from '@/hooks/useUser'
-
+ 
 export function HRMSNavbar() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('')
-  const { user } = useUser();
+  const { user, isLoading } = useUser();
+  const [mounted, setMounted] = useState(false);
+ 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+ 
   const userName = user?.name || "Guest";
   const designation = user?.designation || "Employee";
   const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
-
+  const showUserInfo = mounted && !isLoading;
+ 
   const handleLogout = () => {
     localStorage.removeItem("user");
     router.push("/login");
   };
-
+ 
   return (
     <header className="fixed left-64 right-0 top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-6">
       <div className="flex items-center gap-4">
@@ -45,7 +52,7 @@ export function HRMSNavbar() {
           />
         </div>
       </div>
-
+ 
       <div className="flex items-center gap-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -83,19 +90,28 @@ export function HRMSNavbar() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
+ 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-3 px-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.profilePhoto || `https://i.pravatar.cc/150?u=${userName}`} alt={userName} />
+                <AvatarImage src={user?.profilePhoto || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}`} alt={userName} />
                 <AvatarFallback className="bg-primary text-primary-foreground">
-                  {initials}
+                  {showUserInfo ? initials : ""}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col items-start text-sm">
-                <span className="font-medium">{userName}</span>
-                <span className="text-xs text-muted-foreground">{designation}</span>
+              <div className="flex flex-col items-start text-sm min-w-[100px]">
+                {showUserInfo ? (
+                  <>
+                    <span className="font-medium">{userName}</span>
+                    <span className="text-xs text-muted-foreground">{designation}</span>
+                  </>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="h-3 w-20 bg-gray-100 animate-pulse rounded"></div>
+                    <div className="h-2 w-16 bg-gray-50 animate-pulse rounded"></div>
+                  </div>
+                )}
               </div>
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </Button>

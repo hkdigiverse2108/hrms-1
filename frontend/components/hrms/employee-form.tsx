@@ -19,6 +19,7 @@ import Image from 'next/image'
 import { API_URL } from '@/lib/config'
 
 export interface EmployeeFormData {
+  employeeId: string
   firstName: string
   middleName: string
   lastName: string
@@ -28,7 +29,6 @@ export interface EmployeeFormData {
   dob: string
   joinDate: string
   salary: string
-  company: string
   role: string
   upiId: string
   accountNumber: string
@@ -46,6 +46,7 @@ export interface EmployeeFormData {
   startTime: string
   endTime: string
   profilePhoto: string
+  status: string
 }
 
 interface EmployeeFormProps {
@@ -56,6 +57,7 @@ interface EmployeeFormProps {
 }
 
 const defaultFormData: EmployeeFormData = {
+  employeeId: '',
   firstName: '',
   middleName: '',
   lastName: '',
@@ -65,7 +67,6 @@ const defaultFormData: EmployeeFormData = {
   dob: '',
   joinDate: '',
   salary: '',
-  company: '',
   role: '',
   upiId: '',
   accountNumber: '',
@@ -83,13 +84,13 @@ const defaultFormData: EmployeeFormData = {
   startTime: '',
   endTime: '',
   profilePhoto: '',
+  status: 'active',
 }
 
 export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: EmployeeFormProps) {
   const { data } = useApi()
   const departments = data?.departments || []
   const designations = data?.designations || []
-  const companies = data?.companies || []
   const roles = data?.roles || []
   const relations = data?.relations || []
   const positions = data?.positions || []
@@ -102,21 +103,24 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
     if (initialData) {
       const sanitizedData = { ...defaultFormData }
       
-      // Map all keys from initialData, ensuring null/undefined become empty strings
-      Object.keys(defaultFormData).forEach((key) => {
-        const k = key as keyof EmployeeFormData
-        if (initialData[k] !== undefined && initialData[k] !== null) {
-          if (k === 'salary') {
-            sanitizedData[k] = initialData[k]?.toString() || ''
+        // Aggressive mapping to ensure all fields in defaultFormData are handled
+        Object.keys(defaultFormData).forEach((key) => {
+          const k = key as keyof EmployeeFormData
+          const value = initialData[k]
+          
+          if (value !== undefined && value !== null) {
+            if (k === 'salary') {
+              sanitizedData[k] = String(value)
+            } else if (k === 'password') {
+              // Don't load password into the form for security/UI clarity
+              sanitizedData[k] = ''
+            } else {
+              sanitizedData[k] = String(value)
+            }
           } else {
-            // @ts-ignore
-            sanitizedData[k] = initialData[k]
+            sanitizedData[k] = ''
           }
-        } else {
-          // @ts-ignore
-          sanitizedData[k] = ''
-        }
-      })
+        })
       
       setFormData(sanitizedData)
     }
@@ -188,70 +192,80 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         <FormField label="Joining Date" id="joinDate" type="date" required value={formData.joinDate} onChange={v => handleChange('joinDate', v)} />
         <FormField label="Salary" id="salary" type="number" required value={formData.salary} onChange={v => handleChange('salary', v)} placeholder="Enter salary" />
 
-        {/* Row 4 */}
         <FormSelect
-          label="Company"
-          id="company"
-          value={formData.company}
-          onValueChange={(v) => handleChange('company', v)}
-          options={companies.map((c: any) => ({ label: c.name, value: c.name }))}
-          placeholder="Select company"
-        />
-        <FormSelect
+          key={`role-${roles.length}`}
           label="Role"
           id="role"
+          required
           value={formData.role}
           onValueChange={(v) => handleChange('role', v)}
           options={roles.map((r: any) => ({ label: r.name, value: r.name }))}
           placeholder="Select role"
         />
-  </div>
-
-      {/* Bank Details Card */}
-      <Card className="relative pt-6 border border-gray-200 shadow-sm rounded-xl overflow-visible mt-12">
-        <div className="absolute -top-4 left-4 bg-white px-6 py-2 border border-gray-200 rounded-lg shadow-sm text-sm font-semibold text-gray-700">
-          Bank Details
-        </div>
-        <CardContent className="pt-8 px-8 pb-10">
-          <div className="grid gap-x-16 gap-y-6 md:grid-cols-2">
-            <FormField label="UPI ID" id="upiId" required value={formData.upiId} onChange={v => handleChange('upiId', v)} />
-            <FormField label="Account Number" id="accountNumber" required value={formData.accountNumber} onChange={v => handleChange('accountNumber', v)} />
-            <FormField label="IFSC Code" id="ifscCode" required value={formData.ifscCode} onChange={v => handleChange('ifscCode', v)} />
-            <FormField label="Bank Name" id="bankName" required value={formData.bankName} onChange={v => handleChange('bankName', v)} />
-            <FormField label="Account Holder Name" id="accountHolderName" required value={formData.accountHolderName} onChange={v => handleChange('accountHolderName', v)} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Parent Details Card */}
-      <Card className="relative pt-6 border border-gray-200 shadow-sm rounded-xl overflow-visible mt-12">
-        <div className="absolute -top-4 left-4 bg-white px-6 py-2 border border-gray-200 rounded-lg shadow-sm text-sm font-semibold text-gray-700">
-          Parent Details
-        </div>
-        <CardContent className="pt-8 px-8 pb-10">
-          <div className="grid gap-x-16 gap-y-6 md:grid-cols-2">
-            <FormField label="Parent Name" id="parentName" required value={formData.parentName} onChange={v => handleChange('parentName', v)} />
-            <FormField label="Parent Number" id="parentNumber" required value={formData.parentNumber} onChange={v => handleChange('parentNumber', v)} />
-            <FormSelect
-          label="Relationship"
-          id="relation"
-          value={formData.relation}
-          onValueChange={(v) => handleChange('relation', v)}
-          options={relations.map((r: any) => ({ label: r.name, value: r.name }))}
-          placeholder="Select relationship"
-        />
-  </div>
-        </CardContent>
-      </Card>
+      </div>
+ 
+      {/* Dynamic Conditional Sections */}
+      {formData.role !== 'Admin' && (
+        <>
+          {/* Bank Details Card */}
+          <Card className="relative pt-6 border border-gray-200 shadow-sm rounded-xl overflow-visible mt-12">
+            <div className="absolute -top-4 left-4 bg-white px-6 py-2 border border-gray-200 rounded-lg shadow-sm text-sm font-semibold text-gray-700">
+              Bank Details
+            </div>
+            <CardContent className="pt-8 px-8 pb-10">
+              <div className="grid gap-x-16 gap-y-6 md:grid-cols-2">
+                <FormField label="UPI ID" id="upiId" required={formData.role !== 'Admin'} value={formData.upiId} onChange={v => handleChange('upiId', v)} />
+                <FormField label="Account Number" id="accountNumber" required={formData.role !== 'Admin'} value={formData.accountNumber} onChange={v => handleChange('accountNumber', v)} />
+                <FormField label="IFSC Code" id="ifscCode" required={formData.role !== 'Admin'} value={formData.ifscCode} onChange={v => handleChange('ifscCode', v)} />
+                <FormField label="Bank Name" id="bankName" required={formData.role !== 'Admin'} value={formData.bankName} onChange={v => handleChange('bankName', v)} />
+                <FormField label="Account Holder Name" id="accountHolderName" required={formData.role !== 'Admin'} value={formData.accountHolderName} onChange={v => handleChange('accountHolderName', v)} />
+              </div>
+            </CardContent>
+          </Card>
+ 
+          {/* Parent Details Card */}
+          <Card className="relative pt-6 border border-gray-200 shadow-sm rounded-xl overflow-visible mt-12">
+            <div className="absolute -top-4 left-4 bg-white px-6 py-2 border border-gray-200 rounded-lg shadow-sm text-sm font-semibold text-gray-700">
+              Parent Details
+            </div>
+            <CardContent className="pt-8 px-8 pb-10">
+              <div className="grid gap-x-16 gap-y-6 md:grid-cols-2">
+                <FormField label="Parent Name" id="parentName" required={formData.role !== 'Admin'} value={formData.parentName} onChange={v => handleChange('parentName', v)} />
+                <FormField label="Parent Number" id="parentNumber" required={formData.role !== 'Admin'} value={formData.parentNumber} onChange={v => handleChange('parentNumber', v)} />
+                <FormSelect
+                  key={`rel-${relations.length}`}
+                  label="Relationship"
+                  id="relation"
+                  value={formData.relation}
+                  onValueChange={(v) => handleChange('relation', v)}
+                  options={relations.map((r: any) => ({ label: r.name, value: r.name }))}
+                  placeholder="Select relationship"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* Professional Details Section */}
       <div className="space-y-6 pt-6 max-w-4xl">
-        <FormField label="Aadhar Card" id="aadharCard" value={formData.aadharCard} onChange={v => handleChange('aadharCard', v)} />
-        <FormField label="PAN Card" id="panCard" value={formData.panCard} onChange={v => handleChange('panCard', v)} />
+        <div className="flex items-center gap-4">
+          <Label className="w-32 text-gray-500 font-medium">Employee ID:</Label>
+          <div className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-600 font-mono text-sm">
+            {formData.employeeId || 'System Generated'}
+          </div>
+        </div>
         
-        <FormSelect label="Position" id="position" required value={formData.position} onValueChange={v => handleChange('position', v)} options={positions.map((p: any) => ({ label: p.name, value: p.name }))} placeholder="Select position" />
-        <FormSelect label="Department" id="department" required value={formData.department} onValueChange={v => handleChange('department', v)} options={departments.map((d: any) => ({ label: d.name, value: d.name }))} placeholder="Select department" />
-        <FormSelect label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+        {formData.role !== 'Admin' && (
+          <>
+            <FormField label="Aadhar Card" id="aadharCard" value={formData.aadharCard} onChange={v => handleChange('aadharCard', v)} />
+            <FormField label="PAN Card" id="panCard" value={formData.panCard} onChange={v => handleChange('panCard', v)} />
+          </>
+        )}
+        
+        <FormSelect key={`pos-${positions.length}`} label="Position" id="position" required value={formData.position} onValueChange={v => handleChange('position', v)} options={positions.map((p: any) => ({ label: p.name, value: p.name }))} placeholder="Select position" />
+        <FormSelect key={`dept-${departments.length}`} label="Department" id="department" required value={formData.department} onValueChange={v => handleChange('department', v)} options={departments.map((d: any) => ({ label: d.name, value: d.name }))} placeholder="Select department" />
+        <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
 
         {/* Working Hours */}
         <div className="flex items-center gap-4">

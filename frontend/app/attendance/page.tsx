@@ -1,6 +1,6 @@
 "use client";
-
-import React, { useState } from "react";
+ 
+import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,82 +16,121 @@ import {
   Briefcase, 
   CheckCircle2, 
   Eye,
-  MapPin
+  Loader2,
+  AlertCircle,
+  Coffee
 } from "lucide-react";
-
-const attendanceData = [
-  { id: '01', date: 'April 18, 2026', currentStatus: 'break-out', status: 'Present', checkIn: '09:34 AM', checkOut: '-', break: '46Min', late: '-', overtime: '-', prodHrs: '3H 45Min', isProdGreen: true },
-  { id: '02', date: 'April 17, 2026', currentStatus: 'punch-out', status: 'Present', checkIn: '09:30 AM', checkOut: '06:45 PM', break: '8Min', late: '-', overtime: '1H 6Min', prodHrs: '9H 6Min', isProdGreen: true },
-  { id: '03', date: 'April 16, 2026', currentStatus: 'punch-out', status: 'Present', checkIn: '09:36 AM', checkOut: '07:15 PM', break: '1H 33Min', late: '-', overtime: '5Min', prodHrs: '8H 5Min', isProdGreen: true },
-  { id: '04', date: 'April 15, 2026', currentStatus: 'punch-out', status: 'Present', checkIn: '09:32 AM', checkOut: '06:39 PM', break: '55Min', late: '-', overtime: '12Min', prodHrs: '8H 12Min', isProdGreen: true },
-  { id: '05', date: 'April 14, 2026', currentStatus: 'punch-out', status: 'Present', checkIn: '09:32 AM', checkOut: '06:32 PM', break: '53Min', late: '-', overtime: '7Min', prodHrs: '8H 7Min', isProdGreen: true },
-  { id: '06', date: 'April 13, 2026', currentStatus: 'punch-out', status: 'Present', checkIn: '09:29 AM', checkOut: '06:31 PM', break: '57Min', late: '-', overtime: '4Min', prodHrs: '8H 4Min', isProdGreen: true },
-  { id: '07', date: 'April 12, 2026', currentStatus: 'punch-out', status: 'Present', checkIn: '09:41 AM', checkOut: '06:38 PM', break: '52Min', late: '-', overtime: '4Min', prodHrs: '8H 4Min', isProdGreen: true },
-  { id: '08', date: 'April 11, 2026', currentStatus: 'punch-out', status: 'Present', checkIn: '09:30 AM', checkOut: '06:32 PM', break: '57Min', late: '-', overtime: '4Min', prodHrs: '8H 4Min', isProdGreen: true },
-];
-
+import { API_URL } from "@/lib/config";
+import { useUserContext } from "@/context/UserContext";
+ 
 export default function AttendancePage() {
+  const { user } = useUserContext();
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [recoverModalOpen, setRecoverModalOpen] = useState(false);
-
+  const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [stats, setStats] = useState({
+    presentDays: 0,
+    avgHours: "0",
+    totalWorkTime: "0H 0M",
+    totalBreakTime: "0M"
+  });
+ 
+  useEffect(() => {
+    if (user) {
+      fetchAttendance();
+    }
+  }, [user]);
+ 
+  const fetchAttendance = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/attendance`);
+      if (res.ok) {
+        let data = await res.json();
+        
+        if (user.role !== "Admin" && user.role !== "HR") {
+          data = data.filter((a: any) => a.employeeId === user.id);
+        }
+ 
+        data.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setAttendance(data);
+        calculateStats(data);
+      }
+    } catch (err) {
+      console.error("Error fetching attendance:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+ 
+  const calculateStats = (data: any[]) => {
+    const presentDays = data.length;
+    let totalMinutes = 0;
+    let totalBreakMinutes = 0;
+ 
+    data.forEach(a => {
+      if (a.workHours) {
+        const parts = a.workHours.match(/(\d+)h\s+(\d+)m/);
+        if (parts) {
+          totalMinutes += parseInt(parts[1]) * 60 + parseInt(parts[2]);
+        }
+      }
+      (a.breaks || []).forEach((b: any) => {
+        if (b.duration) totalBreakMinutes += parseInt(b.duration);
+      });
+    });
+ 
+    const avg = presentDays > 0 ? (totalMinutes / presentDays / 60).toFixed(1) : "0";
+    setStats({
+      presentDays,
+      avgHours: avg,
+      totalWorkTime: `${Math.floor(totalMinutes / 60)}H ${totalMinutes % 60}M`,
+      totalBreakTime: `${totalBreakMinutes}M`
+    });
+  };
+ 
+  const currentRecord = attendance.find(a => a.date === dayjs().format("YYYY-MM-DD"));
+ 
   const CalendarWidget = () => (
     <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-foreground text-lg">October 2024</h3>
+        <h3 className="font-bold text-foreground text-lg">{dayjs().format("MMMM YYYY")}</h3>
         <div className="bg-brand-light/50 text-brand-teal text-xs font-medium px-2 py-1 rounded-md">
-          22 present
+          {stats.presentDays} present
         </div>
       </div>
-
       <div className="grid grid-cols-7 gap-y-2 text-center text-sm mb-2">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
           <div key={i} className="text-muted-foreground font-semibold text-xs py-2">{day}</div>
         ))}
-        
-        <div className="py-2 text-foreground bg-gray-50 rounded-md m-0.5">1</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">2</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">3</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">4</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">5</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">6</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">7</div>
-        
-        <div className="py-2 text-foreground bg-gray-50 rounded-md m-0.5">8</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">9</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">10</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">11</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">12</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">13</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">14</div>
-        
-        <div className="py-2 text-foreground bg-gray-50 rounded-md m-0.5">15</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">16</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">17</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">18</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">19</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">20</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">21</div>
-        
-        <div className="py-2 text-foreground bg-gray-50 rounded-md m-0.5">22</div>
-        <div className="py-2 text-brand-teal bg-brand-light/40 rounded-md m-0.5 font-medium">23</div>
-        <div className="py-2 text-white bg-brand-teal rounded-md m-0.5 font-bold shadow-sm">24</div>
-        <div className="py-2 text-foreground m-0.5">25</div>
-        <div className="py-2 text-foreground m-0.5">26</div>
-        <div className="py-2 text-foreground m-0.5">27</div>
-        <div className="py-2 text-foreground m-0.5">28</div>
-        
-        <div className="py-2 text-foreground m-0.5">29</div>
-        <div className="py-2 text-foreground m-0.5">30</div>
-        <div className="py-2 text-foreground m-0.5">31</div>
+        {Array.from({ length: 31 }).map((_, i) => {
+          const dayNum = i + 1;
+          const isToday = dayNum === dayjs().date();
+          const hasRecord = attendance.some(a => dayjs(a.date).date() === dayNum && dayjs(a.date).month() === dayjs().month());
+          
+          return (
+            <div 
+              key={i} 
+              className={`py-2 rounded-md m-0.5 text-xs ${
+                isToday ? 'bg-brand-teal text-white font-bold shadow-sm' : 
+                hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium' : 'text-foreground bg-gray-50'
+              }`}
+            >
+              {dayNum}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
-
+ 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Attendance"
-        description="Manage your team members and their account permissions here."
+        title="Attendance List"
+        description="View and manage attendance records for the organization."
       >
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           <Dialog open={recoverModalOpen} onOpenChange={setRecoverModalOpen}>
@@ -112,45 +151,19 @@ export default function AttendancePage() {
                 <div className="space-y-2 flex flex-col">
                   <label className="text-sm font-medium text-foreground">Date of Record</label>
                   <DatePicker 
-                    defaultValue={dayjs("2026-04-18", "YYYY-MM-DD")}
-                    className="w-full h-9 hover:border-brand-teal focus-within:border-brand-teal focus-within:ring-brand-teal"
+                    className="w-full h-9 hover:border-brand-teal focus-within:border-brand-teal"
                     format="MMMM D, YYYY"
                   />
                 </div>
-                
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2 flex flex-col">
                     <label className="text-sm font-medium text-foreground">Recorded Break-In</label>
-                    <TimePicker 
-                      defaultValue={dayjs("13:15", "HH:mm")}
-                      className="w-full h-9 hover:border-brand-teal focus-within:border-brand-teal focus-within:ring-brand-teal"
-                      format="hh:mm A"
-                      use12Hours
-                    />
+                    <TimePicker className="w-full h-9" format="hh:mm A" use12Hours />
                   </div>
                   <div className="space-y-2 flex flex-col">
                     <label className="text-sm font-medium text-foreground">Actual Break-Out Time</label>
-                    <TimePicker 
-                      defaultValue={dayjs("14:00", "HH:mm")}
-                      className="w-full h-9 hover:border-brand-teal focus-within:border-brand-teal focus-within:ring-brand-teal"
-                      format="hh:mm A"
-                      use12Hours
-                    />
+                    <TimePicker className="w-full h-9" format="hh:mm A" use12Hours />
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Reason for Request</label>
-                  <Select defaultValue="forgot">
-                    <SelectTrigger className="w-full h-9">
-                      <SelectValue placeholder="Select reason" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="forgot">I am forgot break out please recoverd my time.</SelectItem>
-                      <SelectItem value="system">System error/Glitch</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
               <DialogFooter className="gap-2 sm:gap-2 mt-4">
@@ -161,300 +174,267 @@ export default function AttendancePage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          
           <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium">
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
         </div>
       </PageHeader>
-
+ 
       <div className="flex flex-col gap-6">
-        
-        {/* Top Section */}
         <div className="flex flex-col xl:flex-row gap-6">
           <div className="flex-1 space-y-6">
-          
-          {/* Top Info Banner */}
-          <div className="bg-white border border-border rounded-xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <Avatar className="w-16 h-16 border border-border">
-                <AvatarImage src="/avatars/sarah.jpg" />
-                <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xl">SJ</AvatarFallback>
-              </Avatar>
-              <div>
-                <h2 className="text-xl font-bold text-foreground mb-1">Sarah Jenkins</h2>
-                <p className="text-sm text-muted-foreground mb-2">HR Manager • Employee ID #EMP-001</p>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand-light/50 border border-brand-teal/20 text-brand-teal text-xs font-semibold">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Present today
+            <div className="bg-white border border-border rounded-xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <Avatar className="w-16 h-16 border border-border">
+                  <AvatarImage src={user?.profilePhoto} />
+                  <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xl">
+                    {user?.name?.split(' ').map((n:any) => n[0]).join('')}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h2 className="text-xl font-bold text-foreground mb-1">{user?.name}</h2>
+                  <p className="text-sm text-muted-foreground mb-2">{user?.role} • {user?.designation}</p>
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-semibold ${
+                    currentRecord ? 'bg-brand-light/50 border-brand-teal/20 text-brand-teal' : 'bg-gray-50 border-gray-200 text-gray-500'
+                  }`}>
+                    {currentRecord ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                    {currentRecord ? 'Present today' : 'Not Punched In'}
+                  </div>
+                </div>
+              </div>
+ 
+              <div className="flex items-stretch gap-2 sm:gap-3 w-full md:w-auto">
+                <div className="flex-1 md:flex-none md:min-w-[100px] bg-gray-50 border border-border rounded-lg p-2 sm:p-3 flex flex-col justify-center">
+                  <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Today</span>
+                  <span className="text-sm sm:text-lg font-bold text-foreground">{currentRecord?.workHours || '--'}</span>
+                </div>
+                <div className="flex-1 md:flex-none md:min-w-[100px] bg-gray-50 border border-border rounded-lg p-2 sm:p-3 flex flex-col justify-center">
+                  <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Check-in</span>
+                  <span className="text-sm sm:text-lg font-bold text-foreground">{currentRecord?.checkIn || '--'}</span>
+                </div>
+                <div className={`flex-1 md:flex-none md:min-w-[100px] border rounded-lg p-2 sm:p-3 flex flex-col justify-center ${
+                  currentRecord?.status === "On Break" ? 'bg-amber-50 border-amber-100' : 'bg-brand-light/30 border-brand-teal/10'
+                }`}>
+                  <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Status</span>
+                  <span className={`text-sm sm:text-lg font-bold ${currentRecord?.status === "On Break" ? 'text-amber-600' : 'text-brand-teal'}`}>
+                    {currentRecord?.status || 'Inactive'}
+                  </span>
                 </div>
               </div>
             </div>
-
-            <div className="flex items-stretch gap-2 sm:gap-3 w-full md:w-auto">
-              <div className="flex-1 md:flex-none md:min-w-[100px] bg-gray-50 border border-border rounded-lg p-2 sm:p-3 flex flex-col justify-center">
-                <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Today</span>
-                <span className="text-sm sm:text-lg font-bold text-foreground">7h 42m</span>
+ 
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-medium text-muted-foreground">Present Days</span>
+                  <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div className="text-3xl font-bold text-foreground mb-2">{stats.presentDays}</div>
+                <p className="text-xs text-muted-foreground">Days recorded this month</p>
               </div>
-              <div className="flex-1 md:flex-none md:min-w-[100px] bg-gray-50 border border-border rounded-lg p-2 sm:p-3 flex flex-col justify-center">
-                <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Check-in</span>
-                <span className="text-sm sm:text-lg font-bold text-foreground">08:52</span>
+              <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-medium text-muted-foreground">Avg Daily Hours</span>
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div className="text-3xl font-bold text-foreground mb-2">{stats.avgHours}h</div>
+                <p className="text-xs text-muted-foreground">Based on your activity</p>
               </div>
-              <div className="flex-1 md:flex-none md:min-w-[100px] bg-brand-light/30 border border-brand-teal/10 rounded-lg p-2 sm:p-3 flex flex-col justify-center">
-                <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Status</span>
-                <span className="text-sm sm:text-lg font-bold text-brand-teal">Active</span>
+              <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-medium text-muted-foreground">Break Time</span>
+                  <Coffee className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div className="text-3xl font-bold text-foreground mb-2">{stats.totalBreakTime}</div>
+                <p className="text-xs text-muted-foreground">Cumulative break duration</p>
+              </div>
+              <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-medium text-muted-foreground">Working Time</span>
+                  <Briefcase className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div className="text-3xl font-bold text-foreground mb-2">{stats.totalWorkTime.split(' ')[0]}</div>
+                <p className="text-xs text-muted-foreground">Total hours this month</p>
               </div>
             </div>
           </div>
-
-          {/* Calendar on Mobile Only */}
-          <div className="w-full xl:hidden shrink-0">
-            <CalendarWidget />
-          </div>
-
-          {/* 4 Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-xs font-medium text-muted-foreground">Present Days</span>
-                <CalendarIcon className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="text-3xl font-bold text-foreground mb-2">22</div>
-              <p className="text-xs text-muted-foreground leading-snug">Out of 24 working days this month</p>
-            </div>
-            <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-xs font-medium text-muted-foreground">Late Check-ins</span>
-                <Clock className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="text-3xl font-bold text-foreground mb-2">2</div>
-              <p className="text-xs text-muted-foreground leading-snug">Improved from 4 late arrivals last month</p>
-            </div>
-            <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-xs font-medium text-muted-foreground">Avg Daily Hours</span>
-                <Clock className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="text-3xl font-bold text-foreground mb-2">8.1h</div>
-              <p className="text-xs text-muted-foreground leading-snug">Consistent attendance across the last 30 days</p>
-            </div>
-            <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-xs font-medium text-muted-foreground">Leave Balance</span>
-                <Briefcase className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="text-3xl font-bold text-foreground mb-2">7</div>
-              <p className="text-xs text-muted-foreground leading-snug">Paid leave days remaining this quarter</p>
-            </div>
-          </div>
-
-          {/* Totals Row */}
-          <div className="bg-white border border-border rounded-xl shadow-sm flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-border">
-            <div className="flex-1 p-4">
-              <div className="text-xs font-medium text-muted-foreground mb-1">Total Time</div>
-              <div className="text-base font-bold text-foreground">1329H 5Min</div>
-            </div>
-            <div className="flex-1 p-4">
-              <div className="text-xs font-medium text-muted-foreground mb-1">Total Break Time</div>
-              <div className="text-base font-bold text-foreground">170H 57Min</div>
-            </div>
-            <div className="flex-1 p-4">
-              <div className="text-xs font-medium text-muted-foreground mb-1">Total Late Time</div>
-              <div className="text-base font-bold text-foreground">48H 11Min</div>
-            </div>
-            <div className="flex-1 p-4">
-              <div className="text-xs font-medium text-muted-foreground mb-1">Total Overtime</div>
-              <div className="text-base font-bold text-foreground">36H 4Min</div>
-            </div>
-          </div>
-          </div>
-
-          {/* Calendar on Desktop Only */}
           <div className="hidden xl:block w-full xl:w-[320px] shrink-0">
             <CalendarWidget />
           </div>
         </div>
-
-        {/* Table - Full Width Bottom */}
+ 
         <div className="w-full">
-          <div className="bg-white border border-border rounded-xl shadow-sm">
+          <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-muted-foreground font-semibold bg-gray-50/50 border-b border-border">
-                  <tr>
-                    <th className="px-5 py-4 font-medium">Sr. No.</th>
-                    <th className="px-5 py-4 font-medium">Date</th>
-                    <th className="px-5 py-4 font-medium">Current Status</th>
-                    <th className="px-5 py-4 font-medium">Status</th>
-                    <th className="px-5 py-4 font-medium">Check In</th>
-                    <th className="px-5 py-4 font-medium">Check Out</th>
-                    <th className="px-5 py-4 font-medium">Break</th>
-                    <th className="px-5 py-4 font-medium">Late</th>
-                    <th className="px-5 py-4 font-medium">Overtime</th>
-                    <th className="px-5 py-4 font-medium">Production Hrs</th>
-                    <th className="px-5 py-4 font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {attendanceData.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-muted/50 transition-colors">
-                      <td className="px-5 py-4 text-foreground">{row.id}</td>
-                      <td className="px-5 py-4 text-foreground font-medium">{row.date}</td>
-                      <td className="px-5 py-4 text-foreground">{row.currentStatus}</td>
-                      <td className="px-5 py-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-light/50 border border-brand-teal/20 text-brand-teal text-xs font-semibold">
-                          <CheckCircle2 className="w-3 h-3" />
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-foreground">{row.checkIn}</td>
-                      <td className="px-5 py-4 text-foreground">{row.checkOut}</td>
-                      <td className="px-5 py-4 text-foreground">{row.break}</td>
-                      <td className="px-5 py-4 text-foreground">{row.late}</td>
-                      <td className="px-5 py-4 text-foreground">{row.overtime}</td>
-                      <td className="px-5 py-4">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-brand-light/50 border border-brand-teal/20 text-brand-teal text-xs font-semibold">
-                          {row.prodHrs}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        {idx === 0 ? (
-                          <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
-                            <DialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-brand-teal bg-brand-light/50 hover:bg-brand-light">
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[480px]">
-                              <DialogHeader className="pb-4 border-b border-border">
-                                <DialogTitle className="text-xl font-bold">Attendance Details</DialogTitle>
-                                <div className="flex items-center gap-3 mt-2">
-                                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                    <CalendarIcon className="w-4 h-4" />
-                                    April 18, 2026
-                                  </div>
-                                  <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                                    <Avatar className="w-5 h-5">
-                                      <AvatarImage src="/avatars/sarah.jpg" />
-                                      <AvatarFallback>SJ</AvatarFallback>
-                                    </Avatar>
-                                    Sarah Jenkins
-                                  </div>
-                                </div>
-                              </DialogHeader>
-                              
-                              <div className="py-2">
-                                <div className="flex items-center justify-between border border-border rounded-xl p-3 mb-4 shadow-sm">
-                                  <div className="text-sm">
-                                    <span className="text-muted-foreground">Current Status: </span>
-                                    <span className="font-semibold text-foreground">Break-out</span>
-                                  </div>
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-light/50 border border-brand-teal/20 text-brand-teal text-xs font-semibold">
-                                    <CheckCircle2 className="w-3 h-3" />
-                                    Present
-                                  </span>
-                                </div>
-
-                                <div className="grid grid-cols-4 gap-3 mb-6">
-                                  <div className="border border-border rounded-lg p-2 text-center">
-                                    <div className="text-xs text-muted-foreground mb-1">Check In</div>
-                                    <div className="font-bold text-sm text-foreground">09:34 AM</div>
-                                  </div>
-                                  <div className="border border-border rounded-lg p-2 text-center">
-                                    <div className="text-xs text-muted-foreground mb-1">Check Out</div>
-                                    <div className="font-bold text-sm text-muted-foreground">--:--</div>
-                                  </div>
-                                  <div className="border border-border rounded-lg p-2 text-center">
-                                    <div className="text-xs text-muted-foreground mb-1">Break</div>
-                                    <div className="font-bold text-sm text-foreground">46 Min</div>
-                                  </div>
-                                  <div className="border border-brand-teal/30 bg-brand-light/20 rounded-lg p-2 text-center">
-                                    <div className="text-xs text-brand-teal font-medium mb-1">Prod. Hrs</div>
-                                    <div className="font-bold text-sm text-brand-teal">3H 45Min</div>
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <h4 className="font-semibold text-foreground mb-4">Activity Timeline</h4>
-                                  <div className="space-y-0 relative before:absolute before:inset-0 before:ml-[11px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent">
-                                    
-                                    <div className="relative flex items-start justify-between mb-6">
-                                      <div className="flex items-start gap-4">
-                                        <div className="w-6 h-6 rounded-full bg-brand-teal border-4 border-white flex-shrink-0 z-10 relative"></div>
-                                        <div>
-                                          <div className="font-semibold text-sm text-foreground">Punched In</div>
-                                          <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                            Web Portal • IP: 192.168.1.45
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="text-sm font-medium text-foreground">09:34 AM</div>
-                                    </div>
-
-                                    <div className="relative flex items-start justify-between mb-6">
-                                      <div className="flex items-start gap-4">
-                                        <div className="w-6 h-6 rounded-full bg-amber-400 border-4 border-white flex-shrink-0 z-10 relative"></div>
-                                        <div>
-                                          <div className="font-semibold text-sm text-foreground">Break Start</div>
-                                          <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                            Lunch Break
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="text-sm font-medium text-foreground">12:15 PM</div>
-                                    </div>
-
-                                    <div className="relative flex items-start justify-between mb-6">
-                                      <div className="flex items-start gap-4">
-                                        <div className="w-6 h-6 rounded-full bg-amber-400 border-4 border-white flex-shrink-0 z-10 relative"></div>
-                                        <div>
-                                          <div className="font-semibold text-sm text-foreground">Break End</div>
-                                          <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                            Duration: 46 Min
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="text-sm font-medium text-foreground">01:01 PM</div>
-                                    </div>
-
-                                    <div className="relative flex items-start justify-between">
-                                      <div className="flex items-start gap-4">
-                                        <div className="w-6 h-6 rounded-full bg-gray-300 border-4 border-white flex-shrink-0 z-10 relative"></div>
-                                        <div>
-                                          <div className="font-semibold text-sm text-foreground">Punched Out</div>
-                                          <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                            Pending
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="text-sm font-medium text-muted-foreground">--:--</div>
-                                    </div>
-
-                                  </div>
-                                </div>
-                              </div>
-                              <DialogFooter className="pt-4 border-t border-border sm:justify-end">
-                                <Button variant="outline" onClick={() => setDetailsModalOpen(false)}>Close</Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                        ) : (
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-brand-teal bg-brand-light/50 hover:bg-brand-light">
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </td>
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
+                  <p className="text-muted-foreground font-medium">Loading records...</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-[11px] text-muted-foreground font-bold bg-gray-50/50 border-b border-border uppercase tracking-wider">
+                    <tr>
+                      <th className="px-5 py-4">Sr. No.</th>
+                      <th className="px-5 py-4">Date</th>
+                      <th className="px-5 py-4">Day</th>
+                      <th className="px-5 py-4">Current Status</th>
+                      <th className="px-5 py-4">Status</th>
+                      <th className="px-5 py-4">Check In</th>
+                      <th className="px-5 py-4">Check Out</th>
+                      <th className="px-5 py-4">Break</th>
+                      <th className="px-5 py-4">Late</th>
+                      <th className="px-5 py-4">Overtime</th>
+                      <th className="px-5 py-4">Production Hours</th>
+                      <th className="px-5 py-4">Total Working Hours</th>
+                      <th className="px-5 py-4 text-center">Remarks</th>
+                      <th className="px-5 py-4 text-center">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {attendance.map((row, idx) => {
+                      const totalBreak = (row.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
+                      
+                      // Calculate Total Working Hours (CheckIn to CheckOut)
+                      let totalWorkingStr = "--";
+                      if (row.checkIn && row.checkOut) {
+                         const start = dayjs(`${row.date}T${row.checkIn}`);
+                         const end = dayjs(`${row.date}T${row.checkOut}`);
+                         const diffMin = end.diff(start, 'minute');
+                         totalWorkingStr = `${Math.floor(diffMin / 60)}H ${diffMin % 60}Min`;
+                      }
+ 
+                      return (
+                        <tr key={idx} className="hover:bg-muted/50 transition-colors">
+                          <td className="px-5 py-4 text-foreground font-medium">{(idx + 1).toString().padStart(2, '0')}</td>
+                          <td className="px-5 py-4 text-foreground font-medium">{row.date}</td>
+                          <td className="px-5 py-4 text-foreground">{dayjs(row.date).format("dddd")}</td>
+                          <td className="px-5 py-4 text-foreground lowercase">{row.status === "On Break" ? "break-out" : (row.checkOut ? "punch-out" : "punch-in")}</td>
+                          <td className="px-5 py-4">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-green-200 bg-green-50 text-green-600 text-[11px] font-bold">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Present
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-foreground font-mono text-[13px]">{row.checkIn}</td>
+                          <td className="px-5 py-4 text-foreground font-mono text-[13px]">{row.checkOut || '-'}</td>
+                          <td className="px-5 py-4 text-foreground">{totalBreak}Min</td>
+                          <td className="px-5 py-4 text-foreground text-center">-</td>
+                          <td className="px-5 py-4 text-foreground text-center">-</td>
+                          <td className="px-5 py-4">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-brand-light/50 text-brand-teal text-[11px] font-bold border border-brand-teal/10">
+                              {row.workHours ? row.workHours.replace('h', 'H').replace('m', 'Min') : '--'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-foreground font-medium text-[13px]">{totalWorkingStr}</td>
+                          <td className="px-5 py-4 text-foreground text-center">-</td>
+                          <td className="px-5 py-4 text-center">
+                            <Button 
+                              onClick={() => { setSelectedRecord(row); setDetailsModalOpen(true); }}
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-brand-teal border border-brand-teal/20 bg-brand-light/50 hover:bg-brand-light"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {attendance.length === 0 && (
+                      <tr>
+                        <td colSpan={14} className="px-6 py-20 text-center text-muted-foreground">
+                          No attendance records found for this period.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
-            <TablePagination totalItems={195} itemsPerPage={8} currentPage={1} itemName="entries" />
+            {!isLoading && <TablePagination totalItems={attendance.length} itemsPerPage={10} currentPage={1} itemName="entries" />}
           </div>
         </div>
-
       </div>
+ 
+      {/* Details Modal */}
+      <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader className="pb-4 border-b border-border">
+            <DialogTitle className="text-xl font-bold">Attendance Details</DialogTitle>
+            {selectedRecord && (
+              <div className="flex items-center gap-3 mt-2">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <CalendarIcon className="w-4 h-4" />
+                  {dayjs(selectedRecord.date).format("MMMM D, YYYY")}
+                </div>
+              </div>
+            )}
+          </DialogHeader>
+          {selectedRecord && (
+            <div className="py-4 space-y-6">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="border border-border rounded-lg p-3 text-center">
+                  <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">In</div>
+                  <div className="font-bold text-sm">{selectedRecord.checkIn}</div>
+                </div>
+                <div className="border border-border rounded-lg p-3 text-center">
+                  <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Out</div>
+                  <div className="font-bold text-sm">{selectedRecord.checkOut || '--:--'}</div>
+                </div>
+                <div className="border border-brand-teal/30 bg-brand-light/20 rounded-lg p-3 text-center">
+                  <div className="text-[10px] uppercase font-bold text-brand-teal mb-1">Work</div>
+                  <div className="font-bold text-sm text-brand-teal">{selectedRecord.workHours || '--'}</div>
+                </div>
+              </div>
+ 
+              <div>
+                <h4 className="font-bold text-foreground text-sm mb-4 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-brand-teal" /> Activity Timeline
+                </h4>
+                <div className="max-h-[300px] overflow-y-auto pr-4 custom-scrollbar">
+                  <div className="space-y-6 border-l-2 border-brand-light ml-2 pl-6 relative">
+                    <div className="relative">
+                      <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-brand-teal"></div>
+                      <div className="font-semibold text-sm">Punched In</div>
+                      <div className="text-xs text-muted-foreground">{selectedRecord.checkIn}</div>
+                    </div>
+                    
+                    {(selectedRecord.breaks || []).map((b: any, i: number) => (
+                      <React.Fragment key={i}>
+                        <div className="relative">
+                          <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-amber-400"></div>
+                          <div className="font-semibold text-sm">Break Start</div>
+                          <div className="text-xs text-muted-foreground">{b.startTime}</div>
+                        </div>
+                        {b.endTime && (
+                          <div className="relative">
+                            <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-amber-400"></div>
+                            <div className="font-semibold text-sm">Break End</div>
+                            <div className="text-xs text-muted-foreground">{b.endTime} ({b.duration}m)</div>
+                          </div>
+                        )}
+                      </React.Fragment>
+                    ))}
+ 
+                    {selectedRecord.checkOut && (
+                      <div className="relative">
+                        <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-gray-400"></div>
+                        <div className="font-semibold text-sm">Punched Out</div>
+                        <div className="text-xs text-muted-foreground">{selectedRecord.checkOut}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailsModalOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -4,8 +4,8 @@ import './globals.css'
 import { AppLayout } from "@/components/layout/AppLayout"
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import { ConfigProvider } from 'antd';
-
-
+import { UserProvider } from '@/context/UserContext';
+ 
 export const metadata: Metadata = {
   title: 'HRMS - Human Resource Management System',
   description: 'Complete HRMS solution for managing employees, attendance, payroll, and more',
@@ -28,8 +28,7 @@ export const metadata: Metadata = {
     apple: '/apple-icon.png',
   },
 }
-
-
+ 
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -38,37 +37,37 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-background" suppressHydrationWarning>
       <body className="font-sans antialiased bg-background flex min-h-screen text-foreground" suppressHydrationWarning>
-        <AntdRegistry>
-          <ConfigProvider
-            theme={{
-              token: {
-                colorPrimary: '#09A08A',
-                borderRadius: 8,
-                colorBgContainer: '#EAF7F6', // Match sidebar bg
-              },
-              components: {
-                Menu: {
-                  itemSelectedBg: '#09A08A',
-                  itemSelectedColor: '#FFFFFF',
-                  itemHoverBg: '#FFFFFF',
-                  itemMarginInline: 8,
-                  itemPaddingInline: 12,
-                  itemMarginBlock: 4,
-                  itemHeight: 30,
+        <UserProvider>
+          <AntdRegistry>
+            <ConfigProvider
+              theme={{
+                token: {
+                  colorPrimary: '#09A08A',
+                  borderRadius: 8,
+                  colorBgContainer: '#EAF7F6', 
                 },
-              },
-
-            }}
-          >
-            <AppLayout>
-              {children}
-            </AppLayout>
-          </ConfigProvider>
-        </AntdRegistry>
-
+                components: {
+                  Menu: {
+                    itemSelectedBg: '#09A08A',
+                    itemSelectedColor: '#FFFFFF',
+                    itemHoverBg: '#FFFFFF',
+                    itemMarginInline: 8,
+                    itemPaddingInline: 12,
+                    itemMarginBlock: 4,
+                    itemHeight: 30,
+                  },
+                },
+              }}
+            >
+              <AppLayout>
+                {children}
+              </AppLayout>
+            </ConfigProvider>
+          </AntdRegistry>
+        </UserProvider>
+ 
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )
 }
-

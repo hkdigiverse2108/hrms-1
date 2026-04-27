@@ -80,7 +80,14 @@ export default function EditEmployeePage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
-          <h1 className="text-2xl font-bold text-gray-800">Edit Employee</h1>
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-bold text-gray-800">Edit Employee</h1>
+            {employeeData && (
+              <p className="text-sm text-gray-500 font-medium">
+                {employeeData.firstName} {employeeData.lastName} • ID: {employeeData.employeeId}
+              </p>
+            )}
+          </div>
         </div>
 
         {isLoading ? (

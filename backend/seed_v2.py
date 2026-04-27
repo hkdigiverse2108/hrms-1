@@ -24,7 +24,7 @@ def seed():
 
     seed_collection("roles", [
         {"name": "Admin"},
-        {"name": "Manager"},
+        {"name": "HR"},
         {"name": "Employee"},
     ])
 
@@ -78,9 +78,38 @@ def seed():
         {"name": "Republic Day", "date": "2024-01-26", "type": "public"},
     ])
 
-    seed_collection("kpi_records", [
-        {"employeeId": "EMP001", "employeeName": "John Smith", "period": "Q4 2023", "score": 92, "goals": 10, "achieved": 9, "rating": "excellent"},
-        {"employeeId": "EMP002", "employeeName": "Sarah Johnson", "period": "Q4 2023", "score": 88, "goals": 8, "achieved": 7, "rating": "good"},
+    # Employees
+    seed_collection("employees", [
+        {
+            "employeeId": "EMP001",
+            "firstName": "John",
+            "middleName": "Robert",
+            "lastName": "Doe",
+            "email": "john.doe@hkdigiverse.com",
+            "phone": "+91 9876543210",
+            "password": "hashed_password_123",
+            "dob": "1990-05-15",
+            "joinDate": "2024-01-01",
+            "salary": 75000.0,
+            "role": "HR",
+            "status": "active",
+            "department": "HR",
+            "designation": "HR Manager",
+            "position": "Senior HR",
+            "upiId": "john.doe@okaxis",
+            "accountNumber": "123456789012",
+            "ifscCode": "UTIB0000123",
+            "bankName": "Axis Bank",
+            "accountHolderName": "John Robert Doe",
+            "parentName": "Richard Doe",
+            "parentNumber": "+91 9988776655",
+            "relation": "Father",
+            "aadharCard": "1234 5678 9012",
+            "panCard": "ABCDE1234F",
+            "startTime": "09:00",
+            "endTime": "18:00",
+            "profilePhoto": "https://api.dicebear.com/7.x/avataaars/svg?seed=John"
+        }
     ])
 
     print("Seeding complete!")

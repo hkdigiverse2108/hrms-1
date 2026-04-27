@@ -32,7 +32,7 @@ const tasks = [
   {
     id: "T2",
     title: "Collect attendance exceptions",
-    desc: "Managers need to confirm missing punch reports",
+    desc: "HR needs to confirm missing punch reports",
     assignee: "Mia Clark",
     avatar: "/avatars/mia.jpg",
     status: "Pending",
