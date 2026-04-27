@@ -12,7 +12,7 @@ export function Sidebar() {
       collapsedWidth="0"
       theme="light"
       width={260}
-      className="hidden lg:block border-r border-sidebar-border h-screen"
+      className="border-r border-sidebar-border h-screen"
       style={{ background: '#EAF7F6' }}
     >
       <SidebarNav />

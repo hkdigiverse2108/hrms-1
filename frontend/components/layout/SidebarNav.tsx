@@ -98,7 +98,7 @@ export function SidebarNav() {
           </div>
           <div className="flex flex-col">
             <div className="flex flex-col leading-tight">
-              <span className="text-slate-800 font-extrabold text-[15px] tracking-tight">HariKrushn</span>
+              <span className="text-foreground font-extrabold text-[15px] tracking-tight">HariKrushn</span>
               <span className="text-primary font-bold text-[14px] -mt-1">DigiVerse LLP</span>
             </div>
           </div>
