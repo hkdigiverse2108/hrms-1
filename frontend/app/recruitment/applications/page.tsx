@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
 import { StatusBadge } from '@/components/hrms/status-badge'
 import { Button } from '@/components/ui/button'
@@ -118,7 +117,7 @@ export default function ApplicationsPage() {
   }
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Applications" description="Track and manage candidate applications.">
         <Button variant="outline">
           <Download className="mr-2 h-4 w-4" />
@@ -204,6 +203,6 @@ export default function ApplicationsPage() {
           />
         </TabsContent>
       </Tabs>
-    </HRMSLayout>
+    </>
   )
 }

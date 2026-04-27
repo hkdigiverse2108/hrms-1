@@ -1,7 +1,6 @@
 'use client'
 
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -24,7 +23,7 @@ const penaltyRules = [
 
 export default function LatePenaltyPage() {
   return (
-    <HRMSLayout>
+    <>
       <PageHeader
         title="Late & Penalty"
         description="Track late arrivals and apply penalties as per company policy."
@@ -149,6 +148,6 @@ export default function LatePenaltyPage() {
           </div>
         </CardContent>
       </Card>
-    </HRMSLayout>
+    </>
   )
 }

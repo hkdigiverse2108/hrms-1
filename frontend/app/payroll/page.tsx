@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
 import { StatusBadge } from '@/components/hrms/status-badge'
 import { StatsCard } from '@/components/hrms/stats-card'
@@ -132,7 +131,7 @@ export default function PayrollPage() {
   )
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Payroll Processing" description="Manage monthly payroll for all employees.">
         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
           <SelectTrigger className="w-[180px]">
@@ -192,6 +191,6 @@ export default function PayrollPage() {
           />
         </div>
       )}
-    </HRMSLayout>
+    </>
   )
 }

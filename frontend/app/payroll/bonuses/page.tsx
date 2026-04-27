@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,7 +65,7 @@ export default function BonusesPage() {
   }
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Bonuses & Deductions" description="Manage employee incentives and penalties.">
         <Button variant="outline" onClick={() => handleOpenModal('deduction')}>
           <Minus className="mr-2 h-4 w-4" />
@@ -275,6 +274,6 @@ export default function BonusesPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </HRMSLayout>
+    </>
   )
 }

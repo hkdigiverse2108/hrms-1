@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
 import { StatusBadge } from '@/components/hrms/status-badge'
 import { StatsCard } from '@/components/hrms/stats-card'
@@ -32,11 +31,11 @@ export default function LeaveManagementPage() {
 
   if (isLoading) {
     return (
-      <HRMSLayout>
+      <>
         <div className="flex h-[80vh] items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
-      </HRMSLayout>
+      </>
     )
   }
   const pendingRequests = leaveRequests.filter((r) => r.status === 'pending')
@@ -123,7 +122,7 @@ export default function LeaveManagementPage() {
     ) : null
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader
         title="Leave Management"
         description="Manage and approve employee leave requests."
@@ -198,6 +197,6 @@ export default function LeaveManagementPage() {
           />
         </TabsContent>
       </Tabs>
-    </HRMSLayout>
+    </>
   )
 }

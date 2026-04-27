@@ -1,7 +1,6 @@
 'use client'
 
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   BarChart,
@@ -62,7 +61,7 @@ const performanceDistribution = [
 
 export default function AnalyticsPage() {
   return (
-    <HRMSLayout>
+    <>
       <PageHeader
         title="Analytics"
         description="Comprehensive reports and insights about your organization."
@@ -210,6 +209,6 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
-    </HRMSLayout>
+    </>
   )
 }

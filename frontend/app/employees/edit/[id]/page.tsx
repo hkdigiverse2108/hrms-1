@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
@@ -73,7 +72,7 @@ export default function EditEmployeePage() {
   }
 
   return (
-    <HRMSLayout>
+    <>
       <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-10">
         <div className="flex items-center gap-4">
           <Link href="/employees">
@@ -102,6 +101,6 @@ export default function EditEmployeePage() {
           </div>
         )}
       </div>
-    </HRMSLayout>
+    </>
   )
 }

@@ -1,7 +1,6 @@
 'use client'
 
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -40,7 +39,7 @@ export default function SalaryStructurePage() {
   }
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Salary Structure" description="Define salary components and pay grades.">
         <Button>
           <Plus className="mr-2 h-4 w-4" />
@@ -181,6 +180,6 @@ export default function SalaryStructurePage() {
           </div>
         </CardContent>
       </Card>
-    </HRMSLayout>
+    </>
   )
 }

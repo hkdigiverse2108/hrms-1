@@ -1,7 +1,6 @@
 'use client'
 
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,7 +33,7 @@ export default function InternshipOffersPage() {
   }
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Internship Offers" description="Manage internship offer letters.">
         <Button>
           <Plus className="mr-2 h-4 w-4" />
@@ -84,6 +83,6 @@ export default function InternshipOffersPage() {
           </div>
         </CardContent>
       </Card>
-    </HRMSLayout>
+    </>
   )
 }

@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -106,7 +105,7 @@ export default function DepartmentsPage() {
 
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Departments" description="Manage departments in your organization.">
         <Button onClick={() => handleOpenModal()}>
           <Plus className="mr-2 h-4 w-4" />
@@ -201,6 +200,6 @@ export default function DepartmentsPage() {
         title="Delete Department"
         description={`Are you sure you want to delete ${departmentToDelete?.name}? This action cannot be undone.`}
       />
-    </HRMSLayout>
+    </>
   )
 }

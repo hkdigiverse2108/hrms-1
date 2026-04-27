@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -98,7 +97,7 @@ export default function ShiftsPage() {
   }
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Shift Management" description="Manage work shifts and timings.">
         <Button onClick={() => handleOpenModal()}>
           <Plus className="mr-2 h-4 w-4" />
@@ -256,6 +255,6 @@ export default function ShiftsPage() {
         title="Delete Shift"
         description={`Are you sure you want to delete "${shiftToDelete?.name}"? This action cannot be undone.`}
       />
-    </HRMSLayout>
+    </>
   )
 }

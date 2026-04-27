@@ -1,7 +1,6 @@
 'use client'
 
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -37,7 +36,7 @@ export default function PayslipsPage() {
   }
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Payslips" description="Generate and download employee payslips.">
         <Select defaultValue="January 2024">
           <SelectTrigger className="w-[180px]">
@@ -66,6 +65,6 @@ export default function PayslipsPage() {
         searchPlaceholder="Search employees..."
         actions={renderActions}
       />
-    </HRMSLayout>
+    </>
   )
 }

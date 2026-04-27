@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import { SidebarNav } from "./SidebarNav";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
+import { API_URL } from "@/lib/config";
 
 const { Header: AntHeader } = Layout;
 

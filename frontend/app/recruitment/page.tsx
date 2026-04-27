@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
 import { StatusBadge } from '@/components/hrms/status-badge'
 import { StatsCard } from '@/components/hrms/stats-card'
@@ -203,7 +202,7 @@ export default function RecruitmentPage() {
   )
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Job Openings" description="Manage open positions and recruitment.">
         <Button onClick={() => handleOpenModal()}>
           <Plus className="mr-2 h-4 w-4" />
@@ -341,6 +340,6 @@ export default function RecruitmentPage() {
         title="Delete Job Opening"
         description={`Are you sure you want to delete "${jobToDelete?.title}"? This action cannot be undone.`}
       />
-    </HRMSLayout>
+    </>
   )
 }

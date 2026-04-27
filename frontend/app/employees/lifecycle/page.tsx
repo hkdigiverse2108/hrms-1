@@ -1,7 +1,6 @@
 'use client'
 
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,7 +27,7 @@ export default function LifecyclePage() {
 
   const exitRequests: any[] = [] // Placeholder for future exit request migration
   return (
-    <HRMSLayout>
+    <>
       <PageHeader
         title="Employee Lifecycle"
         description="Manage employee onboarding, probation, and exit processes."
@@ -206,6 +205,6 @@ export default function LifecyclePage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </HRMSLayout>
+    </>
   )
 }

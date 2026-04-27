@@ -1,7 +1,6 @@
 'use client'
 
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -94,7 +93,7 @@ export default function OffersPage() {
   const acceptedOffers = offerLetters.filter((o) => o.status === 'accepted')
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Offer Letters" description="Generate and manage candidate offer letters.">
         <Button>
           <Plus className="mr-2 h-4 w-4" />
@@ -210,6 +209,6 @@ export default function OffersPage() {
           </div>
         </CardContent>
       </Card>
-    </HRMSLayout>
+    </>
   )
 }

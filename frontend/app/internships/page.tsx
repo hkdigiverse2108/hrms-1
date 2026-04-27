@@ -1,7 +1,6 @@
 'use client'
 
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
 import { StatusBadge } from '@/components/hrms/status-badge'
 import { StatsCard } from '@/components/hrms/stats-card'
@@ -84,7 +83,7 @@ export default function InternshipsPage() {
   )
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Intern List" description="Manage interns and their internship programs.">
         <Button>
           <Plus className="mr-2 h-4 w-4" />
@@ -125,6 +124,6 @@ export default function InternshipsPage() {
           />
         </div>
       )}
-    </HRMSLayout>
+    </>
   )
 }

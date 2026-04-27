@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -17,21 +16,17 @@ export default function ProfilePage() {
 
   if (userLoading) {
     return (
-      <HRMSLayout>
-        <div className="flex h-[60vh] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </HRMSLayout>
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-teal" />
+      </div>
     )
   }
 
   if (!user) {
     return (
-      <HRMSLayout>
-        <div className="flex h-[60vh] items-center justify-center">
-          <p className="text-muted-foreground">Please log in to view your profile.</p>
-        </div>
-      </HRMSLayout>
+      <div className="flex h-[60vh] items-center justify-center">
+        <p className="text-muted-foreground">Please log in to view your profile.</p>
+      </div>
     )
   }
 
@@ -87,7 +82,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <HRMSLayout>
+    <div className="space-y-6">
       <PageHeader title="My Profile" description="Manage your personal information and account settings." />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -186,7 +181,7 @@ export default function ProfilePage() {
           </Card>
         </div>
       </div>
-    </HRMSLayout>
+    </div>
   )
 }
 

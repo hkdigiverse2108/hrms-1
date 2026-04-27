@@ -1,7 +1,6 @@
 'use client'
 
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -146,7 +145,7 @@ export default function InterviewsPage() {
   )
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Interviews" description="Schedule and manage candidate interviews.">
         <Button>
           <Plus className="mr-2 h-4 w-4" />
@@ -217,6 +216,6 @@ export default function InterviewsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </HRMSLayout>
+    </>
   )
 }

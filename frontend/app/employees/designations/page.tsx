@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { HRMSLayout } from '@/components/hrms/hrms-layout'
-import { PageHeader } from '@/components/hrms/page-header'
+import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
 import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -171,7 +170,7 @@ export default function DesignationsPage() {
   )
 
   return (
-    <HRMSLayout>
+    <>
       <PageHeader title="Designations" description="Manage job designations and roles.">
         <Button onClick={() => handleOpenModal()}>
           <Plus className="mr-2 h-4 w-4" />
@@ -264,6 +263,6 @@ export default function DesignationsPage() {
         title="Delete Designation"
         description={`Are you sure you want to delete ${designationToDelete?.title}? This action cannot be undone.`}
       />
-    </HRMSLayout>
+    </>
   )
 }
