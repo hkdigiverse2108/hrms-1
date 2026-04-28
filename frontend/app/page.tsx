@@ -40,6 +40,7 @@ import dayjs from "dayjs";
 import { TablePagination } from "@/components/common/TablePagination";
 import { RequestPunchOutDialog } from "@/components/dashboard/RequestPunchOutDialog";
 import { AddEventDialog } from "@/components/dashboard/AddEventDialog";
+import { ViewAllEventsDialog } from "@/components/dashboard/ViewAllEventsDialog";
  
 export default function DashboardPage() {
   const { user, isLoading } = useUserContext();
@@ -624,8 +625,10 @@ function EmployeeView({
  
 function EventsSidebar({ user }: { user: any }) {
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
+  const [isViewAllOpen, setIsViewAllOpen] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
   const [editingEvent, setEditingEvent] = useState<any>(null);
+  const [currentMonth, setCurrentMonth] = useState(dayjs());
   const canAddEvents = user?.role === "Admin" || user?.role === "HR";
  
   useEffect(() => {
@@ -634,11 +637,38 @@ function EventsSidebar({ user }: { user: any }) {
  
   const fetchEvents = async () => {
     try {
-      const res = await fetch(`${API_URL}/events`);
-      if (res.ok) {
-        const data = await res.json();
-        setEvents(data.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+      const [resEvents, resEmp] = await Promise.all([
+        fetch(`${API_URL}/events`),
+        fetch(`${API_URL}/employees`)
+      ]);
+      
+      let eventsData = [];
+      if (resEvents.ok) {
+        eventsData = await resEvents.json();
       }
+      
+      let empData = [];
+      if (resEmp.ok) {
+        empData = await resEmp.json();
+      }
+
+      const birthdayEvents = empData.filter((emp: any) => emp.dob).map((emp: any) => {
+        const dobDayjs = dayjs(emp.dob);
+        let bday = dobDayjs.year(dayjs().year());
+        if (bday.format('YYYY-MM-DD') < dayjs().format('YYYY-MM-DD')) {
+          bday = bday.add(1, 'year');
+        }
+        return {
+          id: `birthday-${emp.id}`,
+          type: 'birthday',
+          title: `${emp.firstName || emp.name?.split(' ')[0] || 'Employee'}'s Birthday`,
+          description: 'Happy Birthday!!',
+          date: bday.format('YYYY-MM-DD'),
+        };
+      });
+
+      const allCombined = [...eventsData, ...birthdayEvents];
+      setEvents(allCombined.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     } catch (err) {
       console.error("Error fetching events:", err);
     }
@@ -693,19 +723,37 @@ function EventsSidebar({ user }: { user: any }) {
     setEditingEvent(null);
   };
  
+  const displayedEvents = events
+    .filter((e: any) => dayjs(e.date).month() === currentMonth.month() && dayjs(e.date).year() === currentMonth.year())
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
   return (
     <div className="bg-white border border-border rounded-2xl p-6 shadow-sm h-fit">
       <div className="flex justify-between items-start mb-1">
-        <h3 className="font-bold text-lg text-[#111827]">Add & View Events</h3>
-        <Button variant="outline" size="sm" className="h-8 text-[11px] font-bold border-gray-200 px-3 rounded-lg text-gray-600">View all</Button>
+        <h3 className="font-bold text-lg text-[#111827]">View Events</h3>
+        <Button onClick={() => setIsViewAllOpen(true)} variant="outline" size="sm" className="h-8 text-[11px] font-bold border-gray-200 px-3 rounded-lg text-gray-600">View all</Button>
       </div>
       <p className="text-[13px] text-gray-500 mb-6 font-medium">This month events</p>
  
       <div className="bg-[#F9FAFB] border border-[#F3F4F6] rounded-2xl p-5 mb-6">
         <div className="flex items-center justify-between mb-6">
-           <Button variant="ghost" size="icon" className="h-8 w-8 bg-white border border-gray-100 shadow-sm rounded-lg"><ChevronLeft className="w-4 h-4 text-gray-400" /></Button>
-           <span className="text-[13px] font-bold text-[#111827]">{dayjs().format("MMMM YYYY")}</span>
-           <Button variant="ghost" size="icon" className="h-8 w-8 bg-white border border-gray-100 shadow-sm rounded-lg"><ChevronRight className="w-4 h-4 text-gray-400" /></Button>
+           <Button 
+             variant="ghost" 
+             size="icon" 
+             className="h-8 w-8 bg-white border border-gray-100 shadow-sm rounded-lg"
+             onClick={() => setCurrentMonth(currentMonth.subtract(1, 'month'))}
+           >
+             <ChevronLeft className="w-4 h-4 text-gray-400" />
+           </Button>
+           <span className="text-[13px] font-bold text-[#111827]">{currentMonth.format("MMMM YYYY")}</span>
+           <Button 
+             variant="ghost" 
+             size="icon" 
+             className="h-8 w-8 bg-white border border-gray-100 shadow-sm rounded-lg"
+             onClick={() => setCurrentMonth(currentMonth.add(1, 'month'))}
+           >
+             <ChevronRight className="w-4 h-4 text-gray-400" />
+           </Button>
         </div>
         
         <div className="grid grid-cols-7 text-center mb-4">
@@ -713,19 +761,31 @@ function EventsSidebar({ user }: { user: any }) {
         </div>
         
         <div className="grid grid-cols-7 gap-y-1">
-           {Array.from({length: 31}).map((_, i) => {
-             const day = i + 1;
-             const isToday = day === dayjs().date();
-             const hasEvent = events.some(e => dayjs(e.date).date() === day && dayjs(e.date).month() === dayjs().month());
-             return (
-               <div key={i} className={`h-8 flex items-center justify-center text-[13px] font-bold rounded-lg cursor-pointer transition-all ${
-                 isToday ? 'bg-brand-teal text-white shadow-md' : 
-                 hasEvent ? 'text-brand-teal bg-white border border-brand-teal/10' : 'text-gray-400 hover:bg-white'
-               }`}>
-                 {day}
-               </div>
-             );
-           })}
+           {(() => {
+             const daysInMonth = currentMonth.daysInMonth();
+             const firstDayOfMonth = currentMonth.startOf('month').day();
+             const days = [];
+             
+             for (let i = 0; i < firstDayOfMonth; i++) {
+               days.push(<div key={`empty-${i}`} className="h-8"></div>);
+             }
+             
+             for (let i = 1; i <= daysInMonth; i++) {
+               const dayDate = currentMonth.date(i);
+               const isToday = dayDate.format('YYYY-MM-DD') === dayjs().format('YYYY-MM-DD');
+               const hasEvent = events.some(e => dayjs(e.date).format('YYYY-MM-DD') === dayDate.format('YYYY-MM-DD'));
+               
+               days.push(
+                 <div key={i} className={`h-8 flex items-center justify-center text-[13px] font-bold rounded-lg cursor-pointer transition-all ${
+                   isToday ? 'bg-brand-teal text-white shadow-md' : 
+                   hasEvent ? 'text-brand-teal bg-white border border-brand-teal/10' : 'text-gray-400 hover:bg-white'
+                 }`}>
+                   {i}
+                 </div>
+               );
+             }
+             return days;
+           })()}
         </div>
  
         {canAddEvents && (
@@ -742,7 +802,7 @@ function EventsSidebar({ user }: { user: any }) {
       </div>
  
       <div className="space-y-4">
-         {events.length > 0 ? events.map((event, i) => (
+         {displayedEvents.length > 0 ? displayedEvents.map((event, i) => (
            <div key={event.id || i} className="group p-4 rounded-xl bg-white border border-gray-100 hover:border-brand-teal/20 transition-all shadow-sm flex items-center gap-4">
              <div className={`${
                event.type === 'meeting' ? 'bg-[#F0FDF4] text-green-600' : 
@@ -763,7 +823,7 @@ function EventsSidebar({ user }: { user: any }) {
                  <div className="text-[11px] text-gray-400 font-medium">{event.time}</div>
                )}
                
-               {canAddEvents && (
+               {canAddEvents && event.type !== 'birthday' && (
                  <div className="flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => handleEditClick(event)}
@@ -794,6 +854,15 @@ function EventsSidebar({ user }: { user: any }) {
         }}
         onAddEvent={editingEvent ? handleUpdateEvent : handleAddEvent}
         initialData={editingEvent}
+      />
+
+      <ViewAllEventsDialog
+        open={isViewAllOpen}
+        onOpenChange={setIsViewAllOpen}
+        events={events}
+        canAddEvents={canAddEvents}
+        onEditEvent={handleEditClick}
+        onDeleteEvent={handleDeleteEvent}
       />
     </div>
   );

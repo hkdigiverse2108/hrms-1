@@ -227,11 +227,12 @@ export default function AttendancePage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-medium text-muted-foreground">Present Days</span>
+                  <span className="text-xs font-medium text-muted-foreground">{user?.role === "Admin" || user?.role === "HR" ? "Total Attendance" : "Present Days"}</span>
                   <CalendarIcon className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.presentDays}</div>
-                <p className="text-xs text-muted-foreground">Days recorded this month</p>
+                <p className="text-xs text-muted-foreground">{user?.role === "Admin" || user?.role === "HR" ? "All employee records" : "Days recorded this month"}</p>
+
               </div>
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
@@ -266,6 +267,46 @@ export default function AttendancePage() {
  
         <div className="w-full">
           <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+            {/* Table Filters */}
+
+            <div className="p-4 border-b border-border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/30">
+              <div className="flex flex-wrap gap-2">
+                <Select defaultValue="all">
+                  <SelectTrigger className="w-[160px] h-9 bg-white border-border">
+                    <SelectValue placeholder="All Departments" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Departments</SelectItem>
+                    <SelectItem value="eng">Engineering</SelectItem>
+                    <SelectItem value="mar">Marketing</SelectItem>
+                    <SelectItem value="sal">Sales</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select defaultValue="all">
+                  <SelectTrigger className="w-[140px] h-9 bg-white border-border">
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="late">Late Entry</SelectItem>
+                    <SelectItem value="absent">Absent</SelectItem>
+                    <SelectItem value="logged">Logged</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="relative w-full md:w-[280px]">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Search employees..." 
+                  className="w-full pl-9 pr-4 py-1.5 h-9 text-sm rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal transition-all bg-white"
+                />
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -274,67 +315,71 @@ export default function AttendancePage() {
                 </div>
               ) : (
                 <table className="w-full text-sm text-left whitespace-nowrap">
-                  <thead className="text-[11px] text-muted-foreground font-bold bg-gray-50/50 border-b border-border uppercase tracking-wider">
+                  <thead className="text-[11px] text-muted-foreground font-bold bg-white border-b border-border uppercase tracking-wider">
                     <tr>
-                      <th className="px-5 py-4">Sr. No.</th>
-                      <th className="px-5 py-4">Date</th>
-                      <th className="px-5 py-4">Day</th>
-                      <th className="px-5 py-4">Current Status</th>
-                      <th className="px-5 py-4">Status</th>
-                      <th className="px-5 py-4">Check In</th>
-                      <th className="px-5 py-4">Check Out</th>
-                      <th className="px-5 py-4">Break</th>
-                      <th className="px-5 py-4">Late</th>
-                      <th className="px-5 py-4">Overtime</th>
-                      <th className="px-5 py-4">Production Hours</th>
-                      <th className="px-5 py-4">Total Working Hours</th>
-                      <th className="px-5 py-4 text-center">Remarks</th>
-                      <th className="px-5 py-4 text-center">Action</th>
+                      <th className="px-6 py-4">Employee</th>
+                      <th className="px-6 py-4">Date</th>
+                      <th className="px-6 py-4">Punch In</th>
+                      <th className="px-6 py-4">Punch Out</th>
+                      <th className="px-6 py-4">Break</th>
+                      <th className="px-6 py-4">Total Hours</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4 text-right"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {attendance.map((row, idx) => {
                       const totalBreak = (row.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
                       
-                      // Calculate Total Working Hours (CheckIn to CheckOut)
-                      let totalWorkingStr = "--";
-                      if (row.checkIn && row.checkOut) {
-                         const start = dayjs(`${row.date}T${row.checkIn}`);
-                         const end = dayjs(`${row.date}T${row.checkOut}`);
-                         const diffMin = end.diff(start, 'minute');
-                         totalWorkingStr = `${Math.floor(diffMin / 60)}H ${diffMin % 60}Min`;
+                      let statusLabel = "Active";
+                      let statusClass = "bg-green-50 text-green-600";
+                      
+                      if (row.checkOut) {
+                        statusLabel = "Logged";
+                        statusClass = "bg-slate-100 text-slate-600";
+                      } else if (row.status === "On Break") {
+                        statusLabel = "On Break";
+                        statusClass = "bg-amber-50 text-amber-600";
                       }
- 
+                      
+                      const isToday = dayjs(row.date).isSame(dayjs(), 'day');
+                      const dateDisplay = isToday ? `Today, ${dayjs(row.date).format("MMM D")}` : dayjs(row.date).format("MMM D, YYYY");
+
                       return (
-                        <tr key={idx} className="hover:bg-muted/50 transition-colors">
-                          <td className="px-5 py-4 text-foreground font-medium">{(idx + 1).toString().padStart(2, '0')}</td>
-                          <td className="px-5 py-4 text-foreground font-medium">{row.date}</td>
-                          <td className="px-5 py-4 text-foreground">{dayjs(row.date).format("dddd")}</td>
-                          <td className="px-5 py-4 text-foreground lowercase">{row.status === "On Break" ? "break-out" : (row.checkOut ? "punch-out" : "punch-in")}</td>
-                          <td className="px-5 py-4">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-green-200 bg-green-50 text-green-600 text-[11px] font-bold">
-                              <CheckCircle2 className="w-3 h-3" />
-                              Present
+                        <tr key={idx} className="hover:bg-muted/30 transition-colors group">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="w-10 h-10 border border-border shadow-sm">
+                                <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-sm">
+                                  {row.employeeName?.split(' ').map((n:any) => n[0]).join('') || '?'}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <div className="font-bold text-foreground text-[14px]">{row.employeeName || 'Unknown'}</div>
+                                <div className="text-[12px] text-muted-foreground leading-tight">Engineering</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-muted-foreground font-medium">{dateDisplay}</td>
+                          <td className="px-6 py-4 text-foreground font-mono text-[13px]">{row.checkIn || '--:--'}</td>
+                          <td className="px-6 py-4 text-foreground font-mono text-[13px]">{row.checkOut || '--'}</td>
+                          <td className="px-6 py-4 text-muted-foreground">{totalBreak > 0 ? `${totalBreak}m` : '--'}</td>
+                          <td className="px-6 py-4">
+                            <span className="font-medium text-foreground">
+                              {row.workHours ? row.workHours.replace('h', 'h').replace('m', 'm') : '--'}
                             </span>
                           </td>
-                          <td className="px-5 py-4 text-foreground font-mono text-[13px]">{row.checkIn}</td>
-                          <td className="px-5 py-4 text-foreground font-mono text-[13px]">{row.checkOut || '-'}</td>
-                          <td className="px-5 py-4 text-foreground">{totalBreak}Min</td>
-                          <td className="px-5 py-4 text-foreground text-center">-</td>
-                          <td className="px-5 py-4 text-foreground text-center">-</td>
-                          <td className="px-5 py-4">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-brand-light/50 text-brand-teal text-[11px] font-bold border border-brand-teal/10">
-                              {row.workHours ? row.workHours.replace('h', 'H').replace('m', 'Min') : '--'}
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex px-3 py-1 rounded-full text-[11px] font-bold ${statusClass}`}>
+                              {statusLabel}
                             </span>
                           </td>
-                          <td className="px-5 py-4 text-foreground font-medium text-[13px]">{totalWorkingStr}</td>
-                          <td className="px-5 py-4 text-foreground text-center">-</td>
-                          <td className="px-5 py-4 text-center">
+                          <td className="px-6 py-4 text-right">
                             <Button 
                               onClick={() => { setSelectedRecord(row); setDetailsModalOpen(true); }}
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-brand-teal border border-brand-teal/20 bg-brand-light/50 hover:bg-brand-light"
+                              className="h-8 w-8 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
@@ -342,17 +387,12 @@ export default function AttendancePage() {
                         </tr>
                       );
                     })}
-                    {attendance.length === 0 && (
-                      <tr>
-                        <td colSpan={14} className="px-6 py-20 text-center text-muted-foreground">
-                          No attendance records found for this period.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               )}
             </div>
+
+
             {!isLoading && <TablePagination totalItems={attendance.length} itemsPerPage={10} currentPage={1} itemName="entries" />}
           </div>
         </div>
