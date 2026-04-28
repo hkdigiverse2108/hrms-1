@@ -147,7 +147,7 @@ export default function RecruitmentPage() {
   }
 
   const columns = [
-    { key: 'title' as const, header: 'Position' },
+    { key: 'title' as const, header: 'Job Title' },
     { key: 'department' as const, header: 'Department' },
     { key: 'location' as const, header: 'Location' },
     {
@@ -203,7 +203,7 @@ export default function RecruitmentPage() {
 
   return (
     <>
-      <PageHeader title="Job Openings" description="Manage open positions and recruitment.">
+      <PageHeader title="Job Openings" description="Manage job openings and recruitment.">
         <Button onClick={() => handleOpenModal()}>
           <Plus className="mr-2 h-4 w-4" />
           Post New Job
@@ -217,7 +217,7 @@ export default function RecruitmentPage() {
           icon={<Briefcase className="h-6 w-6" />}
         />
         <StatsCard
-          title="Open Positions"
+          title="Active Jobs"
           value={openJobs}
           icon={<CheckCircle className="h-6 w-6" />}
         />
@@ -243,7 +243,7 @@ export default function RecruitmentPage() {
             data={jobs}
             columns={columns}
             searchKey="title"
-            searchPlaceholder="Search positions..."
+            searchPlaceholder="Search jobs..."
             actions={renderActions}
           />
         </div>

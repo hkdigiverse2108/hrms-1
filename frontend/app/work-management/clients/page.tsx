@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Users, Plus, Pencil, Trash2, Mail, Phone, Building2, Loader2, Search } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Mail, Phone, Building2, Loader2, Search, History, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
@@ -10,14 +10,22 @@ import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { useUser } from "@/hooks/useUser";
 
 export default function ClientsPage() {
+  const { user } = useUser();
   const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Logs state
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [clientLogs, setClientLogs] = useState<any[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [activeClient, setActiveClient] = useState<any>(null);
 
   useEffect(() => {
     fetchClients();
@@ -38,6 +46,22 @@ export default function ClientsPage() {
     }
   };
 
+  const fetchLogs = async (client: any) => {
+    setIsLoadingLogs(true);
+    setLogsOpen(true);
+    setActiveClient(client);
+    try {
+      const res = await fetch(`${API_URL}/task-logs?clientId=${client.id}`);
+      if (res.ok) {
+        setClientLogs(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching client logs:", err);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
   const handleSubmit = async (formData: ClientFormData) => {
     setIsSubmitting(true);
     try {
@@ -46,10 +70,16 @@ export default function ClientsPage() {
         : `${API_URL}/clients`;
       const method = editingClient ? "PUT" : "POST";
 
+      const payload = {
+        ...formData,
+        performedBy: user?.id,
+        userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+      };
+
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -119,6 +149,71 @@ export default function ClientsPage() {
           </DialogContent>
         </Dialog>
       </PageHeader>
+
+      {/* Client Logs Dialog */}
+      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
+        <DialogContent className="sm:max-w-[700px] h-[80vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2 border-b">
+            <DialogTitle className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 text-xl font-bold">
+                <History className="w-6 h-6 text-brand-teal" />
+                Client Relationship History
+              </div>
+              {activeClient && (
+                <p className="text-sm font-medium text-muted-foreground ml-8 italic">
+                  Showing updates for: "{activeClient.companyName}"
+                </p>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto bg-slate-50/30 p-6 custom-scrollbar">
+            {isLoadingLogs ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+                <p className="text-sm text-muted-foreground font-medium">Fetching history...</p>
+              </div>
+            ) : clientLogs.length > 0 ? (
+              <div className="space-y-4">
+                {clientLogs.map((log) => (
+                  <div key={log.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex items-center justify-between mb-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center font-bold text-brand-teal">
+                          {log.userName?.split(' ').map((n:any) => n[0]).join('') || '?'}
+                        </div>
+                        <span className="font-bold text-slate-800">{log.userName}</span>
+                      </div>
+                      <span className="text-muted-foreground bg-slate-100 px-2 py-0.5 rounded-full">{log.timestamp}</span>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] uppercase font-bold mb-2">{log.action}</Badge>
+                    <p className="text-sm text-slate-600 border-l-2 border-slate-100 pl-3 leading-relaxed">
+                      {log.details}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
+                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                  <ClipboardList className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-lg font-bold text-slate-800">No History Recorded</p>
+                  <p className="text-sm text-muted-foreground max-w-[250px]">
+                    Actions performed on this client profile will appear here.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="p-4 bg-white border-t text-center">
+            <Button variant="secondary" onClick={() => setLogsOpen(false)} className="w-full sm:w-auto">
+              Close History
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       
       <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
         <div className="relative flex-1 max-w-md">
@@ -147,6 +242,9 @@ export default function ClientsPage() {
                     <Building2 className="w-6 h-6" />
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fetchLogs(client)} title="View History">
+                      <History className="w-4 h-4 text-brand-teal" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                       setEditingClient(client);
                       setModalOpen(true);

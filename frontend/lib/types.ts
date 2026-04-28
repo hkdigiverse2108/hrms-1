@@ -27,7 +27,6 @@ export interface Employee {
   relation?: string
   aadharCard?: string
   panCard?: string
-  position?: string
   startTime?: string
   endTime?: string
   profilePhoto?: string
@@ -98,7 +97,6 @@ export interface Application {
   candidateName: string
   email: string
   phone: string
-  position: string
   status: 'new' | 'screening' | 'interview' | 'offered' | 'hired' | 'rejected'
   appliedDate: string
   resume?: string
@@ -182,5 +180,18 @@ export interface Client {
   address?: string
   department?: string
   status: 'active' | 'inactive'
+  createdDate?: string
+}
+export interface WMTask {
+  id: string
+  title: string
+  description?: string
+  projectId: string
+  projectName?: string
+  assignedToId: string
+  assignedToName?: string
+  dueDate?: string
+  status: 'todo' | 'in-progress' | 'review' | 'completed'
+  priority: 'low' | 'medium' | 'high' | 'urgent'
   createdDate?: string
 }

@@ -193,10 +193,6 @@ async def create_relation(db, relation: schemas.RelationCreate): return await cr
 async def update_relation(db, relation_id: str, update: schemas.RelationUpdate): return await update_item(db, "relations", relation_id, update.dict(exclude_unset=True))
 async def delete_relation(db, relation_id: str): return await delete_item(db, "relations", relation_id)
 
-async def get_positions(db, skip: int = 0, limit: int = 100): return await get_items(db, "positions", skip, limit)
-async def create_position(db, position: schemas.PositionCreate): return await create_item(db, "positions", position.dict())
-async def update_position(db, position_id: str, update: schemas.PositionUpdate): return await update_item(db, "positions", position_id, update.dict(exclude_unset=True))
-async def delete_position(db, position_id: str): return await delete_item(db, "positions", position_id)
 
 async def get_job_openings(db, skip: int = 0, limit: int = 100): return await get_items(db, "job_openings", skip, limit)
 async def create_job_opening(db, job: schemas.JobOpeningCreate): return await create_item(db, "job_openings", job.dict())
@@ -448,31 +444,60 @@ async def get_clients(db, skip: int = 0, limit: int = 100):
 
 async def create_client(db, client: schemas.ClientCreate):
     client_dict = client.dict()
+    performedBy = client_dict.pop("performedBy", "Unknown")
+    userName = client_dict.pop("userName", "Unknown User")
+    
     if not client_dict.get("createdDate"):
         client_dict["createdDate"] = datetime.now().strftime("%Y-%m-%d")
     result = await db.clients.insert_one(client_dict)
+    clientId = str(result.inserted_id)
+    
+    await log_activity(db, "Created", performedBy, userName, f"Client '{client_dict['companyName']}' was created.", clientId=clientId)
+    
     doc = await db.clients.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
 async def update_client(db, client_id: str, client_update: schemas.ClientUpdate):
     update_data = client_update.dict(exclude_unset=True)
+    performedBy = update_data.pop("performedBy", "Unknown")
+    userName = update_data.pop("userName", "Unknown User")
+    
     if update_data:
+        old_client = await db.clients.find_one({"_id": ObjectId(client_id)})
         await db.clients.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
+        
+        details = []
+        for key, value in update_data.items():
+            if old_client.get(key) != value:
+                details.append(f"{key} changed")
+        
+        log_details = f"Client '{old_client.get('companyName')}': " + (", ".join(details) if details else "Details updated")
+        await log_activity(db, "Updated", performedBy, userName, log_details, clientId=client_id)
+        
     doc = await db.clients.find_one({"_id": ObjectId(client_id)})
     return fix_id(doc)
 
 async def delete_client(db, client_id: str):
+    client = await db.clients.find_one({"_id": ObjectId(client_id)})
     result = await db.clients.delete_one({"_id": ObjectId(client_id)})
+    if result.deleted_count > 0 and client:
+        await log_activity(db, "Deleted", "Admin", "N/A", f"Client '{client.get('companyName')}' was deleted.", clientId=client_id)
     return result.deleted_count > 0
 
 # Project CRUD
-async def get_projects(db, skip: int = 0, limit: int = 100):
-    cursor = db.projects.find().skip(skip).limit(limit)
+async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
+    query = {}
+    if role and role != "Admin" and userId:
+        query["teamLeaderId"] = userId
+    cursor = db.projects.find(query).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def create_project(db, project: schemas.ProjectCreate):
     project_dict = project.dict()
+    performedBy = project_dict.pop("performedBy", "Unknown")
+    userName = project_dict.pop("userName", "Unknown User")
+    
     if not project_dict.get("clientName") and project_dict.get("clientId"):
         client = await db.clients.find_one({"_id": ObjectId(project_dict["clientId"])})
         if client:
@@ -484,12 +509,21 @@ async def create_project(db, project: schemas.ProjectCreate):
             project_dict["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
             
     result = await db.projects.insert_one(project_dict)
+    projectId = str(result.inserted_id)
+    
+    await log_activity(db, "Created", performedBy, userName, f"Project '{project_dict['title']}' was created.", projectId=projectId)
+    
     doc = await db.projects.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
 async def update_project(db, project_id: str, project_update: schemas.ProjectUpdate):
     update_data = project_update.dict(exclude_unset=True)
+    performedBy = update_data.pop("performedBy", "Unknown")
+    userName = update_data.pop("userName", "Unknown User")
+    
     if update_data:
+        old_project = await db.projects.find_one({"_id": ObjectId(project_id)})
+        
         if update_data.get("clientId") and not update_data.get("clientName"):
             client = await db.clients.find_one({"_id": ObjectId(update_data["clientId"])})
             if client:
@@ -501,11 +535,24 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
                 update_data["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
                 
         await db.projects.update_one({"_id": ObjectId(project_id)}, {"$set": update_data})
+        
+        details = []
+        if "status" in update_data and old_project.get("status") != update_data["status"]:
+            details.append(f"Status changed to {update_data['status']}")
+        if "teamLeaderName" in update_data and old_project.get("teamLeaderName") != update_data["teamLeaderName"]:
+            details.append(f"Team Leader changed to {update_data['teamLeaderName']}")
+        
+        log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
+        await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)
+        
     doc = await db.projects.find_one({"_id": ObjectId(project_id)})
     return fix_id(doc)
 
 async def delete_project(db, project_id: str):
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
     result = await db.projects.delete_one({"_id": ObjectId(project_id)})
+    if result.deleted_count > 0 and project:
+        await log_activity(db, "Deleted", "Admin", "N/A", f"Project '{project.get('title')}' was deleted.", projectId=project_id)
     return result.deleted_count > 0
 
 # Work Management Task CRUD
@@ -516,6 +563,9 @@ async def get_wm_tasks(db, skip: int = 0, limit: int = 100):
 
 async def create_wm_task(db, task: schemas.WMTaskCreate):
     task_dict = task.dict()
+    performedBy = task_dict.pop("performedBy", "Unknown")
+    userName = task_dict.pop("userName", "Unknown User")
+    
     if not task_dict.get("projectName") and task_dict.get("projectId"):
         project = await db.projects.find_one({"_id": ObjectId(task_dict["projectId"])})
         if project:
@@ -530,12 +580,23 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
         task_dict["createdDate"] = datetime.now().strftime("%Y-%m-%d")
         
     result = await db.wm_tasks.insert_one(task_dict)
+    taskId = str(result.inserted_id)
+    
+    # Log the creation
+    await log_task_activity(db, taskId, "Created", performedBy, userName, f"Task '{task_dict['title']}' was created.")
+    
     doc = await db.wm_tasks.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
 async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
     update_data = task_update.dict(exclude_unset=True)
+    performedBy = update_data.pop("performedBy", "Unknown")
+    userName = update_data.pop("userName", "Unknown User")
+    
     if update_data:
+        # Get old task state for logging
+        old_task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+        
         if update_data.get("projectId") and not update_data.get("projectName"):
             project = await db.projects.find_one({"_id": ObjectId(update_data["projectId"])})
             if project:
@@ -547,11 +608,87 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                 update_data["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
                 
         await db.wm_tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
+        
+        # Log the update
+        details = []
+        if "status" in update_data and old_task.get("status") != update_data["status"]:
+            details.append(f"Stage changed from '{old_task.get('status')}' to '{update_data['status']}'")
+        
+        if "title" in update_data and old_task.get("title") != update_data["title"]:
+            details.append(f"Title changed from '{old_task.get('title')}' to '{update_data['title']}'")
+            
+        if "assignedToName" in update_data and old_task.get("assignedToName") != update_data["assignedToName"]:
+            details.append(f"Assignee changed to '{update_data['assignedToName']}'")
+        elif "assignedToId" in update_data and old_task.get("assignedToId") != update_data["assignedToId"]:
+            details.append(f"Assignee ID updated")
+
+        if "projectName" in update_data and old_task.get("projectName") != update_data["projectName"]:
+            details.append(f"Project changed to '{update_data['projectName']}'")
+            
+        if "priority" in update_data and old_task.get("priority") != update_data["priority"]:
+            details.append(f"Priority changed from '{old_task.get('priority')}' to '{update_data['priority']}'")
+            
+        if "dueDate" in update_data and old_task.get("dueDate") != update_data["dueDate"]:
+            details.append(f"Due date changed from '{old_task.get('dueDate')}' to '{update_data['dueDate']}'")
+            
+        log_details = f"Task '{old_task.get('title')}': " + (", ".join(details) if details else "No visible changes")
+        await log_task_activity(db, task_id, "Updated", performedBy, userName, log_details)
     
     doc = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
     return fix_id(doc)
 
 async def delete_wm_task(db, task_id: str):
+    # Get task info before deletion for logging
+    task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
     result = await db.wm_tasks.delete_one({"_id": ObjectId(task_id)})
+    
+    if result.deleted_count > 0 and task:
+        await log_task_activity(db, task_id, "Deleted", "Admin/User", "N/A", f"Task '{task.get('title')}' was deleted.")
+        
     return result.deleted_count > 0
 
+# Activity Log CRUD
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None):
+    log_entry = {
+        "action": action,
+        "performedBy": performedBy,
+        "userName": userName,
+        "details": details,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    if taskId: log_entry["taskId"] = taskId
+    if projectId: log_entry["projectId"] = projectId
+    if clientId: log_entry["clientId"] = clientId
+    
+    await db.task_logs.insert_one(log_entry)
+
+async def get_task_logs(db, taskId: str = None, projectId: str = None, clientId: str = None):
+    query = {}
+    if taskId: query["taskId"] = taskId
+    if projectId: query["projectId"] = projectId
+    if clientId: query["clientId"] = clientId
+    
+    cursor = db.task_logs.find(query).sort("timestamp", -1)
+    rows = await cursor.to_list(length=100)
+    return [fix_id(row) for row in rows]
+
+# Update existing log_task_activity calls to use the new log_activity
+async def log_task_activity(db, taskId: str, action: str, performedBy: str, userName: str, details: str):
+    await log_activity(db, action, performedBy, userName, details, taskId=taskId)
+
+
+# System Settings CRUD
+async def get_system_settings(db):
+    settings = await db.system_settings.find_one({})
+    if not settings:
+        # Create default settings if none exist
+        default_settings = {"clientVisibilityAdminOnly": True}
+        result = await db.system_settings.insert_one(default_settings)
+        settings = await db.system_settings.find_one({"_id": result.inserted_id})
+    return fix_id(settings)
+
+async def update_system_settings(db, settings_update: schemas.SystemSettingsUpdate):
+    update_data = settings_update.dict(exclude_unset=True)
+    if update_data:
+        await db.system_settings.update_one({}, {"$set": update_data}, upsert=True)
+    return await get_system_settings(db)

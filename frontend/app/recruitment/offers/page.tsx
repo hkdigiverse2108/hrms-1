@@ -12,7 +12,7 @@ import { exportToCSV } from "@/lib/export";
 interface OfferLetter {
   id: string
   candidateName: string
-  position: string
+  role: string
   department: string
   salary: number
   joiningDate: string
@@ -24,7 +24,7 @@ const offerLetters: OfferLetter[] = [
   {
     id: '1',
     candidateName: 'Emma Watson',
-    position: 'HR Coordinator',
+    role: 'HR Coordinator',
     department: 'HR',
     salary: 55000,
     joiningDate: '2024-02-01',
@@ -34,7 +34,7 @@ const offerLetters: OfferLetter[] = [
   {
     id: '2',
     candidateName: 'Chris Martin',
-    position: 'Financial Analyst Intern',
+    role: 'Financial Analyst Intern',
     department: 'Finance',
     salary: 35000,
     joiningDate: '2024-02-15',
@@ -44,7 +44,7 @@ const offerLetters: OfferLetter[] = [
   {
     id: '3',
     candidateName: 'Alex Turner',
-    position: 'Senior React Developer',
+    role: 'Senior React Developer',
     department: 'Engineering',
     salary: 85000,
     joiningDate: '2024-03-01',
@@ -177,7 +177,7 @@ export default function OffersPage() {
                   <div>
                     <p className="font-medium">{offer.candidateName}</p>
                     <p className="text-sm text-muted-foreground">
-                      {offer.position} • {offer.department}
+                      {offer.role} • {offer.department}
                     </p>
                   </div>
                 </div>

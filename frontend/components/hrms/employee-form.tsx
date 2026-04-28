@@ -40,7 +40,6 @@ export interface EmployeeFormData {
   relation: string
   aadharCard: string
   panCard: string
-  position: string
   department: string
   designation: string
   startTime: string
@@ -78,7 +77,6 @@ const defaultFormData: EmployeeFormData = {
   relation: '',
   aadharCard: '',
   panCard: '',
-  position: '',
   department: '',
   designation: '',
   startTime: '',
@@ -93,7 +91,6 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const designations = data?.designations || []
   const roles = data?.roles || []
   const relations = data?.relations || []
-  const positions = data?.positions || []
   
   const [formData, setFormData] = useState<EmployeeFormData>(defaultFormData)
   const [showPassword, setShowPassword] = useState(false)
@@ -299,7 +296,6 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           </>
         )}
         
-        <FormSelect key={`pos-${positions.length}`} label="Position" id="position" required value={formData.position} onValueChange={v => handleChange('position', v)} options={positions.map((p: any) => ({ label: p.name, value: p.name }))} placeholder="Select position" />
         <FormSelect key={`dept-${departments.length}`} label="Department" id="department" required value={formData.department} onValueChange={v => handleChange('department', v)} options={departments.map((d: any) => ({ label: d.name, value: d.name }))} placeholder="Select department" />
         <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
 

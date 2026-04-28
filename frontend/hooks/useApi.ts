@@ -28,7 +28,6 @@ export function useApi() {
           { key: 'companies', url: '/companies' },
           { key: 'roles', url: '/roles' },
           { key: 'relations', url: '/relations' },
-          { key: 'positions', url: '/positions' },
           { key: 'jobOpenings', url: '/job-openings' },
           { key: 'applications', url: '/applications' },
           { key: 'interns', url: '/interns' },

@@ -166,7 +166,6 @@ export default function ProfilePage() {
                 <h4 className="mb-4 font-semibold text-foreground">Account Information</h4>
                 <div className="grid gap-6 sm:grid-cols-2">
                   <DetailItem label="Workplace" value={user.company || 'Hk DigiVerse'} />
-                  <DetailItem label="Position" value={user.position || 'N/A'} />
                   <DetailItem label="Start Time" value={user.startTime || '09:00 AM'} />
                   <DetailItem label="End Time" value={user.endTime || '06:00 PM'} />
                 </div>

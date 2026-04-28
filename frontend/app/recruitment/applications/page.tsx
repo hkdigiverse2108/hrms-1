@@ -60,7 +60,6 @@ export default function ApplicationsPage() {
         </div>
       ),
     },
-    { key: 'position' as const, header: 'Position' },
     { key: 'phone' as const, header: 'Phone' },
     { key: 'appliedDate' as const, header: 'Applied On' },
     {

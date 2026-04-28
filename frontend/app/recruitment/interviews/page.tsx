@@ -13,7 +13,7 @@ import { exportToCSV } from "@/lib/export";
 interface Interview {
   id: string
   candidateName: string
-  position: string
+  role: string
   date: string
   time: string
   type: 'video' | 'in-person' | 'phone'
@@ -26,7 +26,7 @@ const interviews: Interview[] = [
   {
     id: '1',
     candidateName: 'Alex Turner',
-    position: 'Senior React Developer',
+    role: 'Senior React Developer',
     date: '2024-01-20',
     time: '10:00 AM',
     type: 'video',
@@ -37,7 +37,7 @@ const interviews: Interview[] = [
   {
     id: '2',
     candidateName: 'Maria Garcia',
-    position: 'Marketing Specialist',
+    role: 'Marketing Specialist',
     date: '2024-01-20',
     time: '2:00 PM',
     type: 'in-person',
@@ -48,7 +48,7 @@ const interviews: Interview[] = [
   {
     id: '3',
     candidateName: 'James Lee',
-    position: 'Senior React Developer',
+    role: 'Senior React Developer',
     date: '2024-01-19',
     time: '11:00 AM',
     type: 'phone',
@@ -59,7 +59,7 @@ const interviews: Interview[] = [
   {
     id: '4',
     candidateName: 'Emma Watson',
-    position: 'HR Coordinator',
+    role: 'HR Coordinator',
     date: '2024-01-18',
     time: '3:00 PM',
     type: 'video',
@@ -96,7 +96,7 @@ export default function InterviewsPage() {
           </Avatar>
           <div>
             <p className="font-medium">{interview.candidateName}</p>
-            <p className="text-sm text-muted-foreground">{interview.position}</p>
+            <p className="text-sm text-muted-foreground">{interview.role}</p>
           </div>
         </div>
         <Badge variant="outline">Round {interview.round}</Badge>

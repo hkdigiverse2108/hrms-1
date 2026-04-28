@@ -1,6 +1,6 @@
 "use client";
- 
-import React from "react";
+
+import React, { useState, useEffect } from "react";
 import { useUserContext } from "@/context/UserContext";
 import { 
   ShieldCheck, 
@@ -9,15 +9,62 @@ import {
   ShieldAlert, 
   LayoutDashboard,
   Check,
-  ArrowRight
+  ArrowRight,
+  Settings2,
+  Lock,
+  Eye,
+  EyeOff,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/PageHeader";
- 
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { API_URL } from "@/lib/config";
+
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
- 
+  const [settings, setSettings] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/system-settings`);
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching settings:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleClientVisibility = async (checked: boolean) => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientVisibilityAdminOnly: checked })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const roles = [
     {
       id: "Admin",
@@ -41,20 +88,70 @@ export default function SettingsPage() {
       capabilities: ["Punch In/Out", "Request Leave", "View Events", "Personal Profile"]
     }
   ];
- 
+
   const handleRoleSwitch = (roleId: string) => {
     updateUser({ role: roleId });
   };
- 
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <PageHeader 
         title="Settings" 
-        description="Manage your account preferences and dashboard access levels."
+        description="Manage your account preferences, system security, and module access."
       />
- 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          {/* Access Control Card */}
+          <Card className="p-6 border-border shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-brand-light rounded-lg">
+                <Lock className="w-5 h-5 text-brand-teal" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-foreground">Access Control</h3>
+                <p className="text-xs text-muted-foreground">Manage visibility of core modules for different roles.</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/30">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-[14px] font-bold">Restrict Clients Tab to Admin Only</Label>
+                    <Badge variant="outline" className="text-[9px] h-4 font-bold bg-white">SECURITY</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground max-w-[400px]">
+                    When enabled, the "Clients" tab will be completely hidden for Team Leaders and Employees.
+                  </p>
+                </div>
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-brand-teal" />
+                ) : (
+                  <Switch 
+                    checked={settings?.clientVisibilityAdminOnly ?? true}
+                    onCheckedChange={handleToggleClientVisibility}
+                    disabled={isUpdating || user?.role !== 'Admin'}
+                  />
+                )}
+              </div>
+              
+              <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/30 opacity-50 cursor-not-allowed">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-[14px] font-bold">Restrict Payroll to Admin Only</Label>
+                    <Badge variant="outline" className="text-[9px] h-4 font-bold bg-white">FINANCE</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Only administrators can view salary structures and payroll history.
+                  </p>
+                </div>
+                <Switch checked={true} disabled={true} />
+              </div>
+            </div>
+          </Card>
+
+          {/* Role Simulator Card */}
           <Card className="p-0 overflow-hidden border-border shadow-sm">
             <div className="p-6 border-b border-border bg-gray-50/50">
               <h3 className="font-bold text-lg text-foreground">Role Simulator</h3>
@@ -104,57 +201,56 @@ export default function SettingsPage() {
               ))}
             </div>
           </Card>
- 
-          <Card className="p-6 border-border shadow-sm bg-amber-50/30 border-amber-100">
-             <div className="flex gap-4">
-               <div className="p-3 bg-amber-100 rounded-xl h-fit">
-                 <ShieldAlert className="w-6 h-6 text-amber-700" />
-               </div>
-               <div>
-                 <h4 className="font-bold text-amber-900 text-[15px] mb-1">About Role Based Access</h4>
-                 <p className="text-[13px] text-amber-800/80 leading-relaxed">
-                   Changes made here will update your current session instantly. In a production environment, 
-                   these permissions are strictly enforced by the server based on the user's permanent role in the database.
-                 </p>
-               </div>
-             </div>
-          </Card>
         </div>
- 
+
         <div className="space-y-6">
           <Card className="p-6 border-border shadow-sm">
             <h3 className="font-bold text-lg mb-4">Quick Stats</h3>
             <div className="space-y-4">
                <div className="flex justify-between items-center py-2 border-b border-gray-50">
                  <span className="text-sm text-muted-foreground">Current Role</span>
-                 <span className="text-sm font-bold text-brand-teal">{user?.role}</span>
+                 <span className="text-sm font-bold text-brand-teal uppercase">{user?.role}</span>
                </div>
                <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                 <span className="text-sm text-muted-foreground">Permissions</span>
-                 <span className="text-sm font-bold text-foreground">Custom</span>
+                 <span className="text-sm text-muted-foreground">Client Visibility</span>
+                 <span className="text-sm font-bold text-foreground">
+                   {settings?.clientVisibilityAdminOnly ? "Admin Only" : "All Roles"}
+                 </span>
                </div>
                <div className="flex justify-between items-center py-2">
-                 <span className="text-sm text-muted-foreground">Last Update</span>
-                 <span className="text-sm font-bold text-foreground">Just now</span>
+                 <span className="text-sm text-muted-foreground">Last Settings Sync</span>
+                 <span className="text-sm font-bold text-foreground">Success</span>
                </div>
             </div>
-            <Button className="w-full mt-6 bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-11 rounded-xl">
-               Apply Globally
+            <Button className="w-full mt-6 bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-11 rounded-xl" onClick={fetchSettings}>
+               Sync Settings
             </Button>
           </Card>
- 
+
           <Card className="p-6 border-border shadow-sm overflow-hidden relative">
-             <LayoutDashboard className="absolute -right-4 -bottom-4 w-24 h-24 text-gray-100 -rotate-12" />
-             <h4 className="font-bold text-[15px] mb-2 relative z-10">Dashboard View</h4>
+             <ShieldAlert className="absolute -right-4 -bottom-4 w-24 h-24 text-amber-50 -rotate-12" />
+             <h4 className="font-bold text-[15px] mb-2 relative z-10">Access Notice</h4>
              <p className="text-xs text-muted-foreground mb-4 relative z-10 leading-relaxed">
-               Each role has a unique dashboard tailored to their daily tasks and responsibilities.
+               Module restriction toggles allow administrators to control which departments or roles can see sensitive business data.
              </p>
-             <Button variant="outline" className="w-full relative z-10 h-10 font-bold border-border text-xs rounded-lg">
-                Preview Layouts
+             <Button variant="outline" className="w-full relative z-10 h-10 font-bold border-border text-xs rounded-lg" disabled>
+                View Audit Logs
              </Button>
           </Card>
         </div>
       </div>
     </div>
+  );
+}
+
+function Badge({ children, variant, className }: any) {
+  const styles: any = {
+    outline: "border border-slate-200 text-slate-500",
+    default: "bg-brand-teal text-white"
+  };
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] inline-flex items-center ${styles[variant || 'default']} ${className}`}>
+      {children}
+    </span>
   );
 }

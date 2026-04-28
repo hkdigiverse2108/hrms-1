@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "antd";
@@ -19,6 +19,8 @@ import {
   FileText,
   Briefcase,
 } from "lucide-react";
+import { useUser } from "@/hooks/useUser";
+import { API_URL } from "@/lib/config";
 
 type MenuItem = Required<MenuProps>["items"][number];
 
@@ -40,38 +42,88 @@ function getItem(
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const { user } = useUser();
+  const [settings, setSettings] = useState<any>(null);
 
-  const items: MenuItem[] = [
-    getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
-    getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
-      getItem(<Link href="/employees">Employee List</Link>, "/employees"),
-      getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"),
-      getItem("Employee Attendance List", "/employees/attendance"),
-      getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
-      getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
-    ]),
-    getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
-    getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
-    getItem(<Link href="/task">Task</Link>, "/task", <ClipboardList className="w-5 h-5" />),
-    getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
-      getItem("Blank Canvas", "blank-canvas"),
-      getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
-      getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"),
-    ]),
-    getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />),
-    getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />),
-    getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, [
-      getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"),
-      getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"),
-    ]),
-    getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />),
-    getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, [
-      getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"),
-      getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"),
-      getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"),
-    ]),
-    getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />),
-  ];
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch(`${API_URL}/system-settings`);
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching sidebar settings:", err);
+    }
+  };
+
+  const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
+
+  const showClients = () => {
+    if (isAdmin) return true;
+    if (!settings) return true; // Show by default while loading
+    if (!settings.clientVisibilityAdminOnly) return true;
+    return false;
+  };
+
+  const items = React.useMemo(() => {
+    const isSalesDept = user?.department?.toLowerCase() === "sales";
+    const isAdminRole = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
+
+    const workManagementChildren: MenuItem[] = [];
+
+    if (isSalesDept && !isAdminRole) {
+      // Sales department employee only sees Sales tab
+      workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
+    } else {
+      // Non-sales employees see Projects and Tasks
+      workManagementChildren.push(
+        getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"),
+        getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks")
+      );
+      
+      // Admin also sees Sales tab
+      if (isAdminRole) {
+        workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
+      }
+
+      // Check client visibility
+      if (showClients()) {
+        workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
+      }
+    }
+
+    return [
+      getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
+      getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
+        getItem(<Link href="/employees">Employee List</Link>, "/employees"),
+        getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"),
+        getItem("Employee Attendance List", "/employees/attendance"),
+        getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
+        getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
+      ]),
+      getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
+      getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
+      getItem(<Link href="/task">Task</Link>, "/task", <ClipboardList className="w-5 h-5" />),
+      getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
+        getItem("Blank Canvas", "blank-canvas"),
+        getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
+        getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"),
+      ]),
+      getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />),
+      getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />),
+      getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, [
+        getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"),
+        getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"),
+      ]),
+      getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />),
+      getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren),
+      getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />),
+    ];
+  }, [user, settings, pathname]);
 
   // Helper to determine open keys and selected keys
   const getSelectedKeys = () => {
@@ -127,4 +179,3 @@ export function SidebarNav() {
     </div>
   );
 }
-

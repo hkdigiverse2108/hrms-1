@@ -28,7 +28,6 @@ class EmployeeBase(BaseModel):
     relation: Optional[str] = None
     aadharCard: Optional[str] = None
     panCard: Optional[str] = None
-    position: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
     profilePhoto: Optional[str] = None
@@ -61,7 +60,6 @@ class EmployeeUpdate(BaseModel):
     relation: Optional[str] = None
     aadharCard: Optional[str] = None
     panCard: Optional[str] = None
-    position: Optional[str] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
     profilePhoto: Optional[str] = None
@@ -110,7 +108,6 @@ class DashboardStats(BaseModel):
     onLeave: int
     newJoinees: int
     pendingLeaves: int
-    openPositions: int
     upcomingBirthdays: int
     upcomingAnniversaries: int
     id: str
@@ -203,17 +200,6 @@ class RelationUpdate(BaseModel):
 class Relation(RelationBase):
     id: str
 
-class PositionBase(BaseModel):
-    name: str
-
-class PositionCreate(PositionBase):
-    pass
-
-class PositionUpdate(BaseModel):
-    name: Optional[str] = None
-
-class Position(PositionBase):
-    id: str
 
 class JobOpeningBase(BaseModel):
     title: str
@@ -241,7 +227,6 @@ class ApplicationBase(BaseModel):
     candidateName: str
     email: str
     phone: str
-    position: str
     status: str
     appliedDate: str
     resume: Optional[str] = None
@@ -441,7 +426,8 @@ class ClientBase(BaseModel):
     createdDate: Optional[str] = None
 
 class ClientCreate(ClientBase):
-    pass
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class ClientUpdate(BaseModel):
     name: Optional[str] = None
@@ -451,6 +437,8 @@ class ClientUpdate(BaseModel):
     address: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class Client(ClientBase):
     id: str
@@ -474,7 +462,8 @@ class ProjectBase(BaseModel):
     budget: Optional[float] = 0
 
 class ProjectCreate(ProjectBase):
-    pass
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class ProjectUpdate(BaseModel):
     title: Optional[str] = None
@@ -489,6 +478,8 @@ class ProjectUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     budget: Optional[float] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class Project(ProjectBase):
     id: str
@@ -505,11 +496,13 @@ class WMTaskBase(BaseModel):
     assignedToId: str # Employee ID
     assignedToName: Optional[str] = None
     dueDate: Optional[str] = None
+    status: Optional[str] = "todo" # todo, in-progress, review, completed
     priority: Optional[str] = "medium" # low, medium, high, urgent
     createdDate: Optional[str] = None
 
 class WMTaskCreate(WMTaskBase):
-    pass
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class WMTaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -519,10 +512,41 @@ class WMTaskUpdate(BaseModel):
     assignedToId: Optional[str] = None
     assignedToName: Optional[str] = None
     dueDate: Optional[str] = None
+    status: Optional[str] = None
     priority: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class WMTask(WMTaskBase):
     id: str
 
+    class Config:
+        from_attributes = True
+
+# Activity Log Schemas
+class TaskLogBase(BaseModel):
+    taskId: Optional[str] = None
+    projectId: Optional[str] = None
+    clientId: Optional[str] = None
+    action: str
+    performedBy: str
+    userName: str
+    details: str
+    timestamp: Optional[str] = None
+
+class TaskLog(TaskLogBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+# System Settings Schemas
+class SystemSettingsBase(BaseModel):
+    clientVisibilityAdminOnly: Optional[bool] = True
+
+class SystemSettingsUpdate(BaseModel):
+    clientVisibilityAdminOnly: Optional[bool] = None
+
+class SystemSettings(SystemSettingsBase):
+    id: str
     class Config:
         from_attributes = True

@@ -14,6 +14,7 @@ export interface WMTaskFormData {
   projectId: string;
   assignedToId: string;
   dueDate: string;
+  status: string;
   priority: string;
 }
 
@@ -23,6 +24,7 @@ const defaultFormData: WMTaskFormData = {
   projectId: "",
   assignedToId: "",
   dueDate: new Date().toISOString().split('T')[0],
+  status: "todo",
   priority: "medium",
 };
 
@@ -131,7 +133,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting }: WMTaskFormPr
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="dueDate">Due Date</Label>
           <Input
@@ -140,6 +142,23 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting }: WMTaskFormPr
             value={formData.dueDate}
             onChange={(e) => handleChange("dueDate", e.target.value)}
           />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="status">Stage</Label>
+          <Select 
+            value={formData.status} 
+            onValueChange={(v) => handleChange("status", v)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Stage" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todo">To Do</SelectItem>
+              <SelectItem value="in-progress">In Progress</SelectItem>
+              <SelectItem value="review">Review</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <Label htmlFor="priority">Priority</Label>

@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "C:\Users\HP\Downloads\HRMS\backend\main.py", line 4, in <module>
+    import crud, schemas, database
+  File "C:\Users\HP\Downloads\HRMS\backend\database.py", line 6, in <module>
+    raise ValueError("MONGO_URL environment variable is not set")
+ValueError: MONGO_URL environment variable is not set

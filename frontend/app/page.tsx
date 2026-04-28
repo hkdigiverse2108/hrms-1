@@ -189,10 +189,10 @@ export default function DashboardPage() {
   const handlePunch = async (type: 'punch-in' | 'punch-out' | 'break-in' | 'break-out') => {
     setIsPunching(true);
     try {
-      const res = await fetch(`${API_URL}/attendance/${type}`, {
+      const res = await fetch(`${API_URL}/attendance/${type}/${user.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employeeId: user.id })
+        body: JSON.stringify({})
       });
       
       if (res.ok) {
@@ -328,7 +328,6 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
         />
 
         <StatCard title="New Applications" value="24" trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
-        <StatCard title="Open Positions" value="06" trend="Active" trendLabel="across 4 departments" icon={<Briefcase className="w-5 h-5 text-muted-foreground" />} />
         <StatCard title="Asset Requests" value="03" trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
       </div>
  
@@ -369,15 +368,15 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
             <h3 className="font-bold text-lg mb-4">Upcoming Interviews</h3>
             <div className="space-y-4">
               {[
-                { candidate: 'John Robert', position: 'Senior React Dev', time: 'Today, 2:00 PM' },
-                { candidate: 'Elena Torres', position: 'UI Designer', time: 'Tomorrow, 10:30 AM' },
-                { candidate: 'Jason Reed', position: 'QA Engineer', time: '28 Oct, 4:00 PM' },
+                { candidate: 'John Robert', role: 'Senior React Dev', time: 'Today, 2:00 PM' },
+                { candidate: 'Elena Torres', role: 'UI Designer', time: 'Tomorrow, 10:30 AM' },
+                { candidate: 'Jason Reed', role: 'QA Engineer', time: '28 Oct, 4:00 PM' },
               ].map((interview, i) => (
                 <div key={i} className="flex gap-4 p-3 rounded-lg border border-border hover:border-brand-teal/30 transition-colors">
                   <div className="bg-brand-light p-2 rounded-md h-fit"><Clock className="w-4 h-4 text-brand-teal" /></div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-sm">{interview.candidate}</h4>
-                    <p className="text-xs text-muted-foreground">{interview.position}</p>
+                    <p className="text-xs text-muted-foreground">{interview.role}</p>
                   </div>
                   <div className="text-right">
                     <div className="text-xs font-bold text-brand-teal">{interview.time}</div>
