@@ -173,3 +173,15 @@ export interface NavItem {
   icon: React.ComponentType<{ className?: string }>
   children?: { title: string; href: string }[]
 }
+
+export interface Client {
+  id: string
+  name: string
+  companyName: string
+  email: string
+  phone: string
+  address?: string
+  industry?: string
+  status: 'active' | 'inactive'
+  createdDate?: string
+}

@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { UserPlus, Clock, UserMinus, FileText, Loader2 } from 'lucide-react'
+import { UserPlus, Clock, UserMinus, FileText, Loader2, Download } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 import { useApi } from '@/hooks/useApi'
 import { useState, useEffect } from 'react'
 import { Employee } from '@/lib/types'
@@ -31,7 +33,13 @@ export default function LifecyclePage() {
       <PageHeader
         title="Employee Lifecycle"
         description="Manage employee onboarding, probation, and exit processes."
-      />
+      >
+        <Button variant="outline" onClick={() => exportToCSV(employees, 'employee-lifecycle')}>
+          <Download className="mr-2 h-4 w-4" />
+          Export
+        </Button>
+      </PageHeader>
+
 
       <Tabs defaultValue="probation" className="space-y-6">
         <TabsList>

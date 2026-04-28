@@ -12,7 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Users, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Users, Pencil, Trash2, Download } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 import type { Department } from '@/lib/types'
 import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { useApi } from '@/hooks/useApi'
@@ -107,11 +109,18 @@ export default function DepartmentsPage() {
   return (
     <>
       <PageHeader title="Departments" description="Manage departments in your organization.">
-        <Button onClick={() => handleOpenModal()}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Department
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => exportToCSV(departments, 'departments')}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button onClick={() => handleOpenModal()}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Department
+          </Button>
+        </div>
       </PageHeader>
+
 
       {(apiLoading && departments.length === 0) ? (
         <div className="flex h-64 items-center justify-center">

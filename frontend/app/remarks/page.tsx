@@ -18,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/common/PageHeader";
 import { TablePagination } from "@/components/common/TablePagination";
+import { exportToCSV } from "@/lib/export";
+
 
 const remarksData = [
   {
@@ -264,10 +266,15 @@ export default function RemarksPage() {
             </Button>
           </div>
 
-          <Button variant="outline" className="w-full xl:w-auto shadow-sm font-medium text-foreground">
+          <Button 
+            variant="outline" 
+            className="w-full xl:w-auto shadow-sm font-medium text-foreground"
+            onClick={() => exportToCSV(remarksData, 'remarks')}
+          >
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
+
         </div>
         
         <div className="overflow-x-auto">

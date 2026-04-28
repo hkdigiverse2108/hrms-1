@@ -430,3 +430,32 @@ class Notification(NotificationBase):
 
     class Config:
         from_attributes = True
+
+# Client Schemas
+class ClientBase(BaseModel):
+    name: str
+    companyName: str
+    email: str
+    phone: str
+    address: Optional[str] = None
+    industry: Optional[str] = None
+    status: Optional[str] = "active"
+    createdDate: Optional[str] = None
+
+class ClientCreate(ClientBase):
+    pass
+
+class ClientUpdate(BaseModel):
+    name: Optional[str] = None
+    companyName: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    industry: Optional[str] = None
+    status: Optional[str] = None
+
+class Client(ClientBase):
+    id: str
+
+    class Config:
+        from_attributes = True

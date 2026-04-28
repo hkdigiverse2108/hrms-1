@@ -36,11 +36,20 @@ export function ViewAllEventsDialog({
   onEditEvent,
   onDeleteEvent 
 }: ViewAllEventsDialogProps) {
-  // Only show events that are >= today, or show all events? 
-  // "View all" usually means all upcoming events or just all events. Let's show all events, sorted by date.
-  // Actually, let's filter to upcoming events only, so it's a true "View all" of the upcoming events feed, 
-  // or maybe just show all of them. I'll show all sorted by date.
-  const allEvents = [...events].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  // Map birthdays to their next occurrence
+  const processedEvents = [...events].map(e => {
+    if (e.type === 'birthday') {
+      const dobDayjs = dayjs(e.originalDob || e.date);
+      let bday = dobDayjs.year(dayjs().year());
+      if (bday.format('YYYY-MM-DD') < dayjs().format('YYYY-MM-DD')) {
+        bday = bday.add(1, 'year');
+      }
+      return { ...e, date: bday.format('YYYY-MM-DD') };
+    }
+    return e;
+  });
+
+  const allEvents = processedEvents.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const groupedEvents = allEvents.reduce((acc, event) => {
     const monthYear = dayjs(event.date).format("MMMM YYYY");

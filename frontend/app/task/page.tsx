@@ -7,8 +7,11 @@ import {
   X, 
   Calendar as CalendarIcon,
   Flag,
-  MoreHorizontal
+  MoreHorizontal,
+  Download
 } from "lucide-react";
+import { exportToCSV } from "@/lib/export";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -134,6 +137,11 @@ export default function TaskManagementPage() {
         description="Track and manage all tasks in one simple task page."
       >
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
+          <Button variant="outline" className="shadow-sm font-medium" onClick={() => exportToCSV(tasks, 'tasks')}>
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+
           
           {/* Filters Modal */}
           <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>

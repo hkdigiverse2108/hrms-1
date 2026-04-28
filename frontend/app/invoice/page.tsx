@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/common/PageHeader";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { exportToCSV } from "@/lib/export";
+
 
 const invoicesData = [
   { id: "INV-2026-001", client: "Acme Corp", issueDate: "Oct 25, 2026", dueDate: "Nov 08, 2026", amount: "₹ 12,000.00", status: "Pending" },
@@ -42,10 +44,15 @@ export default function AllInvoicesPage() {
         description="Manage and track all your client invoices."
       >
         <div className="flex items-center gap-3">
-          <Button variant="outline" className="h-10 px-4 text-sm font-medium">
+          <Button 
+            variant="outline" 
+            className="h-10 px-4 text-sm font-medium"
+            onClick={() => exportToCSV(invoicesData, 'invoices')}
+          >
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
+
           <Link href="/invoice/create">
             <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm h-10 px-4">
               <Plus className="w-4 h-4 mr-2" />

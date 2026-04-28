@@ -17,6 +17,7 @@ import {
   MessagesSquare,
   Star,
   FileText,
+  Briefcase,
 } from "lucide-react";
 
 type MenuItem = Required<MenuProps>["items"][number];
@@ -56,6 +57,11 @@ export function SidebarNav() {
       getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
       getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"),
     ]),
+    getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, [
+      getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"),
+      getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"),
+      getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"),
+    ]),
     getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />),
     getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />),
     getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, [
@@ -77,6 +83,7 @@ export function SidebarNav() {
     if (pathname.startsWith("/remarks")) return ["/remarks"];
     if (pathname.startsWith("/review")) return ["/review"];
     if (pathname.startsWith("/invoice")) return [pathname];
+    if (pathname.startsWith("/work-management")) return [pathname];
     if (pathname.startsWith("/chat")) return ["/chat"];
     return [];
   };
@@ -85,6 +92,7 @@ export function SidebarNav() {
     if (pathname.startsWith("/employees")) return ["employees-sub"];
     if (pathname.startsWith("/workspace")) return ["workspace"];
     if (pathname.startsWith("/invoice")) return ["invoice"];
+    if (pathname.startsWith("/work-management")) return ["work-management"];
     return [];
   };
  

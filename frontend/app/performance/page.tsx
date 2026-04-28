@@ -1,4 +1,6 @@
 'use client'
+import { useState, useEffect } from 'react'
+
 
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
@@ -7,7 +9,9 @@ import { StatsCard } from '@/components/hrms/stats-card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Target, TrendingUp, Award, Download, Loader2 } from 'lucide-react'
+import { Target, TrendingUp, Award, Download, Loader2, Users } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 import { useApi } from '@/hooks/useApi'
 import type { KPI } from '@/lib/types'
 
@@ -72,11 +76,12 @@ export default function PerformancePage() {
   return (
     <>
       <PageHeader title="KPI Tracking" description="Monitor employee performance and key metrics.">
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => exportToCSV(kpiRecords, 'kpi-report')}>
           <Download className="mr-2 h-4 w-4" />
           Export Report
         </Button>
       </PageHeader>
+
 
       <div className="grid gap-6 md:grid-cols-4">
         <StatsCard

@@ -440,3 +440,28 @@ async def delete_leave_request(db, leave_id: str):
     result = await db.leave_requests.delete_one({"_id": ObjectId(leave_id)})
     return result.deleted_count > 0
 
+# Client CRUD
+async def get_clients(db, skip: int = 0, limit: int = 100):
+    cursor = db.clients.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def create_client(db, client: schemas.ClientCreate):
+    client_dict = client.dict()
+    if not client_dict.get("createdDate"):
+        client_dict["createdDate"] = datetime.now().strftime("%Y-%m-%d")
+    result = await db.clients.insert_one(client_dict)
+    doc = await db.clients.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def update_client(db, client_id: str, client_update: schemas.ClientUpdate):
+    update_data = client_update.dict(exclude_unset=True)
+    if update_data:
+        await db.clients.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
+async def delete_client(db, client_id: str):
+    result = await db.clients.delete_one({"_id": ObjectId(client_id)})
+    return result.deleted_count > 0
+

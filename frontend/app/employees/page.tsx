@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
+import { exportToCSV } from "@/lib/export";
 
 export default function EmployeeListPage() {
   const router = useRouter();
@@ -63,7 +64,7 @@ export default function EmployeeListPage() {
         description="Manage your team members and their account permissions here."
       >
         <div className="flex items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
-          <Button variant="outline" className="shadow-sm flex-1 sm:flex-none">
+          <Button variant="outline" className="shadow-sm flex-1 sm:flex-none" onClick={() => exportToCSV(employees, 'employees')}>
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
@@ -82,14 +83,18 @@ export default function EmployeeListPage() {
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full xl:w-auto">
             <select className="w-full sm:w-auto px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer">
               <option>All Departments</option>
-              <option>Engineering</option>
-              <option>Human Resources</option>
+              <option>Development</option>
+              <option>Sales</option>
+              <option>Graphics</option>
+              <option>Marketing</option>
             </select>
             <div className="grid grid-cols-2 gap-3 w-full sm:w-auto">
               <select className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer">
                 <option>All Roles</option>
+                <option>Admin</option>
                 <option>HR</option>
-                <option>Developer</option>
+                <option>Employee</option>
+                <option>Team Leader</option>
               </select>
               <select className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer">
                 <option>Status</option>

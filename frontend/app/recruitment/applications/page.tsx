@@ -16,8 +16,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MoreHorizontal, Eye, Calendar, Mail, FileText, CheckCircle, XCircle, Download, Loader2 } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
-import type { Application } from '@/lib/types'
+import { Application } from '@/lib/types'
 import { API_URL } from '@/lib/config';
+import { exportToCSV } from "@/lib/export";
+
 
 export default function ApplicationsPage() {
   const { data, isLoading, refresh } = useApi()
@@ -119,11 +121,12 @@ export default function ApplicationsPage() {
   return (
     <>
       <PageHeader title="Applications" description="Track and manage candidate applications.">
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => exportToCSV(applications, 'applications')}>
           <Download className="mr-2 h-4 w-4" />
           Export
         </Button>
       </PageHeader>
+
 
       <Tabs defaultValue="all" className="space-y-6">
         <TabsList>

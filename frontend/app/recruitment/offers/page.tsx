@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Plus, FileText, Send, Download, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 
 interface OfferLetter {
   id: string
@@ -95,11 +97,18 @@ export default function OffersPage() {
   return (
     <>
       <PageHeader title="Offer Letters" description="Generate and manage candidate offer letters.">
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Offer
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => exportToCSV(offerLetters, 'offer-letters')}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Offer
+          </Button>
+        </div>
       </PageHeader>
+
 
       <div className="grid gap-6 md:grid-cols-4">
         <Card>
@@ -193,9 +202,15 @@ export default function OffersPage() {
                     <Button variant="ghost" size="sm">
                       <FileText className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => exportToCSV([offer], `offer-${offer.candidateName}`)}
+                      title="Download Offer"
+                    >
                       <Download className="h-4 w-4" />
                     </Button>
+
                     {offer.status === 'draft' && (
                       <Button size="sm">
                         <Send className="mr-2 h-4 w-4" />

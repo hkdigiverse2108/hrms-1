@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Calendar, Clock, Video, MapPin, User, Plus, CheckCircle, XCircle } from 'lucide-react'
+import { Calendar, Clock, Video, MapPin, User, Plus, CheckCircle, XCircle, Download } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 
 interface Interview {
   id: string
@@ -147,11 +149,18 @@ export default function InterviewsPage() {
   return (
     <>
       <PageHeader title="Interviews" description="Schedule and manage candidate interviews.">
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Schedule Interview
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => exportToCSV(interviews, 'interviews')}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Schedule Interview
+          </Button>
+        </div>
       </PageHeader>
+
 
       <div className="grid gap-6 md:grid-cols-3">
         <Card>

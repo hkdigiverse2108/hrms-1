@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Calendar, Clock, CheckCircle } from 'lucide-react'
+import { Plus, Calendar, Clock, CheckCircle, Download } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 
 interface Review {
   id: string
@@ -76,11 +78,18 @@ export default function ReviewsPage() {
   return (
     <>
       <PageHeader title="Performance Reviews" description="Schedule and conduct employee reviews.">
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Schedule Review
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => exportToCSV(reviews, 'performance-reviews')}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Schedule Review
+          </Button>
+        </div>
       </PageHeader>
+
 
       <div className="grid gap-6 md:grid-cols-3">
         <Card>

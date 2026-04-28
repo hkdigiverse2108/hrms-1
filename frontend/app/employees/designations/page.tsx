@@ -27,7 +27,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, MoreHorizontal, Pencil, Trash2, Loader2 } from 'lucide-react'
+import { Plus, MoreHorizontal, Pencil, Trash2, Loader2, Download } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 import type { Designation, Department } from '@/lib/types'
 import { useApi } from '@/hooks/useApi'
 import { useEffect } from 'react'
@@ -172,11 +174,18 @@ export default function DesignationsPage() {
   return (
     <>
       <PageHeader title="Designations" description="Manage job designations and roles.">
-        <Button onClick={() => handleOpenModal()}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Designation
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => exportToCSV(designations, 'designations')}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button onClick={() => handleOpenModal()}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Designation
+          </Button>
+        </div>
       </PageHeader>
+
 
       {(apiLoading && designations.length === 0) ? (
         <div className="flex h-64 items-center justify-center">

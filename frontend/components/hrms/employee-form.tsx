@@ -101,30 +101,48 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
   useEffect(() => {
     if (initialData) {
+      console.log("DEBUG: Loading initialData into form", initialData);
       const sanitizedData = { ...defaultFormData }
       
-        // Aggressive mapping to ensure all fields in defaultFormData are handled
-        Object.keys(defaultFormData).forEach((key) => {
-          const k = key as keyof EmployeeFormData
-          const value = initialData[k]
-          
-          if (value !== undefined && value !== null) {
-            if (k === 'salary') {
-              sanitizedData[k] = String(value)
-            } else if (k === 'password') {
-              // Don't load password into the form for security/UI clarity
-              sanitizedData[k] = ''
-            } else {
-              sanitizedData[k] = String(value)
-            }
-          } else {
-            sanitizedData[k] = ''
-          }
-        })
+      // Aggressive mapping to ensure all fields are handled, including potential case mismatches
+      const dataKeys = Object.keys(initialData)
       
+      Object.keys(defaultFormData).forEach((key) => {
+        const k = key as keyof EmployeeFormData
+        
+        // Try exact match
+        let value = initialData[k]
+        
+        // Try case-insensitive match if not found
+        if (value === undefined || value === null) {
+          const lowerKey = k.toLowerCase()
+          const foundKey = dataKeys.find(dk => dk.toLowerCase() === lowerKey)
+          if (foundKey) {
+            value = (initialData as any)[foundKey]
+          }
+        }
+        
+        if (value !== undefined && value !== null) {
+          if (k === 'salary') {
+            sanitizedData[k] = String(value)
+          } else if (k === 'password') {
+            sanitizedData[k] = '' // Don't load password
+          } else if (typeof value === 'object' && value !== null) {
+            // Handle if backend returns an object for a field (e.g., department: {name: '...'})
+            sanitizedData[k] = String((value as any).name || (value as any).title || (value as any).label || JSON.stringify(value))
+          } else {
+            sanitizedData[k] = String(value)
+          }
+        } else {
+          sanitizedData[k] = (defaultFormData as any)[k] || ''
+        }
+      })
+      
+      console.log("DEBUG: Final sanitizedData", sanitizedData);
       setFormData(sanitizedData)
     }
   }, [initialData])
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -382,16 +400,26 @@ function FormSelect({ label, id, required, value, onValueChange, options, placeh
         {required && <span className="text-red-500 mr-2 text-lg font-bold">*</span>}
         {label}:
       </Label>
-      <Select value={value || ''} onValueChange={onValueChange} required={required}>
+      <Select 
+        key={`${id}-${value}-${options.length}`} 
+        value={value || ''} 
+        onValueChange={onValueChange} 
+        required={required}
+      >
         <SelectTrigger className="flex-1 bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
-          {options.map((opt: any) => (
-            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-          ))}
+          {options.length === 0 ? (
+            <div className="p-2 text-xs text-muted-foreground text-center">Loading options...</div>
+          ) : (
+            options.map((opt: any) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))
+          )}
         </SelectContent>
       </Select>
+
     </div>
   )
 }

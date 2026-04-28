@@ -173,7 +173,11 @@ export default function DashboardPage() {
         const data = await res.json();
         const myHistory = data
           .filter((a: any) => a.employeeId === user.id)
-          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .sort((a: any, b: any) => {
+            const dateTimeA = new Date(`${a.date} ${a.checkIn}`).getTime();
+            const dateTimeB = new Date(`${b.date} ${b.checkIn}`).getTime();
+            return dateTimeB - dateTimeA;
+          })
           .slice(0, 5);
         setRecentAttendance(myHistory);
       }
@@ -554,12 +558,8 @@ function EmployeeView({
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="px-6 py-5 flex justify-between items-center">
           <h3 className="font-bold text-lg text-foreground">Recent Attendance</h3>
-          <Button variant="outline" size="sm" className="h-9 px-4 border-border hover:bg-gray-50 flex items-center gap-2">
-             <Download className="w-4 h-4" />
-             Export
-          </Button>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto pb-6">
           <table className="w-full text-sm text-left">
             <thead className="text-[11px] text-muted-foreground font-bold bg-gray-50/50 uppercase tracking-widest">
               <tr>
@@ -606,18 +606,7 @@ function EmployeeView({
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-4 flex items-center justify-between border-t border-border">
-           <span className="text-xs text-muted-foreground">Showing Attendance</span>
-           <div className="flex items-center gap-1">
-             <Button variant="outline" size="sm" className="h-8 text-xs px-3">Previous</Button>
-             <Button size="sm" className="h-8 w-8 text-xs bg-brand-teal hover:bg-brand-teal text-white">1</Button>
-             <Button variant="ghost" size="sm" className="h-8 w-8 text-xs hover:bg-gray-50">2</Button>
-             <Button variant="ghost" size="sm" className="h-8 w-8 text-xs hover:bg-gray-50">3</Button>
-             <span className="px-2 text-muted-foreground">...</span>
-             <Button variant="ghost" size="sm" className="h-8 w-8 text-xs hover:bg-gray-50">35</Button>
-             <Button variant="outline" size="sm" className="h-8 text-xs px-3">Next</Button>
-           </div>
-        </div>
+
       </div>
     </div>
   );
@@ -653,17 +642,13 @@ function EventsSidebar({ user }: { user: any }) {
       }
 
       const birthdayEvents = empData.filter((emp: any) => emp.dob).map((emp: any) => {
-        const dobDayjs = dayjs(emp.dob);
-        let bday = dobDayjs.year(dayjs().year());
-        if (bday.format('YYYY-MM-DD') < dayjs().format('YYYY-MM-DD')) {
-          bday = bday.add(1, 'year');
-        }
         return {
           id: `birthday-${emp.id}`,
           type: 'birthday',
           title: `${emp.firstName || emp.name?.split(' ')[0] || 'Employee'}'s Birthday`,
           description: 'Happy Birthday!!',
-          date: bday.format('YYYY-MM-DD'),
+          date: emp.dob,
+          originalDob: emp.dob
         };
       });
 
@@ -724,7 +709,18 @@ function EventsSidebar({ user }: { user: any }) {
   };
  
   const displayedEvents = events
-    .filter((e: any) => dayjs(e.date).month() === currentMonth.month() && dayjs(e.date).year() === currentMonth.year())
+    .filter((e: any) => {
+      if (e.type === 'birthday') {
+        return dayjs(e.date).month() === currentMonth.month();
+      }
+      return dayjs(e.date).month() === currentMonth.month() && dayjs(e.date).year() === currentMonth.year();
+    })
+    .map((e: any) => {
+      if (e.type === 'birthday') {
+        return { ...e, date: dayjs(e.date).year(currentMonth.year()).format('YYYY-MM-DD') };
+      }
+      return e;
+    })
     .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
@@ -773,7 +769,12 @@ function EventsSidebar({ user }: { user: any }) {
              for (let i = 1; i <= daysInMonth; i++) {
                const dayDate = currentMonth.date(i);
                const isToday = dayDate.format('YYYY-MM-DD') === dayjs().format('YYYY-MM-DD');
-               const hasEvent = events.some(e => dayjs(e.date).format('YYYY-MM-DD') === dayDate.format('YYYY-MM-DD'));
+               const hasEvent = events.some(e => {
+                 if (e.type === 'birthday') {
+                   return dayjs(e.date).month() === dayDate.month() && dayjs(e.date).date() === dayDate.date();
+                 }
+                 return dayjs(e.date).format('YYYY-MM-DD') === dayDate.format('YYYY-MM-DD');
+               });
                
                days.push(
                  <div key={i} className={`h-8 flex items-center justify-center text-[13px] font-bold rounded-lg cursor-pointer transition-all ${

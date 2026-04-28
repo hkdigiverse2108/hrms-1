@@ -5,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Plus, DollarSign, Percent } from 'lucide-react'
+import { Plus, DollarSign, Percent, Download } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 
 const salaryComponents = [
   { name: 'Basic Salary', percentage: 50, type: 'earning', description: 'Base compensation' },
@@ -41,11 +43,18 @@ export default function SalaryStructurePage() {
   return (
     <>
       <PageHeader title="Salary Structure" description="Define salary components and pay grades.">
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Component
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => exportToCSV([...salaryComponents, ...deductions, ...salaryGrades], 'salary-structure')}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Component
+          </Button>
+        </div>
       </PageHeader>
+
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Earnings Components */}

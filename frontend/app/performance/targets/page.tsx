@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Plus, Target, CheckCircle, Clock, Loader2 } from 'lucide-react'
+import { Plus, Target, CheckCircle, Clock, Loader2, Download } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 import { useApi } from '@/hooks/useApi'
 import { useUser } from '@/hooks/useUser'
 
@@ -57,11 +59,18 @@ export default function TargetsPage() {
   return (
     <>
       <PageHeader title="Targets" description="Set and track employee performance targets.">
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Assign Target
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => exportToCSV(targets, 'performance-targets')}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Assign Target
+          </Button>
+        </div>
       </PageHeader>
+
 
       <div className="grid gap-6 md:grid-cols-4">
         <Card>

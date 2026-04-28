@@ -1,28 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { DollarSign, Plus, MoreHorizontal, Eye, Trash2, Loader2, Gift, Minus, Award } from 'lucide-react'
+import { DollarSign, Plus, MoreHorizontal, Eye, Trash2, Loader2, Gift, Minus, Award, Download } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
 import { useApi } from '@/hooks/useApi'
+import { useEffect, useState } from 'react'
+
 import { employees } from '@/lib/data'
 import type { Payroll } from '@/lib/types'
 
@@ -67,15 +49,22 @@ export default function BonusesPage() {
   return (
     <>
       <PageHeader title="Bonuses & Deductions" description="Manage employee incentives and penalties.">
-        <Button variant="outline" onClick={() => handleOpenModal('deduction')}>
-          <Minus className="mr-2 h-4 w-4" />
-          Add Deduction
-        </Button>
-        <Button onClick={() => handleOpenModal('bonus')}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Bonus
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => exportToCSV(payroll, 'bonuses-deductions')}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button variant="outline" onClick={() => handleOpenModal('deduction')}>
+            <Minus className="mr-2 h-4 w-4" />
+            Add Deduction
+          </Button>
+          <Button onClick={() => handleOpenModal('bonus')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Bonus
+          </Button>
+        </div>
       </PageHeader>
+
 
       {isLoading && payroll.length === 0 ? (
         <div className="flex h-64 items-center justify-center">

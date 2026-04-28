@@ -22,10 +22,18 @@ def seed():
         {"name": "Marketing Pros"},
     ])
 
+    seed_collection("departments", [
+        {"name": "Development", "head": "TBD", "employeeCount": 0},
+        {"name": "Sales", "head": "TBD", "employeeCount": 0},
+        {"name": "Graphics", "head": "TBD", "employeeCount": 0},
+        {"name": "Marketing", "head": "TBD", "employeeCount": 0},
+    ])
+
     seed_collection("roles", [
         {"name": "Admin"},
         {"name": "HR"},
         {"name": "Employee"},
+        {"name": "Team Leader"},
     ])
 
     seed_collection("relations", [

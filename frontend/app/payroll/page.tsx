@@ -24,6 +24,7 @@ import { useApi } from '@/hooks/useApi'
 import { useEffect } from 'react'
 import type { Payroll } from '@/lib/types'
 import { API_URL } from '@/lib/config'
+import { exportToCSV } from "@/lib/export";
 
 export default function PayrollPage() {
   const { data, isLoading, refresh } = useApi()
@@ -143,7 +144,7 @@ export default function PayrollPage() {
             <SelectItem value="March 2024">March 2024</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => exportToCSV(payroll, 'payroll')}>
           <Download className="mr-2 h-4 w-4" />
           Export
         </Button>

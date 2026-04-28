@@ -1,4 +1,6 @@
 'use client'
+import { useState, useEffect } from 'react'
+
 
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
@@ -13,7 +15,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Plus, GraduationCap, Users, CheckCircle, MoreHorizontal, Eye, Pencil, Award, Loader2 } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
 import { useApi } from '@/hooks/useApi'
+
 import type { Intern } from '@/lib/types'
 
 export default function InternshipsPage() {
@@ -85,11 +89,18 @@ export default function InternshipsPage() {
   return (
     <>
       <PageHeader title="Intern List" description="Manage interns and their internship programs.">
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Intern
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => exportToCSV(interns, 'interns')}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Intern
+          </Button>
+        </div>
       </PageHeader>
+
 
       <div className="grid gap-6 md:grid-cols-3">
         <StatsCard

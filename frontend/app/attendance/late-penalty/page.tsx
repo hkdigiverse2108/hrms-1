@@ -5,7 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
-import { AlertTriangle, Clock, DollarSign } from 'lucide-react'
+import { AlertTriangle, Clock, DollarSign, Download } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { exportToCSV } from "@/lib/export";
+
 
 const lateEmployees = [
   { id: '1', name: 'Alex Turner', department: 'Marketing', lateCount: 5, penaltyAmount: 50, status: 'warning' },
@@ -27,7 +30,13 @@ export default function LatePenaltyPage() {
       <PageHeader
         title="Late & Penalty"
         description="Track late arrivals and apply penalties as per company policy."
-      />
+      >
+        <Button variant="outline" onClick={() => exportToCSV(lateEmployees, 'late-penalty-report')}>
+          <Download className="mr-2 h-4 w-4" />
+          Export
+        </Button>
+      </PageHeader>
+
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Penalty Rules */}

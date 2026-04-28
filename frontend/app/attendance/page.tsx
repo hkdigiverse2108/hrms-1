@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
+import { exportToCSV } from "@/lib/export";
  
 export default function AttendancePage() {
   const { user } = useUserContext();
@@ -174,7 +175,7 @@ export default function AttendancePage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium">
+          <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium" onClick={() => exportToCSV(attendance, 'attendance')}>
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
@@ -277,9 +278,10 @@ export default function AttendancePage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Departments</SelectItem>
-                    <SelectItem value="eng">Engineering</SelectItem>
-                    <SelectItem value="mar">Marketing</SelectItem>
+                    <SelectItem value="dev">Development</SelectItem>
                     <SelectItem value="sal">Sales</SelectItem>
+                    <SelectItem value="gra">Graphics</SelectItem>
+                    <SelectItem value="mar">Marketing</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select defaultValue="all">

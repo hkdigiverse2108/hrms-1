@@ -17,6 +17,10 @@ import {
   Line,
   Legend,
 } from 'recharts'
+import { Button } from '@/components/ui/button'
+import { Download } from 'lucide-react'
+import { exportToCSV } from "@/lib/export";
+
 
 const departmentData = [
   { name: 'Engineering', employees: 25 },
@@ -65,7 +69,13 @@ export default function AnalyticsPage() {
       <PageHeader
         title="Analytics"
         description="Comprehensive reports and insights about your organization."
-      />
+      >
+        <Button variant="outline" onClick={() => exportToCSV([...departmentData, ...attendanceTrend, ...leaveDistribution, ...hiringTrend, ...performanceDistribution], 'analytics-summary')}>
+          <Download className="mr-2 h-4 w-4" />
+          Export Report
+        </Button>
+      </PageHeader>
+
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Department Distribution */}
