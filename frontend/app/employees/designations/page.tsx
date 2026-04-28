@@ -7,7 +7,6 @@ import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -50,7 +49,7 @@ export default function DesignationsPage() {
   const [editingDesignation, setEditingDesignation] = useState<Designation | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [designationToDelete, setDesignationToDelete] = useState<Designation | null>(null)
-  const [formData, setFormData] = useState({ title: '', department: '', level: '' })
+  const [formData, setFormData] = useState({ title: '', department: '' })
 
   const handleOpenModal = (designation?: Designation) => {
     if (designation) {
@@ -58,11 +57,10 @@ export default function DesignationsPage() {
       setFormData({
         title: designation.title,
         department: designation.department,
-        level: designation.level,
       })
     } else {
       setEditingDesignation(null)
-      setFormData({ title: '', department: '', level: '' })
+      setFormData({ title: '', department: '' })
     }
     setModalOpen(true)
   }
@@ -92,12 +90,17 @@ export default function DesignationsPage() {
         }
       }
       setModalOpen(false)
-      setFormData({ title: '', department: '', level: '' })
+      setFormData({ title: '', department: '' })
     } catch (error) {
       console.error('Error saving designation:', error)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleDeleteClick = (designation: Designation) => {
+    setDesignationToDelete(designation)
+    setDeleteDialogOpen(true)
   }
 
   const handleDeleteConfirm = async () => {
@@ -117,35 +120,9 @@ export default function DesignationsPage() {
     setDeleteDialogOpen(false)
   }
 
-  const getLevelColor = (level: string) => {
-    switch (level.toLowerCase()) {
-      case 'senior':
-        return 'bg-blue-100 text-blue-700 border-blue-200'
-      case 'lead':
-        return 'bg-purple-100 text-purple-700 border-purple-200'
-      case 'manager':
-        return 'bg-green-100 text-green-700 border-green-200'
-      case 'mid':
-        return 'bg-yellow-100 text-yellow-700 border-yellow-200'
-      case 'junior':
-        return 'bg-gray-100 text-gray-700 border-gray-200'
-      default:
-        return 'bg-gray-100 text-gray-700 border-gray-200'
-    }
-  }
-
   const columns = [
     { key: 'title' as const, header: 'Designation' },
     { key: 'department' as const, header: 'Department' },
-    {
-      key: 'level' as const,
-      header: 'Level',
-      render: (designation: Designation) => (
-        <Badge variant="outline" className={getLevelColor(designation.level)}>
-          {designation.level}
-        </Badge>
-      ),
-    },
   ]
 
   const renderActions = (designation: Designation) => (
@@ -186,7 +163,6 @@ export default function DesignationsPage() {
         </div>
       </PageHeader>
 
-
       {(apiLoading && designations.length === 0) ? (
         <div className="flex h-64 items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -223,7 +199,7 @@ export default function DesignationsPage() {
                 value={formData.department}
                 onValueChange={(value) => setFormData({ ...formData, department: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
@@ -235,25 +211,7 @@ export default function DesignationsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="level">Level</Label>
-              <Select
-                value={formData.level}
-                onValueChange={(value) => setFormData({ ...formData, level: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Junior">Junior</SelectItem>
-                  <SelectItem value="Mid">Mid</SelectItem>
-                  <SelectItem value="Senior">Senior</SelectItem>
-                  <SelectItem value="Lead">Lead</SelectItem>
-                  <SelectItem value="Manager">Manager</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setModalOpen(false)}>
                 Cancel
               </Button>

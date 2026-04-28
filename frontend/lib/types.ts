@@ -44,7 +44,6 @@ export interface Designation {
   id: string
   title: string
   department: string
-  level: string
 }
 
 export interface Attendance {
@@ -181,7 +180,7 @@ export interface Client {
   email: string
   phone: string
   address?: string
-  industry?: string
+  department?: string
   status: 'active' | 'inactive'
   createdDate?: string
 }

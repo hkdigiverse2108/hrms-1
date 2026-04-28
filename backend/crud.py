@@ -465,3 +465,93 @@ async def delete_client(db, client_id: str):
     result = await db.clients.delete_one({"_id": ObjectId(client_id)})
     return result.deleted_count > 0
 
+# Project CRUD
+async def get_projects(db, skip: int = 0, limit: int = 100):
+    cursor = db.projects.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def create_project(db, project: schemas.ProjectCreate):
+    project_dict = project.dict()
+    if not project_dict.get("clientName") and project_dict.get("clientId"):
+        client = await db.clients.find_one({"_id": ObjectId(project_dict["clientId"])})
+        if client:
+            project_dict["clientName"] = client.get("companyName")
+    
+    if not project_dict.get("teamLeaderName") and project_dict.get("teamLeaderId"):
+        employee = await db.employees.find_one({"_id": ObjectId(project_dict["teamLeaderId"])})
+        if employee:
+            project_dict["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+            
+    result = await db.projects.insert_one(project_dict)
+    doc = await db.projects.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def update_project(db, project_id: str, project_update: schemas.ProjectUpdate):
+    update_data = project_update.dict(exclude_unset=True)
+    if update_data:
+        if update_data.get("clientId") and not update_data.get("clientName"):
+            client = await db.clients.find_one({"_id": ObjectId(update_data["clientId"])})
+            if client:
+                update_data["clientName"] = client.get("companyName")
+        
+        if update_data.get("teamLeaderId") and not update_data.get("teamLeaderName"):
+            employee = await db.employees.find_one({"_id": ObjectId(update_data["teamLeaderId"])})
+            if employee:
+                update_data["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+                
+        await db.projects.update_one({"_id": ObjectId(project_id)}, {"$set": update_data})
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc)
+
+async def delete_project(db, project_id: str):
+    result = await db.projects.delete_one({"_id": ObjectId(project_id)})
+    return result.deleted_count > 0
+
+# Work Management Task CRUD
+async def get_wm_tasks(db, skip: int = 0, limit: int = 100):
+    cursor = db.wm_tasks.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def create_wm_task(db, task: schemas.WMTaskCreate):
+    task_dict = task.dict()
+    if not task_dict.get("projectName") and task_dict.get("projectId"):
+        project = await db.projects.find_one({"_id": ObjectId(task_dict["projectId"])})
+        if project:
+            task_dict["projectName"] = project.get("title")
+    
+    if not task_dict.get("assignedToName") and task_dict.get("assignedToId"):
+        employee = await db.employees.find_one({"_id": ObjectId(task_dict["assignedToId"])})
+        if employee:
+            task_dict["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+
+    if not task_dict.get("createdDate"):
+        task_dict["createdDate"] = datetime.now().strftime("%Y-%m-%d")
+        
+    result = await db.wm_tasks.insert_one(task_dict)
+    doc = await db.wm_tasks.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
+    update_data = task_update.dict(exclude_unset=True)
+    if update_data:
+        if update_data.get("projectId") and not update_data.get("projectName"):
+            project = await db.projects.find_one({"_id": ObjectId(update_data["projectId"])})
+            if project:
+                update_data["projectName"] = project.get("title")
+        
+        if update_data.get("assignedToId") and not update_data.get("assignedToName"):
+            employee = await db.employees.find_one({"_id": ObjectId(update_data["assignedToId"])})
+            if employee:
+                update_data["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+                
+        await db.wm_tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
+    
+    doc = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+    return fix_id(doc)
+
+async def delete_wm_task(db, task_id: str):
+    result = await db.wm_tasks.delete_one({"_id": ObjectId(task_id)})
+    return result.deleted_count > 0
+

@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useApi } from '@/hooks/useApi'
-import { Save, Plus, Loader2, Image as ImageIcon, X } from 'lucide-react'
+import { Save, Plus, Loader2, Image as ImageIcon, X, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { API_URL } from '@/lib/config'
@@ -96,6 +96,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const positions = data?.positions || []
   
   const [formData, setFormData] = useState<EmployeeFormData>(defaultFormData)
+  const [showPassword, setShowPassword] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -126,7 +127,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           if (k === 'salary') {
             sanitizedData[k] = String(value)
           } else if (k === 'password') {
-            sanitizedData[k] = '' // Don't load password
+            sanitizedData[k] = String(value)
           } else if (typeof value === 'object' && value !== null) {
             // Handle if backend returns an object for a field (e.g., department: {name: '...'})
             sanitizedData[k] = String((value as any).name || (value as any).title || (value as any).label || JSON.stringify(value))
@@ -203,7 +204,24 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         {/* Row 2 */}
         <FormField label="Email" id="email" type="email" required value={formData.email} onChange={v => handleChange('email', v)} placeholder="example@email.com" />
         <FormField label="Phone Number" id="phone" required value={formData.phone} onChange={v => handleChange('phone', v)} placeholder="Enter phone number" />
-        <FormField label="Password" id="password" type="password" required={mode === 'add'} value={formData.password} onChange={v => handleChange('password', v)} placeholder={mode === 'edit' ? "Leave blank to keep current" : "............"} />
+        <FormField 
+          label="Password" 
+          id="password" 
+          type={showPassword ? "text" : "password"} 
+          required={mode === 'add'} 
+          value={formData.password} 
+          onChange={v => handleChange('password', v)} 
+          placeholder={mode === 'edit' ? "Leave blank to keep current" : "............"} 
+          rightElement={
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-brand-teal"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          }
+        />
 
         {/* Row 3 */}
         <FormField label="DOB" id="dob" type="date" required value={formData.dob} onChange={v => handleChange('dob', v)} />
@@ -373,22 +391,25 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   )
 }
 
-function FormField({ label, id, required, value, onChange, placeholder, type = 'text', className = "" }: any) {
+function FormField({ label, id, required, value, onChange, placeholder, type = 'text', className = "", rightElement }: any) {
   return (
     <div className={`flex items-center gap-4 ${className}`}>
       <Label htmlFor={id} className="w-44 text-right pr-2 font-medium text-gray-700 whitespace-nowrap">
         {required && <span className="text-red-500 mr-2 text-lg font-bold">*</span>}
         {label}:
       </Label>
-      <Input
-        id={id}
-        type={type}
-        placeholder={placeholder || `Enter ${label.toLowerCase()}`}
-        value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        className="flex-1 bg-white border-gray-200 focus-visible:ring-brand-teal h-10 shadow-sm"
-      />
+      <div className="relative flex-1">
+        <Input
+          id={id}
+          type={type}
+          placeholder={placeholder || `Enter ${label.toLowerCase()}`}
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          required={required}
+          className="w-full bg-white border-gray-200 focus-visible:ring-brand-teal h-10 shadow-sm pr-10"
+        />
+        {rightElement}
+      </div>
     </div>
   )
 }

@@ -156,7 +156,6 @@ class Department(DepartmentBase):
 class DesignationBase(BaseModel):
     title: str
     department: str
-    level: str
 
 class DesignationCreate(DesignationBase):
     pass
@@ -164,7 +163,6 @@ class DesignationCreate(DesignationBase):
 class DesignationUpdate(BaseModel):
     title: Optional[str] = None
     department: Optional[str] = None
-    level: Optional[str] = None
 
 class Designation(DesignationBase):
     id: str
@@ -438,7 +436,7 @@ class ClientBase(BaseModel):
     email: str
     phone: str
     address: Optional[str] = None
-    industry: Optional[str] = None
+    department: Optional[str] = None
     status: Optional[str] = "active"
     createdDate: Optional[str] = None
 
@@ -451,10 +449,79 @@ class ClientUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
-    industry: Optional[str] = None
+    department: Optional[str] = None
     status: Optional[str] = None
 
 class Client(ClientBase):
+    id: str
+
+    class Config:
+        from_attributes = True
+
+# Project Schemas
+class ProjectBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    clientId: str
+    clientName: Optional[str] = None
+    department: Optional[str] = None
+    teamLeaderId: Optional[str] = None
+    teamLeaderName: Optional[str] = None
+    startDate: str
+    endDate: Optional[str] = None
+    status: Optional[str] = "planning"
+    priority: Optional[str] = "medium"
+    budget: Optional[float] = 0
+
+class ProjectCreate(ProjectBase):
+    pass
+
+class ProjectUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    clientId: Optional[str] = None
+    clientName: Optional[str] = None
+    department: Optional[str] = None
+    teamLeaderId: Optional[str] = None
+    teamLeaderName: Optional[str] = None
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    budget: Optional[float] = None
+
+class Project(ProjectBase):
+    id: str
+
+    class Config:
+        from_attributes = True
+
+# Work Management Task Schemas
+class WMTaskBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    projectId: str
+    projectName: Optional[str] = None
+    assignedToId: str # Employee ID
+    assignedToName: Optional[str] = None
+    dueDate: Optional[str] = None
+    priority: Optional[str] = "medium" # low, medium, high, urgent
+    createdDate: Optional[str] = None
+
+class WMTaskCreate(WMTaskBase):
+    pass
+
+class WMTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
+    assignedToId: Optional[str] = None
+    assignedToName: Optional[str] = None
+    dueDate: Optional[str] = None
+    priority: Optional[str] = None
+
+class WMTask(WMTaskBase):
     id: str
 
     class Config:

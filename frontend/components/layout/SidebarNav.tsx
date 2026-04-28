@@ -45,6 +45,7 @@ export function SidebarNav() {
     getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
     getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
       getItem(<Link href="/employees">Employee List</Link>, "/employees"),
+      getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"),
       getItem("Employee Attendance List", "/employees/attendance"),
       getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
       getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
@@ -57,11 +58,6 @@ export function SidebarNav() {
       getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
       getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"),
     ]),
-    getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, [
-      getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"),
-      getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"),
-      getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"),
-    ]),
     getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />),
     getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />),
     getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, [
@@ -69,6 +65,11 @@ export function SidebarNav() {
       getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"),
     ]),
     getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />),
+    getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, [
+      getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"),
+      getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"),
+      getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"),
+    ]),
     getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />),
   ];
 

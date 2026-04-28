@@ -139,6 +139,24 @@ async def read_departments(skip: int = 0, limit: int = 100, db=Depends(database.
 @app.get("/designations", response_model=List[schemas.Designation])
 async def read_designations(skip: int = 0, limit: int = 100, db=Depends(database.get_db)):
     return await crud.get_designations(db, skip=skip, limit=limit)
+
+@app.post("/designations", response_model=schemas.Designation)
+async def create_designation(designation: schemas.DesignationCreate, db=Depends(database.get_db)):
+    return await crud.create_designation(db, designation=designation)
+
+@app.put("/designations/{designation_id}", response_model=schemas.Designation)
+async def update_designation(designation_id: str, designation_update: schemas.DesignationUpdate, db=Depends(database.get_db)):
+    updated = await crud.update_designation(db, designation_id=designation_id, designation_update=designation_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Designation not found")
+    return updated
+
+@app.delete("/designations/{designation_id}")
+async def delete_designation(designation_id: str, db=Depends(database.get_db)):
+    success = await crud.delete_designation(db, designation_id=designation_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Designation not found")
+    return {"message": "Designation deleted successfully"}
  
 @app.get("/companies", response_model=List[schemas.Company])
 async def read_companies(skip: int = 0, limit: int = 100, db=Depends(database.get_db)):
@@ -339,6 +357,52 @@ async def delete_client(client_id: str, db=Depends(database.get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Client not found")
     return {"message": "Client deleted successfully"}
+
+# Project Endpoints
+@app.get("/projects", response_model=List[schemas.Project])
+async def read_projects(skip: int = 0, limit: int = 100, db=Depends(database.get_db)):
+    return await crud.get_projects(db, skip=skip, limit=limit)
+
+@app.post("/projects", response_model=schemas.Project)
+async def create_project(project: schemas.ProjectCreate, db=Depends(database.get_db)):
+    return await crud.create_project(db, project=project)
+
+@app.put("/projects/{project_id}", response_model=schemas.Project)
+async def update_project(project_id: str, project_update: schemas.ProjectUpdate, db=Depends(database.get_db)):
+    updated = await crud.update_project(db, project_id, project_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return updated
+
+@app.delete("/projects/{project_id}")
+async def delete_project(project_id: str, db=Depends(database.get_db)):
+    success = await crud.delete_project(db, project_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"message": "Project deleted successfully"}
+
+# WM Task Endpoints
+@app.get("/wm-tasks", response_model=List[schemas.WMTask])
+async def read_wm_tasks(skip: int = 0, limit: int = 100, db=Depends(database.get_db)):
+    return await crud.get_wm_tasks(db, skip=skip, limit=limit)
+
+@app.post("/wm-tasks", response_model=schemas.WMTask)
+async def create_wm_task(task: schemas.WMTaskCreate, db=Depends(database.get_db)):
+    return await crud.create_wm_task(db, task=task)
+
+@app.put("/wm-tasks/{task_id}", response_model=schemas.WMTask)
+async def update_wm_task(task_id: str, task_update: schemas.WMTaskUpdate, db=Depends(database.get_db)):
+    updated = await crud.update_wm_task(db, task_id, task_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return updated
+
+@app.delete("/wm-tasks/{task_id}")
+async def delete_wm_task(task_id: str, db=Depends(database.get_db)):
+    success = await crud.delete_wm_task(db, task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "Task deleted successfully"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
