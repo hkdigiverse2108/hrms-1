@@ -318,10 +318,6 @@ async def delete_leave(leave_id: str, db=Depends(database.get_db)):
         raise HTTPException(status_code=404, detail="Leave request not found")
     return {"message": "Leave request deleted successfully"}
 
-    if not updated_leave:
-        raise HTTPException(status_code=404, detail="Leave request not found")
-    return updated_leave
-
 # Notification Endpoints
 @app.get("/notifications/{employee_id}", response_model=List[schemas.Notification])
 async def read_notifications(employee_id: str, skip: int = 0, limit: int = 50, db=Depends(database.get_db)):
