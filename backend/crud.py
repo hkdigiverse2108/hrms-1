@@ -677,6 +677,67 @@ async def log_task_activity(db, taskId: str, action: str, performedBy: str, user
     await log_activity(db, action, performedBy, userName, details, taskId=taskId)
 
 
+# Sales Lead CRUD
+async def get_leads(db, skip: int = 0, limit: int = 100):
+    cursor = db.leads.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def create_lead(db, lead: schemas.LeadCreate):
+    lead_dict = lead.dict()
+    performedBy = lead_dict.pop("performedBy", "Unknown")
+    userName = lead_dict.pop("userName", "Unknown User")
+    
+    if not lead_dict.get("date"):
+        lead_dict["date"] = datetime.now().strftime("%Y-%m-%d")
+        
+    result = await db.leads.insert_one(lead_dict)
+    lead_id = str(result.inserted_id)
+    
+    # Log the creation
+    await log_task_activity(db, None, "Lead Created", performedBy, userName, f"Lead for '{lead_dict['company']}' was created.")
+    
+    doc = await db.leads.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
+    update_data = lead_update.dict(exclude_unset=True)
+    performedBy = update_data.pop("performedBy", "Unknown")
+    userName = update_data.pop("userName", "Unknown User")
+    
+    if update_data:
+        # If status changed to 'Closed Won', set closedDate if not provided
+        if update_data.get("status") == "Closed Won" and not update_data.get("closedDate"):
+            update_data["closedDate"] = datetime.now().strftime("%Y-%m-%d")
+            
+        await db.leads.update_one({"_id": ObjectId(lead_id)}, {"$set": update_data})
+        
+        # Log the update
+        await log_task_activity(db, None, "Lead Updated", performedBy, userName, f"Lead '{lead_id}' was updated.")
+        
+    doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
+    return fix_id(doc)
+
+async def delete_lead(db, lead_id: str):
+    result = await db.leads.delete_one({"_id": ObjectId(lead_id)})
+    return result.deleted_count > 0
+
+async def add_lead_follow_up(db, lead_id: str, follow_up: schemas.FollowUp, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    follow_up_dict = follow_up.dict()
+    if not follow_up_dict.get("date"):
+        follow_up_dict["date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+    await db.leads.update_one(
+        {"_id": ObjectId(lead_id)},
+        {"$push": {"followUps": follow_up_dict}}
+    )
+    
+    # Log activity
+    await log_task_activity(db, None, "Follow-up Added", performedBy, userName, f"Follow-up added to lead '{lead_id}'.")
+    
+    doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
+    return fix_id(doc)
+
 # System Settings CRUD
 async def get_system_settings(db):
     settings = await db.system_settings.find_one({})

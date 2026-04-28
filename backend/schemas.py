@@ -539,6 +539,50 @@ class TaskLog(TaskLogBase):
     class Config:
         from_attributes = True
 
+# Sales Lead Schemas
+class FollowUp(BaseModel):
+    date: str
+    note: str
+    performedBy: Optional[str] = None
+
+class LeadBase(BaseModel):
+    company: str
+    contact: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    expectedIncome: Optional[str] = None
+    status: Optional[str] = "Lead" # Lead, Contacted, Proposal Sent, Negotiation, Closed Won
+    priority: Optional[str] = "Medium" # Low, Medium, High
+    source: Optional[str] = None
+    date: Optional[str] = None
+    remarks: Optional[str] = None
+    closedDate: Optional[str] = None
+    followUps: Optional[List[FollowUp]] = []
+
+class LeadCreate(LeadBase):
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class LeadUpdate(BaseModel):
+    company: Optional[str] = None
+    contact: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    expectedIncome: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    source: Optional[str] = None
+    date: Optional[str] = None
+    remarks: Optional[str] = None
+    closedDate: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class Lead(LeadBase):
+    id: str
+    class Config:
+        from_attributes = True
+
 # System Settings Schemas
 class SystemSettingsBase(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = True

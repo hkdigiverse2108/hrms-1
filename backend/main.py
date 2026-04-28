@@ -330,6 +330,30 @@ async def get_system_settings(db=Depends(get_db)):
 async def update_system_settings(settings_update: schemas.SystemSettingsUpdate, db=Depends(get_db)):
     return await crud.update_system_settings(db, settings_update)
 
+# Sales Lead Endpoints
+@app.get("/leads", response_model=List[schemas.Lead])
+async def read_leads(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_leads(db, skip=skip, limit=limit)
+
+@app.post("/leads", response_model=schemas.Lead)
+async def create_lead(lead: schemas.LeadCreate, db=Depends(get_db)):
+    return await crud.create_lead(db, lead)
+
+@app.put("/leads/{lead_id}", response_model=schemas.Lead)
+async def update_lead(lead_id: str, lead_update: schemas.LeadUpdate, db=Depends(get_db)):
+    return await crud.update_lead(db, lead_id, lead_update)
+
+@app.delete("/leads/{lead_id}")
+async def delete_lead(lead_id: str, db=Depends(get_db)):
+    success = await crud.delete_lead(db, lead_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {"message": "Lead deleted successfully"}
+
+@app.post("/leads/{lead_id}/follow-ups", response_model=schemas.Lead)
+async def add_lead_follow_up(lead_id: str, follow_up: schemas.FollowUp, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.add_lead_follow_up(db, lead_id, follow_up, performedBy=performedBy, userName=userName)
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
     # Using 127.0.0.1 explicitly can sometimes resolve connection issues on local machines

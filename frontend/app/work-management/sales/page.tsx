@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { 
   TrendingUp, 
@@ -17,35 +17,120 @@ import {
   Calendar,
   Clock,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Loader2,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/hooks/useUser";
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { API_URL } from "@/lib/config";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { LeadForm, LeadFormData } from "@/components/hrms/LeadForm";
+import { FollowUpDialog } from "@/components/hrms/FollowUpDialog";
+import { toast } from "sonner";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
 
 export default function SalesPage() {
   const { user } = useUser();
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeLeads, setActiveLeads] = useState([
-    { id: 1, company: "TechFlow Systems", contact: "Sarah Johnson", email: "sarah@techflow.io", phone: "+1 (555) 012-3456", expectedIncome: "$12,000", status: "Negotiation", priority: "High", source: "Website", date: "2024-10-25", remarks: "Interested in premium tier." },
-    { id: 2, company: "Global Logistics", contact: "Michael Chen", email: "m.chen@globallog.com", phone: "+1 (555) 987-6543", expectedIncome: "$8,500", status: "Contacted", priority: "Medium", source: "LinkedIn", date: "2024-10-24", remarks: "Follow up next Tuesday." },
-    { id: 3, company: "Creative Minds", contact: "Emma Davis", email: "emma@creativeminds.co", phone: "+1 (555) 456-7890", expectedIncome: "$5,200", status: "Lead", priority: "Low", source: "Referral", date: "2024-10-23", remarks: "Needs more info on pricing." },
-    { id: 4, company: "Peak Performance", contact: "Robert Wilson", email: "robert@peakperf.net", phone: "+1 (555) 321-0987", expectedIncome: "$15,000", status: "Proposal Sent", priority: "High", source: "Cold Call", date: "2024-10-22", remarks: "Highly likely to close." },
-  ]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [convertedLeads, setConvertedLeads] = useState([
-    { id: 5, company: "Future Edge", contact: "Lisa Anderson", email: "lisa@futureedge.com", phone: "+1 (555) 654-3210", expectedIncome: "$9,800", status: "Closed Won", priority: "High", source: "Event", date: "2024-10-15", closedDate: "2024-10-25", remarks: "Long-term partnership potential." },
-  ]);
+  useEffect(() => {
+    fetchLeads();
+  }, []);
 
-  const handleConvert = (leadId: number) => {
-    const leadToConvert = activeLeads.find(l => l.id === leadId);
-    if (leadToConvert) {
-      setActiveLeads(activeLeads.filter(l => l.id !== leadId));
-      setConvertedLeads([...convertedLeads, { ...leadToConvert, status: "Closed Won", closedDate: new Date().toISOString().split('T')[0] }]);
+  const fetchLeads = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/leads`);
+      if (res.ok) {
+        const data = await res.json();
+        setLeads(data);
+      }
+    } catch (err) {
+      console.error("Error fetching leads:", err);
+      toast.error("Failed to load leads");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddLead = async (formData: LeadFormData) => {
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/leads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          performedBy: user?.id,
+          userName: user?.name
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Lead added successfully");
+        setIsDialogOpen(false);
+        fetchLeads();
+      } else {
+        toast.error("Failed to add lead");
+      }
+    } catch (err) {
+      console.error("Error adding lead:", err);
+      toast.error("An error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateStatus = async (leadId: string, newStatus: string) => {
+    try {
+      const res = await fetch(`${API_URL}/leads/${leadId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          performedBy: user?.id,
+          userName: user?.name
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(`Lead status updated to ${newStatus}`);
+        fetchLeads();
+      }
+    } catch (err) {
+      console.error("Error updating lead:", err);
+      toast.error("Failed to update status");
+    }
+  };
+
+  const handleDeleteLead = async (leadId: string) => {
+    if (!confirm("Are you sure you want to delete this lead?")) return;
+    try {
+      const res = await fetch(`${API_URL}/leads/${leadId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast.success("Lead deleted");
+        fetchLeads();
+      }
+    } catch (err) {
+      console.error("Error deleting lead:", err);
+      toast.error("Failed to delete lead");
     }
   };
 
@@ -59,11 +144,19 @@ export default function SalesPage() {
     }
   };
 
+  const activeLeads = leads.filter(l => l.status !== "Closed Won");
+  const convertedLeads = leads.filter(l => l.status === "Closed Won");
+
+  const totalRevenue = convertedLeads.reduce((acc, l) => {
+    const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+    return acc + val;
+  }, 0);
+
   const stats = [
-    { title: "Total Revenue", value: "$124,500", trend: "+12.5%", trendUp: true, icon: <DollarSign className="w-5 h-5" />, color: "text-emerald-600" },
+    { title: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, trend: "+12.5%", trendUp: true, icon: <DollarSign className="w-5 h-5" />, color: "text-emerald-600" },
     { title: "Active Leads", value: activeLeads.length.toString(), trend: "+5", trendUp: true, icon: <Users className="w-5 h-5" />, color: "text-blue-600" },
     { title: "Converted", value: convertedLeads.length.toString(), trend: "+2", trendUp: true, icon: <Target className="w-5 h-5" />, color: "text-amber-600" },
-    { title: "Sales Growth", value: "18%", trend: "+4.2%", trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
+    { title: "Lead Source", value: "8 Active", trend: "High Qual", trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
   ];
 
   const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' }) => (
@@ -77,6 +170,7 @@ export default function SalesPage() {
             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Expected Income</th>
             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Remarks</th>
+            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Follow-ups</th>
             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
           </tr>
         </thead>
@@ -132,9 +226,17 @@ export default function SalesPage() {
                 </div>
               </td>
               <td className="px-6 py-4">
-                <p className="text-[12px] text-slate-500 italic max-w-[150px] truncate" title={lead.remarks}>
+                <p className="text-[12px] text-slate-500 italic max-w-[120px] truncate" title={lead.remarks}>
                   "{lead.remarks || 'No remarks'}"
                 </p>
+              </td>
+              <td className="px-6 py-4">
+                <FollowUpDialog 
+                  lead={lead} 
+                  onUpdate={fetchLeads} 
+                  userId={user?.id} 
+                  userName={user?.name} 
+                />
               </td>
               <td className="px-6 py-4 text-right">
                 <div className="flex justify-end gap-2">
@@ -143,14 +245,24 @@ export default function SalesPage() {
                       variant="outline" 
                       size="sm" 
                       className="h-8 text-[10px] font-extrabold border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white uppercase tracking-tighter"
-                      onClick={() => handleConvert(lead.id)}
+                      onClick={() => handleUpdateStatus(lead.id, "Closed Won")}
                     >
                       Win Lead
                     </Button>
                   )}
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer">
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Lead
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </td>
             </tr>
@@ -166,10 +278,20 @@ export default function SalesPage() {
         title="Sales Management"
         description="Track leads, manage your sales pipeline, and monitor revenue growth in real-time."
       >
-        <Button className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm transition-all active:scale-95">
-          <Plus className="w-4 h-4 mr-2" />
-          Add New Lead
-        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm transition-all active:scale-95">
+              <Plus className="w-4 h-4 mr-2" />
+              Add New Lead
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Add New Sales Lead</DialogTitle>
+            </DialogHeader>
+            <LeadForm onSubmit={handleAddLead} isSubmitting={isSubmitting} />
+          </DialogContent>
+        </Dialog>
       </PageHeader>
 
       {/* Stats Grid */}
@@ -216,28 +338,37 @@ export default function SalesPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline" size="sm" className="h-9 border-slate-200 text-slate-600">
+            <Button variant="outline" size="sm" className="h-9 border-slate-200 text-slate-600" onClick={fetchLeads}>
               <Filter className="w-4 h-4 mr-2" />
-              Filter
+              Refresh
             </Button>
           </div>
         </div>
 
-        <TabsContent value="active">
-          <Card className="border-none shadow-sm bg-white overflow-hidden">
-            <CardContent className="p-0">
-              <LeadTable data={activeLeads} type="active" />
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-[300px] bg-white rounded-xl border border-dashed border-slate-200">
+            <Loader2 className="w-10 h-10 text-brand-teal animate-spin mb-4" />
+            <p className="text-slate-500 font-medium">Fetching your leads...</p>
+          </div>
+        ) : (
+          <>
+            <TabsContent value="active">
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardContent className="p-0">
+                  <LeadTable data={activeLeads} type="active" />
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-        <TabsContent value="converted">
-          <Card className="border-none shadow-sm bg-white overflow-hidden">
-            <CardContent className="p-0">
-              <LeadTable data={convertedLeads} type="converted" />
-            </CardContent>
-          </Card>
-        </TabsContent>
+            <TabsContent value="converted">
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardContent className="p-0">
+                  <LeadTable data={convertedLeads} type="converted" />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </div>
   );
