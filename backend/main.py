@@ -96,27 +96,27 @@ async def break_out(employee_id: str, db=Depends(get_db)):
     return result
 
 # Leave Endpoints
-@app.get("/leave-requests", response_model=List[schemas.LeaveRequest])
+@app.get("/leaves", response_model=List[schemas.LeaveRequest])
 async def read_leave_requests(skip: int = 0, limit: int = 100, db=Depends(get_db)):
     return await crud.get_all_leave_requests(db, skip=skip, limit=limit)
 
-@app.get("/leave-requests/user/{employee_id}", response_model=List[schemas.LeaveRequest])
+@app.get("/leaves/employee/{employee_id}", response_model=List[schemas.LeaveRequest])
 async def read_user_leave_requests(employee_id: str, skip: int = 0, limit: int = 100, db=Depends(get_db)):
     return await crud.get_user_leave_requests(db, employee_id, skip=skip, limit=limit)
 
-@app.post("/leave-requests", response_model=schemas.LeaveRequest)
+@app.post("/leaves", response_model=schemas.LeaveRequest)
 async def create_leave_request(leave: schemas.LeaveRequestCreate, db=Depends(get_db)):
     return await crud.create_leave_request(db, leave)
 
-@app.put("/leave-requests/{leave_id}", response_model=schemas.LeaveRequest)
+@app.put("/leaves/{leave_id}", response_model=schemas.LeaveRequest)
 async def update_leave_request(leave_id: str, leave_update: schemas.LeaveRequestUpdate, db=Depends(get_db)):
     return await crud.update_leave_request(db, leave_id, leave_update.dict(exclude_unset=True))
 
-@app.patch("/leave-requests/{leave_id}/status", response_model=schemas.LeaveRequest)
+@app.patch("/leaves/{leave_id}/status", response_model=schemas.LeaveRequest)
 async def update_leave_status(leave_id: str, status: str, db=Depends(get_db)):
     return await crud.update_leave_request_status(db, leave_id, status)
 
-@app.delete("/leave-requests/{leave_id}")
+@app.delete("/leaves/{leave_id}")
 async def delete_leave_request(leave_id: str, db=Depends(get_db)):
     success = await crud.delete_leave_request(db, leave_id)
     if not success:

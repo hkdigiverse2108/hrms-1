@@ -551,12 +551,13 @@ class LeadBase(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     expectedIncome: Optional[str] = None
-    status: Optional[str] = "Lead" # Lead, Contacted, Proposal Sent, Negotiation, Closed Won
+    status: Optional[str] = "Lead" # Lead, Contacted, Proposal Sent, Client Won, Client Loss
     priority: Optional[str] = "Medium" # Low, Medium, High
     source: Optional[str] = None
     date: Optional[str] = None
     remarks: Optional[str] = None
     closedDate: Optional[str] = None
+    assignedTo: Optional[str] = None
     followUps: Optional[List[FollowUp]] = []
 
 class LeadCreate(LeadBase):
@@ -575,6 +576,7 @@ class LeadUpdate(BaseModel):
     date: Optional[str] = None
     remarks: Optional[str] = None
     closedDate: Optional[str] = None
+    assignedTo: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 

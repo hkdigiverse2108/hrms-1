@@ -11,12 +11,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
 import { exportToCSV } from "@/lib/export";
+import { useApi } from "@/hooks/useApi";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function EmployeeListPage() {
   const router = useRouter();
+  const { data: apiData } = useApi();
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterDept, setFilterDept] = useState("All Departments");
+  const [filterRole, setFilterRole] = useState("All Roles");
+  const [filterStatus, setFilterStatus] = useState("Status");
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -57,6 +69,28 @@ export default function EmployeeListPage() {
     }
   };
 
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = 
+      emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.employeeId?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesDept = filterDept === "All Departments" || emp.department === filterDept;
+    const matchesRole = filterRole === "All Roles" || emp.role === filterRole || emp.designation === filterRole;
+    const matchesStatus = filterStatus === "Status" || emp.status?.toLowerCase() === filterStatus.toLowerCase();
+
+    return matchesSearch && matchesDept && matchesRole && matchesStatus;
+  });
+
+  // Use API data for filters if available, otherwise fallback to existing employee data
+  const departments = apiData?.departments?.map((d: any) => d.name) || 
+                      Array.from(new Set(employees.map(e => e.department).filter(Boolean)));
+  
+  const roles = apiData?.roles?.map((r: any) => r.name) || 
+                Array.from(new Set(employees.map(e => e.role || e.designation).filter(Boolean)));
+
+
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -81,29 +115,45 @@ export default function EmployeeListPage() {
         {/* Filters and Search */}
         <div className="p-4 border-b border-border bg-gray-50/30 rounded-t-xl flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full xl:w-auto">
-            <select className="w-full sm:w-auto px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer">
+            <select 
+              className="w-full sm:w-auto px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
+              value={filterDept}
+              onChange={(e) => setFilterDept(e.target.value)}
+            >
               <option>All Departments</option>
-              <option>Development</option>
-              <option>Sales</option>
-              <option>Graphics</option>
-              <option>Marketing</option>
+              {departments.map(dept => (
+                <option key={dept}>{dept}</option>
+              ))}
             </select>
             <div className="grid grid-cols-2 gap-3 w-full sm:w-auto">
-              <select className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer">
+              <select 
+                className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+              >
                 <option>All Roles</option>
-                <option>Admin</option>
-                <option>HR</option>
-                <option>Employee</option>
-                <option>Team Leader</option>
+                {roles.map(role => (
+                  <option key={role}>{role}</option>
+                ))}
               </select>
-              <select className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer">
+              <select 
+                className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer border-brand-teal ring-1 ring-brand-teal"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
                 <option>Status</option>
-                <option>Active</option>
-                <option>On Leave</option>
+                <option>active</option>
+                <option>inactive</option>
               </select>
             </div>
           </div>
-          <SearchBar placeholder="Search employees..." className="w-full" containerClassName="w-full xl:w-64" />
+          <SearchBar 
+            placeholder="Search employees..." 
+            className="w-full" 
+            containerClassName="w-full xl:w-64" 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
 
         {/* Table */}
@@ -137,14 +187,14 @@ export default function EmployeeListPage() {
                     {error}
                   </td>
                 </tr>
-              ) : employees.length === 0 ? (
+              ) : filteredEmployees.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-6 py-20 text-center text-muted-foreground">
-                    No employees found.
+                    No employees found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                employees.map((emp) => (
+                filteredEmployees.map((emp) => (
                   <tr key={emp.id} className="hover:bg-muted/50 transition-colors group cursor-pointer">
                     <td className="px-6 py-4">
                       <input type="checkbox" className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal accent-brand-teal" />
@@ -175,22 +225,30 @@ export default function EmployeeListPage() {
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">{emp.joinDate}</td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 text-muted-foreground">
-                        <button 
-                          onClick={() => router.push(`/employees/edit/${emp.id}`)}
-                          className="p-1.5 hover:bg-gray-100 hover:text-brand-teal rounded-md transition-colors"
-                          title="Edit Employee"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(emp.id, emp.name)}
-                          className="p-1.5 hover:bg-gray-100 hover:text-brand-danger rounded-md transition-colors"
-                          title="Delete Employee"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                        <button className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"><MoreVertical className="w-4 h-4" /></button>
+                      <div className="flex items-center justify-end">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-32">
+                            <DropdownMenuItem 
+                              onClick={() => router.push(`/employees/edit/${emp.id}`)}
+                              className="cursor-pointer"
+                            >
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDelete(emp.id, emp.name)}
+                              className="cursor-pointer text-brand-danger focus:text-brand-danger"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>
@@ -201,7 +259,7 @@ export default function EmployeeListPage() {
         </div>
 
         {/* Pagination Setup */}
-        <TablePagination totalItems={48} itemsPerPage={7} currentPage={1} itemName="employees" />
+        <TablePagination totalItems={filteredEmployees.length} itemsPerPage={filteredEmployees.length} currentPage={1} itemName="employees" />
       </div>
     </div>
   );

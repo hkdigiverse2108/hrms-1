@@ -19,7 +19,7 @@ export function useApi() {
         const endpoints = [
           { key: 'employees', url: '/employees' },
           { key: 'attendanceRecords', url: '/attendance' },
-          { key: 'leaveRequests', url: '/leave-requests' },
+          { key: 'leaveRequests', url: '/leaves' },
           { key: 'announcements', url: '/announcements' },
           { key: 'dashboardStats', url: '/dashboard-stats' },
           { key: 'payrollRecords', url: '/payroll' },

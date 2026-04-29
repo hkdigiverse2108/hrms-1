@@ -159,7 +159,12 @@ export default function DashboardPage() {
       const res = await fetch(`${API_URL}/attendance/status/${user.id}`);
       if (res.ok) {
         const data = await res.json();
-        setAttendanceStatus(data);
+        // If data has checkIn and no checkOut, it's an active punch-in
+        if (data && data.checkIn && data.checkOut === null) {
+          setAttendanceStatus({ isPunchedIn: true, record: data });
+        } else {
+          setAttendanceStatus({ isPunchedIn: false, record: data });
+        }
       }
     } catch (err) {
       console.error("Error fetching status:", err);

@@ -13,6 +13,13 @@ import { Input } from "@/components/ui/input";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const STAGES = [
@@ -26,7 +33,9 @@ export default function TasksPage() {
   const { user } = useUser();
   const [tasks, setTasks] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -53,13 +62,15 @@ export default function TasksPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [tRes, pRes] = await Promise.all([
+      const [tRes, pRes, eRes] = await Promise.all([
         fetch(`${API_URL}/wm-tasks`),
-        fetch(`${API_URL}/projects`)
+        fetch(`${API_URL}/projects`),
+        fetch(`${API_URL}/employees`)
       ]);
       
       if (tRes.ok) setTasks(await tRes.json());
       if (pRes.ok) setProjects(await pRes.json());
+      if (eRes.ok) setEmployees(await eRes.json());
     } catch (err) {
       console.error("Error fetching tasks:", err);
     } finally {
@@ -181,12 +192,21 @@ export default function TasksPage() {
 
     if (!isVisible) return false;
 
+    // Department Filter
+    if (selectedDepartment !== "all") {
+      const assignee = employees.find(e => e.id === t.assignedToId);
+      if (assignee?.department !== selectedDepartment) return false;
+    }
+
     const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           t.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.assignedToName?.toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesSearch;
   });
+
+  const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)));
+
 
   const isOverdue = (dateString: string, status: string) => {
     if (!dateString || status === "completed") return false;
@@ -274,14 +294,33 @@ export default function TasksPage() {
         </DialogContent>
       </Dialog>
       
-      <div className="flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-slate-200 shadow-sm">
-        <Search className="h-4 w-4 text-slate-400" />
-        <Input 
-          placeholder="Search tasks, projects or members..." 
-          className="h-8 text-[13px] border-none focus-visible:ring-0 shadow-none p-0"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      <div className="flex items-center gap-4">
+        <div className="flex-1 flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-slate-200 shadow-sm">
+          <Search className="h-4 w-4 text-slate-400" />
+          <Input 
+            placeholder="Search tasks, projects or members..." 
+            className="h-8 text-[13px] border-none focus-visible:ring-0 shadow-none p-0"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+            <SelectTrigger className="h-9 w-[180px] text-xs font-bold bg-white">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-3.5 h-3.5 text-brand-teal" />
+                <SelectValue placeholder="All Departments" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map(dept => (
+                <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden">
@@ -351,12 +390,18 @@ export default function TasksPage() {
                                     </div>
 
                                     <div className="flex items-center justify-between gap-3">
-                                      <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0 max-w-[180px]">
+                                      <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0">
                                         <Briefcase className="w-3 h-3 text-brand-teal shrink-0" />
                                         <span className="text-[11px] font-bold text-slate-600 truncate">
                                           {task.projectName || "General"}
                                         </span>
                                       </div>
+
+                                      {employees.find(e => e.id === task.assignedToId)?.department && (
+                                        <div className="px-2 py-0.5 bg-brand-teal/5 text-brand-teal border border-brand-teal/10 rounded-md text-[9px] font-extrabold uppercase tracking-tighter">
+                                          {employees.find(e => e.id === task.assignedToId).department}
+                                        </div>
+                                      )}
                                       
                                       {isOverdue(task.dueDate, task.status) && (
                                         <div className="flex items-center gap-1 text-red-600">

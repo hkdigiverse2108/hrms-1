@@ -706,8 +706,8 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
     userName = update_data.pop("userName", "Unknown User")
     
     if update_data:
-        # If status changed to 'Closed Won', set closedDate if not provided
-        if update_data.get("status") == "Closed Won" and not update_data.get("closedDate"):
+        # If status changed to 'Client Won', set closedDate if not provided
+        if update_data.get("status") == "Client Won" and not update_data.get("closedDate"):
             update_data["closedDate"] = datetime.now().strftime("%Y-%m-%d")
             
         await db.leads.update_one({"_id": ObjectId(lead_id)}, {"$set": update_data})

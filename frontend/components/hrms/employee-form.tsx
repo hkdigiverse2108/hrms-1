@@ -298,6 +298,19 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         
         <FormSelect key={`dept-${departments.length}`} label="Department" id="department" required value={formData.department} onValueChange={v => handleChange('department', v)} options={departments.map((d: any) => ({ label: d.name, value: d.name }))} placeholder="Select department" />
         <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+        
+        <FormSelect 
+          label="Status" 
+          id="status" 
+          required 
+          value={formData.status} 
+          onValueChange={v => handleChange('status', v)} 
+          options={[
+            { label: 'Active', value: 'active' },
+            { label: 'Inactive', value: 'inactive' }
+          ]} 
+          placeholder="Select status" 
+        />
 
         {/* Working Hours */}
         <div className="flex items-center gap-4">

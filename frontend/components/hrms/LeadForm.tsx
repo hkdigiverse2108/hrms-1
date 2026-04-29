@@ -18,7 +18,10 @@ export interface LeadFormData {
   priority: string;
   source: string;
   remarks: string;
+  assignedTo: string;
 }
+
+import { API_URL } from "@/lib/config";
 
 interface LeadFormProps {
   initialData?: any;
@@ -34,8 +37,23 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
     }
   });
 
+  const [employees, setEmployees] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await fetch(`${API_URL}/employees`);
+        if (res.ok) setEmployees(await res.json());
+      } catch (err) {
+        console.error("Error fetching employees:", err);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
   const currentStatus = watch("status");
   const currentPriority = watch("priority");
+  const currentAssignedTo = watch("assignedTo");
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -110,8 +128,8 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
               <SelectItem value="Lead">Lead</SelectItem>
               <SelectItem value="Contacted">Contacted</SelectItem>
               <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
-              <SelectItem value="Negotiation">Negotiation</SelectItem>
-              <SelectItem value="Closed Won">Closed Won</SelectItem>
+              <SelectItem value="Client Won">Client Won</SelectItem>
+              <SelectItem value="Client Loss">Client Loss</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -125,6 +143,22 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
               <SelectItem value="Low">Low</SelectItem>
               <SelectItem value="Medium">Medium</SelectItem>
               <SelectItem value="High">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4">
+        <div className="space-y-2">
+          <Label>Assigned To</Label>
+          <Select value={currentAssignedTo} onValueChange={(val) => setValue("assignedTo", val)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select employee" />
+            </SelectTrigger>
+            <SelectContent>
+              {employees.map(emp => (
+                <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
