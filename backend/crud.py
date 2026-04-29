@@ -468,8 +468,11 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
         
         details = []
         for key, value in update_data.items():
-            if old_client.get(key) != value:
-                details.append(f"{key} changed")
+            old_val = old_client.get(key, "N/A")
+            if old_val != value:
+                # Format key for readability (e.g. companyName -> Company Name)
+                formatted_key = ''.join([' ' + c if c.isupper() else c for c in key]).capitalize().strip()
+                details.append(f"{formatted_key} changed from '{old_val}' to '{value}'")
         
         log_details = f"Client '{old_client.get('companyName')}': " + (", ".join(details) if details else "Details updated")
         await log_activity(db, "Updated", performedBy, userName, log_details, clientId=client_id)
@@ -487,8 +490,35 @@ async def delete_client(db, client_id: str):
 # Project CRUD
 async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role != "Admin" and userId:
-        query["teamLeaderId"] = userId
+    if role and role.lower() != "admin" and userId:
+        # Get projects where user is Team Leader
+        # OR projects where user has assigned tasks
+        
+        # 1. Get projects where user is TL
+        tl_query = {"teamLeaderId": userId}
+        
+        # 2. Get projects where user has tasks
+        task_cursor = db.wm_tasks.find({"assignedToId": userId})
+        task_list = await task_cursor.to_list(length=1000)
+        project_ids_from_tasks = list(set([task.get("projectId") for task in task_list if task.get("projectId")]))
+        
+        # Combine using $or
+        or_conditions = [{"teamLeaderId": userId}]
+        if project_ids_from_tasks:
+            # Handle both string and ObjectId if necessary, but usually they are strings in the db for simplicity or vice versa
+            # Let's check for both
+            project_ids_as_obj = []
+            for pid in project_ids_from_tasks:
+                try:
+                    project_ids_as_obj.append(ObjectId(pid))
+                except:
+                    pass
+            
+            or_conditions.append({"_id": {"$in": project_ids_as_obj}})
+            or_conditions.append({"id": {"$in": project_ids_from_tasks}}) # fallback for string IDs
+            
+        query["$or"] = or_conditions
+
     cursor = db.projects.find(query).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
@@ -648,7 +678,7 @@ async def delete_wm_task(db, task_id: str):
     return result.deleted_count > 0
 
 # Activity Log CRUD
-async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None):
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, dailyReportId: str = None, monthlyReportId: str = None):
     log_entry = {
         "action": action,
         "performedBy": performedBy,
@@ -659,14 +689,18 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
     if taskId: log_entry["taskId"] = taskId
     if projectId: log_entry["projectId"] = projectId
     if clientId: log_entry["clientId"] = clientId
+    if dailyReportId: log_entry["dailyReportId"] = dailyReportId
+    if monthlyReportId: log_entry["monthlyReportId"] = monthlyReportId
     
     await db.task_logs.insert_one(log_entry)
 
-async def get_task_logs(db, taskId: str = None, projectId: str = None, clientId: str = None):
+async def get_task_logs(db, taskId: str = None, projectId: str = None, clientId: str = None, dailyReportId: str = None, monthlyReportId: str = None):
     query = {}
     if taskId: query["taskId"] = taskId
     if projectId: query["projectId"] = projectId
     if clientId: query["clientId"] = clientId
+    if dailyReportId: query["dailyReportId"] = dailyReportId
+    if monthlyReportId: query["monthlyReportId"] = monthlyReportId
     
     cursor = db.task_logs.find(query).sort("timestamp", -1)
     rows = await cursor.to_list(length=100)
@@ -753,3 +787,101 @@ async def update_system_settings(db, settings_update: schemas.SystemSettingsUpda
     if update_data:
         await db.system_settings.update_one({}, {"$set": update_data}, upsert=True)
     return await get_system_settings(db)
+# Marketing Reports CRUD
+async def create_marketing_daily_report(db, report: schemas.MarketingDailyReportCreate):
+    report_dict = report.dict()
+    result = await db.marketing_daily_reports.insert_one(report_dict)
+    report_dict["id"] = str(result.inserted_id)
+    return report_dict
+
+async def get_marketing_daily_reports(db, client_id: str = None, date: str = None):
+    query = {}
+    if client_id:
+        query["clientId"] = client_id
+    if date:
+        query["date"] = date
+    cursor = db.marketing_daily_reports.find(query).sort("date", -1)
+    reports = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        reports.append(doc)
+    return reports
+
+async def update_marketing_daily_report(db, report_id: str, report: schemas.MarketingDailyReportUpdate):
+    update_data = report.dict(exclude_unset=True)
+    performedBy = update_data.pop("performedBy", "Unknown")
+    userName = update_data.pop("userName", "Unknown User")
+    
+    if not update_data:
+        return None
+        
+    old_report = await db.marketing_daily_reports.find_one({"_id": ObjectId(report_id)})
+    await db.marketing_daily_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
+    
+    # Log details
+    changes = []
+    for field, val in update_data.items():
+        if old_report and old_report.get(field) != val:
+            changes.append(f"{field} changed to {val}")
+    
+    if changes:
+        log_details = f"Daily Report updated: " + ", ".join(changes)
+        await log_activity(db, "Updated", performedBy, userName, log_details, dailyReportId=report_id)
+        
+    doc = await db.marketing_daily_reports.find_one({"_id": ObjectId(report_id)})
+    if doc:
+        doc["id"] = str(doc["_id"])
+        return doc
+    return None
+
+async def delete_marketing_daily_report(db, report_id: str):
+    result = await db.marketing_daily_reports.delete_one({"_id": ObjectId(report_id)})
+    return result.deleted_count > 0
+
+async def create_marketing_monthly_report(db, report: schemas.MarketingMonthlyReportCreate):
+    report_dict = report.dict()
+    result = await db.marketing_monthly_reports.insert_one(report_dict)
+    report_dict["id"] = str(result.inserted_id)
+    return report_dict
+
+async def get_marketing_monthly_reports(db, client_id: str = None):
+    query = {}
+    if client_id:
+        query["clientId"] = client_id
+    cursor = db.marketing_monthly_reports.find(query)
+    reports = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        reports.append(doc)
+    return reports
+
+async def update_marketing_monthly_report(db, report_id: str, report: schemas.MarketingMonthlyReportUpdate):
+    update_data = report.dict(exclude_unset=True)
+    performedBy = update_data.pop("performedBy", "Unknown")
+    userName = update_data.pop("userName", "Unknown User")
+    
+    if not update_data:
+        return None
+        
+    old_report = await db.marketing_monthly_reports.find_one({"_id": ObjectId(report_id)})
+    await db.marketing_monthly_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
+    
+    # Log details
+    changes = []
+    for field, val in update_data.items():
+        if old_report and old_report.get(field) != val:
+            changes.append(f"{field} changed to {val}")
+            
+    if changes:
+        log_details = f"Monthly Report updated: " + ", ".join(changes)
+        await log_activity(db, "Updated", performedBy, userName, log_details, monthlyReportId=report_id)
+        
+    doc = await db.marketing_monthly_reports.find_one({"_id": ObjectId(report_id)})
+    if doc:
+        doc["id"] = str(doc["_id"])
+        return doc
+    return None
+
+async def delete_marketing_monthly_report(db, report_id: str):
+    result = await db.marketing_monthly_reports.delete_one({"_id": ObjectId(report_id)})
+    return result.deleted_count > 0

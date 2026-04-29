@@ -147,11 +147,13 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
               <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Team Leader"} />
             </SelectTrigger>
             <SelectContent>
-              {employees.map((emp) => (
-                <SelectItem key={emp.id} value={emp.id}>
-                  {emp.firstName} {emp.lastName}
-                </SelectItem>
-              ))}
+              {employees
+                .filter(emp => !formData.department || emp.department === formData.department)
+                .map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.firstName} {emp.lastName} {emp.department ? `(${emp.department})` : ""}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>

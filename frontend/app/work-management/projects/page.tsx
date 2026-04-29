@@ -27,8 +27,13 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (user && user.department?.toLowerCase() === "sales" && user.role?.toLowerCase() !== "admin") {
-        router.replace("/work-management/sales");
+      if (user && user.role?.toLowerCase() !== "admin") {
+        const dept = user.department?.toLowerCase();
+        if (dept === "sales") {
+          router.replace("/work-management/sales");
+        } else if (dept === "marketing") {
+          router.replace("/work-management/marketing-reports");
+        }
       }
     }, 0);
     return () => clearTimeout(timer);
@@ -164,7 +169,7 @@ export default function ProjectsPage() {
         title="Projects"
         description="Manage company projects, assign team leaders, and track real-time progress."
       >
-        {user?.role === "Admin" && (
+        {user && (
           <Dialog open={modalOpen} onOpenChange={(open) => {
             setModalOpen(open);
             if (!open) setEditingProject(null);
@@ -303,7 +308,7 @@ export default function ProjectsPage() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fetchLogs(project)} title="View History">
                         <History className="w-4 h-4 text-brand-teal" />
                       </Button>
-                      {user?.role === "Admin" && (
+                      {user && (
                         <>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                             setEditingProject(project);
@@ -384,7 +389,7 @@ export default function ProjectsPage() {
               {searchTerm ? `No projects matching "${searchTerm}"` : "You don't have any projects assigned to you yet."}
             </p>
           </div>
-          {!searchTerm && user?.role === "Admin" && (
+          {!searchTerm && user && (
             <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={() => setModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Create Project

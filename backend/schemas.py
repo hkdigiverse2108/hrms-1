@@ -423,6 +423,20 @@ class ClientBase(BaseModel):
     address: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = "active"
+    services: Optional[str] = None
+    festivalPost: Optional[str] = None
+    post: Optional[int] = 0
+    graphics: Optional[str] = None
+    reel: Optional[int] = 0
+    video: Optional[str] = None
+    postRequired: Optional[str] = "No"
+    reelRequired: Optional[str] = "No"
+    graphicsRequired: Optional[str] = "No"
+    salesFocused: Optional[str] = "No"
+    dailyBudget: Optional[float] = 0
+    remarks: Optional[str] = None
+    responsibility: Optional[str] = None
+    dailyFollowup: Optional[str] = "No"
     createdDate: Optional[str] = None
 
 class ClientCreate(ClientBase):
@@ -437,6 +451,20 @@ class ClientUpdate(BaseModel):
     address: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = None
+    services: Optional[str] = None
+    festivalPost: Optional[str] = None
+    post: Optional[int] = None
+    graphics: Optional[str] = None
+    reel: Optional[int] = None
+    video: Optional[str] = None
+    postRequired: Optional[str] = None
+    reelRequired: Optional[str] = None
+    graphicsRequired: Optional[str] = None
+    salesFocused: Optional[str] = None
+    dailyBudget: Optional[float] = None
+    remarks: Optional[str] = None
+    responsibility: Optional[str] = None
+    dailyFollowup: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -498,6 +526,24 @@ class WMTaskBase(BaseModel):
     dueDate: Optional[str] = None
     status: Optional[str] = "todo" # todo, in-progress, review, completed
     priority: Optional[str] = "medium" # low, medium, high, urgent
+    remarks: Optional[str] = None
+    
+    # Graphics specific fields
+    postingDate: Optional[str] = None
+    postingDay: Optional[str] = None
+    reelPost: Optional[str] = None
+    concept: Optional[str] = None
+    reference: Optional[str] = None
+    scriptLink: Optional[str] = None
+    scriptDate: Optional[str] = None
+    shootingLink: Optional[str] = None
+    shootDate: Optional[str] = None
+    editingLink: Optional[str] = None
+    editingDate: Optional[str] = None
+    reviewByTL: Optional[str] = None
+    finalLink: Optional[str] = None
+    postingStatus: Optional[str] = None
+    
     createdDate: Optional[str] = None
 
 class WMTaskCreate(WMTaskBase):
@@ -514,6 +560,24 @@ class WMTaskUpdate(BaseModel):
     dueDate: Optional[str] = None
     status: Optional[str] = None
     priority: Optional[str] = None
+    remarks: Optional[str] = None
+    
+    # Graphics specific fields
+    postingDate: Optional[str] = None
+    postingDay: Optional[str] = None
+    reelPost: Optional[str] = None
+    concept: Optional[str] = None
+    reference: Optional[str] = None
+    scriptLink: Optional[str] = None
+    scriptDate: Optional[str] = None
+    shootingLink: Optional[str] = None
+    shootDate: Optional[str] = None
+    editingLink: Optional[str] = None
+    editingDate: Optional[str] = None
+    reviewByTL: Optional[str] = None
+    finalLink: Optional[str] = None
+    postingStatus: Optional[str] = None
+    
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -594,5 +658,75 @@ class SystemSettingsUpdate(BaseModel):
 
 class SystemSettings(SystemSettingsBase):
     id: str
+    class Config:
+        from_attributes = True
+
+# Marketing Report Schemas
+class MarketingDailyReportBase(BaseModel):
+    date: str
+    campaignName: str
+    reach: int = 0
+    impression: int = 0
+    leads: int = 0
+    spend: float = 0
+    cpl: float = 0
+
+class MarketingDailyReportCreate(MarketingDailyReportBase):
+    clientId: Optional[str] = None
+    clientName: Optional[str] = None
+
+class MarketingDailyReportUpdate(BaseModel):
+    clientId: Optional[str] = None
+    clientName: Optional[str] = None
+    date: Optional[str] = None
+    campaignName: Optional[str] = None
+    reach: Optional[int] = None
+    impression: Optional[int] = None
+    leads: Optional[int] = None
+    spend: Optional[float] = None
+    cpl: Optional[float] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class MarketingDailyReport(MarketingDailyReportBase):
+    id: str
+    clientId: Optional[str] = None
+    clientName: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+class MarketingMonthlyReportBase(BaseModel):
+    clientName: str
+    month: str
+    totalSpend: float = 0
+    totalLeads: int = 0
+    totalSales: int = 0
+    avgCPR: float = 0
+    avgCPP: float = 0
+    totalRevenue: float = 0
+    overallROAS: float = 0
+    conclusion: Optional[str] = None
+
+class MarketingMonthlyReportCreate(MarketingMonthlyReportBase):
+    clientId: Optional[str] = None
+
+class MarketingMonthlyReportUpdate(BaseModel):
+    clientId: Optional[str] = None
+    clientName: Optional[str] = None
+    month: Optional[str] = None
+    totalSpend: Optional[float] = None
+    totalLeads: Optional[int] = None
+    totalSales: Optional[int] = None
+    avgCPR: Optional[float] = None
+    avgCPP: Optional[float] = None
+    totalRevenue: Optional[float] = None
+    overallROAS: Optional[float] = None
+    conclusion: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class MarketingMonthlyReport(MarketingMonthlyReportBase):
+    id: str
+    clientId: Optional[str] = None
     class Config:
         from_attributes = True

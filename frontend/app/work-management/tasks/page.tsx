@@ -44,16 +44,30 @@ export default function TasksPage() {
   const [taskLogs, setTaskLogs] = useState<any[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [logFilter, setLogFilter] = useState<{taskId?: string, taskTitle?: string}>({});
+  const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (user && user.department?.toLowerCase() === "sales" && user.role?.toLowerCase() !== "admin") {
-        router.replace("/work-management/sales");
+      if (user && user.role?.toLowerCase() !== "admin") {
+        const dept = user.department?.toLowerCase();
+        if (dept === "sales") {
+          router.replace("/work-management/sales");
+        } else if (dept === "marketing") {
+          router.replace("/work-management/marketing-reports");
+        }
       }
     }, 0);
     return () => clearTimeout(timer);
   }, [user, router]);
+
+  const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
+
+  useEffect(() => {
+    if (user && !isAdmin && user.department) {
+      setSelectedDepartment(user.department);
+    }
+  }, [user, isAdmin]);
 
   useEffect(() => {
     fetchData();
@@ -179,7 +193,59 @@ export default function TasksPage() {
     }
   };
 
+  const handleInlineUpdate = async (taskId: string, field: string, value: any) => {
+    try {
+      const payload: any = { 
+        [field]: value,
+        performedBy: user?.id,
+        userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+      };
+
+      // Special handling for derived fields
+      if (field === 'projectId') {
+        const p = projects.find(proj => proj.id === value);
+        payload.projectName = p?.title;
+      }
+      if (field === 'assignedToId') {
+        const e = employees.find(emp => emp.id === value);
+        payload.assignedToName = `${e?.firstName} ${e?.lastName}`;
+      }
+      if (field === 'postingDate' && value) {
+        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        payload.postingDay = days[new Date(value).getDay()];
+      }
+
+      const res = await fetch(`${API_URL}/wm-tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setTasks(prev => prev.map(t => {
+          if (t.id === taskId) {
+            const updated = { ...t, ...payload };
+            return updated;
+          }
+          return t;
+        }));
+      }
+    } catch (err) {
+      console.error("Error updating field:", err);
+    }
+    setEditingCell(null);
+  };
+
   const filteredTasks = tasks.filter(t => {
+    const assignee = employees.find(e => e.id === t.assignedToId);
+    const taskDept = assignee?.department;
+
+    // Strict Department Isolation for non-Admins
+    if (user?.role !== "Admin") {
+      if (taskDept && user?.department && taskDept.toLowerCase() !== user.department.toLowerCase()) {
+        return false;
+      }
+    }
+
     let isVisible = false;
     if (user?.role === "Admin") {
       isVisible = true;
@@ -206,6 +272,8 @@ export default function TasksPage() {
   });
 
   const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)));
+
+  const showTableView = selectedDepartment.toLowerCase() === "graphics" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "graphics");
 
 
   const isOverdue = (dateString: string, status: string) => {
@@ -238,7 +306,7 @@ export default function TasksPage() {
                 Add Task
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto custom-scrollbar">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">
                   {editingTask ? "Edit Task Details" : "Create New Task"}
@@ -248,6 +316,7 @@ export default function TasksPage() {
                 initialData={editingTask} 
                 onSubmit={handleSubmit} 
                 isSubmitting={isSubmitting} 
+                userDepartment={user?.department}
               />
             </DialogContent>
           </Dialog>
@@ -305,125 +374,293 @@ export default function TasksPage() {
           />
         </div>
         
-        <div className="flex items-center gap-2">
-          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-            <SelectTrigger className="h-9 w-[180px] text-xs font-bold bg-white">
-              <div className="flex items-center gap-2">
-                <Briefcase className="w-3.5 h-3.5 text-brand-teal" />
-                <SelectValue placeholder="All Departments" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              {departments.map(dept => (
-                <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+              <SelectTrigger className="h-9 w-[180px] text-xs font-bold bg-white">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="w-3.5 h-3.5 text-brand-teal" />
+                  <SelectValue placeholder="All Departments" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map(dept => (
+                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-6 h-full overflow-x-auto pb-4 items-start">
-            {STAGES.map(stage => (
-              <div key={stage.id} className="flex flex-col w-[300px] shrink-0 h-full bg-slate-50/50 rounded-2xl border border-slate-100/50">
-                <div className="flex items-center justify-between p-4 pb-2">
-                  <div className="flex items-center gap-2.5">
-                    <h3 className={`font-bold text-[14px] ${stage.color}`}>{stage.label}</h3>
-                    <span className="bg-slate-200/60 text-slate-600 px-2 py-0.5 rounded-full text-[11px] font-bold">
-                      {filteredTasks.filter(t => t.status === stage.id).length}
-                    </span>
-                  </div>
-                  <MoreHorizontal className="w-5 h-5 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" />
-                </div>
-                
-                <Droppable droppableId={stage.id}>
-                  {(provided, snapshot) => (
-                    <div
-                      {...provided.droppableProps}
-                      ref={provided.innerRef}
-                      className={`flex-1 overflow-y-auto p-3 pt-2 transition-colors custom-scrollbar ${
-                        snapshot.isDraggingOver ? "bg-slate-100/50" : ""
-                      }`}
+        {showTableView ? (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col overflow-hidden">
+            <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
+              <table className="w-full text-left border-collapse min-w-[2000px]">
+                <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
+                  <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 w-16 text-center">S.No.</th>
+                    <th className="px-4 py-3 min-w-[200px]">Task Title</th>
+                    <th className="px-4 py-3 min-w-[150px]">Project</th>
+                    <th className="px-4 py-3 min-w-[120px]">Assignee</th>
+                    <th className="px-4 py-3 min-w-[120px]">Stage</th>
+                    <th className="px-4 py-3">Posting Date</th>
+                    <th className="px-4 py-3">Posting Day</th>
+                    <th className="px-4 py-3">Reel/Post</th>
+                    <th className="px-4 py-3">Concept</th>
+                    <th className="px-4 py-3">Reference</th>
+                    <th className="px-4 py-3">Script Link</th>
+                    <th className="px-4 py-3">Script Date</th>
+                    <th className="px-4 py-3">Shooting Link</th>
+                    <th className="px-4 py-3">Shoot Date</th>
+                    <th className="px-4 py-3">Editing Link</th>
+                    <th className="px-4 py-3">Edit Date</th>
+                    <th className="px-4 py-3">Review By TL</th>
+                    <th className="px-4 py-3">Final Link</th>
+                    <th className="px-4 py-3 min-w-[200px]">Remarks</th>
+                    <th className="px-4 py-3">Posted</th>
+                    <th className="px-4 py-3 w-24 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[12px] divide-y divide-slate-100">
+                  {filteredTasks.map((task, index) => (
+                    <tr 
+                      key={task.id} 
+                      className="hover:bg-slate-50/50 transition-colors group"
                     >
-                      <div className="space-y-3">
-                        {filteredTasks
-                          .filter(t => t.status === stage.id)
-                          .map((task, index) => (
-                            <Draggable key={task.id} draggableId={task.id} index={index}>
-                              {(provided, snapshot) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  className="group"
-                                  onClick={() => {
-                                    setEditingTask(task);
-                                    setModalOpen(true);
-                                  }}
-                                >
-                                  <div className={`p-4 rounded-xl transition-all cursor-pointer border ${
-                                    snapshot.isDragging ? "opacity-90 scale-[1.02] shadow-xl border-brand-teal ring-4 ring-brand-teal/5" : 
-                                    "bg-white hover:border-brand-teal/30 border-slate-200 shadow-sm hover:shadow-md"
-                                  } ${isOverdue(task.dueDate, task.status) ? "border-red-200 bg-red-50/20" : ""}`}>
-                                    
-                                    <div className="flex items-start justify-between gap-3 mb-3">
-                                      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                            task.priority === 'urgent' ? 'bg-red-500' :
-                                            task.priority === 'high' ? 'bg-orange-500' :
-                                            task.priority === 'medium' ? 'bg-blue-500' :
-                                            'bg-slate-300'
-                                          }`} />
-                                          <h4 className="font-bold text-[13px] text-slate-800 leading-snug line-clamp-2">
-                                            {task.title}
-                                          </h4>
-                                        </div>
-                                      </div>
+                      <td className="px-4 py-3 text-center text-slate-400 font-medium">{index + 1}</td>
+                      
+                      {/* Inline Editable Fields */}
+                      {[
+                        { key: 'title', type: 'text', minWidth: '200px' },
+                        { key: 'projectId', labelKey: 'projectName', type: 'select', options: projects.map(p => ({ value: p.id, label: p.title })), minWidth: '150px' },
+                        { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
+                        { key: 'status', type: 'select', options: STAGES.map(s => ({ value: s.id, label: s.label })), minWidth: '120px' },
+                        { key: 'postingDate', type: 'date' },
+                        { key: 'postingDay', type: 'readonly' },
+                        { key: 'reelPost', type: 'select', options: ['Post', 'Reel', 'Video'].map(v => ({ value: v, label: v })) },
+                        { key: 'concept', type: 'text' },
+                        { key: 'reference', type: 'text' },
+                        { key: 'scriptLink', type: 'text' },
+                        { key: 'scriptDate', type: 'date' },
+                        { key: 'shootingLink', type: 'text' },
+                        { key: 'shootDate', type: 'date' },
+                        { key: 'editingLink', type: 'text' },
+                        { key: 'editingDate', type: 'date' },
+                        { key: 'reviewByTL', type: 'text' },
+                        { key: 'finalLink', type: 'text' },
+                        { key: 'remarks', type: 'text', minWidth: '200px' },
+                        { key: 'postingStatus', type: 'select', options: ['Yes', 'No'].map(v => ({ value: v, label: v })) },
+                      ].map((col) => (
+                        <td 
+                          key={col.key} 
+                          className={`px-4 py-3 ${col.type !== 'readonly' ? 'cursor-text hover:bg-brand-teal/5 transition-colors' : ''}`}
+                          style={{ minWidth: col.minWidth }}
+                          onClick={() => col.type !== 'readonly' && setEditingCell({ id: task.id, field: col.key })}
+                        >
+                          {editingCell?.id === task.id && editingCell?.field === col.key ? (
+                            col.type === 'select' ? (
+                              <select 
+                                autoFocus
+                                className="w-full bg-white border border-brand-teal rounded px-1 py-0.5 outline-none"
+                                defaultValue={task[col.key]}
+                                onBlur={(e) => handleInlineUpdate(task.id, col.key, e.target.value)}
+                                onChange={(e) => handleInlineUpdate(task.id, col.key, e.target.value)}
+                              >
+                                <option value="">Select...</option>
+                                {col.options?.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                              </select>
+                            ) : (
+                              <input 
+                                autoFocus
+                                type={col.type}
+                                className="w-full bg-white border border-brand-teal rounded px-2 py-1 outline-none"
+                                defaultValue={task[col.key]}
+                                onBlur={(e) => handleInlineUpdate(task.id, col.key, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleInlineUpdate(task.id, col.key, e.currentTarget.value);
+                                  if (e.key === 'Escape') setEditingCell(null);
+                                }}
+                              />
+                            )
+                          ) : (
+                            <div className="flex items-center gap-2 min-h-[20px]">
+                              {col.key === 'title' ? (
+                                <span className="font-bold text-slate-800">{task[col.key]}</span>
+                              ) : col.key === 'projectId' || col.key === 'assignedToId' ? (
+                                <span className={`${col.key === 'projectId' ? 'text-brand-teal' : 'text-slate-600'} font-medium`}>
+                                  {task[col.labelKey || col.key]}
+                                </span>
+                              ) : col.key === 'status' ? (
+                                <span className={`font-bold px-2 py-0.5 rounded text-[10px] uppercase ${STAGES.find(s => s.id === task.status)?.color}`}>
+                                  {STAGES.find(s => s.id === task.status)?.label}
+                                </span>
+                              ) : (col.key.includes('Link') || col.key === 'reference') && task[col.key] ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="truncate max-w-[100px] text-slate-500 italic">Edit...</span>
+                                  <a 
+                                    href={task[col.key]} 
+                                    target="_blank" 
+                                    className="text-blue-500 hover:underline font-bold"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    Link
+                                  </a>
+                                </div>
+                              ) : col.key === 'postingStatus' ? (
+                                <Badge className={task[col.key] === "Yes" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}>
+                                  {task[col.key] || "No"}
+                                </Badge>
+                              ) : (
+                                <span>{task[col.key] || "-"}</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      ))}
 
-                                      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-brand-teal/10 rounded-md text-brand-teal" title="View History"><History className="w-3.5 h-3.5" /></button>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0">
-                                        <Briefcase className="w-3 h-3 text-brand-teal shrink-0" />
-                                        <span className="text-[11px] font-bold text-slate-600 truncate">
-                                          {task.projectName || "General"}
-                                        </span>
-                                      </div>
-
-                                      {employees.find(e => e.id === task.assignedToId)?.department && (
-                                        <div className="px-2 py-0.5 bg-brand-teal/5 text-brand-teal border border-brand-teal/10 rounded-md text-[9px] font-extrabold uppercase tracking-tighter">
-                                          {employees.find(e => e.id === task.assignedToId).department}
-                                        </div>
-                                      )}
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-2">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} 
+                            className="p-1.5 hover:bg-brand-teal/10 rounded-md text-brand-teal transition-colors"
+                            title="View History"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            onClick={() => { setEditingTask(task); setModalOpen(true); }} 
+                            className="flex items-center gap-1 px-2 py-1 hover:bg-slate-100 rounded text-blue-600 transition-colors"
+                            title="Edit Task"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold">Edit</span>
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(task.id)} 
+                            className="flex items-center gap-1 px-2 py-1 hover:bg-red-50 rounded text-red-500 transition-colors"
+                            title="Delete Task"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold">Delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredTasks.length === 0 && (
+                    <tr>
+                      <td colSpan={20} className="px-4 py-20 text-center text-slate-400 italic">No graphics tasks found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <DragDropContext onDragEnd={onDragEnd}>
+            <div className="flex gap-6 h-full overflow-x-auto pb-4 items-start">
+              {STAGES.map(stage => (
+                <div key={stage.id} className="flex flex-col w-[300px] shrink-0 h-full bg-slate-50/50 rounded-2xl border border-slate-100/50">
+                  <div className="flex items-center justify-between p-4 pb-2">
+                    <div className="flex items-center gap-2.5">
+                      <h3 className={`font-bold text-[14px] ${stage.color}`}>{stage.label}</h3>
+                      <span className="bg-slate-200/60 text-slate-600 px-2 py-0.5 rounded-full text-[11px] font-bold">
+                        {filteredTasks.filter(t => t.status === stage.id).length}
+                      </span>
+                    </div>
+                    <MoreHorizontal className="w-5 h-5 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" />
+                  </div>
+                  
+                  <Droppable droppableId={stage.id}>
+                    {(provided, snapshot) => (
+                      <div
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
+                        className={`flex-1 overflow-y-auto p-3 pt-2 transition-colors custom-scrollbar ${
+                          snapshot.isDraggingOver ? "bg-slate-100/50" : ""
+                        }`}
+                      >
+                        <div className="space-y-3">
+                          {filteredTasks
+                            .filter(t => t.status === stage.id)
+                            .map((task, index) => (
+                              <Draggable key={task.id} draggableId={task.id} index={index}>
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    className="group"
+                                    onClick={() => {
+                                      setEditingTask(task);
+                                      setModalOpen(true);
+                                    }}
+                                  >
+                                    <div className={`p-4 rounded-xl transition-all cursor-pointer border ${
+                                      snapshot.isDragging ? "opacity-90 scale-[1.02] shadow-xl border-brand-teal ring-4 ring-brand-teal/5" : 
+                                      "bg-white hover:border-brand-teal/30 border-slate-200 shadow-sm hover:shadow-md"
+                                    } ${isOverdue(task.dueDate, task.status) ? "border-red-200 bg-red-50/20" : ""}`}>
                                       
-                                      {isOverdue(task.dueDate, task.status) && (
-                                        <div className="flex items-center gap-1 text-red-600">
-                                          <AlertTriangle className="w-3.5 h-3.5" />
-                                          <span className="text-[10px] font-bold uppercase">Overdue</span>
+                                      <div className="flex items-start justify-between gap-3 mb-3">
+                                        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                                          <div className="flex items-center gap-2">
+                                            <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                              task.priority === 'urgent' ? 'bg-red-500' :
+                                              task.priority === 'high' ? 'bg-orange-500' :
+                                              task.priority === 'medium' ? 'bg-blue-500' :
+                                              'bg-slate-300'
+                                            }`} />
+                                            <h4 className="font-bold text-[13px] text-slate-800 leading-snug line-clamp-2">
+                                              {task.title}
+                                            </h4>
+                                          </div>
                                         </div>
-                                      )}
+
+                                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-brand-teal/10 rounded-md text-brand-teal" title="View History"><History className="w-3.5 h-3.5" /></button>
+                                          <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0">
+                                          <Briefcase className="w-3 h-3 text-brand-teal shrink-0" />
+                                          <span className="text-[11px] font-bold text-slate-600 truncate">
+                                            {task.projectName || "General"}
+                                          </span>
+                                        </div>
+
+                                        {employees.find(e => e.id === task.assignedToId)?.department && (
+                                          <div className="px-2 py-0.5 bg-brand-teal/5 text-brand-teal border border-brand-teal/10 rounded-md text-[9px] font-extrabold uppercase tracking-tighter">
+                                            {employees.find(e => e.id === task.assignedToId).department}
+                                          </div>
+                                        )}
+                                        
+                                        {isOverdue(task.dueDate, task.status) && (
+                                          <div className="flex items-center gap-1 text-red-600">
+                                            <AlertTriangle className="w-3.5 h-3.5" />
+                                            <span className="text-[10px] font-bold uppercase">Overdue</span>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                        {provided.placeholder}
+                                )}
+                              </Draggable>
+                            ))}
+                          {provided.placeholder}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </Droppable>
-              </div>
-            ))}
-          </div>
-        </DragDropContext>
+                    )}
+                  </Droppable>
+                </div>
+              ))}
+            </div>
+          </DragDropContext>
+        )}
       </div>
     </div>
   );

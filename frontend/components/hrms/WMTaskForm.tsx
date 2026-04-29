@@ -16,6 +16,23 @@ export interface WMTaskFormData {
   dueDate: string;
   status: string;
   priority: string;
+  remarks?: string;
+  
+  // Graphics fields
+  postingDate?: string;
+  postingDay?: string;
+  reelPost?: string;
+  concept?: string;
+  reference?: string;
+  scriptLink?: string;
+  scriptDate?: string;
+  shootingLink?: string;
+  shootDate?: string;
+  editingLink?: string;
+  editingDate?: string;
+  reviewByTL?: string;
+  finalLink?: string;
+  postingStatus?: string;
 }
 
 const defaultFormData: WMTaskFormData = {
@@ -26,15 +43,31 @@ const defaultFormData: WMTaskFormData = {
   dueDate: new Date().toISOString().split('T')[0],
   status: "todo",
   priority: "medium",
+  remarks: "",
+  postingDate: "",
+  postingDay: "",
+  reelPost: "Post",
+  concept: "",
+  reference: "",
+  scriptLink: "",
+  scriptDate: "",
+  shootingLink: "",
+  shootDate: "",
+  editingLink: "",
+  editingDate: "",
+  reviewByTL: "",
+  finalLink: "",
+  postingStatus: "No",
 };
 
 interface WMTaskFormProps {
   initialData?: Partial<WMTaskFormData>;
   onSubmit: (data: WMTaskFormData) => void;
   isSubmitting?: boolean;
+  userDepartment?: string;
 }
 
-export function WMTaskForm({ initialData, onSubmit, isSubmitting }: WMTaskFormProps) {
+export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment }: WMTaskFormProps) {
   const [formData, setFormData] = useState<WMTaskFormData>({
     ...defaultFormData,
     ...initialData,
@@ -64,8 +97,22 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting }: WMTaskFormPr
   };
 
   const handleChange = (field: keyof WMTaskFormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const newData = { ...prev, [field]: value };
+      
+      // Auto-calculate Posting Day if Posting Date changes
+      if (field === "postingDate" && value) {
+        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const day = days[new Date(value).getDay()];
+        newData.postingDay = day;
+      }
+      
+      return newData;
+    });
   };
+
+  const selectedProject = projects.find(p => p.id === formData.projectId);
+  const isGraphicsProject = selectedProject?.department?.toLowerCase() === "graphics" || userDepartment?.toLowerCase() === "graphics";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,6 +225,109 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting }: WMTaskFormPr
           </Select>
         </div>
       </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="remarks">Remarks</Label>
+        <Input
+          id="remarks"
+          placeholder="Any additional notes..."
+          value={formData.remarks}
+          onChange={(e) => handleChange("remarks", e.target.value)}
+        />
+      </div>
+
+      {isGraphicsProject && (
+        <div className="space-y-6 border-t pt-6 mt-6">
+          <h3 className="text-sm font-medium text-brand-teal uppercase tracking-wider">Graphics & Production Details</h3>
+          
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Posting Date</Label>
+              <Input type="date" value={formData.postingDate} onChange={(e) => handleChange("postingDate", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Posting Day</Label>
+              <Input value={formData.postingDay} readOnly className="bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <Label>Reel/Post</Label>
+              <Select value={formData.reelPost} onValueChange={(v) => handleChange("reelPost", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Post">Post</SelectItem>
+                  <SelectItem value="Reel">Reel</SelectItem>
+                  <SelectItem value="Video">Video</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Concept</Label>
+              <Input placeholder="Theme or core idea" value={formData.concept} onChange={(e) => handleChange("concept", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Reference</Label>
+              <Input placeholder="Reference link or note" value={formData.reference} onChange={(e) => handleChange("reference", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Script Link</Label>
+              <Input placeholder="Google Doc / Link" value={formData.scriptLink} onChange={(e) => handleChange("scriptLink", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Script Date</Label>
+              <Input type="date" value={formData.scriptDate} onChange={(e) => handleChange("scriptDate", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Shooting Link</Label>
+              <Input placeholder="Raw footage link" value={formData.shootingLink} onChange={(e) => handleChange("shootingLink", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Shoot Date</Label>
+              <Input type="date" value={formData.shootDate} onChange={(e) => handleChange("shootDate", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Editing/Post Link</Label>
+              <Input placeholder="WIP edit link" value={formData.editingLink} onChange={(e) => handleChange("editingLink", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Editing/Post Make Date</Label>
+              <Input type="date" value={formData.editingDate} onChange={(e) => handleChange("editingDate", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Review By TL</Label>
+              <Input placeholder="TL Feedback" value={formData.reviewByTL} onChange={(e) => handleChange("reviewByTL", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Final (Video/Post) Link</Label>
+              <Input placeholder="Deliverable link" value={formData.finalLink} onChange={(e) => handleChange("finalLink", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Posting (Yes/No)</Label>
+              <Select value={formData.postingStatus} onValueChange={(v) => handleChange("postingStatus", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Yes">Yes</SelectItem>
+                  <SelectItem value="No">No</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end gap-3 pt-4">
         <Button type="submit" className="bg-brand-teal hover:bg-brand-teal-light text-white" disabled={isSubmitting}>

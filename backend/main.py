@@ -317,9 +317,11 @@ async def read_task_logs(
     taskId: Optional[str] = None, 
     projectId: Optional[str] = None, 
     clientId: Optional[str] = None, 
+    dailyReportId: Optional[str] = None,
+    monthlyReportId: Optional[str] = None,
     db=Depends(get_db)
 ):
-    return await crud.get_task_logs(db, taskId=taskId, projectId=projectId, clientId=clientId)
+    return await crud.get_task_logs(db, taskId=taskId, projectId=projectId, clientId=clientId, dailyReportId=dailyReportId, monthlyReportId=monthlyReportId)
 
 # System Settings Endpoints
 @app.get("/system-settings", response_model=schemas.SystemSettings)
@@ -359,3 +361,47 @@ if __name__ == "__main__":
     # Using 127.0.0.1 explicitly can sometimes resolve connection issues on local machines
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
     uvicorn.run(app, host="127.0.0.1", port=port)
+# Marketing Reports Endpoints
+@app.post("/marketing/reports/daily", response_model=schemas.MarketingDailyReport)
+async def create_marketing_daily_report(report: schemas.MarketingDailyReportCreate, db=Depends(get_db)):
+    return await crud.create_marketing_daily_report(db, report)
+
+@app.get("/marketing/reports/daily", response_model=List[schemas.MarketingDailyReport])
+async def get_marketing_daily_reports(client_id: str = None, date: str = None, db=Depends(get_db)):
+    return await crud.get_marketing_daily_reports(db, client_id, date)
+
+@app.put("/marketing/reports/daily/{report_id}", response_model=schemas.MarketingDailyReport)
+async def update_marketing_daily_report(report_id: str, report: schemas.MarketingDailyReportUpdate, db=Depends(get_db)):
+    updated = await crud.update_marketing_daily_report(db, report_id, report)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Daily report not found")
+    return updated
+
+@app.delete("/marketing/reports/daily/{report_id}")
+async def delete_marketing_daily_report(report_id: str, db=Depends(get_db)):
+    success = await crud.delete_marketing_daily_report(db, report_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Daily report not found")
+    return {"message": "Daily report deleted"}
+
+@app.post("/marketing/reports/monthly", response_model=schemas.MarketingMonthlyReport)
+async def create_marketing_monthly_report(report: schemas.MarketingMonthlyReportCreate, db=Depends(get_db)):
+    return await crud.create_marketing_monthly_report(db, report)
+
+@app.get("/marketing/reports/monthly", response_model=List[schemas.MarketingMonthlyReport])
+async def get_marketing_monthly_reports(client_id: str = None, db=Depends(get_db)):
+    return await crud.get_marketing_monthly_reports(db, client_id)
+
+@app.put("/marketing/reports/monthly/{report_id}", response_model=schemas.MarketingMonthlyReport)
+async def update_marketing_monthly_report(report_id: str, report: schemas.MarketingMonthlyReportUpdate, db=Depends(get_db)):
+    updated = await crud.update_marketing_monthly_report(db, report_id, report)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Monthly report not found")
+    return updated
+
+@app.delete("/marketing/reports/monthly/{report_id}")
+async def delete_marketing_monthly_report(report_id: str, db=Depends(get_db)):
+    success = await crud.delete_marketing_monthly_report(db, report_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Monthly report not found")
+    return {"message": "Monthly report deleted"}
