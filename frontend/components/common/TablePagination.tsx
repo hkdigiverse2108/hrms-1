@@ -21,7 +21,7 @@ export function TablePagination({
 }: TablePaginationProps) {
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   
-  if (totalPages <= 1) return null;
+  if (isNaN(totalPages) || totalPages <= 1) return null;
 
   const getPageNumbers = () => {
     const pages = [];
@@ -43,7 +43,7 @@ export function TablePagination({
       if (currentPage < totalPages - 2) pages.push('...');
       if (!pages.includes(totalPages)) pages.push(totalPages);
     }
-    return pages;
+    return pages.filter(p => p === '...' || (typeof p === 'number' && !isNaN(p)));
   };
 
   return (
