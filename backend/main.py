@@ -238,6 +238,15 @@ async def read_kpi_records(skip: int = 0, limit: int = 100, db=Depends(get_db)):
 @app.post("/kpi-records", response_model=schemas.KPI)
 async def create_kpi_record(kpi: schemas.KPICreate, db=Depends(get_db)): return await crud.create_kpi_record(db, kpi)
 
+@app.get("/reviews", response_model=List[schemas.Review])
+async def read_reviews(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_reviews(db, skip, limit)
+@app.post("/reviews", response_model=schemas.Review)
+async def create_review(review: schemas.ReviewCreate, db=Depends(get_db)): return await crud.create_review(db, review)
+@app.put("/reviews/{review_id}", response_model=schemas.Review)
+async def update_review(review_id: str, update: schemas.ReviewUpdate, db=Depends(get_db)): return await crud.update_review(db, review_id, update)
+@app.delete("/reviews/{review_id}")
+async def delete_review(review_id: str, db=Depends(get_db)): return await crud.delete_review(db, review_id)
+
 # Event Endpoints
 @app.get("/events", response_model=List[schemas.Event])
 async def read_events(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_events(db, skip, limit)

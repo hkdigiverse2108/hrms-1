@@ -229,6 +229,15 @@ async def create_kpi_record(db, kpi: schemas.KPICreate): return await create_ite
 async def update_kpi_record(db, kpi_id: str, update: schemas.KPIUpdate): return await update_item(db, "kpi_records", kpi_id, update.dict(exclude_unset=True))
 async def delete_kpi_record(db, kpi_id: str): return await delete_item(db, "kpi_records", kpi_id)
 
+async def get_reviews(db, skip: int = 0, limit: int = 100): return await get_items(db, "reviews", skip, limit)
+async def create_review(db, review: schemas.ReviewCreate): 
+    review_dict = review.dict()
+    if not review_dict.get("date"):
+        review_dict["date"] = datetime.now().strftime("%Y-%m-%d")
+    return await create_item(db, "reviews", review_dict)
+async def update_review(db, review_id: str, update: schemas.ReviewUpdate): return await update_item(db, "reviews", review_id, update.dict(exclude_unset=True))
+async def delete_review(db, review_id: str): return await delete_item(db, "reviews", review_id)
+
 async def get_events(db, skip: int = 0, limit: int = 100): return await get_items(db, "events", skip, limit)
 async def create_event(db, event: schemas.EventCreate): return await create_item(db, "events", event.dict())
 async def update_event(db, event_id: str, update: schemas.EventUpdate): return await update_item(db, "events", event_id, update.dict(exclude_unset=True))

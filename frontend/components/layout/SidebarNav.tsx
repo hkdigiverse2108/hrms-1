@@ -117,11 +117,11 @@ export function SidebarNav() {
       getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
       getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
       // Hide top-level Task for Marketing
-      ...((isMarketingDept && !isAdminRole) ? [] : [
-        getItem(<Link href="/task">Task</Link>, "/task", <ClipboardList className="w-5 h-5" />)
-      ]),
+      // ...((isMarketingDept && !isAdminRole) ? [] : [
+      //   getItem(<Link href="/task">Task</Link>, "/task", <ClipboardList className="w-5 h-5" />)
+      // ]),
       getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
-        getItem("Blank Canvas", "blank-canvas"),
+        getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"),
         getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
         getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"),
       ]),

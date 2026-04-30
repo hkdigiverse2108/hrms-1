@@ -337,6 +337,26 @@ class KPIUpdate(BaseModel):
 class KPI(KPIBase):
     id: str
 
+class ReviewBase(BaseModel):
+    employeeId: str
+    employeeName: str
+    role: str
+    avatar: Optional[str] = None
+    department: str
+    summary: str
+    rating: int
+    date: Optional[str] = None
+
+class ReviewCreate(ReviewBase):
+    pass
+
+class ReviewUpdate(BaseModel):
+    summary: Optional[str] = None
+    rating: Optional[int] = None
+
+class Review(ReviewBase):
+    id: str
+
 class LoginRequest(BaseModel):
     email: str
     password: str
