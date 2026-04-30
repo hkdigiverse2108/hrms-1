@@ -16,9 +16,7 @@ import {
   ClipboardList,
   Edit2,
   Trash2,
-  Users,
-  ChevronLeft,
-  ChevronRight
+  Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +28,15 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
+import { TablePagination } from "@/components/common/TablePagination";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -38,12 +45,10 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function MarketingReportsPage() {
   const { user } = useUser();
@@ -52,9 +57,6 @@ export default function MarketingReportsPage() {
   const [monthlyReports, setMonthlyReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentPageDaily, setCurrentPageDaily] = useState(1);
-  const [currentPageMonthly, setCurrentPageMonthly] = useState(1);
-  const pageSize = 10;
   
   // Modals
   const [isDailyModalOpen, setIsDailyModalOpen] = useState(false);
@@ -71,6 +73,12 @@ export default function MarketingReportsPage() {
   // Client filtering
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientFilter, setSelectedClientFilter] = useState("all");
+  // Pagination State
+  const [dailyPage, setDailyPage] = useState(1);
+  const [dailyItemsPerPage, setDailyItemsPerPage] = useState(10);
+  const [monthlyPage, setMonthlyPage] = useState(1);
+  const [monthlyItemsPerPage, setMonthlyItemsPerPage] = useState(10);
+
   const [dateFilter, setDateFilter] = useState("");
 
   // Form States
@@ -152,7 +160,7 @@ export default function MarketingReportsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           ...dailyFormData,
-          clientName: client?.companyName || "N/A"
+          clientName: client?.companyName || ""
         }),
       });
 
@@ -238,6 +246,12 @@ export default function MarketingReportsPage() {
     setInlineEditing(null);
   };
 
+  // Reset pages when filters change
+  useEffect(() => {
+    setDailyPage(1);
+    setMonthlyPage(1);
+  }, [searchQuery, selectedClientFilter, dateFilter]);
+
   const fetchLogs = async (report: any, type: "daily" | "monthly") => {
     setIsLoadingLogs(true);
     setLogsOpen(true);
@@ -255,11 +269,24 @@ export default function MarketingReportsPage() {
     }
   };
 
-  const filteredDaily = dailyReports.filter(r => 
-    r.campaignName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (r.clientName && r.clientName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    r.date.includes(searchQuery)
-  );
+  const filteredDaily = dailyReports.filter(r => {
+    const matchesSearch = r.campaignName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (r.clientName && r.clientName.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesClient = selectedClientFilter === "all" || r.clientId === selectedClientFilter;
+    const matchesDate = !dateFilter || r.date === dateFilter;
+    return matchesSearch && matchesClient && matchesDate;
+  });
+
+  const filteredMonthly = monthlyReports.filter(r => {
+    const matchesSearch = r.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         r.month.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesClient = selectedClientFilter === "all" || r.clientId === selectedClientFilter;
+    return matchesSearch && matchesClient;
+  });
+
+  // Pagination Logic
+  const paginatedDaily = filteredDaily.slice((dailyPage - 1) * dailyItemsPerPage, dailyPage * dailyItemsPerPage);
+  const paginatedMonthly = filteredMonthly.slice((monthlyPage - 1) * monthlyItemsPerPage, monthlyPage * monthlyItemsPerPage);
 
   const dailyTotals = filteredDaily.reduce((acc, curr) => ({
     reach: acc.reach + (curr.reach || 0),
@@ -268,13 +295,8 @@ export default function MarketingReportsPage() {
     spend: acc.spend + (curr.spend || 0)
   }), { reach: 0, impression: 0, leads: 0, spend: 0 });
 
-  const filteredMonthly = monthlyReports.filter(r => 
-    r.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.month.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
-    <div className="p-6 space-y-6 bg-slate-50/50 flex flex-col h-[calc(100vh-140px)] overflow-hidden">
+    <div className="space-y-6 flex flex-col h-[calc(100vh-100px)] overflow-hidden">
       {/* Report Logs Dialog */}
       <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
         <DialogContent className="sm:max-w-[700px] h-[80vh] flex flex-col p-0 overflow-hidden">
@@ -370,7 +392,7 @@ export default function MarketingReportsPage() {
       </div>
 
       {/* Tabs & Search */}
-      <Tabs defaultValue="daily" value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col">
+      <Tabs defaultValue="daily" value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col min-h-0">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
           <TabsList className="bg-slate-100 p-1 rounded-lg">
             <TabsTrigger value="daily" className="px-6 py-2 rounded-md transition-all">Daily Reports</TabsTrigger>
@@ -430,8 +452,8 @@ export default function MarketingReportsPage() {
             </div>
           </div>
 
-        <TabsContent value="daily" className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col">
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col">
+        <TabsContent value="daily" className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0">
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
             <div className="overflow-auto flex-1 custom-scrollbar">
             <Table>
               <TableHeader>
@@ -505,12 +527,13 @@ export default function MarketingReportsPage() {
                       </TableCell>
                     </TableRow>
 
-                    {filteredDaily.slice((currentPageDaily - 1) * pageSize, currentPageDaily * pageSize).map((report, idx) => {
-                      const sn = ((currentPageDaily - 1) * pageSize) + idx + 1;
+                    {paginatedDaily.map((report, idx) => {
+                      // Calculate global index for S.N
+                      const globalIdx = (dailyPage - 1) * dailyItemsPerPage + idx + 1;
                       
                       return (
                         <TableRow key={report.id} className="hover:bg-slate-50/50">
-                          <TableCell className="text-center text-slate-400">{sn}</TableCell>
+                          <TableCell className="text-center text-slate-400">{globalIdx}</TableCell>
                       
                       <TableCell 
                         className="font-medium cursor-text hover:bg-slate-50"
@@ -659,18 +682,7 @@ export default function MarketingReportsPage() {
                           >
                             <History className="w-4 h-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                            onClick={() => {
-                              setEditingReport(report);
-                              setDailyFormData(report);
-                              setIsDailyModalOpen(true);
-                            }}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
+
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -684,72 +696,36 @@ export default function MarketingReportsPage() {
                         </TableRow>
                       );
                     })}
-                      {/* Totals Row integrated into Body */}
-                      {filteredDaily.length > 0 && (
-                        <TableRow className="bg-slate-50 font-bold border-t-2">
-                          <TableCell colSpan={4} className="text-right text-slate-900">Total</TableCell>
-                          <TableCell className="text-center text-slate-900">{dailyTotals.reach.toLocaleString()}</TableCell>
-                          <TableCell className="text-center text-slate-900">{dailyTotals.impression.toLocaleString()}</TableCell>
-                          <TableCell className="text-center text-slate-900">{dailyTotals.leads.toLocaleString()}</TableCell>
-                          <TableCell className="text-center text-brand-teal">₹{dailyTotals.spend.toLocaleString()}</TableCell>
-                          <TableCell colSpan={2}></TableCell>
-                        </TableRow>
-                      )}
-                    </>
-                  )}
-                </TableBody>
+                  </>
+                )}
+              </TableBody>
+              {filteredDaily.length > 0 && (
+                <tfoot className="bg-slate-50 border-t-2">
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-right font-bold text-slate-900">Total</TableCell>
+                    <TableCell className="text-center font-bold text-slate-900">{dailyTotals.reach.toLocaleString()}</TableCell>
+                    <TableCell className="text-center font-bold text-slate-900">{dailyTotals.impression.toLocaleString()}</TableCell>
+                    <TableCell className="text-center font-bold text-slate-900">{dailyTotals.leads.toLocaleString()}</TableCell>
+                    <TableCell className="text-center font-bold text-brand-teal">₹{dailyTotals.spend.toLocaleString()}</TableCell>
+                    <TableCell colSpan={2}></TableCell>
+                  </TableRow>
+                </tfoot>
+              )}
               </Table>
             </div>
+            <TablePagination
+              totalItems={filteredDaily.length}
+              itemsPerPage={dailyItemsPerPage}
+              currentPage={dailyPage}
+              onPageChange={setDailyPage}
+              onItemsPerPageChange={setDailyItemsPerPage}
+              itemName="daily reports"
+            />
           </div>
-          {/* Pagination Daily */}
-          {filteredDaily.length > 0 && (
-            <div className="flex items-center justify-between shrink-0 pt-4 px-2">
-              <div className="text-[11px] text-slate-500 font-medium">
-                Showing {(currentPageDaily - 1) * pageSize + 1} to {Math.min(currentPageDaily * pageSize, filteredDaily.length)} of {filteredDaily.length} reports
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  disabled={currentPageDaily === 1}
-                  onClick={() => setCurrentPageDaily(p => p - 1)}
-                  className="h-8 w-8 rounded-lg border-slate-200 text-slate-400 bg-white"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <div className="flex items-center gap-1.5">
-                  {Array.from({ length: Math.ceil(filteredDaily.length / pageSize) }).map((_, i) => (
-                    <Button
-                      key={i}
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setCurrentPageDaily(i + 1)}
-                      className={`h-8 w-8 rounded-lg text-[12px] font-medium transition-all ${
-                        currentPageDaily === i + 1 
-                          ? 'border-blue-500 text-blue-500 bg-blue-50/50' 
-                          : 'border-slate-200 text-slate-500 bg-white hover:bg-slate-50'
-                      }`}
-                    >
-                      {i + 1}
-                    </Button>
-                  ))}
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  disabled={currentPageDaily === Math.ceil(filteredDaily.length / pageSize)}
-                  onClick={() => setCurrentPageDaily(p => p + 1)}
-                  className="h-8 w-8 rounded-lg border-slate-200 text-slate-400 bg-white"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
         </TabsContent>
 
-        <TabsContent value="monthly" className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col">
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col">
+        <TabsContent value="monthly" className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0">
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
             <div className="overflow-auto flex-1 custom-scrollbar">
             <Table>
               <TableHeader>
@@ -841,9 +817,9 @@ export default function MarketingReportsPage() {
                       </TableCell>
                     </TableRow>
 
-                    {filteredMonthly.slice((currentPageMonthly - 1) * pageSize, currentPageMonthly * pageSize).map((report, idx) => (
+                    {paginatedMonthly.map((report, idx) => (
                     <TableRow key={report.id} className="hover:bg-slate-50/50">
-                      <TableCell className="text-center text-slate-400">{((currentPageMonthly - 1) * pageSize) + idx + 1}</TableCell>
+                      <TableCell className="text-center text-slate-400">{(monthlyPage - 1) * monthlyItemsPerPage + idx + 1}</TableCell>
 
                       {/* Client Name Field */}
                       <TableCell 
@@ -1041,18 +1017,7 @@ export default function MarketingReportsPage() {
                           >
                             <History className="w-4 h-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                            onClick={() => {
-                              setEditingReport(report);
-                              setMonthlyFormData(report);
-                              setIsMonthlyModalOpen(true);
-                            }}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
+
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -1070,52 +1035,15 @@ export default function MarketingReportsPage() {
             </TableBody>
             </Table>
             </div>
+            <TablePagination
+              totalItems={filteredMonthly.length}
+              itemsPerPage={monthlyItemsPerPage}
+              currentPage={monthlyPage}
+              onPageChange={setMonthlyPage}
+              onItemsPerPageChange={setMonthlyItemsPerPage}
+              itemName="monthly reports"
+            />
           </div>
-          {/* Pagination Monthly */}
-          {filteredMonthly.length > 0 && (
-            <div className="flex items-center justify-between shrink-0 pt-4 px-2">
-              <div className="text-[11px] text-slate-500 font-medium">
-                Showing {(currentPageMonthly - 1) * pageSize + 1} to {Math.min(currentPageMonthly * pageSize, filteredMonthly.length)} of {filteredMonthly.length} summaries
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  disabled={currentPageMonthly === 1}
-                  onClick={() => setCurrentPageMonthly(p => p - 1)}
-                  className="h-8 w-8 rounded-lg border-slate-200 text-slate-400 bg-white"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <div className="flex items-center gap-1.5">
-                  {Array.from({ length: Math.ceil(filteredMonthly.length / pageSize) }).map((_, i) => (
-                    <Button
-                      key={i}
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setCurrentPageMonthly(i + 1)}
-                      className={`h-8 w-8 rounded-lg text-[12px] font-medium transition-all ${
-                        currentPageMonthly === i + 1 
-                          ? 'border-blue-500 text-blue-500 bg-blue-50/50' 
-                          : 'border-slate-200 text-slate-500 bg-white hover:bg-slate-50'
-                      }`}
-                    >
-                      {i + 1}
-                    </Button>
-                  ))}
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  disabled={currentPageMonthly === Math.ceil(filteredMonthly.length / pageSize)}
-                  onClick={() => setCurrentPageMonthly(p => p + 1)}
-                  className="h-8 w-8 rounded-lg border-slate-200 text-slate-400 bg-white"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
         </TabsContent>
       </Tabs>
 

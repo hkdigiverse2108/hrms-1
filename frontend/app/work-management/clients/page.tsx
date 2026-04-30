@@ -185,7 +185,7 @@ export default function ClientsPage() {
   };
 
   return (
-    <div className="space-y-6 flex flex-col h-[calc(100vh-110px)] pb-4">
+    <div className="space-y-6 flex flex-col h-[calc(100vh-140px)] pb-4">
       <PageHeader
         title="Clients"
         description="Maintain a database of all clients and their associated projects."
