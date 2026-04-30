@@ -19,8 +19,10 @@ import { toast } from "sonner";
 
 import dayjs from "dayjs";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 
 dayjs.extend(isSameOrAfter);
+dayjs.extend(isSameOrBefore);
 
 import { useUserContext } from "@/context/UserContext";
 import { API_URL } from "@/lib/config";
@@ -52,6 +54,25 @@ export default function LeavePage() {
   const [endDate, setEndDate] = useState<any>(dayjs());
   const [reason, setReason] = useState("");
   const [isHalfDay, setIsHalfDay] = useState(false);
+
+
+  const calculateLeaveDays = (start: any, end: any) => {
+    if (!start || !end) return 0;
+    let count = 0;
+    let current = dayjs(start);
+    const last = dayjs(end);
+    
+    while (current.isSameOrBefore(last, 'day')) {
+      const isSunday = current.day() === 0;
+      const isPublicHoliday = publicHolidays.some(h => dayjs(h.date).isSame(current, 'day'));
+      
+      if (!isSunday && !isPublicHoliday) {
+        count++;
+      }
+      current = current.add(1, 'day');
+    }
+    return count;
+  };
 
   useEffect(() => {
     if (user?.id) {
@@ -91,7 +112,12 @@ export default function LeavePage() {
     }
 
     setIsSubmitting(true);
-    const duration = endDate.diff(startDate, 'day') + 1;
+    const duration = calculateLeaveDays(startDate, endDate);
+    if (duration === 0) {
+      toast.error("The selected date range only contains holidays/Sundays.");
+      setIsSubmitting(false);
+      return;
+    }
     const leaveRequest = {
       type: leaveType === 'annual' ? 'Annual Leave' : leaveType === 'sick' ? 'Sick Leave' : 'Unpaid Leave',
       start_date: startDate.format("DD-MM-YYYY"),
@@ -283,8 +309,8 @@ export default function LeavePage() {
               <div className="bg-brand-light rounded-lg p-3 flex gap-3 border border-brand-teal/20 mt-4">
                 <CalendarIcon className="w-5 h-5 text-brand-teal shrink-0 mt-0.5" />
                 <p className="text-sm font-medium text-brand-teal">
-                  {endDate.diff(startDate, 'day') + 1} days will be deducted from your balance.<br />
-                  <span className="font-normal">(Excludes weekends)</span>
+                  {calculateLeaveDays(startDate, endDate)} days will be deducted from your balance.<br />
+                  <span className="font-normal">(Excludes Sundays & Public Holidays)</span>
                 </p>
               </div>
 

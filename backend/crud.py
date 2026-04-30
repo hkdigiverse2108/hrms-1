@@ -238,6 +238,15 @@ async def create_review(db, review: schemas.ReviewCreate):
 async def update_review(db, review_id: str, update: schemas.ReviewUpdate): return await update_item(db, "reviews", review_id, update.dict(exclude_unset=True))
 async def delete_review(db, review_id: str): return await delete_item(db, "reviews", review_id)
 
+async def get_remarks(db, skip: int = 0, limit: int = 100): return await get_items(db, "remarks", skip, limit)
+async def create_remark(db, remark: schemas.RemarkCreate): 
+    remark_dict = remark.dict()
+    if not remark_dict.get("date"):
+        remark_dict["date"] = datetime.now().strftime("%d-%m-%Y")
+    return await create_item(db, "remarks", remark_dict)
+async def update_remark(db, remark_id: str, update: schemas.RemarkUpdate): return await update_item(db, "remarks", remark_id, update.dict(exclude_unset=True))
+async def delete_remark(db, remark_id: str): return await delete_item(db, "remarks", remark_id)
+
 async def get_events(db, skip: int = 0, limit: int = 100): return await get_items(db, "events", skip, limit)
 async def create_event(db, event: schemas.EventCreate): return await create_item(db, "events", event.dict())
 async def update_event(db, event_id: str, update: schemas.EventUpdate): return await update_item(db, "events", event_id, update.dict(exclude_unset=True))

@@ -357,6 +357,26 @@ class ReviewUpdate(BaseModel):
 class Review(ReviewBase):
     id: str
 
+class RemarkBase(BaseModel):
+    employeeId: str
+    employeeName: str
+    role: str
+    avatar: Optional[str] = None
+    type: str  # Appreciation, Warning, Performance, General
+    details: str
+    addedBy: str
+    date: Optional[str] = None
+
+class RemarkCreate(RemarkBase):
+    pass
+
+class RemarkUpdate(BaseModel):
+    type: Optional[str] = None
+    details: Optional[str] = None
+
+class Remark(RemarkBase):
+    id: str
+
 class LoginRequest(BaseModel):
     email: str
     password: str

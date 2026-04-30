@@ -247,6 +247,15 @@ async def update_review(review_id: str, update: schemas.ReviewUpdate, db=Depends
 @app.delete("/reviews/{review_id}")
 async def delete_review(review_id: str, db=Depends(get_db)): return await crud.delete_review(db, review_id)
 
+@app.get("/remarks", response_model=List[schemas.Remark])
+async def read_remarks(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_remarks(db, skip, limit)
+@app.post("/remarks", response_model=schemas.Remark)
+async def create_remark(remark: schemas.RemarkCreate, db=Depends(get_db)): return await crud.create_remark(db, remark)
+@app.put("/remarks/{remark_id}", response_model=schemas.Remark)
+async def update_remark(remark_id: str, update: schemas.RemarkUpdate, db=Depends(get_db)): return await crud.update_remark(db, remark_id, update)
+@app.delete("/remarks/{remark_id}")
+async def delete_remark(remark_id: str, db=Depends(get_db)): return await crud.delete_remark(db, remark_id)
+
 # Event Endpoints
 @app.get("/events", response_model=List[schemas.Event])
 async def read_events(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_events(db, skip, limit)
