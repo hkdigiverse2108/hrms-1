@@ -42,6 +42,8 @@ export default function LeavePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(dayjs());
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isViewOnly, setIsViewOnly] = useState(false);
@@ -227,7 +229,7 @@ export default function LeavePage() {
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
-          <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium">
+          <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium" onClick={() => setIsCalendarOpen(true)}>
             <CalendarIcon className="w-4 h-4 mr-2" />
             View Calendar
           </Button>
@@ -728,6 +730,144 @@ export default function LeavePage() {
           </TabsContent>
         </Tabs>
       </div>
+      
+      {/* Calendar Dialog */}
+      <Dialog open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+        <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[90vh]">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Leave Calendar</DialogTitle>
+            <DialogDescription>Visualize your planned time off and public holidays on a calendar view.</DialogDescription>
+          </DialogHeader>
+          <div className="bg-brand-teal p-4 text-white">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-xl font-bold">Leave Calendar</h2>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-white hover:bg-white/20 h-7 w-7"
+                  onClick={() => setCalendarMonth(calendarMonth.subtract(1, 'month'))}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="font-bold text-xs min-w-[90px] text-center">{calendarMonth.format("MMMM YYYY")}</span>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-white hover:bg-white/20 h-7 w-7"
+                  onClick={() => setCalendarMonth(calendarMonth.add(1, 'month'))}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            <p className="text-brand-light/80 text-xs font-medium">Visualize your planned time off and holidays.</p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto scrollbar-hide">
+            <div className="p-4 bg-white">
+            <div className="grid grid-cols-7 gap-px mb-4 text-center">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                <div key={d} className="py-2 text-[11px] font-bold text-muted-foreground uppercase tracking-widest">{d}</div>
+              ))}
+              
+              {(() => {
+                const daysInMonth = calendarMonth.daysInMonth();
+                const startDay = calendarMonth.startOf('month').day();
+                const days = [];
+                
+                // Empty slots for previous month
+                for (let i = 0; i < startDay; i++) {
+                  days.push(<div key={`prev-${i}`} className="aspect-square"></div>);
+                }
+                
+                for (let i = 1; i <= daysInMonth; i++) {
+                  const currentDay = calendarMonth.date(i);
+                  const isToday = currentDay.isSame(dayjs(), 'day');
+                  const holiday = publicHolidays.find(h => dayjs(h.date).isSame(currentDay, 'day'));
+                  
+                  const leave = leaves.find(l => {
+                    const start = dayjs(l.start_date, "DD-MM-YYYY");
+                    const end = dayjs(l.end_date, "DD-MM-YYYY");
+                    return currentDay.isSameOrAfter(start, 'day') && currentDay.isSameOrBefore(end, 'day');
+                  });
+
+                  let bgColor = "bg-gray-50";
+                  let textColor = "text-foreground";
+                  let indicator = null;
+
+                  if (isToday) {
+                    bgColor = "bg-brand-light border-2 border-brand-teal/30";
+                    textColor = "text-brand-teal font-bold";
+                  }
+                  
+                  if (holiday) {
+                    bgColor = "bg-indigo-50";
+                    textColor = "text-indigo-700 font-bold";
+                    indicator = <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>;
+                  }
+
+                  if (leave) {
+                    if (leave.status === "Approved") {
+                      bgColor = "bg-green-100";
+                      textColor = "text-green-800 font-bold";
+                    } else if (leave.status === "Pending") {
+                      bgColor = "bg-amber-100";
+                      textColor = "text-amber-800 font-bold";
+                    } else if (leave.status === "Rejected") {
+                      bgColor = "bg-red-50 opacity-60";
+                    }
+                  }
+
+                  days.push(
+                    <div 
+                      key={i} 
+                      className={`aspect-square relative flex flex-col items-center justify-center rounded-lg text-sm transition-all hover:scale-105 cursor-default group ${bgColor} ${textColor}`}
+                    >
+                      {i}
+                      {indicator}
+                      {leave && (
+                        <div className={`absolute bottom-1 w-1 h-1 rounded-full ${
+                          leave.status === "Approved" ? "bg-green-600" : "bg-amber-600"
+                        }`}></div>
+                      )}
+                      {holiday && (
+                        <div className="absolute bottom-6 opacity-0 group-hover:opacity-100 transition-opacity bg-indigo-600 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap z-10 pointer-events-none">
+                          {holiday.name}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return days;
+              })()}
+            </div>
+
+            <div className="flex flex-wrap gap-4 pt-4 border-t border-border mt-4">
+              <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+                <div className="w-3 h-3 rounded bg-green-100 border border-green-200"></div>
+                <span>Approved</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+                <div className="w-3 h-3 rounded bg-amber-100 border border-amber-200"></div>
+                <span>Pending</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+                <div className="w-3 h-3 rounded bg-indigo-50 border border-indigo-200"></div>
+                <span>Public Holiday</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+                <div className="w-3 h-3 rounded bg-brand-light border border-brand-teal/30"></div>
+                <span>Today</span>
+              </div>
+            </div>
+          </div>
+          </div>
+          <DialogFooter className="p-4 bg-gray-50 border-t border-border">
+             <Button onClick={() => setIsCalendarOpen(false)} className="bg-brand-teal hover:bg-brand-teal-light text-white w-full sm:w-auto font-bold">Close Calendar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
