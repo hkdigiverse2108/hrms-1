@@ -110,7 +110,7 @@ export function SidebarNav() {
       getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
         getItem(<Link href="/employees">Employee List</Link>, "/employees"),
         getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"),
-        getItem("Employee Attendance List", "/employees/attendance"),
+        getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"),
         getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
         getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
       ]),
@@ -140,7 +140,10 @@ export function SidebarNav() {
   // Helper to determine open keys and selected keys
   const getSelectedKeys = () => {
     if (pathname === "/") return ["/"];
-    if (pathname.startsWith("/employees")) return [pathname];
+    if (pathname.startsWith("/employees")) {
+      if (pathname === "/employees/attendance") return ["/employees/attendance"];
+      return [pathname];
+    }
     if (pathname.startsWith("/workspace")) return [pathname];
     if (pathname.startsWith("/leave")) return ["/leave"];
     if (pathname.startsWith("/attendance")) return ["/attendance"];
