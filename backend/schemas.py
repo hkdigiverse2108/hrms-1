@@ -377,6 +377,20 @@ class RemarkUpdate(BaseModel):
 class Remark(RemarkBase):
     id: str
 
+class PenaltyTypeBase(BaseModel):
+    name: str
+    amount: int
+
+class PenaltyTypeCreate(PenaltyTypeBase):
+    pass
+
+class PenaltyTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    amount: Optional[int] = None
+
+class PenaltyType(PenaltyTypeBase):
+    id: str
+
 class LoginRequest(BaseModel):
     email: str
     password: str

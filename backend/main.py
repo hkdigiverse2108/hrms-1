@@ -256,6 +256,24 @@ async def update_remark(remark_id: str, update: schemas.RemarkUpdate, db=Depends
 @app.delete("/remarks/{remark_id}")
 async def delete_remark(remark_id: str, db=Depends(get_db)): return await crud.delete_remark(db, remark_id)
 
+# Penalty Type Endpoints
+@app.get("/penalty-types", response_model=List[schemas.PenaltyType])
+async def read_penalty_types(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_penalty_types(db, skip=skip, limit=limit)
+
+@app.post("/penalty-types", response_model=schemas.PenaltyType)
+async def create_penalty_type(penalty_type: schemas.PenaltyTypeCreate, db=Depends(get_db)):
+    return await crud.create_penalty_type(db, penalty_type)
+
+@app.put("/penalty-types/{penalty_id}", response_model=schemas.PenaltyType)
+async def update_penalty_type(penalty_id: str, penalty_update: schemas.PenaltyTypeUpdate, db=Depends(get_db)):
+    return await crud.update_penalty_type(db, penalty_id, penalty_update)
+
+@app.delete("/penalty-types/{penalty_id}")
+async def delete_penalty_type(penalty_id: str, db=Depends(get_db)):
+    await crud.delete_penalty_type(db, penalty_id)
+    return {"message": "Penalty type deleted successfully"}
+
 # Event Endpoints
 @app.get("/events", response_model=List[schemas.Event])
 async def read_events(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_events(db, skip, limit)

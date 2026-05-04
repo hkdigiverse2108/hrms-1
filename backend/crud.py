@@ -903,3 +903,25 @@ async def update_marketing_monthly_report(db, report_id: str, report: schemas.Ma
 async def delete_marketing_monthly_report(db, report_id: str):
     result = await db.marketing_monthly_reports.delete_one({"_id": ObjectId(report_id)})
     return result.deleted_count > 0
+
+# Penalty Type CRUD
+async def get_penalty_types(db, skip: int = 0, limit: int = 100):
+    cursor = db.penalty_types.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def create_penalty_type(db, penalty_type: schemas.PenaltyTypeCreate):
+    penalty_dict = penalty_type.dict()
+    result = await db.penalty_types.insert_one(penalty_dict)
+    penalty_dict["id"] = str(result.inserted_id)
+    return penalty_dict
+
+async def update_penalty_type(db, penalty_id: str, penalty_update: schemas.PenaltyTypeUpdate):
+    update_data = penalty_update.dict(exclude_unset=True)
+    await db.penalty_types.update_one({"_id": ObjectId(penalty_id)}, {"$set": update_data})
+    updated_doc = await db.penalty_types.find_one({"_id": ObjectId(penalty_id)})
+    return fix_id(updated_doc)
+
+async def delete_penalty_type(db, penalty_id: str):
+    await db.penalty_types.delete_one({"_id": ObjectId(penalty_id)})
+    return True
