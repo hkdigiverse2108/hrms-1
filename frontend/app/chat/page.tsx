@@ -11,6 +11,9 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { EmojiPicker } from "@/components/chat/EmojiPicker";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { 
@@ -21,6 +24,7 @@ import {
   Paperclip, 
   Smile, 
   Send,
+  CheckCheck,
   UserPlus,
   Hash,
   ChevronLeft,
@@ -34,7 +38,21 @@ import {
   UsersRound,
   Plus,
   Settings,
-  UserMinus
+  UserMinus,
+  Filter,
+  Check,
+  Clock,
+  Layout,
+  ExternalLink,
+  Home,
+  Bookmark,
+  Reply,
+  Forward,
+  Copy,
+  BellOff,
+  Archive,
+  Link as LinkIcon,
+  Pin
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,16 +73,10 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { 
-  Reply, 
-  Forward, 
-  Copy, 
-  Bookmark, 
-  BellOff, 
-  Link as LinkIcon,
-  Pin
-} from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+
+
 
 const INITIAL_MESSAGES: Record<string, any[]> = {
   "all": [
@@ -96,7 +108,20 @@ export default function ChatPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>([]);
   const [isEditingGroup, setIsEditingGroup] = useState(false);
+  const [laterTab, setLaterTab] = useState<"In progress" | "Archived" | "Completed">("In progress");
+  const [showDeletedNotification, setShowDeletedNotification] = useState(true); // Placeholder for demo, normally would be based on actual deletion events
   const [showNewChat, setShowNewChat] = useState(false);
+
+  const [chatChannels, setChatChannels] = useState<any[]>([]);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [newChannelData, setNewChannelData] = useState({ name: "", description: "" });
+  const [editingChannel, setEditingChannel] = useState<any>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState<any>(null);
+  const [showGroupMembers, setShowGroupMembers] = useState(false);
+  const [globalSavedMessages, setGlobalSavedMessages] = useState<any[]>([]);
+  const [showRightSidebar, setShowRightSidebar] = useState(false);
+  const [chatFiles, setChatFiles] = useState<any[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shouldScrollToBottom = useRef(true);
@@ -118,13 +143,79 @@ export default function ChatPage() {
     if (user) {
       fetchUnreadCounts();
       fetchChatSummaries();
+      fetchChannels();
+      fetchSavedMessages();
       const interval = setInterval(() => {
         fetchUnreadCounts();
         fetchChatSummaries();
+        fetchSavedMessages();
       }, 5000);
       return () => clearInterval(interval);
     }
   }, [user]);
+
+  const fetchChannels = async () => {
+    try {
+      const res = await fetch(`${API_URL}/chat/channels`);
+      if (res.ok) {
+        const data = await res.json();
+        setChatChannels(data.map((c: any) => ({ ...c, type: 'general' })));
+      }
+    } catch (err) {
+      console.error("Error fetching channels:", err);
+    }
+  };
+
+  const handleCreateChannel = async () => {
+    if (!newChannelData.name) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/channels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newChannelData)
+      });
+      if (res.ok) {
+        setNewChannelData({ name: "", description: "" });
+        setShowCreateChannel(false);
+        fetchChannels();
+        alert("Channel created successfully!");
+      }
+    } catch (err) {
+      console.error("Error creating channel:", err);
+    }
+  };
+
+  const handleUpdateChannel = async () => {
+    if (!editingChannel || !editingChannel.name) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/channels/${editingChannel.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingChannel.name, description: editingChannel.description })
+      });
+      if (res.ok) {
+        setEditingChannel(null);
+        fetchChannels();
+        alert("Channel updated successfully!");
+      }
+    } catch (err) {
+      console.error("Error updating channel:", err);
+    }
+  };
+
+  const handleDeleteChannel = async (channelId: string) => {
+    if (!confirm("Are you sure you want to delete this channel and all its messages?")) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/channels/${channelId}`, { method: 'DELETE' });
+      if (res.ok) {
+        if (selectedChat?.id === channelId) setSelectedChat(null);
+        fetchChannels();
+        alert("Channel deleted successfully!");
+      }
+    } catch (err) {
+      console.error("Error deleting channel:", err);
+    }
+  };
 
   const fetchChatSummaries = async () => {
     if (!user) return;
@@ -152,20 +243,66 @@ export default function ChatPage() {
     }
   };
 
-  const markAsSeen = async () => {
+  const fetchSavedMessages = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/saved-messages/${user.id}`);
+      if (res.ok) {
+        setGlobalSavedMessages(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching saved messages:", err);
+    }
+  };
+
+  const fetchChatFiles = async () => {
     if (!selectedChat || !user) return;
     try {
-      await fetch(`${API_URL}/chat/mark-seen/${selectedChat.id}/${user.id}`, { method: 'POST' });
-      fetchUnreadCounts();
+      const isGroup = selectedChat.type === 'group' || selectedChat.type === 'general';
+      const res = await fetch(`${API_URL}/chat/files/${user.id}/${selectedChat.id}?is_group=${isGroup}`);
+      if (res.ok) {
+        setChatFiles(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching chat files:", err);
+    }
+  };
+
+  const markAsSeen = async (chatId?: string) => {
+    const targetId = chatId || selectedChat?.id;
+    if (!targetId || !user) return;
+    try {
+      await fetch(`${API_URL}/chat/mark-seen/${targetId}/${user.id}`, { method: 'POST' });
+      // Small delay before refresh to ensure DB consistency
+      setTimeout(() => fetchUnreadCounts(), 500);
     } catch (err) {
       console.error("Error marking as seen:", err);
+    }
+  };
+
+  const handleSelectChat = (chat: any) => {
+    if (!chat) return;
+    setSelectedChat(chat);
+    // Force immediate local clear
+    const chatId = chat.id || chat.employeeId;
+    if (chatId) {
+      setUnreadCounts(prev => {
+        const next = { ...prev };
+        delete next[chatId];
+        return next;
+      });
+      markAsSeen(chatId);
     }
   };
 
   const fetchMessages = React.useCallback(async () => {
     if (!selectedChat || !user) return;
     try {
-      const res = await fetch(`${API_URL}/chat/messages/${user.id}/${selectedChat.id}`);
+      const url = (selectedChat.type === 'group' || selectedChat.type === 'general')
+        ? `${API_URL}/chat/messages/${user.id}/${selectedChat.id}?group_id=${selectedChat.id}`
+        : `${API_URL}/chat/messages/${user.id}/${selectedChat.id}`;
+      
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         // Mark which messages are mine
@@ -175,8 +312,8 @@ export default function ChatPage() {
         }));
         setCurrentMessages(marked);
         
-        // If there are unread messages from the other person, mark them seen
-        const hasUnread = marked.some(m => !m.isMe && !m.isSeen);
+        // If there are unread messages from others, mark them seen
+        const hasUnread = marked.some(m => !m.isMe && (!m.seenBy || !m.seenBy.includes(user.id)));
         if (hasUnread) {
           markAsSeen();
         }
@@ -203,6 +340,7 @@ export default function ChatPage() {
       shouldScrollToBottom.current = true;
       fetchMessages();
       fetchGroups();
+      fetchChatFiles();
       const interval = setInterval(() => {
         fetchMessages();
         fetchGroups();
@@ -218,10 +356,10 @@ export default function ChatPage() {
 
     const payload: any = {
       senderId: user.id,
-      receiverId: selectedChat.type === 'group' ? "group" : selectedChat.id,
-      groupId: selectedChat.type === 'group' ? selectedChat.id : null,
+      receiverId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : selectedChat.id,
+      groupId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? selectedChat.id : null,
       text: message || (pendingFile ? `Sent a file: ${pendingFile.name}` : ""),
-      type: selectedChat.type === 'group' ? "group" : "personal"
+      type: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : "personal"
     };
 
     if (replyingTo) {
@@ -300,6 +438,29 @@ export default function ChatPage() {
     }
   };
 
+  const renderMessageText = (text: string) => {
+    if (!text) return "";
+    const parts = text.split(/(@\w+)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        const name = part.substring(1);
+        const isMe = user?.name?.toLowerCase().includes(name.toLowerCase());
+        return (
+          <span 
+            key={i} 
+            className={cn(
+              "px-1.5 py-0.5 rounded-md font-bold text-[13px] transition-all cursor-pointer inline-block",
+              isMe ? "bg-amber-100 text-amber-700 hover:bg-amber-200" : "bg-brand-teal/10 text-brand-teal hover:bg-brand-teal/20"
+            )}
+          >
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -307,12 +468,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleAddEmoji = (emoji: string) => {
-    setMessage(prev => prev + emoji);
-    setShowEmojiPicker(false);
-  };
 
-  const commonEmojis = ["😊", "😂", "🥰", "😍", "😒", "😭", "👍", "🔥", "✨", "🙌", "🙏", "😎", "🤔", "😅", "👌", "❤️", "🎉", "💯", "✅", "❌", "👋", "🤝", "💪", "🚀"];
 
   const handleCreateGroup = async () => {
     if (!newGroupName.trim() || selectedGroupMembers.length === 0 || !user) return;
@@ -373,13 +529,43 @@ export default function ChatPage() {
   };
 
   const handleToggleSave = async (msgId: string) => {
+    if (!user) return;
     try {
-      const res = await fetch(`${API_URL}/chat/messages/${msgId}/toggle-save`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/chat/messages/${msgId}/toggle-save?user_id=${user.id}`, { method: 'POST' });
       if (res.ok) {
         fetchMessages();
+        fetchSavedMessages();
       }
     } catch (err) {
       console.error("Error toggling save:", err);
+    }
+  };
+
+  const handleToggleArchive = async (messageId: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/messages/${messageId}/toggle-archive?user_id=${user.id}`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        fetchSavedMessages();
+      }
+    } catch (err) {
+      console.error("Error archiving message:", err);
+    }
+  };
+
+  const handleToggleComplete = async (messageId: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/messages/${messageId}/toggle-complete?user_id=${user.id}`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        fetchSavedMessages();
+      }
+    } catch (err) {
+      console.error("Error completing message:", err);
     }
   };
 
@@ -410,13 +596,20 @@ export default function ChatPage() {
     }
   };
 
-  const handleDeleteMessage = async (msgId: string) => {
-    if (!confirm("Delete this message?")) return;
+  const handleDeleteMessage = (msg: any) => {
+    setMessageToDelete(msg);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteMessage = async () => {
+    if (!messageToDelete) return;
     try {
-      const res = await fetch(`${API_URL}/chat/messages/${msgId}`, {
+      const res = await fetch(`${API_URL}/chat/messages/${messageToDelete.id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
+        setShowDeleteConfirm(false);
+        setMessageToDelete(null);
         fetchMessages();
       }
     } catch (err) {
@@ -468,6 +661,19 @@ export default function ChatPage() {
     }
   };
 
+  const filteredLaterMessages = useMemo(() => {
+    return globalSavedMessages.filter((msg: any) => {
+      if (laterTab === "Archived") {
+        return msg.archivedBy?.includes(user?.id);
+      }
+      if (laterTab === "Completed") {
+        return msg.completedBy?.includes(user?.id);
+      }
+      // In progress: Saved but NOT archived and NOT completed
+      return !msg.archivedBy?.includes(user?.id) && !msg.completedBy?.includes(user?.id);
+    });
+  }, [globalSavedMessages, laterTab, user?.id]);
+
   const chats = useMemo(() => {
     return employees
       .filter((emp: any) => emp.id !== user?.id) // Don't chat with self
@@ -498,8 +704,8 @@ export default function ChatPage() {
 
   const pinnedMessages = currentMessages.filter(m => m.isPinned);
   const savedMessagesList = useMemo(() => {
-    return currentMessages.filter(m => m.isSaved);
-  }, [currentMessages]);
+    return currentMessages.filter(m => m.savedBy?.includes(user?.id));
+  }, [currentMessages, user?.id]);
 
   const displayMessages = useMemo(() => {
     if (!messageSearchQuery) return currentMessages;
@@ -526,6 +732,15 @@ export default function ChatPage() {
       return acc;
     }, 0);
   }, [unreadCounts, chatGroups]);
+
+  const totalGeneralUnread = useMemo(() => {
+    return Object.entries(unreadCounts).reduce((acc, [id, count]) => {
+      if (chatChannels.some(c => c.id === id)) {
+        return acc + (count as number);
+      }
+      return acc;
+    }, 0);
+  }, [unreadCounts, chatChannels]);
 
   return (
     <div className="flex h-[calc(100vh-120px)] bg-white border border-border rounded-xl overflow-hidden shadow-sm">
@@ -577,6 +792,14 @@ export default function ChatPage() {
                   </span>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="General" className="flex-1 py-2 text-[11px] font-bold rounded-md data-[state=active]:bg-brand-teal data-[state=active]:text-white relative">
+                General
+                {totalGeneralUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
+                    {totalGeneralUnread}
+                  </span>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="Saved" className="flex-1 py-2 text-[11px] font-bold rounded-md data-[state=active]:bg-brand-teal data-[state=active]:text-white">
                 Saved
               </TabsTrigger>
@@ -591,7 +814,7 @@ export default function ChatPage() {
                 filteredChats.map((chat: any) => (
                   <div 
                     key={chat.id}
-                    onClick={() => setSelectedChat(chat)}
+                    onClick={() => handleSelectChat(chat)}
                     className={cn(
                       "flex items-center gap-4 p-4 cursor-pointer transition-all border-b border-border/50 hover:bg-gray-50",
                       selectedChat?.id === chat.id && "bg-brand-teal/5 border-l-4 border-l-brand-teal"
@@ -619,7 +842,7 @@ export default function ChatPage() {
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate">{chat.lastMessage}</p>
                         {unreadCounts[chat.id] > 0 && (
-                          <Badge className="bg-brand-teal text-white text-[10px] h-5 min-w-5 px-1.5 flex items-center justify-center rounded-full border-none">
+                          <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold">
                             {unreadCounts[chat.id]}
                           </Badge>
                         )}
@@ -638,19 +861,21 @@ export default function ChatPage() {
             </TabsContent>
 
             <TabsContent value="Groups" className="m-0">
-              <div className="p-4">
-                <Button 
-                  className="w-full bg-brand-teal hover:bg-brand-teal/90 rounded-xl gap-2"
-                  onClick={() => setShowCreateGroup(true)}
-                >
-                  <Plus className="w-4 h-4" /> Create New Group
-                </Button>
-              </div>
+              {(user?.role === 'Admin' || user?.role === 'HR') && (
+                <div className="p-4">
+                  <Button 
+                    className="w-full bg-brand-teal hover:bg-brand-teal/90 rounded-xl gap-2"
+                    onClick={() => setShowCreateGroup(true)}
+                  >
+                    <Plus className="w-4 h-4" /> Create New Group
+                  </Button>
+                </div>
+              )}
               {chatGroups.length > 0 ? (
                 chatGroups.map((group: any) => (
                   <div 
                     key={group.id}
-                    onClick={() => setSelectedChat({ ...group, type: 'group' })}
+                    onClick={() => handleSelectChat({ ...group, type: 'group' })}
                     className={cn(
                       "flex items-center gap-4 p-4 cursor-pointer transition-all border-b border-border/50 hover:bg-gray-50",
                       selectedChat?.id === group.id && "bg-brand-teal/5 border-l-4 border-l-brand-teal"
@@ -670,19 +895,43 @@ export default function ChatPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <h3 className="font-bold text-[14px] text-foreground truncate">{group.name}</h3>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-[10px] font-semibold text-muted-foreground">{group.lastMessageTime}</span>
-                          {unreadCounts[group.id] > 0 && (
-                            <Badge className="bg-brand-teal text-white text-[10px] h-5 min-w-5 px-1.5 flex items-center justify-center rounded-full border-none">
-                              {unreadCounts[group.id]}
-                            </Badge>
-                          )}
-                        </div>
+                        <span className="text-[10px] font-semibold text-muted-foreground">{group.lastMessageTime}</span>
                       </div>
-                      <p className="text-[12px] text-muted-foreground truncate">
-                        {group.lastMessage || `${group.members.length} members`}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      {unreadCounts[group.id] > 0 ? (
+                        <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
+                          {unreadCounts[group.id]}
+                        </Badge>
+                      ) : (
+                         <div className="w-2 h-2 rounded-full bg-slate-200 shrink-0" />
+                      )}
+                      {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-white shrink-0">
+                              <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem className="gap-2" onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setNewGroupName(group.name);
+                              setSelectedGroupMembers(group.members);
+                              setIsEditingGroup(true);
+                              setShowCreateGroup(true);
+                              setSelectedChat({ ...group, type: 'group' });
+                            }}>
+                              <Pencil className="w-4 h-4 text-brand-teal" /> Edit Group
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="gap-2 text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }}>
+                              <Trash2 className="w-4 h-4" /> Delete Group
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
+                  </div>
                   </div>
                 ))
               ) : (
@@ -692,43 +941,230 @@ export default function ChatPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="Saved" className="m-0">
-              {savedMessagesList.length > 0 ? (
-                savedMessagesList.map((msg: any) => (
-                  <div 
-                    key={msg.id}
-                    className="p-4 border-b border-border/50 hover:bg-gray-50 transition-all group"
+            <TabsContent value="General" className="m-0">
+              {(user?.role === "Admin" || user?.role === "HR") && (
+                <div className="p-4">
+                  <Button 
+                    className="w-full bg-brand-teal hover:bg-brand-teal/90 rounded-xl gap-2"
+                    onClick={() => setShowCreateChannel(true)}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-bold text-brand-teal uppercase tracking-wider">Saved Message</span>
-                      <span className="text-[10px] text-muted-foreground">{dayjs(msg.timestamp).format("MMM DD, hh:mm A")}</span>
-                    </div>
-                    <div className="bg-white border border-border p-3 rounded-xl text-xs text-slate-700 shadow-sm">
-                      {msg.text}
-                    </div>
-                    <div className="mt-2 flex justify-end">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-7 text-[10px] text-red-500 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleToggleSave(msg.id)}
-                      >
-                        Remove from saved
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-8 text-center mt-10">
-                  <div className="w-16 h-16 bg-brand-teal/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Bookmark className="w-6 h-6 text-brand-teal" />
-                  </div>
-                  <h3 className="font-bold text-foreground mb-1">No saved messages</h3>
-                  <p className="text-xs text-muted-foreground px-4">
-                    Save important messages to see them here for quick access later.
-                  </p>
+                    <Plus className="w-4 h-4" /> Create New Channel
+                  </Button>
                 </div>
               )}
+              <div className="p-4 space-y-2">
+                {chatChannels.map((channel) => (
+                  <div 
+                    key={channel.id}
+                    onClick={() => handleSelectChat(channel)}
+                    className={cn(
+                      "flex items-center gap-4 p-4 cursor-pointer transition-all border border-border/40 rounded-2xl hover:bg-white hover:shadow-md hover:border-brand-teal/20 group/channel",
+                      selectedChat?.id === channel.id && "bg-brand-teal/5 border-brand-teal/30 shadow-sm"
+                    )}
+                  >
+                    <div className="w-12 h-12 bg-brand-teal/5 rounded-2xl flex items-center justify-center shrink-0 border border-brand-teal/10">
+                      <Hash className="w-6 h-6 text-brand-teal" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-[14px] text-foreground">{channel.name}</h3>
+                      <p className="text-[12px] text-muted-foreground truncate">{channel.description}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {unreadCounts[channel.id] > 0 ? (
+                        <Badge className="bg-brand-teal text-white text-[10px] h-5 min-w-5 px-1.5 flex items-center justify-center rounded-full border-none">
+                          {unreadCounts[channel.id]}
+                        </Badge>
+                      ) : (
+                        <div className="w-2 h-2 rounded-full bg-slate-200" />
+                      )}
+                      {(user?.role === "Admin" || user?.role === "HR") && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full opacity-0 group-hover/channel:opacity-100 transition-opacity">
+                              <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem className="gap-2" onClick={(e) => { e.stopPropagation(); setEditingChannel(channel); }}>
+                              <Pencil className="w-4 h-4" /> Edit Channel
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="gap-2 text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteChannel(channel.id); }}>
+                              <Trash2 className="w-4 h-4" /> Delete Channel
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="Saved" className="m-0 h-full">
+              <div className="flex flex-col h-full bg-[#f8f8f8]">
+                {/* Later Header */}
+                <div className="p-4 bg-white border-b border-border/50 flex items-center justify-between shrink-0">
+                  <h2 className="text-xl font-black text-slate-800 tracking-tight">Later</h2>
+                </div>
+                
+                {/* Sub Tabs */}
+                <div className="flex items-center gap-6 px-6 py-2 bg-white border-b border-border/50 shrink-0">
+                  {(["In progress", "Archived", "Completed"] as const).map((tab) => {
+                    const count = globalSavedMessages.filter((msg: any) => {
+                       if (tab === "Archived") return msg.archivedBy?.includes(user?.id);
+                       if (tab === "Completed") return msg.completedBy?.includes(user?.id);
+                       return !msg.archivedBy?.includes(user?.id) && !msg.completedBy?.includes(user?.id);
+                    }).length;
+                    return (
+                      <button 
+                        key={tab}
+                        onClick={() => setLaterTab(tab)}
+                        className={cn(
+                          "text-[13px] font-bold pb-2 border-b-2 transition-all relative",
+                          tab === laterTab ? "text-slate-900 border-slate-900" : "text-slate-500 border-transparent hover:text-slate-700"
+                        )}
+                      >
+                        {tab} {count > 0 && <span className="ml-1 opacity-50">{count}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <ScrollArea className="flex-1">
+                  <div className="p-4 space-y-4">
+                    {/* Deleted notification area placeholder */}
+                    {filteredLaterMessages.length > 0 && laterTab === "In progress" && showDeletedNotification && (
+                      <div className="flex items-center justify-between p-3 bg-white border border-border/50 rounded-lg shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+                            <Trash2 className="w-5 h-5 text-slate-400" />
+                          </div>
+                          <p className="text-[13px] text-slate-600 font-medium">A message you saved was deleted.</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-slate-400 hover:text-slate-600" onClick={() => setShowDeletedNotification(false)}>
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+
+                    {filteredLaterMessages.length > 0 ? (
+                      filteredLaterMessages.map((msg: any) => {
+                        const sender = employees.find(e => e.id === msg.senderId) || (msg.isMe ? user : null);
+                        const isArchived = msg.archivedBy?.includes(user?.id);
+                        const isCompleted = msg.completedBy?.includes(user?.id);
+
+                        return (
+                          <div key={msg.id} className="group relative bg-white border border-border/50 rounded-xl p-4 hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Direct Message</p>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className={cn("h-7 w-7 rounded-lg", isCompleted ? "text-brand-teal bg-brand-teal/10" : "text-slate-500")}
+                                  onClick={() => handleToggleComplete(msg.id)}
+                                  title={isCompleted ? "Mark as in progress" : "Mark as completed"}
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className={cn("h-7 w-7 rounded-lg", isArchived ? "text-amber-600 bg-amber-50" : "text-slate-500")}
+                                  onClick={() => handleToggleArchive(msg.id)}
+                                  title={isArchived ? "Unarchive" : "Archive"}
+                                >
+                                  <Archive className="w-3.5 h-3.5" />
+                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-slate-500">
+                                      <MoreVertical className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-48 p-1">
+                                    <DropdownMenuItem 
+                                      className="gap-2 text-[13px] font-medium py-2"
+                                      onClick={() => handleToggleArchive(msg.id)}
+                                    >
+                                      <Archive className="w-4 h-4" /> {isArchived ? "Unarchive" : "Archive"}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      className="gap-2 text-[13px] font-bold py-2 text-red-600 focus:text-red-600 focus:bg-red-50"
+                                      onClick={() => handleToggleSave(msg.id)}
+                                    >
+                                      <Trash2 className="w-4 h-4" /> Remove from Later
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+                            
+                            <div className="flex gap-3">
+                              <Avatar className="w-10 h-10 rounded-lg shrink-0">
+                                <AvatarImage src={sender?.profilePhoto} />
+                                <AvatarFallback className="bg-brand-teal text-white rounded-lg font-bold">
+                                  {sender?.name?.[0]}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-2 mb-1">
+                                  <span className="font-black text-slate-900 text-[14px]">{sender?.name}</span>
+                                  <span className="text-[11px] text-slate-400 font-medium">{dayjs(msg.timestamp).format("h:mm A")}</span>
+                                  {isCompleted && (
+                                    <Badge variant="outline" className="text-[9px] h-4 bg-brand-teal/5 text-brand-teal border-brand-teal/20 ml-2">
+                                      Completed
+                                    </Badge>
+                                  )}
+                                  {isArchived && (
+                                    <Badge variant="outline" className="text-[9px] h-4 bg-amber-50 text-amber-600 border-amber-200 ml-2">
+                                      Archived
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-[14px] text-slate-700 leading-relaxed break-words">
+                                  {renderMessageText(msg.text)}
+                                </div>
+                                {msg.attachmentUrl && (
+                                  <div className="mt-3 p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                      <FileIcon className="w-4 h-4 text-slate-400 shrink-0" />
+                                      <span className="text-[12px] font-bold text-slate-600 truncate">{msg.attachmentName}</span>
+                                    </div>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 rounded-lg text-brand-teal hover:bg-white"
+                                      onClick={() => handleDownload(msg.attachmentUrl, msg.attachmentName)}
+                                    >
+                                      <Download className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-8 text-center mt-10">
+                        <div className="w-16 h-16 bg-brand-teal/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                          {laterTab === "Archived" ? <Archive className="w-6 h-6 text-brand-teal" /> : 
+                           laterTab === "Completed" ? <Check className="w-6 h-6 text-brand-teal" /> : 
+                           <Bookmark className="w-6 h-6 text-brand-teal" />}
+                        </div>
+                        <h3 className="font-bold text-foreground mb-1">No {laterTab.toLowerCase()} messages</h3>
+                        <p className="text-xs text-muted-foreground px-4">
+                          {laterTab === "In progress" ? "Save important messages to see them here for quick access later." :
+                           laterTab === "Archived" ? "Archived messages will appear here for reference." :
+                           "Messages you mark as complete will be moved to this tab."}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
             </TabsContent>
           </div>
         </Tabs>
@@ -768,9 +1204,33 @@ export default function ChatPage() {
                 </div>
                 <div>
                   <h2 className="font-bold text-slate-800">{selectedChat.name}</h2>
-                  <p className="text-[11px] font-semibold text-emerald-600">
-                    {selectedChat.type === 'group' ? `${selectedChat.members?.length || 0} Members` : selectedChat.status}
-                  </p>
+                  {selectedChat.type === 'group' ? (
+                    <div 
+                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-full pr-2 transition-colors py-0.5"
+                      onClick={() => setShowGroupMembers(true)}
+                    >
+                      <div className="flex -space-x-2 overflow-hidden">
+                        {selectedChat.members?.slice(0, 3).map((memberId: string) => {
+                          const member = employees.find((e: any) => e.id === memberId);
+                          return (
+                            <Avatar key={memberId} className="w-5 h-5 border-2 border-white ring-1 ring-border shrink-0">
+                              <AvatarImage src={member?.profilePhoto} />
+                              <AvatarFallback className="text-[8px] bg-brand-light text-brand-teal font-bold">
+                                {member?.name?.[0] || "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11px] font-bold text-emerald-600">
+                        {selectedChat.members?.length > 3 ? `+${selectedChat.members.length - 3} others` : `${selectedChat.members?.length || 0} Members`}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] font-semibold text-emerald-600">
+                      {selectedChat.status}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -807,7 +1267,7 @@ export default function ChatPage() {
                   </Button>
                 )}
                 
-                {selectedChat.type === 'group' && selectedChat.createdBy === user?.id && (
+                {selectedChat.type === 'group' && (selectedChat.createdBy === user?.id || user?.role === 'Admin' || user?.role === 'HR') && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="text-muted-foreground h-9 w-9 rounded-full hover:bg-gray-100">
@@ -836,6 +1296,15 @@ export default function ChatPage() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className={cn("text-muted-foreground h-9 w-9 rounded-full hover:bg-gray-100", showRightSidebar && "text-brand-teal bg-brand-teal/5")}
+                  onClick={() => setShowRightSidebar(!showRightSidebar)}
+                >
+                  <FileIcon className="w-4 h-4" />
+                </Button>
               </div>
             </div>
 
@@ -928,7 +1397,7 @@ export default function ChatPage() {
                           <div className="flex items-center justify-between gap-4 mb-1">
                             <div className="flex items-center gap-2">
                               {msg.isPinned && <Pin className={cn("w-3 h-3 fill-current", msg.isMe ? "text-white" : "text-brand-teal")} />}
-                              {msg.isSaved && <Bookmark className={cn("w-3 h-3 fill-current", msg.isMe ? "text-white" : "text-brand-teal")} />}
+                              {msg.savedBy?.includes(user?.id) && <Bookmark className={cn("w-3 h-3 fill-current", msg.isMe ? "text-white" : "text-brand-teal")} />}
                             </div>
                             {msg.forwardedFrom && (
                               <>
@@ -1019,8 +1488,8 @@ export default function ChatPage() {
                                 className="gap-2"
                                 onClick={() => handleToggleSave(msg.id)}
                               >
-                                <Bookmark className={cn("w-4 h-4", msg.isSaved && "fill-current text-brand-teal")} /> 
-                                {msg.isSaved ? "Unsave" : "Save for later"}
+                                <Bookmark className={cn("w-4 h-4", msg.savedBy?.includes(user?.id) && "fill-current text-brand-teal")} /> 
+                                {msg.savedBy?.includes(user?.id) ? "Unsave" : "Save for later"}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem 
@@ -1042,18 +1511,20 @@ export default function ChatPage() {
                                 {msg.isPinned ? "Unpin from conversation" : "Pin to this conversation"}
                               </DropdownMenuItem>
                               
-                              {msg.isMe && (
+                              {(msg.isMe || user?.role === "Admin" || user?.role === "HR") && (
                                 <>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem 
-                                    className="gap-2 text-brand-teal"
-                                    onClick={() => { setEditingMessageId(msg.id); setEditText(msg.text); }}
-                                  >
-                                    <Pencil className="w-4 h-4" /> Edit message
-                                  </DropdownMenuItem>
+                                  {msg.isMe && (
+                                    <DropdownMenuItem 
+                                      className="gap-2 text-brand-teal"
+                                      onClick={() => { setEditingMessageId(msg.id); setEditText(msg.text); }}
+                                    >
+                                      <Pencil className="w-4 h-4" /> Edit message
+                                    </DropdownMenuItem>
+                                  )}
                                   <DropdownMenuItem 
                                     className="gap-2 text-red-600 focus:text-red-600 focus:bg-red-50"
-                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    onClick={() => handleDeleteMessage(msg)}
                                   >
                                     <Trash2 className="w-4 h-4" /> Delete message
                                   </DropdownMenuItem>
@@ -1130,30 +1601,29 @@ export default function ChatPage() {
                   className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-sm placeholder:text-muted-foreground h-11"
                 />
                 <div className="relative">
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="icon" 
-                    className="text-muted-foreground hover:bg-white rounded-full"
-                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  >
-                    <Smile className="w-5 h-5" />
-                  </Button>
-                  
-                  {showEmojiPicker && (
-                    <div className="absolute bottom-full right-0 mb-4 p-3 bg-white border border-border rounded-2xl shadow-2xl grid grid-cols-6 gap-2 w-64 animate-in fade-in zoom-in-95 duration-200 z-50">
-                      {commonEmojis.map(emoji => (
-                        <button 
-                          key={emoji}
-                          type="button"
-                          onClick={() => handleAddEmoji(emoji)}
-                          className="text-xl hover:bg-gray-100 p-1.5 rounded-lg transition-colors"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                <div className="relative">
+                  <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                    <PopoverTrigger asChild>
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        className={cn("text-muted-foreground hover:bg-white rounded-full", showEmojiPicker && "bg-brand-teal/10 text-brand-teal")}
+                      >
+                        <Smile className="w-5 h-5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="end" className="p-0 border-none bg-transparent shadow-none w-auto mb-4 z-[100]">
+                      <EmojiPicker 
+                        onEmojiSelect={(emoji) => {
+                          setMessage(prev => prev + emoji);
+                          setShowEmojiPicker(false);
+                        }}
+                        onClose={() => setShowEmojiPicker(false)}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
                 </div>
                 <Button 
                   type="submit"
@@ -1173,6 +1643,69 @@ export default function ChatPage() {
               <h3 className="text-lg font-bold text-foreground">Select a chat to start messaging</h3>
               <p className="text-muted-foreground max-w-sm mx-auto">Choose a conversation from the left sidebar to see messages and start chatting with your colleagues.</p>
             </div>
+          </div>
+        )}
+
+        {/* Right Sidebar - Shared Files Repository */}
+        {selectedChat && showRightSidebar && (
+          <div className="w-80 border-l border-border bg-gray-50/30 flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
+              <h3 className="font-bold text-slate-800">Shared Files</h3>
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setShowRightSidebar(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="p-4 space-y-6">
+                {chatFiles.length > 0 ? (
+                  // Group files by date
+                  Object.entries(
+                    chatFiles.reduce((groups: any, file: any) => {
+                      const date = dayjs(file.timestamp).format("MMMM YYYY");
+                      if (!groups[date]) groups[date] = [];
+                      groups[date].push(file);
+                      return groups;
+                    }, {})
+                  ).map(([date, files]: [string, any]) => (
+                    <div key={date}>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">{date}</h4>
+                      <div className="space-y-2">
+                        {files.map((file: any) => (
+                          <div 
+                            key={file.id} 
+                            className="bg-white border border-border p-3 rounded-2xl hover:shadow-md transition-all group/file cursor-pointer"
+                            onClick={() => handleDownload(file.attachmentUrl, file.attachmentName)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-brand-teal/5 flex items-center justify-center shrink-0 border border-brand-teal/10">
+                                <FileIcon className="w-5 h-5 text-brand-teal" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[12px] font-bold text-slate-800 truncate mb-0.5">{file.attachmentName || "Document"}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">
+                                  {dayjs(file.timestamp).format("MMM DD")} • Shared by {file.senderId === user?.id ? "You" : (employees.find((e: any) => e.id === file.senderId)?.name || "Member")}
+                                </p>
+                              </div>
+                              <div className="opacity-0 group-hover/file:opacity-100 transition-opacity">
+                                <Download className="w-4 h-4 text-brand-teal" />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-20 px-6">
+                    <div className="w-16 h-16 bg-white border-2 border-dashed border-border rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FileIcon className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm font-bold text-slate-500 mb-1">No shared files yet</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">Shared documents, images, and other media will appear here for easy access.</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
           </div>
         )}
       </div>
@@ -1336,6 +1869,174 @@ export default function ChatPage() {
               ))}
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Group Members Dialog */}
+      <Dialog open={showGroupMembers} onOpenChange={setShowGroupMembers}>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-brand-teal">Group Members</DialogTitle>
+            <DialogDescription>
+              {selectedChat?.name} ({selectedChat?.members?.length || 0} members)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 max-h-[400px] overflow-y-auto space-y-3">
+            {selectedChat?.members?.map((memberId: string) => {
+              const member = employees.find((e: any) => e.id === memberId);
+              if (!member) return null;
+              return (
+                <div key={memberId} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-xl transition-colors">
+                  <Avatar className="w-10 h-10 border border-border">
+                    <AvatarImage src={member.profilePhoto} />
+                    <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
+                      {member.name[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-slate-800">{member.name} {member.id === user?.id && "(You)"}</p>
+                    <p className="text-[11px] text-muted-foreground">{member.designation || "Team Member"}</p>
+                  </div>
+                  {selectedChat.createdBy === memberId && (
+                    <Badge variant="outline" className="text-[9px] h-5 border-brand-teal/20 text-brand-teal bg-brand-teal/5">
+                      Admin
+                    </Badge>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Message Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-[500px] bg-[#1a1c1e] border-none text-white rounded-3xl p-0 overflow-hidden">
+          <div className="p-8 pb-6">
+            <DialogHeader className="flex-row items-center justify-between mb-6 space-y-0">
+              <DialogTitle className="text-2xl font-bold text-white">Delete message</DialogTitle>
+              <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-white/10 h-8 w-8 rounded-full" onClick={() => setShowDeleteConfirm(false)}>
+                <X className="w-5 h-5" />
+              </Button>
+            </DialogHeader>
+            
+            <p className="text-gray-400 text-lg mb-8 leading-relaxed">
+              Are you sure you want to delete this message? This cannot be undone.
+            </p>
+
+            {messageToDelete && (
+              <div className="bg-[#2a2d31]/50 border border-white/5 rounded-2xl p-6 mb-8">
+                <div className="flex items-start gap-4">
+                  <Avatar className="w-10 h-10 border border-white/10">
+                    <AvatarImage src={messageToDelete.isMe ? user?.profilePhoto : selectedChat?.avatar} />
+                    <AvatarFallback className="bg-brand-teal text-white font-bold uppercase text-xs">
+                      {(messageToDelete.isMe ? user?.name : selectedChat?.name)?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="font-bold text-white text-[15px]">
+                        {messageToDelete.isMe ? user?.name : selectedChat?.name}
+                      </span>
+                      <span className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">
+                        {dayjs(messageToDelete.timestamp).format("MMM DD at hh:mm A")}
+                      </span>
+                    </div>
+                    <p className="text-gray-300 text-sm break-words leading-relaxed">
+                      {messageToDelete.text}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <Button 
+                variant="ghost" 
+                onClick={() => setShowDeleteConfirm(false)}
+                className="text-white hover:bg-white/10 px-8 py-6 text-lg font-bold rounded-2xl border border-white/10"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={confirmDeleteMessage}
+                className="bg-[#be123c] hover:bg-[#9f1239] text-white px-10 py-6 text-lg font-bold rounded-2xl shadow-xl shadow-red-900/20"
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Create/Edit Channel Dialog */}
+      <Dialog 
+        open={showCreateChannel || !!editingChannel} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowCreateChannel(false);
+            setEditingChannel(null);
+            setNewChannelData({ name: "", description: "" });
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-brand-teal">
+              {editingChannel ? "Edit Channel" : "Create New Channel"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingChannel 
+                ? "Update the channel name and purpose." 
+                : "Create a new organization-wide communication hub."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="channelName" className="text-[12px] font-bold text-slate-500 uppercase">Channel Name</Label>
+              <Input 
+                id="channelName" 
+                placeholder="e.g. Announcements" 
+                value={editingChannel ? editingChannel.name : newChannelData.name}
+                onChange={(e) => {
+                  if (editingChannel) {
+                    setEditingChannel({ ...editingChannel, name: e.target.value });
+                  } else {
+                    setNewChannelData({ ...newChannelData, name: e.target.value });
+                  }
+                }}
+                className="rounded-xl border-border focus:ring-brand-teal"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="channelDesc" className="text-[12px] font-bold text-slate-500 uppercase">Description</Label>
+              <Textarea 
+                id="channelDesc" 
+                placeholder="What is this channel for?" 
+                value={editingChannel ? editingChannel.description : newChannelData.description}
+                onChange={(e) => {
+                  if (editingChannel) {
+                    setEditingChannel({ ...editingChannel, description: e.target.value });
+                  } else {
+                    setNewChannelData({ ...newChannelData, description: e.target.value });
+                  }
+                }}
+                className="rounded-xl border-border focus:ring-brand-teal resize-none h-24"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => {
+              setShowCreateChannel(false);
+              setEditingChannel(null);
+            }} className="rounded-xl">Cancel</Button>
+            <Button 
+              onClick={editingChannel ? handleUpdateChannel : handleCreateChannel}
+              disabled={editingChannel ? !editingChannel.name.trim() : !newChannelData.name.trim()}
+              className="bg-brand-teal hover:bg-brand-teal/90 text-white rounded-xl px-8"
+            >
+              {editingChannel ? "Save Changes" : "Create Channel"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

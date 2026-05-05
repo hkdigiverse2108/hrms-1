@@ -274,30 +274,6 @@ export default function AttendancePage() {
 
             <div className="p-4 border-b border-border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/30">
               <div className="flex flex-wrap gap-2">
-                <Select defaultValue="all">
-                  <SelectTrigger className="w-[160px] h-9 bg-white border-border">
-                    <SelectValue placeholder="All Departments" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Departments</SelectItem>
-                    <SelectItem value="dev">Development</SelectItem>
-                    <SelectItem value="sal">Sales</SelectItem>
-                    <SelectItem value="gra">Graphics</SelectItem>
-                    <SelectItem value="mar">Marketing</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select defaultValue="all">
-                  <SelectTrigger className="w-[140px] h-9 bg-white border-border">
-                    <SelectValue placeholder="All Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="late">Late Entry</SelectItem>
-                    <SelectItem value="absent">Absent</SelectItem>
-                    <SelectItem value="logged">Logged</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
               <div className="relative w-full md:w-[280px]">
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">

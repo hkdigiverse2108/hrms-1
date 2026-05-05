@@ -510,24 +510,80 @@ async def mark_messages_as_seen(sender_id: str, receiver_id: str, db=Depends(get
 
 @app.get("/chat/unread-counts/{user_id}")
 async def get_unread_counts(user_id: str, db=Depends(get_db)):
-    # Simple count for each sender
-    cursor = db.messages.aggregate([
-        {"$match": {"receiverId": user_id, "isSeen": False}},
+    # Aggregated counts for both personal and group chats
+    unread_counts = {}
+    
+    # 1. Personal Chats: messages where receiverId == user_id and seenBy does not contain user_id
+    cursor_personal = db.messages.aggregate([
+        {"$match": {"receiverId": user_id, "senderId": {"$ne": user_id}, "seenBy": {"$ne": user_id}}},
         {"$group": {"_id": "$senderId", "count": {"$sum": 1}}}
     ])
-    results = await cursor.to_list(length=1000)
-    return {r["_id"]: r["count"] for r in results}
+    personal_results = await cursor_personal.to_list(length=1000)
+    for r in personal_results:
+        unread_counts[r["_id"]] = r["count"]
+        
+    # 2. Group Chats: messages where groupId is present and seenBy does not contain user_id
+    # We need to only count groups the user is actually in
+    user_groups = await crud.get_chat_groups(db, user_id)
+    group_ids = [g["id"] for g in user_groups]
+    # Add general channels
+    group_ids.extend(["gen-announcements", "gen-general", "gen-tech", "gen-hr"])
+    
+    cursor_groups = db.messages.aggregate([
+        {"$match": {"groupId": {"$in": group_ids}, "senderId": {"$ne": user_id}, "seenBy": {"$ne": user_id}}},
+        {"$group": {"_id": "$groupId", "count": {"$sum": 1}}}
+    ])
+    group_results = await cursor_groups.to_list(length=1000)
+    for r in group_results:
+        unread_counts[r["_id"]] = r["count"]
+        
+    return unread_counts
 
 @app.get("/chat/summaries/{user_id}")
 async def get_chat_summaries(user_id: str, db=Depends(get_db)):
     return await crud.get_chat_summaries(db, user_id)
 
 @app.post("/chat/messages/{message_id}/toggle-save")
-async def toggle_save_message(message_id: str, db=Depends(get_db)):
-    status = await crud.toggle_save_message(db, message_id)
+async def toggle_save_message(message_id: str, user_id: str, db=Depends(get_db)):
+    status = await crud.toggle_save_message(db, message_id, user_id)
     return {"isSaved": status}
 
 @app.post("/chat/messages/{message_id}/toggle-pin")
 async def toggle_pin_message(message_id: str, db=Depends(get_db)):
     status = await crud.toggle_pin_message(db, message_id)
     return {"isPinned": status}
+
+# Chat Channels
+@app.get("/chat/channels", response_model=List[schemas.ChatChannel])
+async def get_chat_channels(db=Depends(get_db)):
+    return await crud.get_chat_channels(db)
+
+@app.post("/chat/channels", response_model=schemas.ChatChannel)
+async def create_chat_channel(channel: schemas.ChatChannelCreate, db=Depends(get_db)):
+    return await crud.create_chat_channel(db, channel)
+
+@app.put("/chat/channels/{channel_id}", response_model=schemas.ChatChannel)
+async def update_chat_channel(channel_id: str, channel: schemas.ChatChannelUpdate, db=Depends(get_db)):
+    return await crud.update_chat_channel(db, channel_id, channel)
+
+@app.delete("/chat/channels/{channel_id}")
+async def delete_chat_channel(channel_id: str, db=Depends(get_db)):
+    return await crud.delete_chat_channel(db, channel_id)
+
+@app.get("/chat/saved-messages/{user_id}")
+async def get_saved_messages(user_id: str, db=Depends(get_db)):
+    return await crud.get_saved_messages(db, user_id)
+
+@app.get("/chat/files/{user_id}/{other_id}")
+async def get_chat_files(user_id: str, other_id: str, is_group: bool = False, db=Depends(get_db)):
+    return await crud.get_chat_files(db, user_id, other_id, is_group)
+
+@app.post("/chat/messages/{message_id}/toggle-archive")
+async def toggle_archive_message(message_id: str, user_id: str, db=Depends(get_db)):
+    status = await crud.toggle_archive_message(db, message_id, user_id)
+    return {"isArchived": status}
+
+@app.post("/chat/messages/{message_id}/toggle-complete")
+async def toggle_complete_message(message_id: str, user_id: str, db=Depends(get_db)):
+    status = await crud.toggle_complete_message(db, message_id, user_id)
+    return {"isCompleted": status}

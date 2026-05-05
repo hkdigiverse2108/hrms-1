@@ -1026,12 +1026,22 @@ async def delete_message(db, message_id: str):
     await db.messages.delete_one({"_id": ObjectId(message_id)})
     return True
 
-async def mark_messages_as_seen(db, sender_id: str, receiver_id: str):
-    # Receiver is the one who is seeing the messages
-    await db.messages.update_many(
-        {"senderId": sender_id, "receiverId": receiver_id, "isSeen": False},
-        {"$set": {"isSeen": True}}
-    )
+async def mark_messages_as_seen(db, other_id: str, user_id: str):
+    # If other_id is a group, mark all messages in that group as seen by this user
+    is_group = await db.chat_groups.find_one({"_id": ObjectId(other_id)}) if len(other_id) == 24 else None
+    
+    if is_group or other_id.startswith("gen-"):
+        # Group or General channel
+        await db.messages.update_many(
+            {"groupId": other_id, "seenBy": {"$ne": user_id}},
+            {"$push": {"seenBy": user_id}}
+        )
+    else:
+        # Personal chat
+        await db.messages.update_many(
+            {"senderId": other_id, "receiverId": user_id, "seenBy": {"$ne": user_id}},
+            {"$set": {"isSeen": True}, "$push": {"seenBy": user_id}}
+        )
     return True
 
 async def get_chat_summaries(db, user_id: str):
@@ -1056,12 +1066,16 @@ async def get_chat_summaries(db, user_id: str):
     results = await cursor.to_list(length=1000)
     return {r["_id"]: r for r in results}
 
-async def toggle_save_message(db, message_id: str):
+async def toggle_save_message(db, message_id: str, user_id: str):
     msg = await db.messages.find_one({"_id": ObjectId(message_id)})
     if msg:
-        new_status = not msg.get("isSaved", False)
-        await db.messages.update_one({"_id": ObjectId(message_id)}, {"$set": {"isSaved": new_status}})
-        return new_status
+        saved_by = msg.get("savedBy", [])
+        if user_id in saved_by:
+            await db.messages.update_one({"_id": ObjectId(message_id)}, {"$pull": {"savedBy": user_id}})
+            return False
+        else:
+            await db.messages.update_one({"_id": ObjectId(message_id)}, {"$push": {"savedBy": user_id}})
+            return True
     return False
 
 async def toggle_pin_message(db, message_id: str):
@@ -1070,4 +1084,86 @@ async def toggle_pin_message(db, message_id: str):
         new_status = not msg.get("isPinned", False)
         await db.messages.update_one({"_id": ObjectId(message_id)}, {"$set": {"isPinned": new_status}})
         return new_status
+    return False
+
+# Chat Channels CRUD
+async def get_chat_channels(db):
+    cursor = db.chat_channels.find()
+    rows = await cursor.to_list(length=100)
+    if not rows:
+        # Seed default channels
+        defaults = [
+            {"name": "Announcements", "description": "Company-wide official news"},
+            {"name": "General", "description": "General watercooler talk"},
+            {"name": "Tech Support", "description": "IT and technical help"},
+            {"name": "HR Queries", "description": "Ask HR about policies"}
+        ]
+        for d in defaults:
+            await db.chat_channels.insert_one(d)
+        cursor = db.chat_channels.find()
+        rows = await cursor.to_list(length=100)
+    return [fix_id(row) for row in rows]
+
+async def create_chat_channel(db, channel: schemas.ChatChannelCreate):
+    channel_dict = channel.dict()
+    result = await db.chat_channels.insert_one(channel_dict)
+    channel_dict["id"] = str(result.inserted_id)
+    if "_id" in channel_dict:
+        channel_dict.pop("_id")
+    return channel_dict
+
+async def update_chat_channel(db, channel_id: str, channel_update: schemas.ChatChannelUpdate):
+    update_data = channel_update.dict(exclude_unset=True)
+    await db.chat_channels.update_one({"_id": ObjectId(channel_id)}, {"$set": update_data})
+    doc = await db.chat_channels.find_one({"_id": ObjectId(channel_id)})
+    return fix_id(doc)
+
+async def delete_chat_channel(db, channel_id: str):
+    await db.chat_channels.delete_one({"_id": ObjectId(channel_id)})
+    # Note: messages might use channel id as groupId
+    await db.messages.delete_many({"groupId": channel_id})
+    return True
+
+async def get_saved_messages(db, user_id: str):
+    cursor = db.messages.find({"savedBy": user_id})
+    rows = await cursor.to_list(length=1000)
+    return [fix_id(row) for row in rows]
+
+async def get_chat_files(db, user_id: str, other_id: str, is_group: bool = False):
+    if is_group:
+        query = {"groupId": other_id, "attachmentUrl": {"$ne": None}}
+    else:
+        query = {
+            "$or": [
+                {"senderId": user_id, "receiverId": other_id},
+                {"senderId": other_id, "receiverId": user_id}
+            ],
+            "attachmentUrl": {"$ne": None}
+        }
+    cursor = db.messages.find(query).sort("timestamp", -1)
+    rows = await cursor.to_list(length=500)
+    return [fix_id(row) for row in rows]
+
+async def toggle_archive_message(db, message_id: str, user_id: str):
+    msg = await db.messages.find_one({"_id": ObjectId(message_id)})
+    if msg:
+        archived_by = msg.get("archivedBy", [])
+        if user_id in archived_by:
+            await db.messages.update_one({"_id": ObjectId(message_id)}, {"$pull": {"archivedBy": user_id}})
+            return False
+        else:
+            await db.messages.update_one({"_id": ObjectId(message_id)}, {"$push": {"archivedBy": user_id}})
+            return True
+    return False
+
+async def toggle_complete_message(db, message_id: str, user_id: str):
+    msg = await db.messages.find_one({"_id": ObjectId(message_id)})
+    if msg:
+        completed_by = msg.get("completedBy", [])
+        if user_id in completed_by:
+            await db.messages.update_one({"_id": ObjectId(message_id)}, {"$pull": {"completedBy": user_id}})
+            return False
+        else:
+            await db.messages.update_one({"_id": ObjectId(message_id)}, {"$push": {"completedBy": user_id}})
+            return True
     return False

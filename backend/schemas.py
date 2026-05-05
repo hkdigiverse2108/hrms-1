@@ -808,11 +808,14 @@ class ChatMessageBase(BaseModel):
     isSeen: bool = False
     replyToId: Optional[str] = None
     replyToText: Optional[str] = None
-    isSaved: bool = False
+    savedBy: List[str] = []
     isPinned: bool = False
     attachmentUrl: Optional[str] = None
     attachmentName: Optional[str] = None
     groupId: Optional[str] = None
+    seenBy: List[str] = []
+    archivedBy: List[str] = []
+    completedBy: List[str] = []
 
 class ChatMessageCreate(ChatMessageBase):
     pass
@@ -844,3 +847,17 @@ class ChatGroup(ChatGroupBase):
     timestamp: str
     lastMessage: Optional[str] = None
     lastMessageTime: Optional[str] = None
+
+class ChatChannelBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class ChatChannelCreate(ChatChannelBase):
+    pass
+
+class ChatChannelUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+class ChatChannel(ChatChannelBase):
+    id: str
