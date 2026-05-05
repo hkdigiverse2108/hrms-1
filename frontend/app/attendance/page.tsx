@@ -31,6 +31,8 @@ export default function AttendancePage() {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [recoverModalOpen, setRecoverModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [stats, setStats] = useState({
     presentDays: 0,
     avgHours: "0",
@@ -319,69 +321,91 @@ export default function AttendancePage() {
                 <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="text-[11px] text-muted-foreground font-bold bg-white border-b border-border uppercase tracking-wider">
                     <tr>
-                      <th className="px-6 py-4">Employee</th>
-                      <th className="px-6 py-4">Date</th>
-                      <th className="px-6 py-4">Punch In</th>
-                      <th className="px-6 py-4">Punch Out</th>
-                      <th className="px-6 py-4">Break</th>
-                      <th className="px-6 py-4">Total Hours</th>
-                      <th className="px-6 py-4">Status</th>
-                      <th className="px-6 py-4 text-right"></th>
+                      <th className="px-4 py-4">Sr. No.</th>
+                      <th className="px-4 py-4">Date</th>
+                      <th className="px-4 py-4">Day</th>
+                      <th className="px-4 py-4">Current Status</th>
+                      <th className="px-4 py-4">Status</th>
+                      <th className="px-4 py-4">Check In</th>
+                      <th className="px-4 py-4">Check Out</th>
+                      <th className="px-4 py-4">Break</th>
+                      <th className="px-4 py-4">Late</th>
+                      <th className="px-4 py-4">Overtime</th>
+                      <th className="px-4 py-4">Production Hours</th>
+                      <th className="px-4 py-4">Total Working Hours</th>
+                      <th className="px-4 py-4">Remarks</th>
+                      <th className="px-4 py-4 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {attendance.map((row, idx) => {
-                      const totalBreak = (row.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
+                    {attendance.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row, idx) => {
+                      const totalBreakMinutes = (row.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
+                      const breakStr = totalBreakMinutes > 0 ? (totalBreakMinutes >= 60 ? `${Math.floor(totalBreakMinutes/60)}H ${totalBreakMinutes%60}Min` : `${totalBreakMinutes}Min`) : "-";
                       
-                      let statusLabel = "Active";
-                      let statusClass = "bg-green-50 text-green-600";
+                      const checkIn = dayjs(`${row.date} ${row.checkIn}`);
+                      const checkOut = row.checkOut ? dayjs(`${row.date} ${row.checkOut}`) : null;
                       
-                      if (row.checkOut) {
-                        statusLabel = "Logged";
-                        statusClass = "bg-slate-100 text-slate-600";
-                      } else if (row.status === "On Break") {
-                        statusLabel = "On Break";
-                        statusClass = "bg-amber-50 text-amber-600";
+                      // Total Working Hours
+                      let totalWorkingMinutes = 0;
+                      if (checkOut && checkOut.isValid() && checkIn.isValid()) {
+                        totalWorkingMinutes = checkOut.diff(checkIn, 'minute');
                       }
+                      const totalWorkingStr = totalWorkingMinutes > 0 ? (totalWorkingMinutes >= 60 ? `${Math.floor(totalWorkingMinutes/60)}H ${totalWorkingMinutes%60}Min` : `${totalWorkingMinutes}Min`) : "-";
                       
-                      const isToday = dayjs(row.date).isSame(dayjs(), 'day');
-                      const dateDisplay = isToday ? `Today, ${dayjs(row.date).format("MMM D")}` : dayjs(row.date).format("MMM D, YYYY");
+                      // Production Hours
+                      const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
+                      const productionStr = productionMinutes > 0 ? (productionMinutes >= 60 ? `${Math.floor(productionMinutes/60)}H ${productionMinutes%60}Min` : `${productionMinutes}Min`) : "-";
+                      
+                      // Late (9:30 AM start)
+                      const startTime = dayjs(`${row.date} 09:30:00`);
+                      const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(startTime, 'minute')) : 0;
+                      const lateStr = lateMinutes > 0 ? `${lateMinutes}Min` : "-";
+                      
+                      // Overtime (Assuming 9h shift)
+                      const overtimeMinutes = Math.max(0, productionMinutes - 540);
+                      const overtimeStr = overtimeMinutes > 0 ? (overtimeMinutes >= 60 ? `${Math.floor(overtimeMinutes/60)}H ${overtimeMinutes%60}Min` : `${overtimeMinutes}Min`) : "-";
+
+                      let statusLabel = "Present";
+                      let statusClass = "bg-green-50 text-green-600 border-green-100";
+                      
+                      const currentStatus = row.checkOut ? "punch-out" : "punch-in";
+                      const day = dayjs(row.date).format("dddd");
 
                       return (
-                        <tr key={idx} className="hover:bg-muted/30 transition-colors group">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <Avatar className="w-10 h-10 border border-border shadow-sm">
-                                <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-sm">
-                                  {row.employeeName?.split(' ').map((n:any) => n[0]).join('') || '?'}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <div className="font-bold text-foreground text-[14px]">{row.employeeName || 'Unknown'}</div>
-                                <div className="text-[12px] text-muted-foreground leading-tight">Engineering</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-muted-foreground font-medium">{dateDisplay}</td>
-                          <td className="px-6 py-4 text-foreground font-mono text-[13px]">{row.checkIn || '--:--'}</td>
-                          <td className="px-6 py-4 text-foreground font-mono text-[13px]">{row.checkOut || '--'}</td>
-                          <td className="px-6 py-4 text-muted-foreground">{totalBreak > 0 ? `${totalBreak}m` : '--'}</td>
-                          <td className="px-6 py-4">
-                            <span className="font-medium text-foreground">
-                              {row.workHours ? row.workHours.replace('h', 'h').replace('m', 'm') : '--'}
+                        <tr key={idx} className="hover:bg-muted/30 transition-colors group border-b border-border">
+                          <td className="px-4 py-4 font-medium text-muted-foreground">{idx + 1}</td>
+                          <td className="px-4 py-4 font-medium text-foreground">{row.date}</td>
+                          <td className="px-4 py-4 text-muted-foreground">{day}</td>
+                          <td className="px-4 py-4 text-muted-foreground">{currentStatus}</td>
+                          <td className="px-4 py-4">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${statusClass}`}>
+                              <CheckCircle2 className="w-3 h-3" /> {statusLabel}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex px-3 py-1 rounded-full text-[11px] font-bold ${statusClass}`}>
-                              {statusLabel}
-                            </span>
+                          <td className="px-4 py-4 font-medium text-foreground">{row.checkIn || "-"}</td>
+                          <td className="px-4 py-4 font-medium text-foreground">{row.checkOut || "-"}</td>
+                          <td className="px-4 py-4 text-muted-foreground">{breakStr}</td>
+                          <td className="px-4 py-4 text-muted-foreground">{lateStr}</td>
+                          <td className="px-4 py-4 text-muted-foreground">{overtimeStr}</td>
+                          <td className="px-4 py-4">
+                            {productionMinutes > 0 ? (
+                              <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
+                                productionMinutes >= 480 ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-green-50 text-green-600 border border-green-100'
+                              }`}>
+                                {productionStr}
+                              </span>
+                            ) : "-"}
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-4 py-4 font-medium text-foreground">{totalWorkingStr}</td>
+                          <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate">
+                            {lateMinutes > 0 ? `Late punch-in; ${lateMinutes} minutes after expected start time (09:30 AM)` : "-"}
+                          </td>
+                          <td className="px-4 py-4 text-right">
                             <Button 
                               onClick={() => { setSelectedRecord(row); setDetailsModalOpen(true); }}
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="h-8 w-8 text-brand-teal bg-brand-light/20 hover:bg-brand-light/40 rounded-full"
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
@@ -395,7 +419,16 @@ export default function AttendancePage() {
             </div>
 
 
-            {!isLoading && <TablePagination totalItems={attendance.length} itemsPerPage={10} currentPage={1} itemName="entries" />}
+            {!isLoading && (
+              <TablePagination 
+                totalItems={attendance.length} 
+                itemsPerPage={itemsPerPage} 
+                currentPage={currentPage} 
+                onPageChange={setCurrentPage}
+                onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+                itemName="entries" 
+              />
+            )}
           </div>
         </div>
       </div>

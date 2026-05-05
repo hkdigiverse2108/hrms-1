@@ -1,5 +1,5 @@
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 import schemas
 
 def fix_id(doc):
@@ -295,6 +295,34 @@ async def punch_in(db, employee_id: str):
         "status": "Active",
         "workHours": None
     }
+    
+    # Check for late punch-in (10 mins buffer from startTime)
+    try:
+        start_time_str = employee.get("startTime", "09:30")
+        start_time_obj = datetime.strptime(start_time_str, "%H:%M")
+        limit_time_obj = start_time_obj + timedelta(minutes=10)
+        
+        current_time_str = today.strftime("%H:%M")
+        current_time_obj = datetime.strptime(current_time_str, "%H:%M")
+        
+        if current_time_obj > limit_time_obj:
+            date_str = today.strftime("%b %d, %Y")
+            if ", " in date_str and date_str[4] == '0': # Handle "May 05, 2026" -> "May 5, 2026"
+                date_str = date_str[:4] + date_str[5:]
+
+            remark_data = {
+                "employeeId": employee_id,
+                "employeeName": employee["name"],
+                "role": employee.get("designation", "Staff"),
+                "avatar": employee.get("profilePhoto", ""),
+                "type": "Late Punch-in",
+                "details": f"Late Punch-in detected at {current_time_str}. Shift starts at {start_time_str} with a 10-minute buffer (Limit: {limit_time_obj.strftime('%H:%M')}).",
+                "addedBy": "System",
+                "date": date_str
+            }
+            await db.remarks.insert_one(remark_data)
+    except Exception as e:
+        print(f"Error processing late remark: {e}")
     
     result = await db.attendance.insert_one(attendance_data)
     attendance_data["id"] = str(result.inserted_id)
@@ -937,3 +965,109 @@ async def update_penalty_type(db, penalty_id: str, penalty_update: schemas.Penal
 async def delete_penalty_type(db, penalty_id: str):
     await db.penalty_types.delete_one({"_id": ObjectId(penalty_id)})
     return True
+# Chat CRUD
+async def create_message(db, message: schemas.ChatMessageCreate):
+    message_dict = message.dict()
+    message_dict["timestamp"] = datetime.now().isoformat()
+    result = await db.messages.insert_one(message_dict)
+    message_dict["id"] = str(result.inserted_id)
+    if "_id" in message_dict:
+        message_dict.pop("_id")
+    return message_dict
+
+async def create_chat_group(db, group: schemas.ChatGroupCreate):
+    group_dict = group.dict()
+    group_dict["timestamp"] = datetime.now().isoformat()
+    result = await db.chat_groups.insert_one(group_dict)
+    group_dict["id"] = str(result.inserted_id)
+    return group_dict
+
+async def update_chat_group(db, group_id: str, group_update: schemas.ChatGroupUpdate):
+    update_data = group_update.dict(exclude_unset=True)
+    await db.chat_groups.update_one({"_id": ObjectId(group_id)}, {"$set": update_data})
+    updated_doc = await db.chat_groups.find_one({"_id": ObjectId(group_id)})
+    return fix_id(updated_doc)
+
+async def delete_chat_group(db, group_id: str):
+    await db.chat_groups.delete_one({"_id": ObjectId(group_id)})
+    # Also delete messages in this group
+    await db.messages.delete_many({"groupId": group_id})
+    return True
+
+async def get_chat_groups(db, user_id: str):
+    # Get groups where user is a member
+    cursor = db.chat_groups.find({"members": user_id}).sort("timestamp", -1)
+    rows = await cursor.to_list(length=100)
+    return [fix_id(row) for row in rows]
+
+async def get_messages(db, sender_id: str = None, receiver_id: str = None, group_id: str = None):
+    if group_id:
+        query = {"groupId": group_id}
+    else:
+        query = {
+            "$or": [
+                {"senderId": sender_id, "receiverId": receiver_id},
+                {"senderId": receiver_id, "receiverId": sender_id}
+            ]
+        }
+    cursor = db.messages.find(query).sort("timestamp", 1)
+    rows = await cursor.to_list(length=1000)
+    return [fix_id(row) for row in rows]
+
+async def update_message(db, message_id: str, text: str):
+    await db.messages.update_one(
+        {"_id": ObjectId(message_id)},
+        {"$set": {"text": text, "isEdited": True}}
+    )
+    doc = await db.messages.find_one({"_id": ObjectId(message_id)})
+    return fix_id(doc)
+
+async def delete_message(db, message_id: str):
+    await db.messages.delete_one({"_id": ObjectId(message_id)})
+    return True
+
+async def mark_messages_as_seen(db, sender_id: str, receiver_id: str):
+    # Receiver is the one who is seeing the messages
+    await db.messages.update_many(
+        {"senderId": sender_id, "receiverId": receiver_id, "isSeen": False},
+        {"$set": {"isSeen": True}}
+    )
+    return True
+
+async def get_chat_summaries(db, user_id: str):
+    pipeline = [
+        {"$match": {"$or": [{"senderId": user_id}, {"receiverId": user_id}]}},
+        {"$sort": {"timestamp": -1}},
+        {"$group": {
+            "_id": {
+                "$cond": [
+                    {"$eq": ["$senderId", user_id]},
+                    "$receiverId",
+                    "$senderId"
+                ]
+            },
+            "lastMessage": {"$first": "$text"},
+            "timestamp": {"$first": "$timestamp"},
+            "isSeen": {"$first": "$isSeen"},
+            "senderId": {"$first": "$senderId"}
+        }}
+    ]
+    cursor = db.messages.aggregate(pipeline)
+    results = await cursor.to_list(length=1000)
+    return {r["_id"]: r for r in results}
+
+async def toggle_save_message(db, message_id: str):
+    msg = await db.messages.find_one({"_id": ObjectId(message_id)})
+    if msg:
+        new_status = not msg.get("isSaved", False)
+        await db.messages.update_one({"_id": ObjectId(message_id)}, {"$set": {"isSaved": new_status}})
+        return new_status
+    return False
+
+async def toggle_pin_message(db, message_id: str):
+    msg = await db.messages.find_one({"_id": ObjectId(message_id)})
+    if msg:
+        new_status = not msg.get("isPinned", False)
+        await db.messages.update_one({"_id": ObjectId(message_id)}, {"$set": {"isPinned": new_status}})
+        return new_status
+    return False

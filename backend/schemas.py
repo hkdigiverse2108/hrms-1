@@ -795,3 +795,52 @@ class MarketingMonthlyReport(MarketingMonthlyReportBase):
     clientId: Optional[str] = None
     class Config:
         from_attributes = True
+
+
+class ChatMessageBase(BaseModel):
+    senderId: str
+    receiverId: str
+    text: str
+    type: str = "personal" # personal, group
+    isMe: Optional[bool] = None # Helper for frontend
+    timestamp: Optional[str] = None
+    isEdited: bool = False
+    isSeen: bool = False
+    replyToId: Optional[str] = None
+    replyToText: Optional[str] = None
+    isSaved: bool = False
+    isPinned: bool = False
+    attachmentUrl: Optional[str] = None
+    attachmentName: Optional[str] = None
+    groupId: Optional[str] = None
+
+class ChatMessageCreate(ChatMessageBase):
+    pass
+
+class ChatMessage(ChatMessageBase):
+    id: str
+
+class ChatMessageUpdate(BaseModel):
+    text: str
+
+class ChatGroupBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    members: List[str] # List of employee IDs
+    avatar: Optional[str] = None
+    createdBy: str # Employee ID
+
+class ChatGroupCreate(ChatGroupBase):
+    pass
+
+class ChatGroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    members: Optional[List[str]] = None
+    avatar: Optional[str] = None
+
+class ChatGroup(ChatGroupBase):
+    id: str
+    timestamp: str
+    lastMessage: Optional[str] = None
+    lastMessageTime: Optional[str] = None

@@ -38,6 +38,7 @@ const PENALTIES_FALLBACK = [
   { name: "Phone not on silent", amount: 50 },
   { name: "Activity not participated", amount: 20 },
   { name: "Disrespectful behavior", amount: 10 },
+  { name: "Late Punch-in", amount: 50 },
 ];
 
 

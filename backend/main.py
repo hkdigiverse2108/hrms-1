@@ -17,9 +17,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import shutil
+from fastapi.staticfiles import StaticFiles
+
+# Ensure uploads directory exists
+UPLOAD_DIR = "uploads"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 @app.get("/")
 async def root():
     return {"message": "HRMS API is running", "status": "ok"}
+
+@app.post("/chat/upload")
+async def upload_chat_file(file: UploadFile = File(...)):
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    # Use relative path or dynamic host in production
+    return {"url": f"/uploads/{file.filename}", "filename": file.filename}
 
 # Auth
 @app.post("/login", response_model=schemas.LoginResponse)
@@ -447,3 +465,69 @@ async def delete_marketing_monthly_report(report_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Monthly report not found")
     return {"message": "Monthly report deleted"}
+# Chat Endpoints
+@app.get("/chat/messages/{sender_id}/{receiver_id}", response_model=List[schemas.ChatMessage])
+async def read_chat_messages(sender_id: str, receiver_id: str, group_id: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_messages(db, sender_id, receiver_id, group_id)
+
+@app.get("/chat/groups/{user_id}", response_model=List[schemas.ChatGroup])
+async def read_chat_groups(user_id: str, db=Depends(get_db)):
+    return await crud.get_chat_groups(db, user_id)
+
+@app.post("/chat/groups", response_model=schemas.ChatGroup)
+async def create_chat_group(group: schemas.ChatGroupCreate, db=Depends(get_db)):
+    return await crud.create_chat_group(db, group)
+
+@app.put("/chat/groups/{group_id}", response_model=schemas.ChatGroup)
+async def update_chat_group(group_id: str, group: schemas.ChatGroupUpdate, db=Depends(get_db)):
+    return await crud.update_chat_group(db, group_id, group)
+
+@app.delete("/chat/groups/{group_id}")
+async def delete_chat_group(group_id: str, db=Depends(get_db)):
+    await crud.delete_chat_group(db, group_id)
+    return {"message": "Group deleted successfully"}
+
+@app.post("/chat/messages", response_model=schemas.ChatMessage)
+async def create_chat_message(message: schemas.ChatMessageCreate, db=Depends(get_db)):
+    return await crud.create_message(db, message)
+
+@app.put("/chat/messages/{message_id}", response_model=schemas.ChatMessage)
+async def update_chat_message(message_id: str, update: schemas.ChatMessageUpdate, db=Depends(get_db)):
+    updated = await crud.update_message(db, message_id, update.text)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return updated
+
+@app.delete("/chat/messages/{message_id}")
+async def delete_chat_message(message_id: str, db=Depends(get_db)):
+    await crud.delete_message(db, message_id)
+    return {"message": "Message deleted successfully"}
+
+@app.post("/chat/mark-seen/{sender_id}/{receiver_id}")
+async def mark_messages_as_seen(sender_id: str, receiver_id: str, db=Depends(get_db)):
+    await crud.mark_messages_as_seen(db, sender_id, receiver_id)
+    return {"message": "Messages marked as seen"}
+
+@app.get("/chat/unread-counts/{user_id}")
+async def get_unread_counts(user_id: str, db=Depends(get_db)):
+    # Simple count for each sender
+    cursor = db.messages.aggregate([
+        {"$match": {"receiverId": user_id, "isSeen": False}},
+        {"$group": {"_id": "$senderId", "count": {"$sum": 1}}}
+    ])
+    results = await cursor.to_list(length=1000)
+    return {r["_id"]: r["count"] for r in results}
+
+@app.get("/chat/summaries/{user_id}")
+async def get_chat_summaries(user_id: str, db=Depends(get_db)):
+    return await crud.get_chat_summaries(db, user_id)
+
+@app.post("/chat/messages/{message_id}/toggle-save")
+async def toggle_save_message(message_id: str, db=Depends(get_db)):
+    status = await crud.toggle_save_message(db, message_id)
+    return {"isSaved": status}
+
+@app.post("/chat/messages/{message_id}/toggle-pin")
+async def toggle_pin_message(message_id: str, db=Depends(get_db)):
+    status = await crud.toggle_pin_message(db, message_id)
+    return {"isPinned": status}

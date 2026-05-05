@@ -714,10 +714,21 @@ function EventsSidebar({ user }: { user: any }) {
  
   const displayedEvents = events
     .filter((e: any) => {
-      if (e.type === 'birthday') {
-        return dayjs(e.date).month() === currentMonth.month();
+      const eventDate = dayjs(e.date);
+      const isCurrentMonthView = currentMonth.isSame(dayjs(), 'month');
+      
+      // If viewing current month, hide past events
+      if (isCurrentMonthView && eventDate.isBefore(dayjs().startOf('day'))) {
+        if (e.type !== 'birthday') return false;
+        // For birthdays, check if the day itself has passed in the current year
+        const birthdayThisYear = dayjs(e.date).year(dayjs().year());
+        if (birthdayThisYear.isBefore(dayjs().startOf('day'))) return false;
       }
-      return dayjs(e.date).month() === currentMonth.month() && dayjs(e.date).year() === currentMonth.year();
+
+      if (e.type === 'birthday') {
+        return eventDate.month() === currentMonth.month();
+      }
+      return eventDate.month() === currentMonth.month() && eventDate.year() === currentMonth.year();
     })
     .map((e: any) => {
       if (e.type === 'birthday') {
