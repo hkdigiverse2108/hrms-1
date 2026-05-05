@@ -123,7 +123,9 @@ export function SidebarNav() {
       getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
         getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"),
         getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
-        getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"),
+        ...(user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "hr" ? [
+          getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource")
+        ] : []),
       ]),
       getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />),
       getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />),

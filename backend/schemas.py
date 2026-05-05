@@ -262,21 +262,32 @@ class Intern(InternBase):
     id: str
 
 class AssetBase(BaseModel):
+    assetId: str
     name: str
-    type: str
-    serialNumber: str
+    category: str
+    serialNumber: Optional[str] = None
     assignedTo: Optional[str] = None
-    status: str
-    purchaseDate: str
-    value: float
+    status: str # Allocated, Available, Maintenance
+    condition: Optional[str] = "New"
+    location: Optional[str] = None
+    purchaseDate: Optional[str] = None
+    value: Optional[float] = 0
+    description: Optional[str] = None
 
 class AssetCreate(AssetBase):
     pass
 
 class AssetUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    serialNumber: Optional[str] = None
     assignedTo: Optional[str] = None
     status: Optional[str] = None
+    condition: Optional[str] = None
+    location: Optional[str] = None
+    purchaseDate: Optional[str] = None
     value: Optional[float] = None
+    description: Optional[str] = None
 
 class Asset(AssetBase):
     id: str

@@ -209,7 +209,19 @@ async def create_intern(db, intern: schemas.InternCreate): return await create_i
 async def update_intern(db, intern_id: str, update: schemas.InternUpdate): return await update_item(db, "interns", intern_id, update.dict(exclude_unset=True))
 async def delete_intern(db, intern_id: str): return await delete_item(db, "interns", intern_id)
 
-async def get_assets(db, skip: int = 0, limit: int = 100): return await get_items(db, "assets", skip, limit)
+async def get_assets(db, skip: int = 0, limit: int = 100):
+    cursor = db.assets.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    results = []
+    for row in rows:
+        row = fix_id(row)
+        # Compatibility mapping
+        if "type" in row and "category" not in row:
+            row["category"] = row.pop("type")
+        if "assetId" not in row:
+            row["assetId"] = f"ASSET-{row['id'][-4:].upper()}"
+        results.append(row)
+    return results
 async def create_asset(db, asset: schemas.AssetCreate): return await create_item(db, "assets", asset.dict())
 async def update_asset(db, asset_id: str, update: schemas.AssetUpdate): return await update_item(db, "assets", asset_id, update.dict(exclude_unset=True))
 async def delete_asset(db, asset_id: str): return await delete_item(db, "assets", asset_id)

@@ -221,6 +221,12 @@ async def create_intern(intern: schemas.InternCreate, db=Depends(get_db)): retur
 async def read_assets(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_assets(db, skip, limit)
 @app.post("/assets", response_model=schemas.Asset)
 async def create_asset(asset: schemas.AssetCreate, db=Depends(get_db)): return await crud.create_asset(db, asset)
+@app.put("/assets/{asset_id}", response_model=schemas.Asset)
+async def update_asset(asset_id: str, asset_update: schemas.AssetUpdate, db=Depends(get_db)): return await crud.update_asset(db, asset_id, asset_update)
+@app.delete("/assets/{asset_id}")
+async def delete_asset(asset_id: str, db=Depends(get_db)):
+    await crud.delete_asset(db, asset_id)
+    return {"message": "Asset deleted successfully"}
 
 @app.get("/expense-claims", response_model=List[schemas.ExpenseClaim])
 async def read_expense_claims(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_expense_claims(db, skip, limit)

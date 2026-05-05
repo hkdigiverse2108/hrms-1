@@ -9,7 +9,10 @@ import {
   Image as ImageIcon,
   RefreshCw,
   Calendar as CalendarIcon,
-  ChevronRight
+  ChevronRight,
+  Pencil,
+  Trash2,
+  MoreVertical
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,16 +21,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/common/PageHeader";
-
-const resources = [
-  { id: "HKSET001", name: "Dual Monitor Setup (27\")", category: "IT Equipment", status: "Allocated", assignee: "Maya Patel", avatar: "/avatars/maya.jpg" },
-  { id: "HKSET002", name: "Ergonomic Chair Pro", category: "Furniture", status: "Available", assignee: null, avatar: null },
-  { id: "HKSET003", name: "Standing Desk V2", category: "Furniture", status: "Allocated", assignee: "Carlos Mendoza", avatar: "/avatars/carlos.jpg" },
-  { id: "HKSET004", name: "MacBook Pro M2 Max", category: "IT Equipment", status: "Maintenance", assignee: null, avatar: null },
-  { id: "HKSET005", name: "Docking Station Gen 3", category: "IT Equipment", status: "Allocated", assignee: "Maya Patel", avatar: "/avatars/maya.jpg" },
-  { id: "HKSET006", name: "Filing Cabinet (3-Drawer)", category: "Furniture", status: "Available", assignee: null, avatar: null },
-  { id: "HKSET007", name: "Dell UltraSharp 32\"", category: "IT Equipment", status: "Available", assignee: null, avatar: null },
-];
+import { useApi } from "@/hooks/useApi";
+import { useUser } from "@/hooks/useUser";
+import { API_URL } from "@/lib/config";
+import { toast } from "sonner";
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -39,94 +36,267 @@ const getStatusBadge = (status: string) => {
 };
 
 export default function ResourceManagementPage() {
+  const { user, isLoading: userLoading } = useUser();
+  const { data, isLoading } = useApi();
   const [isAddingMode, setIsAddingMode] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  
+  const initialFormState = {
+    name: "",
+    category: "",
+    status: "Available",
+    assignedTo: "",
+    purchaseDate: new Date().toISOString().split('T')[0],
+    description: "",
+    value: 0
+  };
+
+  // Form state
+  const [formData, setFormData] = useState(initialFormState);
+  const [isAssignedImmediately, setIsAssignedImmediately] = useState(false);
+
+  const isAdminOrHR = user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "hr";
+
+  const handleEditClick = (resource: any) => {
+    setEditingId(resource.id);
+    setFormData({
+      name: resource.name,
+      category: resource.category,
+      status: resource.status,
+      assignedTo: resource.assignedTo || "",
+      purchaseDate: resource.purchaseDate || new Date().toISOString().split('T')[0],
+      description: resource.description || "",
+      value: resource.value || 0
+    });
+    setIsAssignedImmediately(!!resource.assignedTo);
+    setIsAddingMode(true);
+  };
+
+  const handleDeleteResource = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this resource?")) return;
+
+    try {
+      const response = await fetch(`${API_URL}/assets/${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        toast.success("Resource deleted successfully");
+        window.location.reload();
+      } else {
+        toast.error("Failed to delete resource");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("An error occurred while deleting");
+    }
+  };
+
+  const handleCancel = () => {
+    setIsAddingMode(false);
+    setEditingId(null);
+    setFormData(initialFormState);
+    setIsAssignedImmediately(false);
+  };
+
+  if (userLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh]">
+        <RefreshCw className="w-8 h-8 text-brand-teal animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAdminOrHR) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] space-y-4 px-4">
+        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center">
+          <Wrench className="w-10 h-10 text-red-600" />
+        </div>
+        <h2 className="text-3xl font-bold text-foreground">Access Denied</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          This section is restricted to Admin and HR personnel only. Please contact your administrator if you believe this is an error.
+        </p>
+        <Button 
+          className="bg-brand-teal hover:bg-brand-teal-light text-white"
+          onClick={() => window.location.href = "/"}
+        >
+          Return to Dashboard
+        </Button>
+      </div>
+    );
+  }
+
+  const allResources = data?.assets || [];
+  const filteredResources = allResources.filter((res: any) => {
+    const matchStatus = statusFilter === "all" || res.status.toLowerCase() === statusFilter.toLowerCase();
+    const matchType = typeFilter === "all" || res.category === typeFilter;
+    return matchStatus && matchType;
+  });
+
+  const resources = filteredResources;
+
+  const handleSaveResource = async () => {
+    if (!formData.name || !formData.category) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const url = editingId ? `${API_URL}/assets/${editingId}` : `${API_URL}/assets`;
+      const method = editingId ? "PUT" : "POST";
+      
+      const payload = {
+        ...formData,
+        status: isAssignedImmediately ? "Allocated" : formData.status,
+      };
+
+      if (!editingId) {
+        // Only for new assets
+        (payload as any).assetId = `HKSET${String(resources.length + 1).padStart(3, '0')}`;
+        (payload as any).serialNumber = `SN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      }
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        toast.success(editingId ? "Resource updated successfully" : "Resource added successfully");
+        handleCancel();
+        // Refresh page to show new data
+        window.location.reload();
+      } else {
+        toast.error(editingId ? "Failed to update resource" : "Failed to add resource");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("An error occurred");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (isAddingMode) {
     return (
       <div className="space-y-6 pb-10">
         <div className="flex items-center text-sm text-muted-foreground mb-4">
-          <span className="cursor-pointer hover:text-foreground" onClick={() => setIsAddingMode(false)}>Resource Management</span>
+          <span className="cursor-pointer hover:text-foreground" onClick={handleCancel}>Resource Management</span>
           <ChevronRight className="w-4 h-4 mx-2" />
-          <span className="text-foreground font-semibold">Add Resource</span>
+          <span className="text-foreground font-semibold">{editingId ? "Edit Resource" : "Add Resource"}</span>
         </div>
         
-        <PageHeader title="Add New Resource" />
+        <PageHeader title={editingId ? "Edit Resource" : "Add New Resource"} />
 
         <div className="bg-white border border-border rounded-xl shadow-sm max-w-4xl">
           <div className="p-6 border-b border-border">
             <h3 className="text-lg font-bold text-foreground">Resource Details</h3>
-            <p className="text-sm text-muted-foreground">Enter the information for the new resource to be added to the inventory.</p>
+            <p className="text-sm text-muted-foreground">{editingId ? "Modify the information for the existing resource." : "Enter the information for the new resource to be added to the inventory."}</p>
           </div>
 
           <div className="p-6 space-y-6">
-            {/* Image Upload */}
-            <div className="border-2 border-dashed border-border rounded-xl p-10 flex flex-col items-center justify-center text-center bg-gray-50/50 cursor-pointer hover:bg-gray-50 transition-colors">
-              <div className="w-12 h-12 bg-white border border-border rounded-xl flex items-center justify-center shadow-sm mb-3 text-muted-foreground">
-                <ImageIcon className="w-5 h-5" />
-              </div>
-              <p className="font-semibold text-foreground text-sm mb-1">Click to upload resource image</p>
-              <p className="text-xs text-muted-foreground">SVG, PNG, JPG or GIF (max. 5MB)</p>
-            </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Resource Name <span className="text-red-500">*</span></label>
-                <Input placeholder="e.g. Ergonomic Office Chair" className="bg-white" />
+                <Input 
+                  placeholder="e.g. Ergonomic Office Chair" 
+                  className="bg-white" 
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Resource ID <span className="text-red-500">*</span></label>
-                <div className="flex gap-2">
-                  <Input defaultValue="HKSET008" className="bg-gray-50 flex-1 font-medium text-muted-foreground" readOnly />
-                  <Button variant="outline" size="icon" className="shrink-0 bg-white shadow-sm">
-                    <RefreshCw className="w-4 h-4 text-muted-foreground" />
-                  </Button>
-                </div>
+                <label className="text-sm font-semibold text-foreground">Assign To</label>
+                <Select 
+                  value={formData.assignedTo}
+                  onValueChange={(val) => setFormData({...formData, assignedTo: val})}
+                  disabled={!isAssignedImmediately && formData.status !== "Allocated"}
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Select employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {data?.employees?.map((emp: any) => (
+                      <SelectItem key={emp.id} value={emp.name || emp.firstName + ' ' + emp.lastName}>
+                        {emp.name || `${emp.firstName} ${emp.lastName}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Category <span className="text-red-500">*</span></label>
-                <Select>
+                <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
                   <SelectTrigger className="bg-white">
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="it">IT Equipment</SelectItem>
-                    <SelectItem value="furniture">Furniture</SelectItem>
-                    <SelectItem value="software">Software License</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Condition</label>
-                <Select defaultValue="new">
-                  <SelectTrigger className="bg-white">
-                    <SelectValue placeholder="Select condition" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="new">New</SelectItem>
-                    <SelectItem value="good">Good</SelectItem>
-                    <SelectItem value="fair">Fair</SelectItem>
-                    <SelectItem value="poor">Poor</SelectItem>
+                    <SelectItem value="PC">PC / Laptop</SelectItem>
+                    <SelectItem value="CPU">CPU</SelectItem>
+                    <SelectItem value="Monitor">Monitor</SelectItem>
+                    <SelectItem value="Keyboard">Keyboard</SelectItem>
+                    <SelectItem value="Mouse">Mouse</SelectItem>
+                    <SelectItem value="Mousepad">Mousepad</SelectItem>
+                    <SelectItem value="Parking Card">Parking Card</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Location / Storage</label>
-                <Input placeholder="e.g. IT Storage Room A" className="bg-white" />
-              </div>
-              <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Purchase Date</label>
                 <div className="relative">
                   <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                  <Input placeholder="Select date" className="bg-white pr-10" />
+                  <Input 
+                    type="date"
+                    placeholder="Select date" 
+                    className="bg-white pr-10" 
+                    value={formData.purchaseDate}
+                    onChange={(e) => setFormData({...formData, purchaseDate: e.target.value})}
+                  />
                 </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground">Value (Amount)</label>
+                <Input 
+                  type="number"
+                  placeholder="0.00" 
+                  className="bg-white" 
+                  value={formData.value}
+                  onChange={(e) => setFormData({...formData, value: parseFloat(e.target.value) || 0})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground">Initial Status</label>
+                <Select value={formData.status} onValueChange={(val) => setFormData({...formData, status: val})}>
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Available">Available</SelectItem>
+                    <SelectItem value="Allocated">Allocated</SelectItem>
+                    <SelectItem value="Maintenance">Maintenance</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Description & Notes</label>
-              <Textarea placeholder="Add any additional details, specifications, or notes about this resource..." className="h-28 resize-none bg-white" />
+              <Textarea 
+                placeholder="Add any additional details, specifications, or notes about this resource..." 
+                className="h-28 resize-none bg-white" 
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+              />
             </div>
 
             <div className="flex items-center justify-between p-4 bg-brand-light/20 border border-brand-teal/10 rounded-xl">
@@ -139,21 +309,43 @@ export default function ResourceManagementPage() {
                   <p className="text-xs text-muted-foreground">Allocate this resource to an employee right away</p>
                 </div>
               </div>
-              <Switch />
+              <Switch 
+                checked={isAssignedImmediately}
+                onCheckedChange={(checked) => {
+                  setIsAssignedImmediately(checked);
+                  if (checked) {
+                    setFormData({...formData, status: "Allocated"});
+                  } else {
+                    setFormData({...formData, status: "Available"});
+                  }
+                }}
+              />
             </div>
           </div>
           
           <div className="p-6 border-t border-border flex justify-end gap-3 bg-gray-50/50 rounded-b-xl">
-            <Button variant="outline" className="font-medium bg-white" onClick={() => setIsAddingMode(false)}>Cancel</Button>
-            <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Save Resource
+            <Button variant="outline" className="font-medium bg-white" onClick={handleCancel} disabled={isSaving}>Cancel</Button>
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm"
+              onClick={handleSaveResource}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
+              {isSaving ? "Saving..." : (editingId ? "Update Resource" : "Save Resource")}
             </Button>
           </div>
         </div>
       </div>
     );
   }
+
+  const allocatedCount = allResources.filter((r: any) => r.status === "Allocated").length;
+  const availableCount = allResources.filter((r: any) => r.status === "Available").length;
+  const maintenanceCount = allResources.filter((r: any) => r.status === "Maintenance").length;
 
   return (
     <div className="space-y-6 pb-10">
@@ -171,8 +363,8 @@ export default function ResourceManagementPage() {
             <CheckCircle2 className="w-4 h-4 text-blue-500" />
             <h3 className="font-medium text-muted-foreground text-sm">Allocated Resources</h3>
           </div>
-          <div className="text-4xl font-bold text-foreground mb-2">182</div>
-          <p className="text-xs font-medium text-emerald-600">+12 this month</p>
+          <div className="text-4xl font-bold text-foreground mb-2">{allocatedCount}</div>
+          <p className="text-xs font-medium text-emerald-600">+0 this month</p>
         </div>
         
         <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
@@ -180,7 +372,7 @@ export default function ResourceManagementPage() {
             <Package className="w-4 h-4 text-emerald-500" />
             <h3 className="font-medium text-muted-foreground text-sm">Available Resources</h3>
           </div>
-          <div className="text-4xl font-bold text-foreground mb-2">58</div>
+          <div className="text-4xl font-bold text-foreground mb-2">{availableCount}</div>
           <p className="text-xs font-medium text-muted-foreground">Ready for deployment</p>
         </div>
 
@@ -189,8 +381,8 @@ export default function ResourceManagementPage() {
             <Wrench className="w-4 h-4 text-amber-500" />
             <h3 className="font-medium text-muted-foreground text-sm">Under Maintenance</h3>
           </div>
-          <div className="text-4xl font-bold text-foreground mb-2">5</div>
-          <p className="text-xs font-medium text-red-500">-2 from last week</p>
+          <div className="text-4xl font-bold text-foreground mb-2">{maintenanceCount}</div>
+          <p className="text-xs font-medium text-red-500">Scheduled service</p>
         </div>
       </div>
 
@@ -199,24 +391,31 @@ export default function ResourceManagementPage() {
         <div className="p-6 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h2 className="text-lg font-bold text-foreground">All Resources</h2>
           <div className="flex items-center gap-3">
-            <Select defaultValue="all">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[140px] bg-gray-50">
                 <span className="text-muted-foreground mr-1">Status:</span> <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="allocated">Allocated</SelectItem>
                 <SelectItem value="available">Available</SelectItem>
+                <SelectItem value="maintenance">Maintenance</SelectItem>
               </SelectContent>
             </Select>
-            <Select defaultValue="all">
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger className="w-[150px] bg-gray-50">
-                <span className="text-muted-foreground mr-1">Category:</span> <SelectValue />
+                <span className="text-muted-foreground mr-1">Type:</span> <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="it">IT Equipment</SelectItem>
-                <SelectItem value="furniture">Furniture</SelectItem>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="PC">PC / Laptop</SelectItem>
+                <SelectItem value="CPU">CPU</SelectItem>
+                <SelectItem value="Monitor">Monitor</SelectItem>
+                <SelectItem value="Keyboard">Keyboard</SelectItem>
+                <SelectItem value="Mouse">Mouse</SelectItem>
+                <SelectItem value="Mousepad">Mousepad</SelectItem>
+                <SelectItem value="Parking Card">Parking Card</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -226,21 +425,27 @@ export default function ResourceManagementPage() {
           <table className="w-full text-sm text-left whitespace-nowrap">
             <thead className="text-xs text-muted-foreground font-semibold border-b border-border bg-gray-50/30 uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-4 font-medium">Resource ID</th>
-                <th className="px-6 py-4 font-medium">Name / Details</th>
-                <th className="px-6 py-4 font-medium">Category</th>
-                <th className="px-6 py-4 font-medium">Status</th>
-                <th className="px-6 py-4 font-medium">Assigned To</th>
+                <th className="px-6 py-4 font-medium text-foreground">Name / Details</th>
+                <th className="px-6 py-4 font-medium text-foreground">Category</th>
+                <th className="px-6 py-4 font-medium text-foreground">Status</th>
+                <th className="px-6 py-4 font-medium text-foreground">Assigned To</th>
+                <th className="px-6 py-4 font-medium text-foreground text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {resources.map((res) => (
-                <tr key={res.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 font-semibold text-foreground">
-                    {res.id}
+              {resources.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-muted-foreground">
+                    {isLoading ? "Loading resources..." : "No resources found. Click 'Add Resource' to get started."}
                   </td>
+                </tr>
+              ) : resources.map((res: any) => (
+                <tr key={res.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-6 py-4 font-medium text-foreground">
-                    {res.name}
+                    <div className="flex flex-col">
+                      <span>{res.name}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">{res.assetId}</span>
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-muted-foreground text-sm">
                     {res.category}
@@ -251,19 +456,39 @@ export default function ResourceManagementPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    {res.assignee ? (
+                    {res.assignedTo ? (
                       <div className="flex items-center gap-2">
                         <Avatar className="w-6 h-6">
                           <AvatarImage src={res.avatar || ""} />
                           <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                            {res.assignee.split(' ').map(n => n[0]).join('')}
+                            {res.assignedTo.split(' ').map((n: string) => n[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="font-medium text-foreground text-sm">{res.assignee}</span>
+                        <span className="font-medium text-foreground text-sm">{res.assignedTo}</span>
                       </div>
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/50"
+                        onClick={() => handleEditClick(res)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                        onClick={() => handleDeleteResource(res.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
