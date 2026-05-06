@@ -1,6 +1,7 @@
 from bson import ObjectId
 from datetime import datetime, timedelta
 import schemas
+import calendar
 
 def fix_id(doc):
     if doc:
@@ -70,6 +71,132 @@ async def get_payroll(db, skip: int = 0, limit: int = 100):
     cursor = db.payroll.find().skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
+
+async def get_salary_structures(db, skip: int = 0, limit: int = 100):
+    cursor = db.salary_structures.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def get_salary_structure_by_employee(db, employee_id: str):
+    doc = await db.salary_structures.find_one({"employeeId": employee_id})
+    return fix_id(doc)
+
+async def create_or_update_salary_structure(db, salary: schemas.SalaryStructureCreate):
+    salary_dict = salary.dict()
+    await db.salary_structures.update_one(
+        {"employeeId": salary.employeeId},
+        {"$set": salary_dict},
+        upsert=True
+    )
+    doc = await db.salary_structures.find_one({"employeeId": salary.employeeId})
+    return fix_id(doc)
+
+async def get_bonus_deductions(db, month: str = None, year: int = None):
+    query = {}
+    if month: query["month"] = month
+    if year: query["year"] = year
+    cursor = db.bonus_deductions.find(query)
+    rows = await cursor.to_list(length=1000)
+    return [fix_id(row) for row in rows]
+
+async def create_bonus_deduction(db, item: schemas.BonusDeductionCreate):
+    item_dict = item.dict()
+    result = await db.bonus_deductions.insert_one(item_dict)
+    doc = await db.bonus_deductions.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def run_payroll_processing(db, month: str, year: int):
+    # 1. Get all employees
+    employees = await get_employees(db, limit=1000)
+    
+    # 2. Get days in month
+    try:
+        month_num = list(calendar.month_name).index(month)
+    except ValueError:
+        # Fallback if month is abbreviated or case-different
+        month_map = {m: i for i, m in enumerate(calendar.month_name)}
+        month_num = month_map.get(month.capitalize(), 1)
+        
+    _, num_days = calendar.monthrange(year, month_num)
+    
+    payroll_results = []
+    
+    for emp in employees:
+        emp_id = emp["id"]
+        # Get salary structure
+        salary = await get_salary_structure_by_employee(db, emp_id)
+        if not salary:
+            continue 
+            
+        # Start/End date strings
+        start_date_str = f"{year}-{str(month_num).zfill(2)}-01"
+        end_date_str = f"{year}-{str(month_num).zfill(2)}-{num_days}"
+        
+        # Count attendance
+        attendance_count = await db.attendance.count_documents({
+            "employeeId": emp_id,
+            "date": {"$gte": start_date_str, "$lte": end_date_str}
+        })
+        
+        # Approved Leaves
+        leave_cursor = db.leave_requests.find({
+            "employeeId": emp_id,
+            "status": "Approved",
+            "startDate": {"$gte": start_date_str},
+            "endDate": {"$lte": end_date_str}
+        })
+        leaves = await leave_cursor.to_list(length=100)
+        leave_days = 0
+        for l in leaves:
+            try:
+                s = datetime.strptime(l["startDate"], "%Y-%m-%d")
+                e = datetime.strptime(l["endDate"], "%Y-%m-%d")
+                leave_days += (e - s).days + 1
+            except:
+                pass
+        
+        # Count Weekends
+        weekends = 0
+        for d in range(1, num_days + 1):
+            if calendar.weekday(year, month_num, d) >= 5: 
+                weekends += 1
+        
+        paid_days = attendance_count + leave_days + weekends
+        # Basic check to not exceed month days
+        paid_days = min(paid_days, num_days)
+        lop_days = max(0, num_days - paid_days)
+        
+        per_day_gross = salary["monthlyGross"] / num_days
+        lop_amount = lop_days * per_day_gross
+        
+        # Ad-hoc Bonus/Deductions
+        adjustments = await get_bonus_deductions(db, month, year)
+        emp_adjustments = [a for a in adjustments if a["employeeId"] == emp_id and a["status"] == "active"]
+        total_bonus = sum([a["amount"] for a in emp_adjustments if a["type"] == "bonus"])
+        total_adhoc_deduction = sum([a["amount"] for a in emp_adjustments if a["type"] == "deduction"])
+        
+        net_salary = (salary["monthlyGross"] - lop_amount + total_bonus - total_adhoc_deduction) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"])
+        
+        payroll_record = {
+            "employeeId": emp_id,
+            "employeeName": emp["name"],
+            "month": month,
+            "year": year,
+            "basicSalary": salary["basic"],
+            "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"] + total_bonus,
+            "deductions": salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + lop_amount + total_adhoc_deduction,
+            "netSalary": round(net_salary, 2),
+            "status": "processed"
+        }
+        
+        await db.payroll.update_one(
+            {"employeeId": emp_id, "month": month, "year": year},
+            {"$set": payroll_record},
+            upsert=True
+        )
+        payroll_results.append(fix_id(payroll_record))
+        
+    return payroll_results
 
 async def create_employee(db, employee: schemas.EmployeeCreate):
     # Calculate sequential employeeId

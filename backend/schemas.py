@@ -135,6 +135,40 @@ class PayrollBase(BaseModel):
 class Payroll(PayrollBase):
     id: str
 
+class SalaryStructureBase(BaseModel):
+    employeeId: str
+    basic: float
+    hra: float
+    conveyance: float
+    medical: float
+    specialAllowance: float
+    pf: float
+    esi: float
+    professionalTax: float
+    tds: float
+    monthlyGross: float
+
+class SalaryStructureCreate(SalaryStructureBase):
+    pass
+
+class SalaryStructure(SalaryStructureBase):
+    id: str
+
+class BonusDeductionBase(BaseModel):
+    employeeId: str
+    month: str
+    year: int
+    type: str  # bonus, deduction
+    amount: float
+    reason: str
+    status: str  # active, cancelled
+
+class BonusDeductionCreate(BonusDeductionBase):
+    pass
+
+class BonusDeduction(BonusDeductionBase):
+    id: str
+
 class DepartmentBase(BaseModel):
     name: str
     head: Optional[str] = None

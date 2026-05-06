@@ -1,266 +1,194 @@
 'use client'
 
-import { DollarSign, Plus, MoreHorizontal, Eye, Trash2, Loader2, Gift, Minus, Award, Download } from 'lucide-react'
-import { exportToCSV } from "@/lib/export";
+import { useState, useEffect } from 'react'
+import { PageHeader } from '@/components/common/PageHeader'
+import { DataTable } from '@/components/hrms/data-table'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Plus, Loader2, Save, Trash2, Tag } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
-import { useEffect, useState } from 'react'
-
-import { employees } from '@/lib/data'
-import type { Payroll } from '@/lib/types'
-
-const bonusCategories = ['Performance', 'Referral', 'Festival', 'Incentive', 'Project Completion', 'Anniversary']
-const deductionCategories = ['Advance', 'Late Penalty', 'Loan Repayment', 'Insurance', 'Other']
+import { API_URL } from '@/lib/config'
+import { toast } from 'sonner'
 
 export default function BonusesPage() {
-  const { data, isLoading } = useApi()
-  const [payroll, setPayroll] = useState<Payroll[]>([])
+  const { data, isLoading: loadingEmployees } = useApi()
+  const employees = data?.employees || []
+  const [adjustments, setAdjustments] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
-  const [type, setType] = useState<'bonus' | 'deduction'>('bonus')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   const [formData, setFormData] = useState({
-    employee: '',
-    category: '',
-    amount: '',
+    employeeId: '',
+    month: 'May',
+    year: 2026,
+    type: 'bonus',
+    amount: 0,
     reason: '',
+    status: 'active'
   })
 
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ]
+
   useEffect(() => {
-    if (data?.payrollRecords) setPayroll(data.payrollRecords)
-  }, [data?.payrollRecords])
+    fetchAdjustments()
+  }, [])
 
-  const bonuses = payroll.filter((b) => b.type === 'bonus')
-  const deductions = payroll.filter((b) => b.type === 'deduction')
-
-  const totalBonuses = bonuses.reduce((sum, b) => sum + b.amount, 0)
-  const totalDeductions = deductions.reduce((sum, b) => sum + b.amount, 0)
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount)
+  const fetchAdjustments = async () => {
+    try {
+      const response = await fetch(`${API_URL}/bonus-deductions`)
+      if (response.ok) {
+        setAdjustments(await response.json())
+      }
+    } catch (error) {
+      console.error('Error fetching adjustments:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleOpenModal = (itemType: 'bonus' | 'deduction') => {
-    setType(itemType)
-    setFormData({ employee: '', category: '', amount: '', reason: '' })
-    setModalOpen(true)
+  const handleSave = async () => {
+    if (!formData.employeeId || !formData.amount) {
+      toast.error('Please fill required fields')
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      const response = await fetch(`${API_URL}/bonus-deductions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+
+      if (response.ok) {
+        toast.success('Adjustment added successfully')
+        fetchAdjustments()
+        setModalOpen(false)
+      }
+    } catch (error) {
+      console.error('Error saving adjustment:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
+
+  const columns = [
+    { key: 'employeeId' as const, header: 'Employee', render: (id: string) => {
+        const emp = (employees as any[])?.find(e => e.id === id)
+        return emp?.name || id
+    }},
+    { key: 'type' as const, header: 'Type', render: (val: string) => (
+        <span className={val === 'bonus' ? 'text-emerald-600 font-bold uppercase text-[10px]' : 'text-rose-600 font-bold uppercase text-[10px]'}>
+            {val}
+        </span>
+    )},
+    { key: 'amount' as const, header: 'Amount', render: (val: number) => `$${val.toLocaleString()}` },
+    { key: 'month' as const, header: 'Period', render: (val: string, record: any) => `${val} ${record.year}` },
+    { key: 'reason' as const, header: 'Reason' },
+  ]
 
   return (
     <>
-      <PageHeader title="Bonuses & Deductions" description="Manage employee incentives and penalties.">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => exportToCSV(payroll, 'bonuses-deductions')}>
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
-          <Button variant="outline" onClick={() => handleOpenModal('deduction')}>
-            <Minus className="mr-2 h-4 w-4" />
-            Add Deduction
-          </Button>
-          <Button onClick={() => handleOpenModal('bonus')}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Bonus
-          </Button>
-        </div>
+      <PageHeader title="Bonuses & Deductions" description="Add ad-hoc salary adjustments for specific months.">
+        <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={() => setModalOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Adjustment
+        </Button>
       </PageHeader>
 
-
-      {isLoading && payroll.length === 0 ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      ) : (
-        <>
-          <div className="grid gap-6 md:grid-cols-3">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  <div className="rounded-lg bg-green-100 p-3">
-                    <Gift className="h-6 w-6 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Bonuses</p>
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totalBonuses)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  <div className="rounded-lg bg-red-100 p-3">
-                    <Minus className="h-6 w-6 text-red-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Deductions</p>
-                    <p className="text-2xl font-bold text-red-600">{formatCurrency(totalDeductions)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  <div className="rounded-lg bg-blue-100 p-3">
-                    <DollarSign className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Net Impact</p>
-                    <p className="text-2xl font-bold">{formatCurrency(totalBonuses - totalDeductions)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Tabs defaultValue="bonuses" className="mt-6">
-            <TabsList>
-              <TabsTrigger value="bonuses">
-                <Award className="mr-2 h-4 w-4" />
-                Bonuses ({bonuses.length})
-              </TabsTrigger>
-              <TabsTrigger value="deductions">
-                <Minus className="mr-2 h-4 w-4" />
-                Deductions ({deductions.length})
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="bonuses">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Bonuses</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {bonuses.map((bonus) => (
-                      <div
-                        key={bonus.id}
-                        className="flex items-center justify-between rounded-lg border p-4"
-                      >
-                        <div>
-                          <p className="font-medium">{bonus.employeeName}</p>
-                          <p className="text-sm text-muted-foreground">{bonus.reason}</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <Badge variant="outline">{bonus.category}</Badge>
-                          <span className="text-sm text-muted-foreground">{bonus.date}</span>
-                          <span className="font-semibold text-green-600">
-                            +{formatCurrency(bonus.amount)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="deductions">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Deductions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {deductions.map((deduction) => (
-                      <div
-                        key={deduction.id}
-                        className="flex items-center justify-between rounded-lg border p-4"
-                      >
-                        <div>
-                          <p className="font-medium">{deduction.employeeName}</p>
-                          <p className="text-sm text-muted-foreground">{deduction.reason}</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <Badge variant="outline" className="bg-red-50 text-red-700">
-                            {deduction.category}
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">{deduction.date}</span>
-                          <span className="font-semibold text-red-600">
-                            -{formatCurrency(deduction.amount)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </>
-      )}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <DataTable
+          data={adjustments}
+          columns={columns}
+          isLoading={loading}
+          searchKey="reason"
+          searchPlaceholder="Search by reason..."
+        />
+      </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              Add {type === 'bonus' ? 'Bonus' : 'Deduction'}
-            </DialogTitle>
+            <DialogTitle>Add Bonus or Deduction</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Employee</Label>
-              <Select
-                value={formData.employee}
-                onValueChange={(value) => setFormData({ ...formData, employee: value })}
-              >
+              <Label>Select Employee</Label>
+              <Select value={formData.employeeId} onValueChange={(val) => setFormData({...formData, employeeId: val})}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select employee" />
+                  <SelectValue placeholder="Choose employee..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.name}>
-                      {emp.name}
-                    </SelectItem>
+                  {(employees as any[])?.map(emp => (
+                    <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select
-                value={formData.category}
-                onValueChange={(value) => setFormData({ ...formData, category: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(type === 'bonus' ? bonusCategories : deductionCategories).map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Adjustment Type</Label>
+                <Select value={formData.type} onValueChange={(val) => setFormData({...formData, type: val})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bonus">Bonus / Addition</SelectItem>
+                    <SelectItem value="deduction">Deduction / Penalty</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Amount</Label>
+                <Input type="number" value={formData.amount} onChange={(e) => setFormData({...formData, amount: Number(e.target.value)})} />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Amount</Label>
-              <Input
-                type="number"
-                value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                placeholder="Enter amount"
-              />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Month</Label>
+                <Select value={formData.month} onValueChange={(val) => setFormData({...formData, month: val})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Year</Label>
+                <Input type="number" value={formData.year} onChange={(e) => setFormData({...formData, year: Number(e.target.value)})} />
+              </div>
             </div>
+
             <div className="space-y-2">
-              <Label>Reason</Label>
-              <Input
-                value={formData.reason}
-                onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                placeholder="Enter reason"
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => setModalOpen(false)}>
-                Add {type === 'bonus' ? 'Bonus' : 'Deduction'}
-              </Button>
+              <Label>Reason / Description</Label>
+              <Input placeholder="e.g. Performance Bonus Q1" value={formData.reason} onChange={(e) => setFormData({...formData, reason: e.target.value})} />
             </div>
           </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={handleSave} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Add Adjustment
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

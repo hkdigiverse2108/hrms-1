@@ -164,6 +164,38 @@ async def read_dashboard_stats(db=Depends(get_db)):
 async def read_payroll(skip: int = 0, limit: int = 100, db=Depends(get_db)):
     return await crud.get_payroll(db, skip=skip, limit=limit)
 
+@app.post("/payroll/process")
+async def process_payroll(request: dict, db=Depends(get_db)):
+    # request should contain month and year
+    month = request.get("month")
+    year = request.get("year")
+    if not month or not year:
+        raise HTTPException(status_code=400, detail="Month and year required")
+    return await crud.run_payroll_processing(db, month, year)
+
+@app.get("/salary-structures", response_model=List[schemas.SalaryStructure])
+async def read_salary_structures(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_salary_structures(db, skip=skip, limit=limit)
+
+@app.get("/salary-structures/{employee_id}", response_model=schemas.SalaryStructure)
+async def read_salary_structure(employee_id: str, db=Depends(get_db)):
+    res = await crud.get_salary_structure_by_employee(db, employee_id)
+    if not res:
+        raise HTTPException(status_code=404, detail="Salary structure not found")
+    return res
+
+@app.post("/salary-structures", response_model=schemas.SalaryStructure)
+async def upsert_salary_structure(salary: schemas.SalaryStructureCreate, db=Depends(get_db)):
+    return await crud.create_or_update_salary_structure(db, salary)
+
+@app.get("/bonus-deductions", response_model=List[schemas.BonusDeduction])
+async def read_bonus_deductions(month: Optional[str] = None, year: Optional[int] = None, db=Depends(get_db)):
+    return await crud.get_bonus_deductions(db, month, year)
+
+@app.post("/bonus-deductions", response_model=schemas.BonusDeduction)
+async def create_bonus_deduction(item: schemas.BonusDeductionCreate, db=Depends(get_db)):
+    return await crud.create_bonus_deduction(db, item)
+
 # Notification Endpoints
 @app.get("/notifications/{employee_id}", response_model=List[schemas.Notification])
 async def read_notifications(employee_id: str, db=Depends(get_db)):

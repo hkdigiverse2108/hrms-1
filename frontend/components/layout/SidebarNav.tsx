@@ -18,6 +18,9 @@ import {
   Star,
   FileText,
   Briefcase,
+  DollarSign,
+  GraduationCap,
+  Landmark,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
@@ -114,17 +117,19 @@ export function SidebarNav() {
         getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
         getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
       ]),
+      getItem("Payroll", "payroll-sub", <DollarSign className="w-5 h-5" />, [
+        getItem(<Link href="/payroll/salary-structure">Salary Structure</Link>, "/payroll/salary-structure"),
+        getItem(<Link href="/payroll">Payroll Processing</Link>, "/payroll"),
+        getItem(<Link href="/payroll/payslips">Payslips</Link>, "/payroll/payslips"),
+        getItem(<Link href="/payroll/bonuses">Bonuses & Deductions</Link>, "/payroll/bonuses"),
+      ]),
       getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, [
-        getItem(<Link href="/recruitment/hiring-board">Hiring Board</Link>, "/recruitment/hiring-board"),
-        getItem(<Link href="/recruitment">Job Openings</Link>, "/recruitment"),
+        getItem(<Link href="/recruitment/hiring-board">Interviews</Link>, "/recruitment/hiring-board"),
+        getItem(<Link href="/recruitment">Hirings</Link>, "/recruitment"),
         getItem(<Link href="/recruitment/applications">Applications</Link>, "/recruitment/applications"),
       ]),
       getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
       getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
-      // Hide top-level Task for Marketing
-      // ...((isMarketingDept && !isAdminRole) ? [] : [
-      //   getItem(<Link href="/task">Task</Link>, "/task", <ClipboardList className="w-5 h-5" />)
-      // ]),
       getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
         getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"),
         getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
@@ -161,6 +166,7 @@ export function SidebarNav() {
     if (pathname.startsWith("/work-management")) return [pathname];
     if (pathname.startsWith("/chat")) return ["/chat"];
     if (pathname.startsWith("/recruitment")) return [pathname];
+    if (pathname.startsWith("/payroll")) return [pathname];
     return [];
   };
 
@@ -170,6 +176,7 @@ export function SidebarNav() {
     if (pathname.startsWith("/invoice")) return ["invoice"];
     if (pathname.startsWith("/work-management")) return ["work-management"];
     if (pathname.startsWith("/recruitment")) return ["recruitment-sub"];
+    if (pathname.startsWith("/payroll")) return ["payroll-sub"];
     return [];
   };
  

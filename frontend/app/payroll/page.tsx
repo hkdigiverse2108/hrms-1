@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
 import { StatusBadge } from '@/components/hrms/status-badge'
@@ -20,32 +20,75 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DollarSign, Users, CheckCircle, Clock, MoreHorizontal, Eye, FileText, Download, Play, Loader2 } from 'lucide-react'
-import { useApi } from '@/hooks/useApi'
-import { useEffect } from 'react'
-import type { Payroll } from '@/lib/types'
 import { API_URL } from '@/lib/config'
 import { exportToCSV } from "@/lib/export";
+import { toast } from 'sonner'
+import type { Payroll } from '@/lib/types'
 
 export default function PayrollPage() {
-  const { data, isLoading, refresh } = useApi()
   const [payroll, setPayroll] = useState<Payroll[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [selectedMonth, setSelectedMonth] = useState('May')
+  const [selectedYear, setSelectedYear] = useState('2026')
+
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ]
+  const years = ['2024', '2025', '2026']
 
   useEffect(() => {
-    if (data?.payrollRecords) setPayroll(data.payrollRecords)
-  }, [data?.payrollRecords])
-  const [selectedMonth, setSelectedMonth] = useState('January 2024')
+    fetchPayroll()
+  }, [])
 
-  const totalPayroll = payroll.reduce((sum, p) => sum + p.netSalary, 0)
-  const paidCount = payroll.filter((p) => p.status === 'paid').length
-  const pendingCount = payroll.filter((p) => p.status === 'pending').length
-  const processedCount = payroll.filter((p) => p.status === 'processed').length
+  const fetchPayroll = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/payroll`)
+      if (response.ok) {
+        setPayroll(await response.json())
+      }
+    } catch (error) {
+      console.error('Error fetching payroll:', error)
+    } finally {
+      setIsLoading(true)
+    }
+    // Wait, I should probably filter by selected month/year or let the backend do it
+    // For now, I'll fetch all and filter client-side for UX
+    setIsLoading(false)
+  }
 
-  const handleRunPayroll = () => {
-    setPayroll(
-      payroll.map((p) =>
-        p.status === 'pending' ? { ...p, status: 'processed' as const } : p
-      )
-    )
+  const filteredPayroll = payroll.filter(p => p.month === selectedMonth && String(p.year) === selectedYear)
+
+  const totalPayroll = filteredPayroll.reduce((sum, p) => sum + p.netSalary, 0)
+  const paidCount = filteredPayroll.filter((p) => p.status === 'paid').length
+  const pendingCount = filteredPayroll.filter((p) => p.status === 'processed').length
+
+  const handleRunPayroll = async () => {
+    setIsProcessing(true)
+    try {
+      const response = await fetch(`${API_URL}/payroll/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: selectedMonth,
+          year: Number(selectedYear)
+        })
+      })
+
+      if (response.ok) {
+        toast.success('Payroll processed successfully')
+        fetchPayroll()
+      } else {
+        toast.error('Failed to process payroll. Ensure salary structures are set.')
+      }
+    } catch (error) {
+      console.error('Error processing payroll:', error)
+      toast.error('Error processing payroll')
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const handleMarkPaid = async (id: string) => {
@@ -55,26 +98,27 @@ export default function PayrollPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'paid' }),
       })
-      if (response.ok) refresh()
+      if (response.ok) {
+        toast.success('Marked as paid')
+        fetchPayroll()
+      }
     } catch (error) {
       console.error('Error marking as paid:', error)
     }
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'INR',
     }).format(amount)
   }
 
   const columns = [
-    { key: 'employeeId' as const, header: 'Employee ID' },
-    { key: 'employeeName' as const, header: 'Employee Name' },
-    { key: 'month' as const, header: 'Month' },
+    { key: 'employeeName' as const, header: 'Employee' },
     {
       key: 'basicSalary' as const,
-      header: 'Basic Salary',
+      header: 'Basic',
       render: (record: Payroll) => formatCurrency(record.basicSalary),
     },
     {
@@ -93,9 +137,9 @@ export default function PayrollPage() {
     },
     {
       key: 'netSalary' as const,
-      header: 'Net Salary',
+      header: 'Net Payable',
       render: (record: Payroll) => (
-        <span className="font-semibold">{formatCurrency(record.netSalary)}</span>
+        <span className="font-bold text-slate-900">{formatCurrency(record.netSalary)}</span>
       ),
     },
     {
@@ -113,17 +157,13 @@ export default function PayrollPage() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem>
-          <Eye className="mr-2 h-4 w-4" />
-          View Details
-        </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => window.location.href=`/payroll/payslips?id=${record.id}`}>
           <FileText className="mr-2 h-4 w-4" />
-          Generate Payslip
+          View Payslip
         </DropdownMenuItem>
         {record.status === 'processed' && (
           <DropdownMenuItem onClick={() => handleMarkPaid(record.id)}>
-            <CheckCircle className="mr-2 h-4 w-4" />
+            <CheckCircle className="mr-2 h-4 w-4 text-emerald-500" />
             Mark as Paid
           </DropdownMenuItem>
         )}
@@ -133,65 +173,72 @@ export default function PayrollPage() {
 
   return (
     <>
-      <PageHeader title="Payroll Processing" description="Manage monthly payroll for all employees.">
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="January 2024">January 2024</SelectItem>
-            <SelectItem value="February 2024">February 2024</SelectItem>
-            <SelectItem value="March 2024">March 2024</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button variant="outline" onClick={() => exportToCSV(payroll, 'payroll')}>
+      <PageHeader title="Payroll Processing" description="Calculate and manage monthly salaries.">
+        <div className="flex gap-2">
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="outline" onClick={() => exportToCSV(filteredPayroll, `payroll_${selectedMonth}_${selectedYear}`)}>
           <Download className="mr-2 h-4 w-4" />
           Export
         </Button>
-        <Button onClick={handleRunPayroll} disabled={pendingCount === 0}>
-          <Play className="mr-2 h-4 w-4" />
-          Run Payroll
+        <Button 
+          className="bg-brand-teal hover:bg-brand-teal/90" 
+          onClick={handleRunPayroll} 
+          disabled={isProcessing}
+        >
+          {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+          Run Processing
         </Button>
       </PageHeader>
 
       <div className="grid gap-6 md:grid-cols-4">
         <StatsCard
-          title="Total Payroll"
+          title="Total Payout"
           value={formatCurrency(totalPayroll)}
           icon={<DollarSign className="h-6 w-6" />}
         />
         <StatsCard
-          title="Employees"
-          value={payroll.length}
+          title="Total Employees"
+          value={filteredPayroll.length}
           icon={<Users className="h-6 w-6" />}
         />
         <StatsCard
           title="Paid"
           value={paidCount}
-          icon={<CheckCircle className="h-6 w-6" />}
+          icon={<CheckCircle className="h-6 w-6 text-emerald-500" />}
         />
         <StatsCard
-          title="Pending"
-          value={pendingCount + processedCount}
-          icon={<Clock className="h-6 w-6" />}
+          title="To Process"
+          value={filteredPayroll.length - (paidCount + pendingCount)}
+          icon={<Clock className="h-6 w-6 text-amber-500" />}
         />
       </div>
 
-      {isLoading && payroll.length === 0 ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      ) : (
-        <div className="mt-6">
-          <DataTable
-            data={payroll}
-            columns={columns}
-            searchKey="employeeName"
-            searchPlaceholder="Search employees..."
-            actions={renderActions}
-          />
-        </div>
-      )}
+      <div className="mt-6">
+        <DataTable
+          data={filteredPayroll}
+          columns={columns}
+          isLoading={isLoading}
+          searchKey="employeeName"
+          searchPlaceholder="Search by name..."
+          actions={renderActions}
+        />
+      </div>
     </>
   )
 }

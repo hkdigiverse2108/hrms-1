@@ -1,194 +1,261 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DataTable } from '@/components/hrms/data-table'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { Plus, DollarSign, Percent, Download } from 'lucide-react'
-import { exportToCSV } from "@/lib/export";
-
-
-const salaryComponents = [
-  { name: 'Basic Salary', percentage: 50, type: 'earning', description: 'Base compensation' },
-  { name: 'House Rent Allowance', percentage: 20, type: 'earning', description: 'Housing support' },
-  { name: 'Transport Allowance', percentage: 10, type: 'earning', description: 'Commute expenses' },
-  { name: 'Medical Allowance', percentage: 5, type: 'earning', description: 'Healthcare support' },
-  { name: 'Special Allowance', percentage: 15, type: 'earning', description: 'Additional benefits' },
-]
-
-const deductions = [
-  { name: 'Provident Fund', percentage: 12, type: 'deduction', description: 'Retirement savings' },
-  { name: 'Professional Tax', amount: 200, type: 'deduction', description: 'State tax' },
-  { name: 'Income Tax', percentage: 10, type: 'deduction', description: 'Federal tax (varies)' },
-  { name: 'Health Insurance', amount: 150, type: 'deduction', description: 'Employee contribution' },
-]
-
-const salaryGrades = [
-  { grade: 'Grade A', minSalary: 80000, maxSalary: 150000, employees: 12 },
-  { grade: 'Grade B', minSalary: 60000, maxSalary: 80000, employees: 25 },
-  { grade: 'Grade C', minSalary: 45000, maxSalary: 60000, employees: 30 },
-  { grade: 'Grade D', minSalary: 30000, maxSalary: 45000, employees: 21 },
-]
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Plus, Edit2, Loader2, Save } from 'lucide-react'
+import { useApi } from '@/hooks/useApi'
+import { API_URL } from '@/lib/config'
+import { toast } from 'sonner'
 
 export default function SalaryStructurePage() {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0,
-    }).format(amount)
+  const { data, isLoading: loadingEmployees } = useApi()
+  const employees = data?.employees || []
+  const [structures, setStructures] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedEmployee, setSelectedEmployee] = useState<any>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const [formData, setFormData] = useState({
+    basic: 0,
+    hra: 0,
+    conveyance: 0,
+    medical: 0,
+    specialAllowance: 0,
+    pf: 0,
+    esi: 0,
+    professionalTax: 0,
+    tds: 0,
+    monthlyGross: 0,
+  })
+
+  useEffect(() => {
+    fetchStructures()
+  }, [])
+
+  const fetchStructures = async () => {
+    try {
+      const response = await fetch(`${API_URL}/salary-structures`)
+      if (response.ok) {
+        setStructures(await response.json())
+      }
+    } catch (error) {
+      console.error('Error fetching structures:', error)
+    } finally {
+      setLoading(false)
+    }
   }
+
+  const handleOpenModal = async (employee: any) => {
+    setSelectedEmployee(employee)
+    setFormData({
+      basic: 0,
+      hra: 0,
+      conveyance: 0,
+      medical: 0,
+      specialAllowance: 0,
+      pf: 0,
+      esi: 0,
+      professionalTax: 0,
+      tds: 0,
+      monthlyGross: 0,
+    })
+
+    // Try to find existing structure
+    const existing = structures.find((s) => s.employeeId === employee.id)
+    if (existing) {
+      setFormData({
+        basic: existing.basic,
+        hra: existing.hra,
+        conveyance: existing.conveyance,
+        medical: existing.medical,
+        specialAllowance: existing.specialAllowance,
+        pf: existing.pf,
+        esi: existing.esi,
+        professionalTax: existing.professionalTax,
+        tds: existing.tds,
+        monthlyGross: existing.monthlyGross,
+      })
+    }
+    setModalOpen(true)
+  }
+
+  const handleSave = async () => {
+    setIsSubmitting(true)
+    try {
+      const response = await fetch(`${API_URL}/salary-structures`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          employeeId: selectedEmployee.id,
+        }),
+      })
+
+      if (response.ok) {
+        toast.success('Salary structure saved')
+        fetchStructures()
+        setModalOpen(false)
+      } else {
+        toast.error('Failed to save salary structure')
+      }
+    } catch (error) {
+      console.error('Error saving structure:', error)
+      toast.error('Error saving salary structure')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleCalculateGross = () => {
+    const gross = 
+      Number(formData.basic) + 
+      Number(formData.hra) + 
+      Number(formData.conveyance) + 
+      Number(formData.medical) + 
+      Number(formData.specialAllowance)
+    setFormData({ ...formData, monthlyGross: gross })
+  }
+
+  const columns = [
+    { key: 'employeeId' as const, header: 'Employee ID', render: (record: any) => {
+        const emp = (employees as any[])?.find(e => e.id === record.employeeId)
+        return emp?.employeeId || record.employeeId
+    }},
+    { key: 'employeeName' as const, header: 'Employee Name', render: (record: any) => {
+        const emp = (employees as any[])?.find(e => e.id === record.employeeId)
+        return emp?.name || 'Unknown'
+    }},
+    { key: 'monthlyGross' as const, header: 'Monthly Gross', render: (val: number) => `$${val.toLocaleString()}` },
+    { key: 'basic' as const, header: 'Basic', render: (val: number) => `$${val.toLocaleString()}` },
+    { key: 'pf' as const, header: 'PF', render: (val: number) => `$${val.toLocaleString()}` },
+    { key: 'tds' as const, header: 'TDS', render: (val: number) => `$${val.toLocaleString()}` },
+  ]
+
+  const renderActions = (record: any) => (
+    <Button variant="ghost" size="icon" onClick={() => handleOpenModal({ id: record.employeeId })}>
+      <Edit2 className="h-4 w-4" />
+    </Button>
+  )
 
   return (
     <>
-      <PageHeader title="Salary Structure" description="Define salary components and pay grades.">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => exportToCSV([...salaryComponents, ...deductions, ...salaryGrades], 'salary-structure')}>
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Component
-          </Button>
-        </div>
+      <PageHeader title="Salary Structures" description="Manage salary components for employees.">
       </PageHeader>
 
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-slate-800">All Employees</h3>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <DataTable
+              data={employees || []}
+              columns={[
+                { key: 'employeeId' as const, header: 'ID' },
+                { key: 'name' as const, header: 'Name' },
+                { key: 'department' as const, header: 'Dept' },
+              ]}
+              searchKey="name"
+              searchPlaceholder="Search employees..."
+              actions={(emp: any) => (
+                <Button variant="outline" size="sm" onClick={() => handleOpenModal(emp)}>
+                  {structures.find(s => s.employeeId === emp.id) ? 'Edit Structure' : 'Set Structure'}
+                </Button>
+              )}
+            />
+          </div>
+        </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Earnings Components */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-green-600" />
-              Earnings Components
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {salaryComponents.map((component) => (
-                <div key={component.name} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{component.name}</p>
-                      <p className="text-sm text-muted-foreground">{component.description}</p>
-                    </div>
-                    <Badge variant="outline" className="bg-green-50 text-green-700">
-                      {component.percentage}%
-                    </Badge>
-                  </div>
-                  <Progress value={component.percentage} className="h-2" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Deductions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Percent className="h-5 w-5 text-red-600" />
-              Deductions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {deductions.map((deduction) => (
-                <div key={deduction.name} className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">{deduction.name}</p>
-                    <p className="text-sm text-muted-foreground">{deduction.description}</p>
-                  </div>
-                  <Badge variant="outline" className="bg-red-50 text-red-700">
-                    {deduction.percentage
-                      ? `${deduction.percentage}%`
-                      : formatCurrency(deduction.amount as number)}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-slate-800">Assigned Structures</h3>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <DataTable
+              data={structures}
+              columns={columns}
+              searchKey="employeeId"
+              searchPlaceholder="Search by ID..."
+              actions={renderActions}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Salary Grades */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Salary Grades</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {salaryGrades.map((grade) => (
-              <div
-                key={grade.grade}
-                className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
-              >
-                <h3 className="text-lg font-semibold">{grade.grade}</h3>
-                <div className="mt-2 space-y-1">
-                  <p className="text-sm text-muted-foreground">
-                    Range: {formatCurrency(grade.minSalary)} - {formatCurrency(grade.maxSalary)}
-                  </p>
-                  <p className="text-sm">
-                    <span className="font-medium">{grade.employees}</span> employees
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Salary Structure - {selectedEmployee?.name}
+            </DialogTitle>
+          </DialogHeader>
 
-      {/* Sample Calculation */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Sample Salary Calculation</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="max-w-md">
-            <div className="space-y-2 border-b pb-4">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Gross Salary (Annual)</span>
-                <span className="font-medium">$60,000</span>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="space-y-4 border-r pr-4">
+              <h4 className="font-bold text-brand-teal uppercase text-xs tracking-wider">Earnings</h4>
+              <div className="space-y-2">
+                <Label>Basic Salary</Label>
+                <Input type="number" value={formData.basic} onChange={(e) => setFormData({...formData, basic: Number(e.target.value)})} onBlur={handleCalculateGross} />
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Basic Salary (50%)</span>
-                <span>$30,000</span>
+              <div className="space-y-2">
+                <Label>HRA</Label>
+                <Input type="number" value={formData.hra} onChange={(e) => setFormData({...formData, hra: Number(e.target.value)})} onBlur={handleCalculateGross} />
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">HRA (20%)</span>
-                <span>$12,000</span>
+              <div className="space-y-2">
+                <Label>Conveyance</Label>
+                <Input type="number" value={formData.conveyance} onChange={(e) => setFormData({...formData, conveyance: Number(e.target.value)})} onBlur={handleCalculateGross} />
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Other Allowances</span>
-                <span>$18,000</span>
+              <div className="space-y-2">
+                <Label>Medical Allowance</Label>
+                <Input type="number" value={formData.medical} onChange={(e) => setFormData({...formData, medical: Number(e.target.value)})} onBlur={handleCalculateGross} />
               </div>
-            </div>
-            <div className="space-y-2 border-b py-4">
-              <div className="flex justify-between text-red-600">
-                <span>Provident Fund (12%)</span>
-                <span>-$3,600</span>
+              <div className="space-y-2">
+                <Label>Special Allowance</Label>
+                <Input type="number" value={formData.specialAllowance} onChange={(e) => setFormData({...formData, specialAllowance: Number(e.target.value)})} onBlur={handleCalculateGross} />
               </div>
-              <div className="flex justify-between text-red-600">
-                <span>Income Tax (Est.)</span>
-                <span>-$6,000</span>
-              </div>
-              <div className="flex justify-between text-red-600">
-                <span>Other Deductions</span>
-                <span>-$2,400</span>
+              <div className="pt-2">
+                <Label className="font-bold">Total Monthly Gross: ${formData.monthlyGross}</Label>
               </div>
             </div>
-            <div className="flex justify-between pt-4 text-lg font-semibold">
-              <span>Net Annual Salary</span>
-              <span className="text-green-600">$48,000</span>
+
+            <div className="space-y-4">
+              <h4 className="font-bold text-rose-500 uppercase text-xs tracking-wider">Deductions</h4>
+              <div className="space-y-2">
+                <Label>Provident Fund (PF)</Label>
+                <Input type="number" value={formData.pf} onChange={(e) => setFormData({...formData, pf: Number(e.target.value)})} />
+              </div>
+              <div className="space-y-2">
+                <Label>ESI</Label>
+                <Input type="number" value={formData.esi} onChange={(e) => setFormData({...formData, esi: Number(e.target.value)})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Professional Tax</Label>
+                <Input type="number" value={formData.professionalTax} onChange={(e) => setFormData({...formData, professionalTax: Number(e.target.value)})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Income Tax (TDS)</Label>
+                <Input type="number" value={formData.tds} onChange={(e) => setFormData({...formData, tds: Number(e.target.value)})} />
+              </div>
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Monthly take-home: $4,000
-            </p>
           </div>
-        </CardContent>
-      </Card>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={handleSave} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save Structure
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
