@@ -21,7 +21,8 @@ import {
   ArrowDownRight,
   Loader2,
   Trash2,
-  Pencil
+  Pencil,
+  History as HistoryIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +61,24 @@ export default function SalesPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [reportEmployeeFilter, setReportEmployeeFilter] = useState("all");
   const [reportDateFilter, setReportDateFilter] = useState("");
+  const [selectedLeadForLogs, setSelectedLeadForLogs] = useState<any>(null);
+  const [leadLogs, setLeadLogs] = useState<any[]>([]);
+  const [isLogsLoading, setIsLogsLoading] = useState(false);
+  const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
+
+  const fetchLeadLogs = async (lead: any) => {
+    setSelectedLeadForLogs(lead);
+    setIsLogsDialogOpen(true);
+    setIsLogsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/leads/${lead.id}/logs`);
+      if (res.ok) setLeadLogs(await res.json());
+    } catch (err) {
+      console.error("Error fetching lead logs:", err);
+    } finally {
+      setIsLogsLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchLeads();
@@ -440,8 +459,13 @@ export default function SalesPage() {
                               <MoreHorizontal className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer">
+                          <DropdownMenuContent align="end" className="w-[180px]">
+                            <DropdownMenuItem onClick={() => fetchLeadLogs(lead)} className="cursor-pointer font-medium">
+                              <HistoryIcon className="w-4 h-4 mr-2 text-brand-teal" />
+                              View History
+                            </DropdownMenuItem>
+                            <div className="h-px bg-slate-100 my-1" />
+                            <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
                               <Trash2 className="w-4 h-4 mr-2" />
                               Delete Lead
                             </DropdownMenuItem>
@@ -668,6 +692,68 @@ export default function SalesPage() {
           </>
         )}
       </Tabs>
+
+      <Dialog open={isLogsDialogOpen} onOpenChange={setIsLogsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          <DialogHeader className="p-6 pb-4 bg-brand-teal text-white">
+            <DialogTitle className="flex items-center gap-3 text-xl font-black">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <HistoryIcon className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-sm font-bold opacity-80 uppercase tracking-widest leading-none mb-1">Lead History</div>
+                <div className="leading-tight">{selectedLeadForLogs?.company}</div>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50">
+            {isLogsLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+                <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+                <p className="text-xs font-bold uppercase tracking-widest">Loading history...</p>
+              </div>
+            ) : leadLogs.length > 0 ? (
+              <div className="space-y-4 relative">
+                {leadLogs.map((log, i) => (
+                  <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm mb-4 hover:border-brand-teal/30 transition-all group">
+                    <div className="flex justify-between items-start mb-3">
+                       <span className="font-bold text-slate-900 text-[13px]">{log.userName}</span>
+                       <span className="text-[11px] text-slate-400 font-semibold">{log.timestamp}</span>
+                    </div>
+                    
+                    <div className="mb-4">
+                       <span className="px-2 py-0.5 bg-slate-50 text-slate-600 border border-slate-200 rounded text-[9px] font-black uppercase tracking-wider">
+                         {log.action}
+                       </span>
+                    </div>
+
+                    <div className="pl-4 border-l-[3px] border-slate-100 group-hover:border-brand-teal/20 transition-all text-[12.5px] text-slate-600 font-medium leading-relaxed">
+                       {log.details}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-4">
+                <div className="p-4 bg-slate-100 rounded-full">
+                   <HistoryIcon className="w-8 h-8 opacity-20" />
+                </div>
+                <p className="text-xs font-bold uppercase tracking-widest italic">No activity logs found for this lead.</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="p-4 bg-white border-t border-slate-100 flex justify-end">
+            <Button 
+              onClick={() => setIsLogsDialogOpen(false)}
+              className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] uppercase tracking-widest px-8 rounded-xl h-10"
+            >
+              Close History
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

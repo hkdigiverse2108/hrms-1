@@ -719,6 +719,9 @@ class TaskLogBase(BaseModel):
     taskId: Optional[str] = None
     projectId: Optional[str] = None
     clientId: Optional[str] = None
+    leadId: Optional[str] = None
+    dailyReportId: Optional[str] = None
+    monthlyReportId: Optional[str] = None
     action: str
     performedBy: str
     userName: str

@@ -863,7 +863,7 @@ async def delete_wm_task(db, task_id: str):
     return result.deleted_count > 0
 
 # Activity Log CRUD
-async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, dailyReportId: str = None, monthlyReportId: str = None):
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None):
     log_entry = {
         "action": action,
         "performedBy": performedBy,
@@ -874,10 +874,18 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
     if taskId: log_entry["taskId"] = taskId
     if projectId: log_entry["projectId"] = projectId
     if clientId: log_entry["clientId"] = clientId
+    if leadId: log_entry["leadId"] = leadId
     if dailyReportId: log_entry["dailyReportId"] = dailyReportId
     if monthlyReportId: log_entry["monthlyReportId"] = monthlyReportId
     
     await db.task_logs.insert_one(log_entry)
+
+async def get_lead_logs(db, lead_id: str):
+    cursor = db.task_logs.find({"leadId": lead_id}).sort("timestamp", -1)
+    logs = []
+    async for doc in cursor:
+        logs.append(fix_id(doc))
+    return logs
 
 async def get_task_logs(db, taskId: str = None, projectId: str = None, clientId: str = None, dailyReportId: str = None, monthlyReportId: str = None):
     query = {}
@@ -914,7 +922,7 @@ async def create_lead(db, lead: schemas.LeadCreate):
     lead_id = str(result.inserted_id)
     
     # Log the creation
-    await log_task_activity(db, None, "Lead Created", performedBy, userName, f"Lead for '{lead_dict['company']}' was created.")
+    await log_activity(db, "Lead Created", performedBy, userName, f"Lead for '{lead_dict['company']}' was created.", leadId=lead_id)
     
     doc = await db.leads.find_one({"_id": result.inserted_id})
     return fix_id(doc)
@@ -932,7 +940,7 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
         await db.leads.update_one({"_id": ObjectId(lead_id)}, {"$set": update_data})
         
         # Log the update
-        await log_task_activity(db, None, "Lead Updated", performedBy, userName, f"Lead '{lead_id}' was updated.")
+        await log_activity(db, "Lead Updated", performedBy, userName, f"Lead details were updated. Status: {update_data.get('status', 'Unchanged')}", leadId=lead_id)
         
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
@@ -952,7 +960,7 @@ async def add_lead_follow_up(db, lead_id: str, follow_up: schemas.FollowUp, perf
     )
     
     # Log activity
-    await log_task_activity(db, None, "Follow-up Added", performedBy, userName, f"Follow-up added to lead '{lead_id}'.")
+    await log_activity(db, "Follow-up Added", performedBy, userName, f"Added follow-up: {follow_up_dict.get('notes', 'No notes provided')}", leadId=lead_id)
     
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)

@@ -708,3 +708,7 @@ async def update_daily_report(report_id: str, report_update: schemas.EmployeeDai
     if not updated:
         raise HTTPException(status_code=404, detail="Report not found")
     return updated
+
+@app.get("/leads/{lead_id}/logs", response_model=List[schemas.TaskLog])
+async def read_lead_logs(lead_id: str, db=Depends(get_db)):
+    return await crud.get_lead_logs(db, lead_id)
