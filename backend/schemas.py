@@ -521,6 +521,10 @@ class ClientBase(BaseModel):
     remarks: Optional[str] = None
     responsibility: Optional[str] = None
     dailyFollowup: Optional[str] = "No"
+    interviewDate: Optional[str] = None
+    interviewTime: Optional[str] = None
+    interviewerName: Optional[str] = None
+    interviewNotes: Optional[str] = None
     createdDate: Optional[str] = None
 
 class ClientCreate(ClientBase):
@@ -549,6 +553,11 @@ class ClientUpdate(BaseModel):
     remarks: Optional[str] = None
     responsibility: Optional[str] = None
     dailyFollowup: Optional[str] = None
+    interviewDate: Optional[str] = None
+    interviewTime: Optional[str] = None
+    interviewerName: Optional[str] = None
+    interviewLink: Optional[str] = None
+    interviewNotes: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
