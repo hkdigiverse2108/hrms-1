@@ -119,10 +119,13 @@ export default function DailyProgressPage() {
   ]
 
   const actions = (record: any) => {
-    const canManage = isAdmin || (isTeamLeader && user?.department === record.department)
+    const isSelf = user?.id === record.employeeId
+    const canManage = (isAdmin || (isTeamLeader && user?.department === record.department)) && !isSelf
     
     if (!canManage) {
-        return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">View Only</span>
+        return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">
+          {isSelf ? "Self Verification Hidden" : "View Only"}
+        </span>
     }
 
     return (
