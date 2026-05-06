@@ -1167,3 +1167,96 @@ async def toggle_complete_message(db, message_id: str, user_id: str):
             await db.messages.update_one({"_id": ObjectId(message_id)}, {"$push": {"completedBy": user_id}})
             return True
     return False
+
+async def toggle_reaction(db, message_id: str, user_id: str, emoji: str):
+    msg = await db.messages.find_one({"_id": ObjectId(message_id)})
+    if not msg:
+        return None
+    
+    reactions = msg.get("reactions", {})
+    if not isinstance(reactions, dict):
+        reactions = {}
+        
+    user_list = reactions.get(emoji, [])
+    if user_id in user_list:
+        user_list.remove(user_id)
+        if not user_list:
+            del reactions[emoji]
+        else:
+            reactions[emoji] = user_list
+    else:
+        # Check if user already reacted with this emoji, or if we want to allow multiple different reactions per user
+        # Standard behavior: allow multiple different emojis, but only one of each
+        if emoji not in reactions:
+            reactions[emoji] = []
+        reactions[emoji].append(user_id)
+        
+    await db.messages.update_one(
+        {"_id": ObjectId(message_id)},
+        {"$set": {"reactions": reactions}}
+    )
+    return reactions
+
+async def update_employee_status(db, employee_id: str, status: str, emoji: str):
+    await db.employees.update_one(
+        {"_id": ObjectId(employee_id)},
+        {"$set": {"customStatus": status, "statusEmoji": emoji}}
+    )
+    doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
+    return fix_id(doc)
+
+async def vote_poll(db, message_id: str, user_id: str, option_id: str):
+    msg = await db.messages.find_one({"_id": ObjectId(message_id)})
+    if not msg or "poll" not in msg:
+        return None
+    
+    poll = msg["poll"]
+    is_multiple = poll.get("isMultiple", False)
+    
+    updated_options = []
+    for opt in poll["options"]:
+        if opt["id"] == option_id:
+            if user_id in opt["votes"]:
+                opt["votes"].remove(user_id)
+            else:
+                opt["votes"].append(user_id)
+        elif not is_multiple:
+            # If not multiple choice, remove user from other options
+            if user_id in opt["votes"]:
+                opt["votes"].remove(user_id)
+        updated_options.append(opt)
+    
+    await db.messages.update_one(
+        {"_id": ObjectId(message_id)},
+        {"$set": {"poll.options": updated_options}}
+    )
+    return updated_options
+
+async def set_typing_status(db, chat_id: str, user_id: str, is_typing: bool):
+    if is_typing:
+        await db.typing.update_one(
+            {"chatId": chat_id, "userId": user_id},
+            {"$set": {"timestamp": datetime.now()}},
+            upsert=True
+        )
+    else:
+        await db.typing.delete_one({"chatId": chat_id, "userId": user_id})
+    return True
+
+async def get_typing_users(db, chat_id: str, current_user_id: str):
+    # Get users typing in this chat in the last 10 seconds
+    threshold = datetime.now() - timedelta(seconds=10)
+    cursor = db.typing.find({
+        "chatId": chat_id, 
+        "userId": {"$ne": current_user_id},
+        "timestamp": {"$gt": threshold}
+    })
+    typing_entries = await cursor.to_list(length=100)
+    
+    user_ids = [entry["userId"] for entry in typing_entries]
+    if not user_ids:
+        return []
+    
+    # Get user names
+    users = await db.employees.find({"_id": {"$in": [ObjectId(uid) for uid in user_ids]}}).to_list(length=100)
+    return [user["name"] for user in users]

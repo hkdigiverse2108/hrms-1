@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable } from '@/components/hrms/data-table'
 import { StatusBadge } from '@/components/hrms/status-badge'
@@ -33,10 +34,10 @@ import { Plus, Briefcase, Users, Clock, CheckCircle, MoreHorizontal, Eye, Pencil
 import type { JobOpening, Department } from '@/lib/types'
 import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { useApi } from '@/hooks/useApi'
-import { useEffect } from 'react'
 import { API_URL } from '@/lib/config'
 
 export default function RecruitmentPage() {
+  const router = useRouter()
   const { data, isLoading: apiLoading, refresh } = useApi()
   const [jobs, setJobs] = useState<JobOpening[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -57,6 +58,9 @@ export default function RecruitmentPage() {
     location: '',
     type: 'full-time' as const,
     description: '',
+    applications: 0,
+    status: 'open',
+    postedDate: '',
   })
 
   const openJobs = jobs.filter((j) => j.status === 'open').length
@@ -69,12 +73,24 @@ export default function RecruitmentPage() {
         title: job.title,
         department: job.department,
         location: job.location,
-        type: job.type,
+        type: job.type as any,
         description: '',
+        applications: job.applications,
+        status: job.status,
+        postedDate: job.postedDate,
       })
     } else {
       setEditingJob(null)
-      setFormData({ title: '', department: '', location: '', type: 'full-time', description: '' })
+      setFormData({ 
+        title: '', 
+        department: '', 
+        location: '', 
+        type: 'full-time', 
+        description: '',
+        applications: 0,
+        status: 'open',
+        postedDate: new Date().toISOString().split('T')[0],
+      })
     }
     setModalOpen(true)
   }
@@ -93,12 +109,7 @@ export default function RecruitmentPage() {
         const response = await fetch(`${API_URL}/job-openings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            applications: 0,
-            status: 'open',
-            postedDate: new Date().toISOString().split('T')[0],
-          }),
+          body: JSON.stringify(formData),
         })
         if (response.ok) refresh()
       }
@@ -182,7 +193,7 @@ export default function RecruitmentPage() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => router.push('/recruitment/hiring-board')}>
           <Eye className="mr-2 h-4 w-4" />
           View Applications
         </DropdownMenuItem>
@@ -204,13 +215,19 @@ export default function RecruitmentPage() {
   return (
     <>
       <PageHeader title="Job Openings" description="Manage job openings and recruitment.">
-        <Button onClick={() => handleOpenModal()}>
-          <Plus className="mr-2 h-4 w-4" />
-          Post New Job
-        </Button>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => window.location.href='/recruitment/hiring-board'}>
+            <Users className="mr-2 h-4 w-4" />
+            Hiring Board
+          </Button>
+          <Button onClick={() => handleOpenModal()}>
+            <Plus className="mr-2 h-4 w-4" />
+            Post New Job
+          </Button>
+        </div>
       </PageHeader>
 
-      <div className="grid gap-6 md:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-3">
         <StatsCard
           title="Total Openings"
           value={jobs.length}
@@ -225,11 +242,6 @@ export default function RecruitmentPage() {
           title="Total Applications"
           value={totalApplications}
           icon={<Users className="h-6 w-6" />}
-        />
-        <StatsCard
-          title="Avg. Time to Fill"
-          value="21 days"
-          icon={<Clock className="h-6 w-6" />}
         />
       </div>
 
@@ -293,24 +305,60 @@ export default function RecruitmentPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Employment Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value: 'full-time' | 'part-time' | 'contract' | 'intern') =>
-                  setFormData({ ...formData, type: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="full-time">Full Time</SelectItem>
-                  <SelectItem value="part-time">Part Time</SelectItem>
-                  <SelectItem value="contract">Contract</SelectItem>
-                  <SelectItem value="intern">Internship</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Employment Type</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(value: 'full-time' | 'part-time' | 'contract' | 'intern') =>
+                    setFormData({ ...formData, type: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full-time">Full Time</SelectItem>
+                    <SelectItem value="part-time">Part Time</SelectItem>
+                    <SelectItem value="intern">Internship</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                    <SelectItem value="on-hold">On Hold</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Applications Count</Label>
+                <Input
+                  type="number"
+                  value={formData.applications}
+                  onChange={(e) => setFormData({ ...formData, applications: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Posted Date</Label>
+                <Input
+                  type="date"
+                  value={formData.postedDate}
+                  onChange={(e) => setFormData({ ...formData, postedDate: e.target.value })}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Job Description</Label>

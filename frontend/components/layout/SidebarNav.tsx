@@ -114,6 +114,11 @@ export function SidebarNav() {
         getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
         getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
       ]),
+      getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, [
+        getItem(<Link href="/recruitment/hiring-board">Hiring Board</Link>, "/recruitment/hiring-board"),
+        getItem(<Link href="/recruitment">Job Openings</Link>, "/recruitment"),
+        getItem(<Link href="/recruitment/applications">Applications</Link>, "/recruitment/applications"),
+      ]),
       getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
       getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
       // Hide top-level Task for Marketing
@@ -155,6 +160,7 @@ export function SidebarNav() {
     if (pathname.startsWith("/invoice")) return [pathname];
     if (pathname.startsWith("/work-management")) return [pathname];
     if (pathname.startsWith("/chat")) return ["/chat"];
+    if (pathname.startsWith("/recruitment")) return [pathname];
     return [];
   };
 
@@ -163,6 +169,7 @@ export function SidebarNav() {
     if (pathname.startsWith("/workspace")) return ["workspace"];
     if (pathname.startsWith("/invoice")) return ["invoice"];
     if (pathname.startsWith("/work-management")) return ["work-management"];
+    if (pathname.startsWith("/recruitment")) return ["recruitment-sub"];
     return [];
   };
  

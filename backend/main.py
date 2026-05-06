@@ -29,7 +29,15 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 @app.get("/")
 async def root():
-    return {"message": "HRMS API is running", "status": "ok"}
+    return {"message": "Welcome to HRMS API"}
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    # Note: API_URL might not be available here directly, using relative path or placeholder
+    return {"url": f"/uploads/{file.filename}"}
 
 @app.post("/chat/upload")
 async def upload_chat_file(file: UploadFile = File(...)):
@@ -223,11 +231,25 @@ async def create_relation(relation: schemas.RelationCreate, db=Depends(get_db)):
 async def read_job_openings(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_job_openings(db, skip, limit)
 @app.post("/job-openings", response_model=schemas.JobOpening)
 async def create_job_opening(job: schemas.JobOpeningCreate, db=Depends(get_db)): return await crud.create_job_opening(db, job)
+@app.put("/job-openings/{job_id}", response_model=schemas.JobOpening)
+async def update_job_opening(job_id: str, job_update: schemas.JobOpeningUpdate, db=Depends(get_db)):
+    return await crud.update_job_opening(db, job_id, job_update)
+@app.delete("/job-openings/{job_id}")
+async def delete_job_opening(job_id: str, db=Depends(get_db)):
+    await crud.delete_job_opening(db, job_id)
+    return {"message": "Job opening deleted successfully"}
 
 @app.get("/applications", response_model=List[schemas.Application])
 async def read_applications(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_applications(db, skip, limit)
 @app.post("/applications", response_model=schemas.Application)
 async def create_application(app: schemas.ApplicationCreate, db=Depends(get_db)): return await crud.create_application(db, app)
+@app.put("/applications/{app_id}", response_model=schemas.Application)
+async def update_application(app_id: str, app_update: schemas.ApplicationUpdate, db=Depends(get_db)):
+    return await crud.update_application(db, app_id, app_update)
+@app.delete("/applications/{app_id}")
+async def delete_application(app_id: str, db=Depends(get_db)):
+    await crud.delete_application(db, app_id)
+    return {"message": "Application deleted successfully"}
 
 @app.get("/interns", response_model=List[schemas.Intern])
 async def read_interns(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_interns(db, skip, limit)
@@ -587,3 +609,31 @@ async def toggle_archive_message(message_id: str, user_id: str, db=Depends(get_d
 async def toggle_complete_message(message_id: str, user_id: str, db=Depends(get_db)):
     status = await crud.toggle_complete_message(db, message_id, user_id)
     return {"isCompleted": status}
+
+@app.post("/chat/messages/{message_id}/reaction")
+async def toggle_reaction(message_id: str, user_id: str, emoji: str, db=Depends(get_db)):
+    reactions = await crud.toggle_reaction(db, message_id, user_id, emoji)
+    if reactions is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"reactions": reactions}
+
+@app.put("/employees/{employee_id}/status")
+async def update_employee_status(employee_id: str, status: Optional[str] = None, emoji: Optional[str] = None, db=Depends(get_db)):
+    return await crud.update_employee_status(db, employee_id, status, emoji)
+
+@app.post("/chat/messages/{message_id}/vote")
+async def vote_on_poll(message_id: str, user_id: str, option_id: str, db=Depends(get_db)):
+    options = await crud.vote_poll(db, message_id, user_id, option_id)
+    if options is None:
+        raise HTTPException(status_code=404, detail="Poll not found")
+    return {"options": options}
+
+@app.post("/chat/typing")
+async def set_typing_status(chat_id: str, user_id: str, is_typing: bool, db=Depends(get_db)):
+    await crud.set_typing_status(db, chat_id, user_id, is_typing)
+    return {"status": "ok"}
+
+@app.get("/chat/typing/{chat_id}")
+async def get_typing_status(chat_id: str, user_id: str, db=Depends(get_db)):
+    typing_users = await crud.get_typing_users(db, chat_id, user_id)
+    return {"typingUsers": typing_users}

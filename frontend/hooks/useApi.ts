@@ -11,10 +11,15 @@ export function useApi() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const refresh = () => setRefreshTrigger(prev => prev + 1);
+
   useEffect(() => {
     let mounted = true;
 
     async function fetchAllData() {
+      setIsLoading(true);
       try {
         const endpoints = [
           { key: 'employees', url: '/employees' },
@@ -81,7 +86,7 @@ export function useApi() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [refreshTrigger]);
 
-  return { data, isLoading, error };
+  return { data, isLoading, error, refresh };
 }

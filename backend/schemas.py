@@ -218,7 +218,9 @@ class JobOpeningUpdate(BaseModel):
     department: Optional[str] = None
     location: Optional[str] = None
     type: Optional[str] = None
+    applications: Optional[int] = None
     status: Optional[str] = None
+    postedDate: Optional[str] = None
 
 class JobOpening(JobOpeningBase):
     id: str
@@ -230,12 +232,29 @@ class ApplicationBase(BaseModel):
     status: str
     appliedDate: str
     resume: Optional[str] = None
+    jobTitle: Optional[str] = None
+    skills: Optional[str] = None
+    source: Optional[str] = None
+    interviewDate: Optional[str] = None
+    interviewTime: Optional[str] = None
+    interviewerName: Optional[str] = None
+    interviewLink: Optional[str] = None
+    interviewNotes: Optional[str] = None
 
 class ApplicationCreate(ApplicationBase):
     pass
 
 class ApplicationUpdate(BaseModel):
     status: Optional[str] = None
+    jobTitle: Optional[str] = None
+    skills: Optional[str] = None
+    source: Optional[str] = None
+    resume: Optional[str] = None
+    interviewDate: Optional[str] = None
+    interviewTime: Optional[str] = None
+    interviewerName: Optional[str] = None
+    interviewLink: Optional[str] = None
+    interviewNotes: Optional[str] = None
 
 class Application(ApplicationBase):
     id: str
@@ -797,6 +816,17 @@ class MarketingMonthlyReport(MarketingMonthlyReportBase):
         from_attributes = True
 
 
+class PollOption(BaseModel):
+    id: str
+    text: str
+    votes: List[str] = [] # User IDs
+
+class Poll(BaseModel):
+    question: str
+    options: List[PollOption]
+    isMultiple: bool = False
+    expiresAt: Optional[str] = None
+
 class ChatMessageBase(BaseModel):
     senderId: str
     receiverId: str
@@ -816,6 +846,10 @@ class ChatMessageBase(BaseModel):
     seenBy: List[str] = []
     archivedBy: List[str] = []
     completedBy: List[str] = []
+    reactions: Optional[dict] = {} # { emoji: [userId1, userId2] }
+    poll: Optional[Poll] = None
+    isVoice: bool = False
+    voiceDuration: Optional[float] = None
 
 class ChatMessageCreate(ChatMessageBase):
     pass

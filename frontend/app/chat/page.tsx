@@ -52,7 +52,12 @@ import {
   BellOff,
   Archive,
   Link as LinkIcon,
-  Pin
+  Pin,
+  Mic,
+  BarChart2,
+  Play,
+  Pause,
+  Square
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,11 +127,28 @@ export default function ChatPage() {
   const [globalSavedMessages, setGlobalSavedMessages] = useState<any[]>([]);
   const [showRightSidebar, setShowRightSidebar] = useState(false);
   const [chatFiles, setChatFiles] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [newStatus, setNewStatus] = useState("");
+  const [newStatusEmoji, setNewStatusEmoji] = useState("💬");
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [showCreatePoll, setShowCreatePoll] = useState(false);
+  const [pollData, setPollData] = useState({ 
+    question: "", 
+    options: ["", ""], 
+    isMultiple: false 
+  });
+  
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shouldScrollToBottom = useRef(true);
+  const mediaRecorderRef = useRef<any>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<any>(null);
+  const typingTimeoutRef = useRef<any>(null);
 
-  const employees = apiData?.employees || [];
 
   const scrollToBottom = () => {
     if (scrollRef.current && shouldScrollToBottom.current) {
@@ -139,20 +161,47 @@ export default function ChatPage() {
     scrollToBottom();
   }, [currentMessages]);
 
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch(`${API_URL}/employees`);
+      if (res.ok) {
+        setEmployees(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+    }
+  };
+
+  const fetchTypingStatus = async () => {
+    if (!user || !selectedChat) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/typing/${selectedChat.id}?user_id=${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTypingUsers(data.typingUsers);
+      }
+    } catch (err) {
+      console.error("Error fetching typing status:", err);
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchUnreadCounts();
       fetchChatSummaries();
       fetchChannels();
       fetchSavedMessages();
+      fetchEmployees();
       const interval = setInterval(() => {
         fetchUnreadCounts();
         fetchChatSummaries();
         fetchSavedMessages();
+        fetchEmployees();
+        fetchTypingStatus();
       }, 5000);
       return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user, selectedChat]);
 
   const fetchChannels = async () => {
     try {
@@ -351,16 +400,20 @@ export default function ChatPage() {
     }
   }, [selectedChat, user, fetchMessages, fetchGroups]);
 
-  const handleSendMessage = async () => {
-    if ((!message.trim() && !pendingFile) || !selectedChat || !user) return;
+  const handleSendMessage = async (extraData: any = null) => {
+    if (!extraData && (!message.trim() && !pendingFile) || !selectedChat || !user) return;
 
-    const payload: any = {
+    let payload: any = {
       senderId: user.id,
       receiverId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : selectedChat.id,
       groupId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? selectedChat.id : null,
-      text: message || (pendingFile ? `Sent a file: ${pendingFile.name}` : ""),
+      text: message || (pendingFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : "")),
       type: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : "personal"
     };
+
+    if (extraData) {
+      payload = { ...payload, ...extraData };
+    }
 
     if (replyingTo) {
       payload.replyToId = replyingTo.id;
@@ -440,14 +493,16 @@ export default function ChatPage() {
 
   const renderMessageText = (text: string) => {
     if (!text) return "";
+    
+    // First, handle @mentions
     const parts = text.split(/(@\w+)/g);
-    return parts.map((part, i) => {
+    const withMentions = parts.map((part, i) => {
       if (part.startsWith("@")) {
         const name = part.substring(1);
         const isMe = user?.name?.toLowerCase().includes(name.toLowerCase());
         return (
           <span 
-            key={i} 
+            key={`mention-${i}`} 
             className={cn(
               "px-1.5 py-0.5 rounded-md font-bold text-[13px] transition-all cursor-pointer inline-block",
               isMe ? "bg-amber-100 text-amber-700 hover:bg-amber-200" : "bg-brand-teal/10 text-brand-teal hover:bg-brand-teal/20"
@@ -457,8 +512,19 @@ export default function ChatPage() {
           </span>
         );
       }
-      return part;
+      
+      // Then, handle search highlighting for non-mention parts
+      if (!messageSearchQuery) return part;
+      
+      const searchParts = part.split(new RegExp(`(${messageSearchQuery})`, 'gi'));
+      return searchParts.map((sp, j) => 
+        sp.toLowerCase() === messageSearchQuery.toLowerCase() ? 
+          <mark key={`search-${i}-${j}`} className="bg-yellow-200 text-slate-900 rounded-sm px-0.5">{sp}</mark> : 
+          sp
+      );
     });
+
+    return withMentions;
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -661,6 +727,147 @@ export default function ChatPage() {
     }
   };
 
+  const handleToggleReaction = async (msgId: string, emoji: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/messages/${msgId}/reaction?user_id=${user.id}&emoji=${encodeURIComponent(emoji)}`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        fetchMessages();
+      }
+    } catch (err) {
+      console.error("Error toggling reaction:", err);
+    }
+  };
+
+  const handleUpdateStatus = async (status: string, emoji: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_URL}/employees/${user.id}/status?status=${encodeURIComponent(status)}&emoji=${encodeURIComponent(emoji)}`, {
+        method: 'PUT'
+      });
+      if (res.ok) {
+        const updatedUser = await res.json();
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        window.dispatchEvent(new Event('storage'));
+        alert("Status updated!");
+        setShowStatusPicker(false);
+      }
+    } catch (err) {
+      console.error("Error updating status:", err);
+    }
+  };
+
+  // Typing logic
+  const handleTyping = () => {
+    if (!user || !selectedChat) return;
+    
+    // Notify server we are typing
+    fetch(`${API_URL}/chat/typing?chat_id=${selectedChat.id}&user_id=${user.id}&is_typing=true`, { method: 'POST' });
+    
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    
+    typingTimeoutRef.current = setTimeout(() => {
+      fetch(`${API_URL}/chat/typing?chat_id=${selectedChat.id}&user_id=${user.id}&is_typing=false`, { method: 'POST' });
+    }, 3000);
+  };
+
+  // Voice Recording logic
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioFile = new File([audioBlob], "voice_message.webm", { type: 'audio/webm' });
+        
+        // Upload and send
+        const formData = new FormData();
+        formData.append('file', audioFile);
+        
+        try {
+          const res = await fetch(`${API_URL}/chat/upload`, {
+            method: 'POST',
+            body: formData
+          });
+          if (res.ok) {
+            const data = await res.json();
+            handleSendMessage({ 
+              isVoice: true, 
+              attachmentUrl: data.url, 
+              attachmentName: "Voice Message",
+              voiceDuration: recordingDuration
+            });
+          }
+        } catch (err) {
+          console.error("Error uploading voice message:", err);
+        }
+        
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Error starting recording:", err);
+      alert("Please allow microphone access to record voice messages.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      clearInterval(recordingTimerRef.current);
+    }
+  };
+
+  // Poll logic
+  const handleCreatePoll = async () => {
+    if (!pollData.question || pollData.options.some(o => !o)) return;
+    
+    const pollPayload = {
+      question: pollData.question,
+      isMultiple: pollData.isMultiple,
+      options: pollData.options.map((opt, i) => ({
+        id: `opt-${i}`,
+        text: opt,
+        votes: []
+      }))
+    };
+    
+    handleSendMessage({ poll: pollPayload, text: `Poll: ${pollData.question}` });
+    setShowCreatePoll(false);
+    setPollData({ question: "", options: ["", ""], isMultiple: false });
+  };
+
+  const handleVote = async (messageId: string, optionId: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/messages/${messageId}/vote?user_id=${user.id}&option_id=${optionId}`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        fetchMessages();
+      }
+    } catch (err) {
+      console.error("Error voting:", err);
+    }
+  };
+
+
   const filteredLaterMessages = useMemo(() => {
     return globalSavedMessages.filter((msg: any) => {
       if (laterTab === "Archived") {
@@ -750,17 +957,19 @@ export default function ChatPage() {
         selectedChat && "hidden md:flex" // Hide list on mobile when chat is open
       )}>
         <div className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-foreground">Messages</h1>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-brand-teal h-8 w-8"
-              onClick={() => setShowNewChat(true)}
-            >
-              <UserPlus className="w-5 h-5" />
-            </Button>
-          </div>
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold text-foreground">Messages</h1>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-brand-teal h-8 w-8"
+                  onClick={() => setShowNewChat(true)}
+                >
+                  <UserPlus className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
           
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -840,7 +1049,14 @@ export default function ChatPage() {
                         <span className="text-[10px] font-semibold text-muted-foreground">{chat.time}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-[12px] text-muted-foreground truncate">{chat.lastMessage}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {employees.find(e => e.id === chat.id)?.statusEmoji && (
+                            <span className="text-[10px] shrink-0">{employees.find(e => e.id === chat.id)?.statusEmoji}</span>
+                          )}
+                          <p className="text-[12px] text-muted-foreground truncate">
+                            {employees.find(e => e.id === chat.id)?.customStatus || chat.lastMessage}
+                          </p>
+                        </div>
                         {unreadCounts[chat.id] > 0 && (
                           <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold">
                             {unreadCounts[chat.id]}
@@ -1204,7 +1420,11 @@ export default function ChatPage() {
                 </div>
                 <div>
                   <h2 className="font-bold text-slate-800">{selectedChat.name}</h2>
-                  {selectedChat.type === 'group' ? (
+                  {typingUsers.length > 0 ? (
+                    <p className="text-[11px] font-bold text-brand-teal animate-pulse">
+                      {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
+                    </p>
+                  ) : selectedChat.type === 'group' ? (
                     <div 
                       className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-full pr-2 transition-colors py-0.5"
                       onClick={() => setShowGroupMembers(true)}
@@ -1430,7 +1650,7 @@ export default function ChatPage() {
                                   <div className="truncate">{msg.replyToText}</div>
                                 </div>
                               )}
-                              {msg.attachmentName && (
+                              {msg.attachmentName && !msg.isVoice && (
                                 <div className={cn(
                                   "flex items-center gap-3 p-3 rounded-xl mb-2 border",
                                   msg.isMe ? "bg-white/10 border-white/20" : "bg-gray-50 border-border"
@@ -1455,11 +1675,111 @@ export default function ChatPage() {
                                   </Button>
                                 </div>
                               )}
-                              {msg.text}
+
+                              {msg.isVoice && (
+                                <div className={cn(
+                                  "flex items-center gap-3 p-2 rounded-xl mb-2 min-w-[200px]",
+                                  msg.isMe ? "bg-white/10" : "bg-gray-50"
+                                )}>
+                                  <Button 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    className={cn("h-9 w-9 rounded-full shrink-0", msg.isMe ? "text-white hover:bg-white/20" : "text-brand-teal hover:bg-brand-teal/10")}
+                                    onClick={async () => {
+                                      try {
+                                        const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+                                        const audio = new Audio(fullUrl);
+                                        await audio.play();
+                                      } catch (err) {
+                                        console.error("Audio playback failed:", err);
+                                        alert("Could not play voice message. The file might be missing or unsupported.");
+                                      }
+                                    }}
+                                  >
+                                    <Play className="w-5 h-5 fill-current" />
+                                  </Button>
+                                  <div className="flex-1 space-y-1">
+                                    <div className="h-1 bg-current opacity-20 rounded-full w-full" />
+                                    <div className="flex justify-between text-[9px] opacity-70 font-bold uppercase">
+                                      <span>{msg.voiceDuration ? `${Math.floor(msg.voiceDuration / 60)}:${String(Math.floor(msg.voiceDuration % 60)).padStart(2, '0')}` : "0:00"}</span>
+                                      <span>Voice Note</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {msg.poll && (
+                                <div className={cn(
+                                  "p-4 rounded-xl border mb-2 min-w-[240px]",
+                                  msg.isMe ? "bg-white/10 border-white/20" : "bg-white border-border"
+                                )}>
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <BarChart2 className="w-4 h-4" />
+                                    <h4 className="font-bold text-[14px]">{msg.poll.question}</h4>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {msg.poll.options.map((option: any) => {
+                                      const totalVotes = msg.poll.options.reduce((acc: number, opt: any) => acc + opt.votes.length, 0);
+                                      const percentage = totalVotes > 0 ? (option.votes.length / totalVotes) * 100 : 0;
+                                      const hasVoted = option.votes.includes(user?.id);
+
+                                      return (
+                                        <button 
+                                          key={option.id}
+                                          onClick={() => handleVote(msg.id, option.id)}
+                                          className="w-full text-left group/opt relative overflow-hidden rounded-lg border border-border p-2.5 transition-all hover:border-brand-teal/50"
+                                        >
+                                          <div 
+                                            className="absolute left-0 top-0 bottom-0 bg-brand-teal/10 transition-all duration-500" 
+                                            style={{ width: `${percentage}%` }}
+                                          />
+                                          <div className="relative flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2">
+                                              {hasVoted && <Check className="w-3.5 h-3.5 text-brand-teal" />}
+                                              <span className="text-[12px] font-medium">{option.text}</span>
+                                            </div>
+                                            <span className="text-[10px] font-bold text-muted-foreground">{option.votes.length}</span>
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <p className="mt-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
+                                    {msg.poll.options.reduce((acc: number, opt: any) => acc + opt.votes.length, 0)} votes total
+                                  </p>
+                                </div>
+                              )}
+
+                              {renderMessageText(msg.text)}
                             </>
                           )}
                           {msg.isEdited && <span className="ml-2 text-[8px] opacity-60 italic">(edited)</span>}
                         </div>
+
+                        {/* Reactions Display */}
+                        {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                          <div className={cn(
+                            "flex flex-wrap gap-1 mt-1",
+                            msg.isMe ? "justify-end" : "justify-start"
+                          )}>
+                            {Object.entries(msg.reactions).map(([emoji, users]: [string, any]) => (
+                              <button
+                                key={emoji}
+                                onClick={() => handleToggleReaction(msg.id, emoji)}
+                                className={cn(
+                                  "flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] border transition-all",
+                                  users.includes(user?.id) 
+                                    ? "bg-brand-teal/10 border-brand-teal/30 text-brand-teal" 
+                                    : "bg-white border-border text-muted-foreground hover:bg-gray-50"
+                                )}
+                                title={users.map((id: string) => employees.find(e => e.id === id)?.name || "User").join(", ")}
+                              >
+                                <span>{emoji}</span>
+                                <span className="font-bold">{users.length}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         
                         <div className={cn(
                           "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover/msg:opacity-100 transition-opacity",
@@ -1530,6 +1850,20 @@ export default function ChatPage() {
                                   </DropdownMenuItem>
                                 </>
                               )}
+                              <DropdownMenuSeparator />
+                              <div className="p-2 flex flex-wrap gap-1 justify-center">
+                                {["👍", "❤️", "😂", "😮", "😢", "🔥"].map(emoji => (
+                                  <Button
+                                    key={emoji}
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-full hover:bg-brand-teal/10 hover:text-brand-teal text-lg p-0"
+                                    onClick={() => handleToggleReaction(msg.id, emoji)}
+                                  >
+                                    {emoji}
+                                  </Button>
+                                ))}
+                              </div>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -1596,38 +1930,85 @@ export default function ChatPage() {
                 </Button>
                 <Input 
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={(e) => {
+                    setMessage(e.target.value);
+                    handleTyping();
+                  }}
                   placeholder={`Type your message to ${selectedChat.name}...`}
                   className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-sm placeholder:text-muted-foreground h-11"
                 />
-                <div className="relative">
-                <div className="relative">
-                  <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-                    <PopoverTrigger asChild>
+                <div className="flex items-center gap-1">
+                  {isRecording ? (
+                    <div className="flex items-center gap-3 bg-red-50 px-3 py-1 rounded-full animate-in fade-in zoom-in-95">
+                      <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                      <span className="text-[11px] font-bold text-red-500 tabular-nums">
+                        {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+                      </span>
                       <Button 
-                        type="button" 
+                        type="button"
                         variant="ghost" 
                         size="icon" 
-                        className={cn("text-muted-foreground hover:bg-white rounded-full", showEmojiPicker && "bg-brand-teal/10 text-brand-teal")}
+                        className="h-7 w-7 text-red-500 hover:bg-red-100 rounded-full"
+                        onClick={stopRecording}
                       >
-                        <Smile className="w-5 h-5" />
+                        <Square className="w-4 h-4 fill-current" />
                       </Button>
-                    </PopoverTrigger>
-                    <PopoverContent side="top" align="end" className="p-0 border-none bg-transparent shadow-none w-auto mb-4 z-[100]">
-                      <EmojiPicker 
-                        onEmojiSelect={(emoji) => {
-                          setMessage(prev => prev + emoji);
-                          setShowEmojiPicker(false);
-                        }}
-                        onClose={() => setShowEmojiPicker(false)}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Button 
+                        type="button"
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-muted-foreground hover:bg-white rounded-full h-9 w-9"
+                        onClick={() => setShowCreatePoll(true)}
+                        title="Create Poll"
+                      >
+                        <BarChart2 className="w-5 h-5" />
+                      </Button>
+                      <Button 
+                        type="button"
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-muted-foreground hover:bg-white rounded-full h-9 w-9"
+                        onClick={startRecording}
+                        title="Voice Message"
+                      >
+                        <Mic className="w-5 h-5" />
+                      </Button>
+                    </>
+                  )}
+                  <div className="relative">
+                    <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="icon" 
+                          className={cn("text-muted-foreground hover:bg-white rounded-full", showEmojiPicker && "bg-brand-teal/10 text-brand-teal")}
+                        >
+                          <Smile className="w-5 h-5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent side="top" align="end" className="p-0 border-none bg-transparent shadow-none w-auto mb-4 z-[100]">
+                        <EmojiPicker 
+                          onEmojiSelect={(emoji) => {
+                            setMessage(prev => prev + emoji);
+                            setShowEmojiPicker(false);
+                          }}
+                          onClose={() => setShowEmojiPicker(false)}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
                 <Button 
                   type="submit"
-                  className="bg-brand-teal hover:bg-brand-teal-light text-white rounded-full w-11 h-11 p-0 shadow-md"
+                  disabled={!message.trim() && !pendingFile && !isRecording}
+                  className={cn(
+                    "bg-brand-teal hover:bg-brand-teal-light text-white rounded-full w-11 h-11 p-0 shadow-md transition-all",
+                    (message.trim() || pendingFile || isRecording) ? "scale-100 opacity-100" : "scale-90 opacity-80"
+                  )}
                 >
                   <Send className="w-5 h-5" />
                 </Button>
@@ -2035,6 +2416,85 @@ export default function ChatPage() {
               className="bg-brand-teal hover:bg-brand-teal/90 text-white rounded-xl px-8"
             >
               {editingChannel ? "Save Changes" : "Create Channel"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Poll Dialog */}
+      <Dialog open={showCreatePoll} onOpenChange={setShowCreatePoll}>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-brand-teal">Create a Poll</DialogTitle>
+            <DialogDescription>
+              Ask a question and gather feedback from the team.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div className="grid gap-2">
+              <Label className="text-[12px] font-bold text-slate-500 uppercase">Question</Label>
+              <Input
+                value={pollData.question}
+                onChange={(e) => setPollData({ ...pollData, question: e.target.value })}
+                placeholder="What would you like to ask?"
+                className="rounded-xl h-11"
+              />
+            </div>
+            <div className="grid gap-3">
+              <Label className="text-[12px] font-bold text-slate-500 uppercase">Options</Label>
+              {pollData.options.map((opt, i) => (
+                <div key={i} className="flex gap-2">
+                  <Input
+                    value={opt}
+                    onChange={(e) => {
+                      const newOpts = [...pollData.options];
+                      newOpts[i] = e.target.value;
+                      setPollData({ ...pollData, options: newOpts });
+                    }}
+                    placeholder={`Option ${i + 1}`}
+                    className="rounded-xl h-10"
+                  />
+                  {pollData.options.length > 2 && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-red-500 shrink-0"
+                      onClick={() => {
+                        const newOpts = pollData.options.filter((_, idx) => idx !== i);
+                        setPollData({ ...pollData, options: newOpts });
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-brand-teal font-bold h-8 w-fit"
+                onClick={() => setPollData({ ...pollData, options: [...pollData.options, ""] })}
+              >
+                <Plus className="w-4 h-4 mr-1" /> Add Option
+              </Button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="multiple" 
+                checked={pollData.isMultiple} 
+                onCheckedChange={(checked) => setPollData({ ...pollData, isMultiple: !!checked })}
+              />
+              <label htmlFor="multiple" className="text-sm font-medium leading-none">Allow multiple choices</label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowCreatePoll(false)} className="rounded-xl">Cancel</Button>
+            <Button 
+              onClick={handleCreatePoll}
+              disabled={!pollData.question.trim() || pollData.options.some(o => !o.trim())}
+              className="bg-brand-teal hover:bg-brand-teal/90 text-white rounded-xl px-8"
+            >
+              Create Poll
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,6 +1,7 @@
 "use client";
  
 import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { 
@@ -332,7 +333,9 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
           icon={<CalendarIcon className="w-5 h-5 text-muted-foreground" />} 
         />
 
-        <StatCard title="New Applications" value="24" trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
+        <Link href="/recruitment/hiring-board">
+          <StatCard title="New Applications" value="24" trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
+        </Link>
         <StatCard title="Asset Requests" value="03" trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
       </div>
  
@@ -340,8 +343,10 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white border border-border rounded-xl shadow-sm">
             <div className="p-5 border-b border-border flex justify-between items-center">
-              <h3 className="font-bold text-lg">Recent Leave Requests</h3>
-              <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
+              <h3 className="font-bold text-lg text-[#111827]">Recent Leave Requests</h3>
+              <Link href="/attendance/leave">
+                <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
+              </Link>
             </div>
             <div className="p-0">
               {leaves.length > 0 ? leaves.slice(0, 5).map((leave, i) => (
@@ -370,7 +375,12 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
           </div>
  
           <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
-            <h3 className="font-bold text-lg mb-4">Upcoming Interviews</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg text-[#111827]">Upcoming Interviews</h3>
+              <Link href="/recruitment/hiring-board">
+                <Button variant="ghost" size="sm" className="text-brand-teal">Hiring Board</Button>
+              </Link>
+            </div>
             <div className="space-y-4">
               {[
                 { candidate: 'John Robert', role: 'Senior React Dev', time: 'Today, 2:00 PM' },
