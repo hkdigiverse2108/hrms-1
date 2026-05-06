@@ -79,33 +79,26 @@ export function SidebarNav() {
 
     const workManagementChildren: MenuItem[] = [];
 
+    // All employees (including Sales/Marketing) see Daily Progress
     if (isSalesDept && !isAdminRole) {
-      // Sales department employee only sees Sales tab
       workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
     } else if (isMarketingDept && !isAdminRole) {
-      // Marketing department employee only sees Marketing Reports tab
       workManagementChildren.push(getItem(<Link href="/work-management/marketing-reports">Marketing Reports</Link>, "/work-management/marketing-reports"));
     } else {
-      // Others see Projects and Tasks
       workManagementChildren.push(
         getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"),
         getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks")
       );
-      
-      // Admin also sees Sales tab
-      if (isAdminRole) {
-        workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
-      }
+    }
 
-      // Clients tab - ONLY for ADMIN
-      if (isAdminRole) {
-        workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
-      }
-
-      // Marketing Reports - for Admin (Marketing already handled above)
-      if (isAdminRole) {
-        workManagementChildren.push(getItem(<Link href="/work-management/marketing-reports">Marketing Reports</Link>, "/work-management/marketing-reports"));
-      }
+    // Common for all departments in Work Management
+    workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
+    
+    // Admin specific additions
+    if (isAdminRole) {
+      if (!isSalesDept) workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
+      workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
+      if (!isMarketingDept) workManagementChildren.push(getItem(<Link href="/work-management/marketing-reports">Marketing Reports</Link>, "/work-management/marketing-reports"));
     }
 
     return [
@@ -116,6 +109,7 @@ export function SidebarNav() {
         getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"),
         getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
         getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
+        getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"),
       ]),
       getItem("Payroll", "payroll-sub", <DollarSign className="w-5 h-5" />, [
         getItem(<Link href="/payroll/salary-structure">Salary Structure</Link>, "/payroll/salary-structure"),
@@ -154,6 +148,7 @@ export function SidebarNav() {
     if (pathname === "/") return ["/"];
     if (pathname.startsWith("/employees")) {
       if (pathname === "/employees/attendance") return ["/employees/attendance"];
+      if (pathname === "/employees/documents") return ["/employees/documents"];
       return [pathname];
     }
     if (pathname.startsWith("/workspace")) return [pathname];

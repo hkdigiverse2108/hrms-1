@@ -938,3 +938,56 @@ class ChatChannelUpdate(BaseModel):
 
 class ChatChannel(ChatChannelBase):
     id: str
+
+# Employee Document Schemas
+class EmployeeDocumentBase(BaseModel):
+    employeeId: str
+    employeeName: str
+    documentName: str
+    category: str # ID Proof, Education, Experience, Other
+    fileName: str
+    fileUrl: str
+    uploadDate: str
+    expiryDate: Optional[str] = None
+    status: str = "Active" # Active, Expired, Revoked
+    remarks: Optional[str] = None
+
+class EmployeeDocumentCreate(EmployeeDocumentBase):
+    pass
+
+class EmployeeDocumentUpdate(BaseModel):
+    documentName: Optional[str] = None
+    category: Optional[str] = None
+    expiryDate: Optional[str] = None
+    status: Optional[str] = None
+    remarks: Optional[str] = None
+
+class EmployeeDocument(EmployeeDocumentBase):
+    id: str
+
+# Employee Daily Progress/Report Schemas
+class EmployeeDailyReportBase(BaseModel):
+    employeeId: str
+    employeeName: str
+    department: str
+    date: str
+    tasksCompleted: List[str]
+    tasksInProgress: List[str]
+    challenges: Optional[str] = None
+    nextDayPlan: Optional[str] = None
+    hoursWorked: float = 8.0
+    status: str = "Submitted" # Submitted, Reviewed
+
+class EmployeeDailyReportCreate(EmployeeDailyReportBase):
+    pass
+
+class EmployeeDailyReportUpdate(BaseModel):
+    tasksCompleted: Optional[List[str]] = None
+    tasksInProgress: Optional[List[str]] = None
+    challenges: Optional[str] = None
+    nextDayPlan: Optional[str] = None
+    hoursWorked: Optional[float] = None
+    status: Optional[str] = None
+
+class EmployeeDailyReport(EmployeeDailyReportBase):
+    id: str

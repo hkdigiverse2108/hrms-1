@@ -45,6 +45,8 @@ export default function TasksPage() {
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [logFilter, setLogFilter] = useState<{taskId?: string, taskTitle?: string}>({});
   const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
+  const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -235,6 +237,9 @@ export default function TasksPage() {
     setEditingCell(null);
   };
 
+  const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)));
+  const showTableView = selectedDepartment.toLowerCase() === "graphics" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "graphics");
+
   const filteredTasks = tasks.filter(t => {
     const assignee = employees.find(e => e.id === t.assignedToId);
     const taskDept = assignee?.department;
@@ -268,12 +273,18 @@ export default function TasksPage() {
                           t.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.assignedToName?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    return matchesSearch;
+    if (!matchesSearch) return false;
+
+    // Date Filtering
+    if (!showAllTasks) {
+      const taskDate = showTableView ? t.postingDate : t.dueDate;
+      if (taskDate !== dateFilter) return false;
+    }
+
+    return true;
   });
 
-  const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)));
 
-  const showTableView = selectedDepartment.toLowerCase() === "graphics" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "graphics");
 
 
   const isOverdue = (dateString: string, status: string) => {
@@ -374,8 +385,39 @@ export default function TasksPage() {
           />
         </div>
         
-        {isAdmin && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">
+            <Button 
+              variant={!showAllTasks ? "secondary" : "ghost"} 
+              size="sm" 
+              className={`h-7 text-[11px] font-bold px-3 ${!showAllTasks ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+              onClick={() => setShowAllTasks(false)}
+            >
+              Today
+            </Button>
+            <Button 
+              variant={showAllTasks ? "secondary" : "ghost"} 
+              size="sm" 
+              className={`h-7 text-[11px] font-bold px-3 ${showAllTasks ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+              onClick={() => setShowAllTasks(true)}
+            >
+              All Tasks
+            </Button>
+          </div>
+
+          {!showAllTasks && (
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 h-9">
+              <Calendar className="w-3.5 h-3.5 text-brand-teal" />
+              <input 
+                type="date" 
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="text-xs font-bold bg-transparent outline-none border-none p-0"
+              />
+            </div>
+          )}
+
+          {isAdmin && (
             <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
               <SelectTrigger className="h-9 w-[180px] text-xs font-bold bg-white">
                 <div className="flex items-center gap-2">
@@ -390,8 +432,8 @@ export default function TasksPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden">

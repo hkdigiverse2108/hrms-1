@@ -669,3 +669,42 @@ async def set_typing_status(chat_id: str, user_id: str, is_typing: bool, db=Depe
 async def get_typing_status(chat_id: str, user_id: str, db=Depends(get_db)):
     typing_users = await crud.get_typing_users(db, chat_id, user_id)
     return {"typingUsers": typing_users}
+
+# Employee Document Endpoints
+@app.post("/employee-documents", response_model=schemas.EmployeeDocument)
+async def create_employee_document(document: schemas.EmployeeDocumentCreate, db=Depends(get_db)):
+    return await crud.create_employee_document(db, document)
+
+@app.get("/employee-documents", response_model=List[schemas.EmployeeDocument])
+async def read_employee_documents(employeeId: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_employee_documents(db, employee_id=employeeId)
+
+@app.put("/employee-documents/{doc_id}", response_model=schemas.EmployeeDocument)
+async def update_employee_document(doc_id: str, doc_update: schemas.EmployeeDocumentUpdate, db=Depends(get_db)):
+    updated = await crud.update_employee_document(db, doc_id, doc_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return updated
+
+@app.delete("/employee-documents/{doc_id}")
+async def delete_employee_document(doc_id: str, db=Depends(get_db)):
+    success = await crud.delete_employee_document(db, doc_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"message": "Document deleted successfully"}
+
+# Employee Daily Report Endpoints
+@app.post("/employee-daily-reports", response_model=schemas.EmployeeDailyReport)
+async def create_daily_report(report: schemas.EmployeeDailyReportCreate, db=Depends(get_db)):
+    return await crud.create_employee_daily_report(db, report)
+
+@app.get("/employee-daily-reports", response_model=List[schemas.EmployeeDailyReport])
+async def read_daily_reports(employeeId: Optional[str] = None, department: Optional[str] = None, date: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_employee_daily_reports(db, employee_id=employeeId, department=department, date=date)
+
+@app.put("/employee-daily-reports/{report_id}", response_model=schemas.EmployeeDailyReport)
+async def update_daily_report(report_id: str, report_update: schemas.EmployeeDailyReportUpdate, db=Depends(get_db)):
+    updated = await crud.update_employee_daily_report(db, report_id, report_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return updated

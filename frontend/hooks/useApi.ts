@@ -39,7 +39,9 @@ export function useApi() {
           { key: 'assets', url: '/assets' },
           { key: 'expenseClaims', url: '/expense-claims' },
           { key: 'holidays', url: '/holidays' },
-          { key: 'kpiRecords', url: '/kpi-records' }
+          { key: 'kpiRecords', url: '/kpi-records' },
+          { key: 'employeeDocuments', url: '/employee-documents' },
+          { key: 'employeeDailyReports', url: '/employee-daily-reports' }
         ];
 
         const requests = endpoints.map(ep => 

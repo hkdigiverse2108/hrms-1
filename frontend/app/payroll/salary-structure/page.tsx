@@ -137,10 +137,10 @@ export default function SalaryStructurePage() {
         const emp = (employees as any[])?.find(e => e.id === record.employeeId)
         return emp?.name || 'Unknown'
     }},
-    { key: 'monthlyGross' as const, header: 'Monthly Gross', render: (val: number) => `$${val.toLocaleString()}` },
-    { key: 'basic' as const, header: 'Basic', render: (val: number) => `$${val.toLocaleString()}` },
-    { key: 'pf' as const, header: 'PF', render: (val: number) => `$${val.toLocaleString()}` },
-    { key: 'tds' as const, header: 'TDS', render: (val: number) => `$${val.toLocaleString()}` },
+    { key: 'monthlyGross' as const, header: 'Monthly Gross', render: (record: any) => `$${record.monthlyGross?.toLocaleString() || 0}` },
+    { key: 'basic' as const, header: 'Basic', render: (record: any) => `$${record.basic?.toLocaleString() || 0}` },
+    { key: 'pf' as const, header: 'PF', render: (record: any) => `$${record.pf?.toLocaleString() || 0}` },
+    { key: 'tds' as const, header: 'TDS', render: (record: any) => `$${record.tds?.toLocaleString() || 0}` },
   ]
 
   const renderActions = (record: any) => (

@@ -85,17 +85,17 @@ export default function BonusesPage() {
   }
 
   const columns = [
-    { key: 'employeeId' as const, header: 'Employee', render: (id: string) => {
-        const emp = (employees as any[])?.find(e => e.id === id)
-        return emp?.name || id
+    { key: 'employeeId' as const, header: 'Employee', render: (record: any) => {
+        const emp = (employees as any[])?.find(e => e.id === record.employeeId)
+        return emp?.name || record.employeeId
     }},
-    { key: 'type' as const, header: 'Type', render: (val: string) => (
-        <span className={val === 'bonus' ? 'text-emerald-600 font-bold uppercase text-[10px]' : 'text-rose-600 font-bold uppercase text-[10px]'}>
-            {val}
+    { key: 'type' as const, header: 'Type', render: (record: any) => (
+        <span className={record.type === 'bonus' ? 'text-emerald-600 font-bold uppercase text-[10px]' : 'text-rose-600 font-bold uppercase text-[10px]'}>
+            {record.type}
         </span>
     )},
-    { key: 'amount' as const, header: 'Amount', render: (val: number) => `$${val.toLocaleString()}` },
-    { key: 'month' as const, header: 'Period', render: (val: string, record: any) => `${val} ${record.year}` },
+    { key: 'amount' as const, header: 'Amount', render: (record: any) => `$${record.amount?.toLocaleString() || 0}` },
+    { key: 'month' as const, header: 'Period', render: (record: any) => `${record.month} ${record.year}` },
     { key: 'reason' as const, header: 'Reason' },
   ]
 

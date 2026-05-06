@@ -1387,3 +1387,69 @@ async def get_typing_users(db, chat_id: str, current_user_id: str):
     # Get user names
     users = await db.employees.find({"_id": {"$in": [ObjectId(uid) for uid in user_ids]}}).to_list(length=100)
     return [user["name"] for user in users]
+
+# Employee Document CRUD
+async def create_employee_document(db, document: schemas.EmployeeDocumentCreate):
+    doc_dict = document.dict()
+    result = await db.employee_documents.insert_one(doc_dict)
+    doc_dict["id"] = str(result.inserted_id)
+    # Log activity
+    await log_task_activity(db, None, "Document Uploaded", doc_dict["employeeId"], doc_dict["employeeName"], f"Uploaded document: {doc_dict['documentName']}")
+    return doc_dict
+
+async def get_employee_documents(db, employee_id: str = None):
+    query = {}
+    if employee_id:
+        query["employeeId"] = employee_id
+    cursor = db.employee_documents.find(query).sort("uploadDate", -1)
+    docs = []
+    async for doc in cursor:
+        docs.append(fix_id(doc))
+    return docs
+
+async def update_employee_document(db, doc_id: str, doc_update: schemas.EmployeeDocumentUpdate):
+    update_data = doc_update.dict(exclude_unset=True)
+    if not update_data:
+        doc = await db.employee_documents.find_one({"_id": ObjectId(doc_id)})
+        return fix_id(doc)
+    
+    await db.employee_documents.update_one({"_id": ObjectId(doc_id)}, {"$set": update_data})
+    doc = await db.employee_documents.find_one({"_id": ObjectId(doc_id)})
+    return fix_id(doc)
+
+async def delete_employee_document(db, doc_id: str):
+    result = await db.employee_documents.delete_one({"_id": ObjectId(doc_id)})
+    return result.deleted_count > 0
+
+# Employee Daily Report CRUD
+async def create_employee_daily_report(db, report: schemas.EmployeeDailyReportCreate):
+    report_dict = report.dict()
+    result = await db.employee_daily_reports.insert_one(report_dict)
+    report_dict["id"] = str(result.inserted_id)
+    # Log activity
+    await log_task_activity(db, None, "Daily Report Submitted", report_dict["employeeId"], report_dict["employeeName"], f"Submitted daily report for {report_dict['date']}")
+    return report_dict
+
+async def get_employee_daily_reports(db, employee_id: str = None, department: str = None, date: str = None):
+    query = {}
+    if employee_id:
+        query["employeeId"] = employee_id
+    if department:
+        query["department"] = department
+    if date:
+        query["date"] = date
+    
+    cursor = db.employee_daily_reports.find(query).sort("date", -1)
+    reports = []
+    async for doc in cursor:
+        reports.append(fix_id(doc))
+    return reports
+
+async def update_employee_daily_report(db, report_id: str, report_update: schemas.EmployeeDailyReportUpdate):
+    update_data = report_update.dict(exclude_unset=True)
+    if not update_data:
+        return fix_id(await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)}))
+    
+    await db.employee_daily_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
+    doc = await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)})
+    return fix_id(doc)
