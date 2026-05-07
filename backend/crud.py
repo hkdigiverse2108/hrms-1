@@ -219,15 +219,10 @@ async def run_payroll_processing(db, month: str, year: int):
             deduction_details.append(f"LOP/Leave ({lop_days} days): ₹{round(lop_amount, 2)}")
             
         for r in emp_remarks:
-            # Check for specific "Late Punch-in" penalty (1 day salary as requested)
-            if r["type"] == "Late Punch-in":
-                penalty_total += per_day_gross
-                deduction_details.append(f"Late Come (1 day cut): ₹{round(per_day_gross, 2)}")
-            else:
-                p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
-                if p_amount > 0:
-                    penalty_total += p_amount
-                    deduction_details.append(f"{r['type']}: ₹{p_amount}")
+            p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
+            if p_amount > 0:
+                penalty_total += p_amount
+                deduction_details.append(f"{r['type']}: ₹{p_amount}")
         
         net_salary = (salary["monthlyGross"] - lop_amount + total_bonus - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"])
         
