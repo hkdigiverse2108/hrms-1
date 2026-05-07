@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/common/TablePagination";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker, TimePicker } from "antd";
 import dayjs from "dayjs";
 import { 
@@ -18,11 +19,15 @@ import {
   Eye,
   Loader2,
   AlertCircle,
-  Coffee
+  Coffee,
+  Pencil,
+  Trash2,
+  Plus
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { exportToCSV } from "@/lib/export";
+import { toast } from 'sonner'
  
 export default function AttendancePage() {
   const { user } = useUserContext();
@@ -33,6 +38,34 @@ export default function AttendancePage() {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
+  const [isBulkGenerating, setIsBulkGenerating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [bulkForm, setBulkForm] = useState({
+    employeeId: "",
+    month: dayjs().format("MMMM"),
+    year: dayjs().format("YYYY")
+  });
+  const [editForm, setEditForm] = useState<any>({
+    id: "",
+    date: "",
+    checkIn: "",
+    checkOut: "",
+    status: "Logged"
+  });
+  const [createForm, setCreateForm] = useState<any>({
+    employeeId: "",
+    employeeName: "",
+    date: dayjs().format("YYYY-MM-DD"),
+    checkIn: "09:30:00",
+    checkOut: "18:30:00",
+    status: "Logged"
+  });
   const [stats, setStats] = useState({
     presentDays: 0,
     avgHours: "0",
@@ -43,8 +76,20 @@ export default function AttendancePage() {
   useEffect(() => {
     if (user) {
       fetchAttendance();
+      fetchEmployees();
     }
   }, [user]);
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch(`${API_URL}/employees`);
+      if (res.ok) {
+        setAllEmployees(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+    }
+  };
  
   const fetchAttendance = async () => {
     setIsLoading(true);
@@ -92,6 +137,188 @@ export default function AttendancePage() {
       totalWorkTime: `${Math.floor(totalMinutes / 60)}H ${totalMinutes % 60}M`,
       totalBreakTime: `${totalBreakMinutes}M`
     });
+  };
+
+  const handleBulkGenerate = async () => {
+    if (!bulkForm.employeeId) {
+      toast.error("Please select an employee");
+      return;
+    }
+    setIsBulkGenerating(true);
+    try {
+      const res = await fetch(`${API_URL}/attendance/bulk-generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: bulkForm.employeeId,
+          month: bulkForm.month,
+          year: parseInt(bulkForm.year)
+        })
+      });
+      if (res.ok) {
+        const result = await res.json();
+        toast.success(result.message);
+        setBulkModalOpen(false);
+        fetchAttendance();
+      } else {
+        toast.error("Failed to generate attendance");
+      }
+    } catch (err) {
+      console.error("Error bulk generating:", err);
+      toast.error("Error connecting to server");
+    } finally {
+      setIsBulkGenerating(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`${API_URL}/attendance/${editForm.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          checkIn: editForm.checkIn,
+          checkOut: editForm.checkOut,
+          status: editForm.status,
+          date: editForm.date
+        })
+      });
+      if (res.ok) {
+        toast.success("Attendance updated successfully");
+        setEditModalOpen(false);
+        fetchAttendance();
+      } else {
+        toast.error("Failed to update attendance");
+      }
+    } catch (err) {
+      console.error("Error updating attendance:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!bulkForm.employeeId) {
+      toast.error("Please select an employee");
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete ALL attendance for this employee in ${bulkForm.month} ${bulkForm.year}?`)) return;
+    
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`${API_URL}/attendance/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: bulkForm.employeeId,
+          month: bulkForm.month,
+          year: parseInt(bulkForm.year)
+        })
+      });
+      if (res.ok) {
+        const result = await res.json();
+        toast.success(result.message);
+        setBulkModalOpen(false);
+        fetchAttendance();
+      } else {
+        toast.error("Failed to delete attendance");
+      }
+    } catch (err) {
+      console.error("Error bulk deleting:", err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this record?")) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`${API_URL}/attendance/${id}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        toast.success("Attendance deleted successfully");
+        fetchAttendance();
+      } else {
+        toast.error("Failed to delete attendance");
+      }
+    } catch (err) {
+      console.error("Error deleting attendance:", err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleMultiDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} selected records?`)) return;
+    
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`${API_URL}/attendance/multi-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) })
+      });
+      if (res.ok) {
+        toast.success(`Deleted ${selectedIds.size} records`);
+        setSelectedIds(new Set());
+        fetchAttendance();
+      } else {
+        toast.error("Failed to delete records");
+      }
+    } catch (err) {
+      console.error("Error multi-deleting:", err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === attendance.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(attendance.map(a => a.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleCreateManual = async () => {
+    if (!createForm.employeeId) {
+      toast.error("Please select an employee");
+      return;
+    }
+    const emp = allEmployees.find(e => e.id === createForm.employeeId);
+    try {
+      const res = await fetch(`${API_URL}/attendance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createForm,
+          employeeName: emp?.name || ""
+        })
+      });
+      if (res.ok) {
+        toast.success("Attendance record created");
+        setCreateModalOpen(false);
+        fetchAttendance();
+      } else {
+        toast.error("Failed to create record");
+      }
+    } catch (err) {
+      console.error("Error creating attendance:", err);
+    }
   };
  
   const currentRecord = attendance.find(a => a.date === dayjs().format("YYYY-MM-DD"));
@@ -181,6 +408,160 @@ export default function AttendancePage() {
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
+
+          {selectedIds.size > 0 && (
+            <Button 
+              variant="destructive" 
+              className="shadow-sm w-full sm:w-auto font-medium" 
+              onClick={handleMultiDelete}
+              disabled={isDeleting}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete ({selectedIds.size})
+            </Button>
+          )}
+
+          {(user?.role === "Admin" || user?.role === "HR") && (
+            <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm w-full sm:w-auto">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Manual Entry
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[400px]">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-bold">Manual Attendance Entry</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Employee</label>
+                    <Select value={createForm.employeeId} onValueChange={(v) => setCreateForm({...createForm, employeeId: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                      <SelectContent>
+                        {allEmployees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Date</label>
+                    <input 
+                      type="date" 
+                      className="w-full p-2 border rounded-md" 
+                      value={createForm.date}
+                      onChange={(e) => setCreateForm({...createForm, date: e.target.value})}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Check In</label>
+                      <input 
+                        type="time" 
+                        step="1"
+                        className="w-full p-2 border rounded-md" 
+                        value={createForm.checkIn}
+                        onChange={(e) => setCreateForm({...createForm, checkIn: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Check Out</label>
+                      <input 
+                        type="time" 
+                        step="1"
+                        className="w-full p-2 border rounded-md" 
+                        value={createForm.checkOut}
+                        onChange={(e) => setCreateForm({...createForm, checkOut: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+                  <Button className="bg-brand-teal text-white" onClick={handleCreateManual}>Save Entry</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
+          <Dialog open={bulkModalOpen} onOpenChange={setBulkModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-orange-600 hover:bg-orange-700 text-white font-medium shadow-sm w-full sm:w-auto">
+                <CalendarIcon className="w-4 h-4 mr-2" />
+                Bulk Generate
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[400px]">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold">Bulk Generate Attendance</DialogTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Generate mock attendance records for testing purposes for the whole month.
+                </p>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Select Employee</label>
+                  <Select value={bulkForm.employeeId} onValueChange={(val) => setBulkForm({...bulkForm, employeeId: val})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allEmployees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Month</label>
+                    <Select value={bulkForm.month} onValueChange={(val) => setBulkForm({...bulkForm, month: val})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Year</label>
+                    <Select value={bulkForm.year} onValueChange={(val) => setBulkForm({...bulkForm, year: val})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["2024", "2025", "2026"].map(y => (
+                          <SelectItem key={y} value={y}>{y}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                  <Button variant="outline" className="sm:flex-1" onClick={() => setBulkModalOpen(false)}>Cancel</Button>
+                  <Button 
+                    variant="destructive" 
+                    className="sm:flex-1" 
+                    onClick={handleBulkDelete}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Clear Month"}
+                  </Button>
+                  <Button 
+                    className="bg-orange-600 hover:bg-orange-700 text-white sm:flex-1" 
+                    onClick={handleBulkGenerate}
+                    disabled={isBulkGenerating}
+                  >
+                    {isBulkGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Generate Data"}
+                  </Button>
+                </DialogFooter>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </PageHeader>
  
@@ -297,6 +678,12 @@ export default function AttendancePage() {
                 <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="text-[11px] text-muted-foreground font-bold bg-white border-b border-border uppercase tracking-wider">
                     <tr>
+                      <th className="px-4 py-4">
+                        <Checkbox 
+                          checked={attendance.length > 0 && selectedIds.size === attendance.length}
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </th>
                       <th className="px-4 py-4">Sr. No.</th>
                       <th className="px-4 py-4">Date</th>
                       <th className="px-4 py-4">Day</th>
@@ -348,7 +735,13 @@ export default function AttendancePage() {
                       const day = dayjs(row.date).format("dddd");
 
                       return (
-                        <tr key={idx} className="hover:bg-muted/30 transition-colors group border-b border-border">
+                        <tr key={idx} className={`hover:bg-muted/30 transition-colors group border-b border-border ${selectedIds.has(row.id) ? 'bg-brand-light/20' : ''}`}>
+                          <td className="px-4 py-4">
+                            <Checkbox 
+                              checked={selectedIds.has(row.id)}
+                              onCheckedChange={() => toggleSelect(row.id)}
+                            />
+                          </td>
                           <td className="px-4 py-4 font-medium text-muted-foreground">{idx + 1}</td>
                           <td className="px-4 py-4 font-medium text-foreground">{row.date}</td>
                           <td className="px-4 py-4 text-muted-foreground">{day}</td>
@@ -377,14 +770,41 @@ export default function AttendancePage() {
                             {lateMinutes > 0 ? `Late punch-in; ${lateMinutes} minutes after expected start time (09:30 AM)` : "-"}
                           </td>
                           <td className="px-4 py-4 text-right">
-                            <Button 
-                              onClick={() => { setSelectedRecord(row); setDetailsModalOpen(true); }}
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-brand-teal bg-brand-light/20 hover:bg-brand-light/40 rounded-full"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  onClick={() => { setSelectedRecord(row); setDetailsModalOpen(true); }}
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-brand-teal bg-brand-light/20 hover:bg-brand-light/40 rounded-full"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  onClick={() => { 
+                                    setEditForm({
+                                      id: row.id,
+                                      date: row.date,
+                                      checkIn: row.checkIn,
+                                      checkOut: row.checkOut || "",
+                                      status: row.status || "Logged"
+                                    }); 
+                                    setEditModalOpen(true); 
+                                  }}
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  onClick={() => handleDelete(row.id)}
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-red-600 bg-red-50 hover:bg-red-100 rounded-full"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                           </td>
                         </tr>
                       );
@@ -483,6 +903,71 @@ export default function AttendancePage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailsModalOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Modal */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Edit Attendance Record</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Date</label>
+              <input 
+                type="date" 
+                className="w-full p-2 border rounded-md" 
+                value={editForm.date}
+                onChange={(e) => setEditForm({...editForm, date: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Check In</label>
+                <input 
+                  type="time" 
+                  step="1"
+                  className="w-full p-2 border rounded-md" 
+                  value={editForm.checkIn}
+                  onChange={(e) => setEditForm({...editForm, checkIn: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Check Out</label>
+                <input 
+                  type="time" 
+                  step="1"
+                  className="w-full p-2 border rounded-md" 
+                  value={editForm.checkOut}
+                  onChange={(e) => setEditForm({...editForm, checkOut: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm({...editForm, status: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Logged">Logged</SelectItem>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="On Break">On Break</SelectItem>
+                  <SelectItem value="Absent">Absent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditModalOpen(false)}>Cancel</Button>
+            <Button 
+              className="bg-brand-teal text-white" 
+              onClick={handleUpdate}
+              disabled={isUpdating}
+            >
+              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Update Record
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

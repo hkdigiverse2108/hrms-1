@@ -84,6 +84,18 @@ class AttendanceBase(BaseModel):
  
 class Attendance(AttendanceBase):
     id: str
+
+class AttendanceCreate(AttendanceBase):
+    pass
+
+class AttendanceUpdate(BaseModel):
+    employeeId: Optional[str] = None
+    employeeName: Optional[str] = None
+    date: Optional[str] = None
+    checkIn: Optional[str] = None
+    checkOut: Optional[str] = None
+    status: Optional[str] = None
+    workHours: Optional[str] = None
  
 class PunchRequest(BaseModel):
     employeeId: str
@@ -127,6 +139,10 @@ class PayrollBase(BaseModel):
     employeeName: str
     month: str
     year: Optional[int] = None
+    totalWorkingDays: int = 0
+    workedDays: int = 0
+    leaveDays: int = 0
+    lopDays: int = 0
     basicSalary: float
     allowances: float
     bonus: float = 0
@@ -1002,3 +1018,4 @@ class EmployeeDailyReportUpdate(BaseModel):
 
 class EmployeeDailyReport(EmployeeDailyReportBase):
     id: str
+

@@ -1,5 +1,6 @@
 from bson import ObjectId
 from datetime import datetime, timedelta
+from typing import List, Optional, Dict
 import schemas
 import calendar
 
@@ -189,10 +190,9 @@ async def run_payroll_processing(db, month: str, year: int):
         total_working_days = num_days - sundays - unique_holidays
         
         # LOP days are calculated based on missing working days
-        # attendance_count includes any day worked (even weekends)
-        # leave_days are approved leaves
-        actual_worked_plus_leaves = attendance_count + leave_days
-        lop_days = max(0, total_working_days - actual_worked_plus_leaves)
+        # attendance_count includes any day worked
+        # To "cut leave salary", we no longer add leave_days to the worked count
+        lop_days = max(0, total_working_days - attendance_count)
         
         per_day_gross = salary["monthlyGross"] / total_working_days
         lop_amount = lop_days * per_day_gross
@@ -216,13 +216,18 @@ async def run_payroll_processing(db, month: str, year: int):
         penalty_total = 0
         deduction_details = []
         if lop_amount > 0:
-            deduction_details.append(f"LOP ({lop_days} days): ₹{round(lop_amount, 2)}")
+            deduction_details.append(f"LOP/Leave ({lop_days} days): ₹{round(lop_amount, 2)}")
             
         for r in emp_remarks:
-            p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
-            if p_amount > 0:
-                penalty_total += p_amount
-                deduction_details.append(f"{r['type']}: ₹{p_amount}")
+            # Check for specific "Late Punch-in" penalty (1 day salary as requested)
+            if r["type"] == "Late Punch-in":
+                penalty_total += per_day_gross
+                deduction_details.append(f"Late Come (1 day cut): ₹{round(per_day_gross, 2)}")
+            else:
+                p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
+                if p_amount > 0:
+                    penalty_total += p_amount
+                    deduction_details.append(f"{r['type']}: ₹{p_amount}")
         
         net_salary = (salary["monthlyGross"] - lop_amount + total_bonus - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"])
         
@@ -231,6 +236,10 @@ async def run_payroll_processing(db, month: str, year: int):
             "employeeName": emp["name"],
             "month": month,
             "year": year,
+            "totalWorkingDays": int(total_working_days),
+            "workedDays": int(attendance_count),
+            "leaveDays": int(lop_days),
+            "lopDays": int(lop_days),
             "basicSalary": salary["basic"],
             "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"],
             "bonus": total_bonus,
@@ -451,6 +460,95 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
         return fix_id(user)
     return None
 
+async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
+    employee = await get_employee(db, employee_id)
+    if not employee:
+        return None
+    
+    try:
+        month_num = list(calendar.month_name).index(month)
+    except ValueError:
+        month_map = {m: i for i, m in enumerate(calendar.month_name)}
+        month_num = month_map.get(month.capitalize(), 1)
+        
+    _, num_days = calendar.monthrange(year, month_num)
+    
+    # Get holidays to skip
+    holiday_query = {
+        "date": {"$regex": f"^{year}-{str(month_num).zfill(2)}"}
+    }
+    emp_company = employee.get("company")
+    if emp_company:
+        holiday_query["$or"] = [{"company": emp_company}, {"company": None}, {"company": ""}]
+    
+    holidays = await db.holidays.find(holiday_query).to_list(length=31)
+    holiday_dates = [h["date"] for h in holidays]
+    
+    attendance_records = []
+    
+    import random
+    
+    # Identify available working days
+    available_working_days = []
+    for d in range(1, num_days + 1):
+        date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
+        if calendar.weekday(year, month_num, d) == 6: continue
+        if date_str in holiday_dates: continue
+        existing = await db.attendance.find_one({"employeeId": employee_id, "date": date_str})
+        if existing: continue
+        available_working_days.append(d)
+    
+    # Pick 1-2 random days to be 'late'
+    late_days_indices = random.sample(available_working_days, min(random.randint(1, 2), len(available_working_days))) if available_working_days else []
+    
+    for d in available_working_days:
+        date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
+        
+        # Generate random punch times
+        is_late = d in late_days_indices
+        if is_late:
+            # Late: 09:45 - 10:15
+            in_hour = 9
+            in_min = random.randint(45, 59)
+            if random.random() > 0.5:
+                in_hour = 10
+                in_min = random.randint(0, 15)
+        else:
+            # On-time: 09:00 - 09:35
+            in_hour = 9
+            in_min = random.randint(0, 35)
+            
+        check_in = f"{str(in_hour).zfill(2)}:{str(in_min).zfill(2)}:00"
+        
+        # 18:00 - 19:00
+        out_hour = 18
+        out_min = random.randint(0, 59)
+        check_out = f"{str(out_hour).zfill(2)}:{str(out_min).zfill(2)}:00"
+        
+        # Calculate working minutes correctly
+        start_min = in_hour * 60 + in_min
+        end_min = out_hour * 60 + out_min
+        total_min = end_min - start_min
+        h, m = divmod(total_min, 60)
+        work_hours = f"{h}h {m}m"
+        
+        record = {
+            "employeeId": employee_id,
+            "employeeName": employee["name"],
+            "date": date_str,
+            "checkIn": check_in,
+            "checkOut": check_out,
+            "status": "Logged",
+            "workHours": work_hours,
+            "breaks": []
+        }
+        
+        result = await db.attendance.insert_one(record)
+        record["id"] = str(result.inserted_id)
+        attendance_records.append(fix_id(record))
+    
+    return attendance_records
+
 async def get_attendance_status(db, employee_id: str):
     today = datetime.now().strftime("%Y-%m-%d")
     # Find active punch for today (checkIn present, checkOut missing)
@@ -537,6 +635,47 @@ async def punch_out(db, employee_id: str):
     
     updated_doc = await db.attendance.find_one({"_id": ObjectId(status["id"])})
     return fix_id(updated_doc)
+
+async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
+    attendance_dict = attendance.dict()
+    result = await db.attendance.insert_one(attendance_dict)
+    attendance_dict["id"] = str(result.inserted_id)
+    if "_id" in attendance_dict:
+        attendance_dict.pop("_id")
+    return attendance_dict
+
+async def update_attendance(db, attendance_id: str, attendance_update: schemas.AttendanceUpdate):
+    update_data = attendance_update.dict(exclude_unset=True)
+    await db.attendance.update_one(
+        {"_id": ObjectId(attendance_id)},
+        {"$set": update_data}
+    )
+    updated = await db.attendance.find_one({"_id": ObjectId(attendance_id)})
+    return fix_id(updated)
+
+async def delete_attendance(db, attendance_id: str):
+    await db.attendance.delete_one({"_id": ObjectId(attendance_id)})
+    return True
+
+async def delete_multiple_attendance(db, attendance_ids: List[str]):
+    await db.attendance.delete_many({
+        "_id": {"$in": [ObjectId(aid) for aid in attendance_ids]}
+    })
+    return True
+
+async def delete_bulk_attendance(db, employee_id: str, month: str, year: int):
+    try:
+        month_num = list(calendar.month_name).index(month)
+    except ValueError:
+        month_map = {m: i for i, m in enumerate(calendar.month_name)}
+        month_num = month_map.get(month.capitalize(), 1)
+        
+    pattern = f"^{year}-{str(month_num).zfill(2)}"
+    result = await db.attendance.delete_many({
+        "employeeId": employee_id,
+        "date": {"$regex": pattern}
+    })
+    return result.deleted_count
 
 async def break_in(db, employee_id: str):
     status = await get_attendance_status(db, employee_id)

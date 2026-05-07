@@ -31,6 +31,7 @@
   --brand-dark: #15803D;
   --brand-danger: #9B2C2C;
   --brand-success: #22C55E;
+  --brand-orange: #f97316;
   
   --sidebar: #EAF7F6;
   --sidebar-foreground: #000000;
@@ -118,6 +119,7 @@
   --color-brand-dark: var(--brand-dark);
   --color-brand-danger: var(--brand-danger);
   --color-brand-success: var(--brand-success);
+  --color-brand-orange: var(--brand-orange);
 }
 
 @layer base {

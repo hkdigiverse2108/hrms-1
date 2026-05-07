@@ -4,6 +4,7 @@ from typing import List, Optional
 import crud, schemas, database
 import uvicorn
 import os
+from bson import ObjectId
 from database import get_db
 
 app = FastAPI(title="HRMS API")
@@ -99,6 +100,54 @@ async def punch_in(employee_id: str, db=Depends(get_db)):
     if not result:
         raise HTTPException(status_code=400, detail="Punch in failed")
     return result
+
+@app.post("/attendance/bulk-generate")
+async def generate_bulk_attendance(request: dict, db=Depends(get_db)):
+    employee_id = request.get("employeeId")
+    month = request.get("month")
+    year = request.get("year")
+    if not all([employee_id, month, year]):
+        raise HTTPException(status_code=400, detail="EmployeeId, month, and year required")
+    result = await crud.generate_bulk_attendance(db, employee_id, month, year)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return {"message": f"Generated {len(result)} records", "records": result}
+
+@app.post("/attendance", response_model=schemas.Attendance)
+async def create_attendance(attendance: schemas.AttendanceCreate, db=Depends(get_db)):
+    return await crud.create_manual_attendance(db, attendance)
+
+@app.put("/attendance/{attendance_id}", response_model=schemas.Attendance)
+async def update_attendance(attendance_id: str, attendance_update: schemas.AttendanceUpdate, db=Depends(get_db)):
+    updated = await crud.update_attendance(db, attendance_id, attendance_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    return updated
+
+@app.delete("/attendance/{attendance_id}")
+async def delete_attendance(attendance_id: str, db=Depends(get_db)):
+    success = await crud.delete_attendance(db, attendance_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    return {"message": "Attendance record deleted successfully"}
+
+@app.post("/attendance/bulk-delete")
+async def bulk_delete_attendance(request: dict, db=Depends(get_db)):
+    employee_id = request.get("employeeId")
+    month = request.get("month")
+    year = request.get("year")
+    if not all([employee_id, month, year]):
+        raise HTTPException(status_code=400, detail="EmployeeId, month, and year required")
+    deleted_count = await crud.delete_bulk_attendance(db, employee_id, month, year)
+    return {"message": f"Deleted {deleted_count} records", "count": deleted_count}
+
+@app.post("/attendance/multi-delete")
+async def delete_multiple_attendance(request: dict, db=Depends(get_db)):
+    attendance_ids = request.get("ids", [])
+    if not attendance_ids:
+        raise HTTPException(status_code=400, detail="List of IDs required")
+    await crud.delete_multiple_attendance(db, attendance_ids)
+    return {"message": f"Deleted {len(attendance_ids)} records"}
 
 @app.post("/attendance/punch-out/{employee_id}")
 async def punch_out(employee_id: str, db=Depends(get_db)):
@@ -442,45 +491,6 @@ async def read_task_logs(
     db=Depends(get_db)
 ):
     return await crud.get_task_logs(db, taskId=taskId, projectId=projectId, clientId=clientId, dailyReportId=dailyReportId, monthlyReportId=monthlyReportId)
-
-# System Settings Endpoints
-@app.get("/system-settings", response_model=schemas.SystemSettings)
-async def get_system_settings(db=Depends(get_db)):
-    return await crud.get_system_settings(db)
-
-@app.put("/system-settings", response_model=schemas.SystemSettings)
-async def update_system_settings(settings_update: schemas.SystemSettingsUpdate, db=Depends(get_db)):
-    return await crud.update_system_settings(db, settings_update)
-
-# Sales Lead Endpoints
-@app.get("/leads", response_model=List[schemas.Lead])
-async def read_leads(skip: int = 0, limit: int = 100, db=Depends(get_db)):
-    return await crud.get_leads(db, skip=skip, limit=limit)
-
-@app.post("/leads", response_model=schemas.Lead)
-async def create_lead(lead: schemas.LeadCreate, db=Depends(get_db)):
-    return await crud.create_lead(db, lead)
-
-@app.put("/leads/{lead_id}", response_model=schemas.Lead)
-async def update_lead(lead_id: str, lead_update: schemas.LeadUpdate, db=Depends(get_db)):
-    return await crud.update_lead(db, lead_id, lead_update)
-
-@app.delete("/leads/{lead_id}")
-async def delete_lead(lead_id: str, db=Depends(get_db)):
-    success = await crud.delete_lead(db, lead_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    return {"message": "Lead deleted successfully"}
-
-@app.post("/leads/{lead_id}/follow-ups", response_model=schemas.Lead)
-async def add_lead_follow_up(lead_id: str, follow_up: schemas.FollowUp, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
-    return await crud.add_lead_follow_up(db, lead_id, follow_up, performedBy=performedBy, userName=userName)
-
-if __name__ == "__main__":
-    port = int(os.environ.get("BACKEND_PORT", 8000))
-    # Using 127.0.0.1 explicitly can sometimes resolve connection issues on local machines
-    print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
-    uvicorn.run(app, host="127.0.0.1", port=port)
 # Marketing Reports Endpoints
 @app.post("/marketing/reports/daily", response_model=schemas.MarketingDailyReport)
 async def create_marketing_daily_report(report: schemas.MarketingDailyReportCreate, db=Depends(get_db)):
@@ -718,3 +728,42 @@ async def update_daily_report(report_id: str, report_update: schemas.EmployeeDai
 @app.get("/leads/{lead_id}/logs", response_model=List[schemas.TaskLog])
 async def read_lead_logs(lead_id: str, db=Depends(get_db)):
     return await crud.get_lead_logs(db, lead_id)
+
+# System Settings Endpoints
+@app.get("/system-settings", response_model=schemas.SystemSettings)
+async def get_system_settings(db=Depends(get_db)):
+    return await crud.get_system_settings(db)
+
+@app.put("/system-settings", response_model=schemas.SystemSettings)
+async def update_system_settings(settings_update: schemas.SystemSettingsUpdate, db=Depends(get_db)):
+    return await crud.update_system_settings(db, settings_update)
+
+# Sales Lead Endpoints
+@app.get("/leads", response_model=List[schemas.Lead])
+async def read_leads(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_leads(db, skip=skip, limit=limit)
+
+@app.post("/leads", response_model=schemas.Lead)
+async def create_lead(lead: schemas.LeadCreate, db=Depends(get_db)):
+    return await crud.create_lead(db, lead)
+
+@app.put("/leads/{lead_id}", response_model=schemas.Lead)
+async def update_lead(lead_id: str, lead_update: schemas.LeadUpdate, db=Depends(get_db)):
+    return await crud.update_lead(db, lead_id, lead_update)
+
+@app.delete("/leads/{lead_id}")
+async def delete_lead(lead_id: str, db=Depends(get_db)):
+    success = await crud.delete_lead(db, lead_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {"message": "Lead deleted successfully"}
+
+@app.post("/leads/{lead_id}/follow-ups", response_model=schemas.Lead)
+async def add_lead_follow_up(lead_id: str, follow_up: schemas.FollowUp, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.add_lead_follow_up(db, lead_id, follow_up, performedBy=performedBy, userName=userName)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("BACKEND_PORT", 8000))
+    # Using 127.0.0.1 explicitly can sometimes resolve connection issues on local machines
+    print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
+    uvicorn.run(app, host="127.0.0.1", port=port)

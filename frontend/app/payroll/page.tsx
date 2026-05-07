@@ -116,6 +116,9 @@ export default function PayrollPage() {
 
   const columns = [
     { key: 'employeeName' as const, header: 'Employee' },
+    { key: 'totalWorkingDays' as const, header: 'Working Days' },
+    { key: 'workedDays' as const, header: 'Worked' },
+    { key: 'leaveDays' as const, header: 'Leaves' },
     {
       key: 'basicSalary' as const,
       header: 'Basic',
