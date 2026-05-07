@@ -4,7 +4,7 @@ import schemas
 import calendar
 
 def fix_id(doc):
-    if doc:
+    if doc and "_id" in doc:
         doc["id"] = str(doc.pop("_id"))
     return doc
 
@@ -119,6 +119,7 @@ async def run_payroll_processing(db, month: str, year: int):
         
     _, num_days = calendar.monthrange(year, month_num)
     
+    penalty_types = await get_penalty_types(db)
     payroll_results = []
     
     for emp in employees:
@@ -155,18 +156,45 @@ async def run_payroll_processing(db, month: str, year: int):
             except:
                 pass
         
-        # Count Weekends
-        weekends = 0
+        # Count Weekends (Sundays only)
+        sundays = 0
+        sunday_dates = []
         for d in range(1, num_days + 1):
-            if calendar.weekday(year, month_num, d) >= 5: 
-                weekends += 1
+            if calendar.weekday(year, month_num, d) == 6: # Sunday
+                sundays += 1
+                sunday_dates.append(f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}")
         
-        paid_days = attendance_count + leave_days + weekends
-        # Basic check to not exceed month days
-        paid_days = min(paid_days, num_days)
-        lop_days = max(0, num_days - paid_days)
+        # Count Holidays for this employee's company
+        emp_company = emp.get("company")
+        holiday_query = {
+            "date": {"$regex": f"^{year}-{str(month_num).zfill(2)}"}
+        }
+        if emp_company:
+            # Match specific company holidays OR global holidays (where company is null/empty)
+            holiday_query["$or"] = [
+                {"company": emp_company},
+                {"company": None},
+                {"company": ""}
+            ]
         
-        per_day_gross = salary["monthlyGross"] / num_days
+        holidays_cursor = db.holidays.find(holiday_query)
+        month_holidays = await holidays_cursor.to_list(length=31)
+        
+        unique_holidays = 0
+        for h in month_holidays:
+            # Only count holiday if it doesn't fall on a Sunday
+            if h["date"] not in sunday_dates:
+                unique_holidays += 1
+        
+        total_working_days = num_days - sundays - unique_holidays
+        
+        # LOP days are calculated based on missing working days
+        # attendance_count includes any day worked (even weekends)
+        # leave_days are approved leaves
+        actual_worked_plus_leaves = attendance_count + leave_days
+        lop_days = max(0, total_working_days - actual_worked_plus_leaves)
+        
+        per_day_gross = salary["monthlyGross"] / total_working_days
         lop_amount = lop_days * per_day_gross
         
         # Ad-hoc Bonus/Deductions
@@ -175,7 +203,28 @@ async def run_payroll_processing(db, month: str, year: int):
         total_bonus = sum([a["amount"] for a in emp_adjustments if a["type"] == "bonus"])
         total_adhoc_deduction = sum([a["amount"] for a in emp_adjustments if a["type"] == "deduction"])
         
-        net_salary = (salary["monthlyGross"] - lop_amount + total_bonus - total_adhoc_deduction) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"])
+        # Fetch Penalties from Remarks
+        # Remarks date format: "May 7, 2026"
+        month_short = month[:3]
+        remark_query = {
+            "employeeId": emp_id,
+            "date": {"$regex": f"{month_short}.* {year}"}
+        }
+        remarks_cursor = db.remarks.find(remark_query)
+        emp_remarks = await remarks_cursor.to_list(length=100)
+        
+        penalty_total = 0
+        deduction_details = []
+        if lop_amount > 0:
+            deduction_details.append(f"LOP ({lop_days} days): ₹{round(lop_amount, 2)}")
+            
+        for r in emp_remarks:
+            p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
+            if p_amount > 0:
+                penalty_total += p_amount
+                deduction_details.append(f"{r['type']}: ₹{p_amount}")
+        
+        net_salary = (salary["monthlyGross"] - lop_amount + total_bonus - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"])
         
         payroll_record = {
             "employeeId": emp_id,
@@ -183,10 +232,13 @@ async def run_payroll_processing(db, month: str, year: int):
             "month": month,
             "year": year,
             "basicSalary": salary["basic"],
-            "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"] + total_bonus,
-            "deductions": salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + lop_amount + total_adhoc_deduction,
+            "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"],
+            "bonus": total_bonus,
+            "deductions": salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + lop_amount + total_adhoc_deduction + penalty_total,
+            "penalty": penalty_total,
             "netSalary": round(net_salary, 2),
-            "status": "processed"
+            "status": "processed",
+            "deductionRemarks": "; ".join(deduction_details)
         }
         
         await db.payroll.update_one(
@@ -194,7 +246,9 @@ async def run_payroll_processing(db, month: str, year: int):
             {"$set": payroll_record},
             upsert=True
         )
-        payroll_results.append(fix_id(payroll_record))
+        
+        doc = await db.payroll.find_one({"employeeId": emp_id, "month": month, "year": year})
+        payroll_results.append(fix_id(doc))
         
     return payroll_results
 
@@ -1430,12 +1484,55 @@ async def delete_employee_document(db, doc_id: str):
     return result.deleted_count > 0
 
 # Employee Daily Report CRUD
+async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
+    employee = await get_employee(db, employee_id)
+    if not employee or employee.get("department") != "Development":
+        return
+    
+    salary_struct = await get_salary_structure_by_employee(db, employee_id)
+    if not salary_struct:
+        return
+    
+    try:
+        dt = datetime.strptime(report_date, "%Y-%m-%d")
+        month_name = calendar.month_name[dt.month]
+        year = dt.year
+        _, num_days = calendar.monthrange(year, dt.month)
+        
+        per_day_salary = salary_struct["monthlyGross"] / num_days
+        reason = f"Work rejected by TL on {report_date}"
+        
+        # Check if already deducted for this specific date
+        existing = await db.bonus_deductions.find_one({
+            "employeeId": employee_id,
+            "type": "deduction",
+            "reason": reason
+        })
+        
+        if not existing:
+            deduction = schemas.BonusDeductionCreate(
+                employeeId=employee_id,
+                month=month_name,
+                year=year,
+                type="deduction",
+                amount=round(per_day_salary, 2),
+                reason=reason,
+                status="active"
+            )
+            await create_bonus_deduction(db, deduction)
+    except Exception as e:
+        print(f"Error applying work rejection penalty: {e}")
+
 async def create_employee_daily_report(db, report: schemas.EmployeeDailyReportCreate):
     report_dict = report.dict()
     result = await db.employee_daily_reports.insert_one(report_dict)
     report_dict["id"] = str(result.inserted_id)
     # Log activity
     await log_task_activity(db, None, "Daily Report Submitted", report_dict["employeeId"], report_dict["employeeName"], f"Submitted daily report for {report_dict['date']}")
+    
+    if report_dict.get("status") == "Rejected":
+        await apply_work_rejection_penalty(db, report_dict["employeeId"], report_dict["date"])
+        
     return report_dict
 
 async def get_employee_daily_reports(db, employee_id: str = None, department: str = None, date: str = None):
@@ -1458,6 +1555,14 @@ async def update_employee_daily_report(db, report_id: str, report_update: schema
     if not update_data:
         return fix_id(await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)}))
     
+    # Fetch existing to check status change
+    existing = await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)})
+    
     await db.employee_daily_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
+    
+    # Apply penalty if status changed to Rejected
+    if update_data.get("status") == "Rejected" and existing and existing.get("status") != "Rejected":
+        await apply_work_rejection_penalty(db, existing["employeeId"], existing["date"])
+        
     doc = await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)})
     return fix_id(doc)

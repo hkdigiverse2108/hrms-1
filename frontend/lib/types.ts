@@ -74,11 +74,15 @@ export interface Payroll {
   employeeId: string
   employeeName: string
   month: string
+  year: number
   basicSalary: number
   allowances: number
+  bonus: number
   deductions: number
+  penalty: number
   netSalary: number
   status: 'processed' | 'pending' | 'paid'
+  deductionRemarks?: string
 }
 
 export interface JobOpening {

@@ -310,6 +310,12 @@ async def create_expense_claim(claim: schemas.ExpenseClaimCreate, db=Depends(get
 async def read_holidays(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_holidays(db, skip, limit)
 @app.post("/holidays", response_model=schemas.Holiday)
 async def create_holiday(holiday: schemas.HolidayCreate, db=Depends(get_db)): return await crud.create_holiday(db, holiday)
+@app.put("/holidays/{holiday_id}", response_model=schemas.Holiday)
+async def update_holiday(holiday_id: str, holiday: schemas.HolidayUpdate, db=Depends(get_db)): return await crud.update_holiday(db, holiday_id, holiday)
+@app.delete("/holidays/{holiday_id}")
+async def delete_holiday(holiday_id: str, db=Depends(get_db)):
+    await crud.delete_holiday(db, holiday_id)
+    return {"message": "Holiday deleted"}
 
 @app.get("/kpi-records", response_model=List[schemas.KPI])
 async def read_kpi_records(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_kpi_records(db, skip, limit)

@@ -126,11 +126,15 @@ class PayrollBase(BaseModel):
     employeeId: str
     employeeName: str
     month: str
+    year: Optional[int] = None
     basicSalary: float
     allowances: float
+    bonus: float = 0
     deductions: float
+    penalty: float = 0
     netSalary: float
     status: str
+    deductionRemarks: str = ""
 
 class Payroll(PayrollBase):
     id: str
@@ -368,6 +372,7 @@ class HolidayBase(BaseModel):
     name: str
     date: str
     type: str
+    company: Optional[str] = None
 
 class HolidayCreate(HolidayBase):
     pass
@@ -376,6 +381,7 @@ class HolidayUpdate(BaseModel):
     name: Optional[str] = None
     date: Optional[str] = None
     type: Optional[str] = None
+    company: Optional[str] = None
 
 class Holiday(HolidayBase):
     id: str
@@ -493,6 +499,7 @@ class LeaveRequestBase(BaseModel):
     duration: str
     reason: str
     half_day: bool = False
+    day_type: str = "Full Day"
     requested_on: str = ""
 
 class LeaveRequestCreate(LeaveRequestBase):
@@ -505,6 +512,7 @@ class LeaveRequestUpdate(BaseModel):
     duration: Optional[str] = None
     reason: Optional[str] = None
     half_day: Optional[bool] = None
+    day_type: Optional[str] = None
     status: Optional[str] = None  # Pending, Approved, Rejected, Cancelled
 
 class LeaveRequest(LeaveRequestBase):

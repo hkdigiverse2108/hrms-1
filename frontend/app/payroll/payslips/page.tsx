@@ -17,6 +17,7 @@ function PayslipContent() {
 
   useEffect(() => {
     if (payrollId) fetchDetails()
+    else setLoading(false)
   }, [payrollId])
 
   const fetchDetails = async () => {
@@ -148,9 +149,15 @@ function PayslipContent() {
                 <span className="text-slate-600 font-medium">Allowances</span>
                 <span className="font-bold text-emerald-600">+{formatCurrency(record.allowances)}</span>
               </div>
+              {record.bonus > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600 font-medium">Bonus</span>
+                  <span className="font-bold text-emerald-600">+{formatCurrency(record.bonus)}</span>
+                </div>
+              )}
               <div className="pt-4 border-t border-slate-50 flex justify-between">
                 <span className="font-bold text-slate-900">Gross Earnings</span>
-                <span className="font-black text-slate-900">{formatCurrency(record.basicSalary + record.allowances)}</span>
+                <span className="font-black text-slate-900">{formatCurrency(record.basicSalary + record.allowances + (record.bonus || 0))}</span>
               </div>
             </div>
           </div>
@@ -158,17 +165,25 @@ function PayslipContent() {
             <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest mb-6 bg-slate-50 p-2 text-center rounded">Deductions</h3>
             <div className="space-y-4">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600 font-medium">Statutory Deductions (PF/ESI/PT)</span>
-                <span className="font-bold text-rose-600">-{formatCurrency(record.deductions)}</span>
+                <span className="text-slate-600 font-medium">Standard Deductions</span>
+                <span className="font-bold text-rose-600">-{formatCurrency(record.deductions - (record.penalty || 0))}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600 font-medium">Tax Deducted (TDS)</span>
-                <span className="font-bold text-rose-600">-$0.00</span>
-              </div>
+              {record.penalty > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600 font-medium">Penalties</span>
+                  <span className="font-bold text-rose-600">-{formatCurrency(record.penalty)}</span>
+                </div>
+              )}
               <div className="pt-4 border-t border-slate-100 flex justify-between">
                 <span className="font-bold text-slate-900">Total Deductions</span>
                 <span className="font-black text-rose-600">{formatCurrency(record.deductions)}</span>
               </div>
+              {record.deductionRemarks && (
+                <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-100">
+                   <p className="text-[10px] font-bold text-red-800 uppercase mb-1">Deduction Breakdown</p>
+                   <p className="text-[11px] text-red-600 italic leading-tight">{record.deductionRemarks}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

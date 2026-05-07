@@ -52,7 +52,7 @@ export default function PayrollPage() {
     } catch (error) {
       console.error('Error fetching payroll:', error)
     } finally {
-      setIsLoading(true)
+      setIsLoading(false)
     }
     // Wait, I should probably filter by selected month/year or let the backend do it
     // For now, I'll fetch all and filter client-side for UX
