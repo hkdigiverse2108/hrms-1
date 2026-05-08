@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -103,152 +104,261 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const isMarketing = formData.department === "Marketing";
+  const isGraphics = formData.department === "Graphics";
+  const isDevelopment = formData.department === "Development";
+  const isSales = formData.department === "Sales";
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(formData);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 py-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-        <div className="space-y-2">
-          <Label htmlFor="name" className="text-xs font-bold uppercase text-slate-500">Contact Person Name</Label>
-          <Input id="name" placeholder="e.g. John Doe" value={formData.name} onChange={(e) => handleChange("name", e.target.value)} required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="companyName" className="text-xs font-bold uppercase text-slate-500">Company Name</Label>
-          <Input id="companyName" placeholder="e.g. Acme Corp" value={formData.companyName} onChange={(e) => handleChange("companyName", e.target.value)} required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="email" className="text-xs font-bold uppercase text-slate-500">Email Address</Label>
-          <Input id="email" type="email" placeholder="client@example.com" value={formData.email} onChange={(e) => handleChange("email", e.target.value)} required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="phone" className="text-xs font-bold uppercase text-slate-500">Phone Number</Label>
-          <Input id="phone" placeholder="+91 00000 00000" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} required />
-        </div>
-      </div>
+    <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
+      <div 
+        className="flex-1 overflow-y-auto px-6 py-2" 
+        style={{ maxHeight: "calc(90vh - 140px)" }}
+      >
+        <div className="space-y-6 pb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-xs font-bold uppercase text-slate-500">Contact Person Name</Label>
+              <Input id="name" placeholder="e.g. John Doe" value={formData.name} onChange={(e) => handleChange("name", e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="companyName" className="text-xs font-bold uppercase text-slate-500">Company Name</Label>
+              <Input id="companyName" placeholder="e.g. Acme Corp" value={formData.companyName} onChange={(e) => handleChange("companyName", e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-xs font-bold uppercase text-slate-500">Email Address</Label>
+              <Input id="email" type="email" placeholder="client@example.com" value={formData.email} onChange={(e) => handleChange("email", e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="text-xs font-bold uppercase text-slate-500">Phone Number</Label>
+              <Input id="phone" placeholder="+91 00000 00000" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} required />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-        <div className="space-y-2">
-          <Label htmlFor="department" className="text-xs font-bold uppercase text-slate-500">Department</Label>
-          <Select value={formData.department} onValueChange={(v) => handleChange("department", v)}>
-            <SelectTrigger><SelectValue placeholder="Select Department" /></SelectTrigger>
-            <SelectContent>
-              {departments.map((dept) => (
-                <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="status" className="text-xs font-bold uppercase text-slate-500">Status</Label>
-          <Select value={formData.status} onValueChange={(v) => handleChange("status", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-4 border-t border-slate-100 pt-6">
-        <h4 className="text-xs font-bold text-brand-teal uppercase tracking-widest flex items-center gap-2">
-          <FileText className="w-4 h-4" /> All Service Fields
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <Label htmlFor="services" className="text-[10px] font-bold uppercase text-slate-400">Services</Label>
-            <Input id="services" placeholder="e.g. SMM, Web Dev" value={formData.services} onChange={(e) => handleChange("services", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="dailyBudget" className="text-[10px] font-bold uppercase text-slate-400">Daily Budget (₹)</Label>
-            <Input id="dailyBudget" type="number" value={formData.dailyBudget} onChange={(e) => handleChange("dailyBudget", parseFloat(e.target.value) || 0)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="post" className="text-[10px] font-bold uppercase text-slate-400">Post Count</Label>
-            <Input id="post" type="number" value={formData.post} onChange={(e) => handleChange("post", parseInt(e.target.value) || 0)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="reel" className="text-[10px] font-bold uppercase text-slate-400">Reel Count</Label>
-            <Input id="reel" type="number" value={formData.reel} onChange={(e) => handleChange("reel", parseInt(e.target.value) || 0)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="graphics" className="text-[10px] font-bold uppercase text-slate-400">Graphics Requirements</Label>
-            <Input id="graphics" value={formData.graphics} onChange={(e) => handleChange("graphics", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="video" className="text-[10px] font-bold uppercase text-slate-400">Video Requirements</Label>
-            <Input id="video" value={formData.video} onChange={(e) => handleChange("video", e.target.value)} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {["festivalPost", "postRequired", "reelRequired", "graphicsRequired", "dailyFollowup"].map((field) => (
-            <div key={field} className="space-y-2">
-              <Label htmlFor={field} className="text-[10px] font-bold uppercase text-slate-400">{field.replace(/([A-Z])/g, ' $1')}</Label>
-              <Select value={(formData as any)[field]} onValueChange={(v) => handleChange(field as any, v)}>
-                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+            <div className="space-y-2">
+              <Label htmlFor="department" className="text-xs font-bold uppercase text-slate-500">Department</Label>
+              <Select value={formData.department} onValueChange={(v) => handleChange("department", v)}>
+                <SelectTrigger><SelectValue placeholder="Select Department" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Yes">Yes</SelectItem>
-                  <SelectItem value="No">No</SelectItem>
+                  {departments.map((dept) => (
+                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-          ))}
-          <div className="space-y-2">
-            <Label htmlFor="responsibility" className="text-[10px] font-bold uppercase text-slate-400">Assigned To</Label>
-            <Select value={formData.responsibility} onValueChange={(v) => handleChange("responsibility", v)}>
-              <SelectTrigger className="h-8"><SelectValue placeholder="Select Employee" /></SelectTrigger>
-              <SelectContent>
-                {employees.map((emp) => (
-                  <SelectItem key={emp.id} value={`${emp.firstName} ${emp.lastName}`}>{emp.firstName} {emp.lastName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-2">
+              <Label htmlFor="status" className="text-xs font-bold uppercase text-slate-500">Status</Label>
+              <Select value={formData.status} onValueChange={(v) => handleChange("status", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Marketing Specific Fields - Simplified as per user request */}
+          {isMarketing && (
+            <div className="space-y-4 border-t border-slate-100 pt-6">
+              <h4 className="text-xs font-bold text-brand-teal uppercase tracking-widest flex items-center gap-2">
+                <FileText className="w-4 h-4" /> Marketing Service Fields
+              </h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="services" className="text-[10px] font-bold uppercase text-slate-400">Services</Label>
+                  <Input id="services" placeholder="e.g. SMM, SEO" value={formData.services} onChange={(e) => handleChange("services", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="salesFocused" className="text-[10px] font-bold uppercase text-slate-400">Sales Focused</Label>
+                  <Input id="salesFocused" placeholder="e.g. Wp leads" value={formData.salesFocused} onChange={(e) => handleChange("salesFocused", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dailyBudget" className="text-[10px] font-bold uppercase text-slate-400">Daily Budget (₹)</Label>
+                  <Input id="dailyBudget" type="number" value={formData.dailyBudget} onChange={(e) => handleChange("dailyBudget", parseFloat(e.target.value) || 0)} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase text-slate-400">Daily Followup</Label>
+                  <Select value={formData.dailyFollowup} onValueChange={(v) => handleChange("dailyFollowup", v)}>
+                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Yes">Yes</SelectItem>
+                      <SelectItem value="No">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="responsibility" className="text-[10px] font-bold uppercase text-slate-400">Assigned To</Label>
+                  <Select value={formData.responsibility} onValueChange={(v) => handleChange("responsibility", v)}>
+                    <SelectTrigger className="h-8"><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                    <SelectContent>
+                      {employees.map((emp) => (
+                        <SelectItem key={emp.id} value={`${emp.firstName} ${emp.lastName}`}>{emp.firstName} {emp.lastName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}          {/* Development Specific Fields - Minimal as per user request */}
+          {isDevelopment && (
+            <div className="space-y-4 border-t border-slate-100 pt-6">
+              <p className="text-[10px] text-slate-400 font-medium italic">Only basic contact information is required for Development clients.</p>
+            </div>
+          )}
+
+          {/* Graphics Specific Fields - Updated as per user request */}
+          {isGraphics && (
+            <div className="space-y-4 border-t border-slate-100 pt-6">
+              <h4 className="text-xs font-bold text-brand-teal uppercase tracking-widest flex items-center gap-2">
+                <FileText className="w-4 h-4" /> Graphics Service Fields
+              </h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="services" className="text-[10px] font-bold uppercase text-slate-400">Services</Label>
+                  <Input id="services" placeholder="e.g. Social Media" value={formData.services} onChange={(e) => handleChange("services", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="post" className="text-[10px] font-bold uppercase text-slate-400">Post Count</Label>
+                  <Input id="post" type="number" value={formData.post} onChange={(e) => handleChange("post", parseInt(e.target.value) || 0)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reel" className="text-[10px] font-bold uppercase text-slate-400">Reel Count</Label>
+                  <Input id="reel" type="number" value={formData.reel} onChange={(e) => handleChange("reel", parseInt(e.target.value) || 0)} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase text-slate-400">Festival Post</Label>
+                  <Select value={formData.festivalPost} onValueChange={(v) => handleChange("festivalPost", v)}>
+                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Yes">Yes</SelectItem>
+                      <SelectItem value="No">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase text-slate-400">Graph Req</Label>
+                  <Select value={formData.graphicsRequired} onValueChange={(v) => handleChange("graphicsRequired", v)}>
+                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Yes">Yes</SelectItem>
+                      <SelectItem value="No">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase text-slate-400">Post Req</Label>
+                  <Select value={formData.postRequired} onValueChange={(v) => handleChange("postRequired", v)}>
+                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Yes">Yes</SelectItem>
+                      <SelectItem value="No">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase text-slate-400">Reel Req</Label>
+                  <Select value={formData.reelRequired} onValueChange={(v) => handleChange("reelRequired", v)}>
+                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Yes">Yes</SelectItem>
+                      <SelectItem value="No">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sales Service Fields */}
+          {isSales && (
+            <div className="space-y-4 border-t border-slate-100 pt-6">
+              <h4 className="text-xs font-bold text-brand-teal uppercase tracking-widest flex items-center gap-2">
+                <FileText className="w-4 h-4" /> Sales Service Fields
+              </h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="services" className="text-[10px] font-bold uppercase text-slate-400">Services</Label>
+                  <Input id="services" placeholder="e.g. SMM, SEO" value={formData.services} onChange={(e) => handleChange("services", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dailyBudget" className="text-[10px] font-bold uppercase text-slate-400">Daily Budget (₹)</Label>
+                  <Input id="dailyBudget" type="number" value={formData.dailyBudget} onChange={(e) => handleChange("dailyBudget", parseFloat(e.target.value) || 0)} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="responsibility" className="text-[10px] font-bold uppercase text-slate-400">Assigned To</Label>
+                <Select value={formData.responsibility} onValueChange={(v) => handleChange("responsibility", v)}>
+                  <SelectTrigger className="h-8"><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={`${emp.firstName} ${emp.lastName}`}>{emp.firstName} {emp.lastName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {/* Interview Schedule - Shown for Sales ONLY */}
+          {isSales && (
+            <div className="space-y-4 border-t border-slate-100 pt-6">
+              <h4 className="text-xs font-bold text-purple-600 uppercase tracking-widest flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Interview / Meeting Schedule
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="interviewDate" className="text-[10px] font-bold uppercase text-slate-400">Date</Label>
+                  <Input id="interviewDate" type="date" value={formData.interviewDate} onChange={(e) => handleChange("interviewDate", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="interviewTime" className="text-[10px] font-bold uppercase text-slate-400">Time</Label>
+                  <Input id="interviewTime" type="time" value={formData.interviewTime} onChange={(e) => handleChange("interviewTime", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="interviewerName" className="text-[10px] font-bold uppercase text-slate-400">Interviewer / Contact</Label>
+                  <Select value={formData.interviewerName} onValueChange={(v) => handleChange("interviewerName", v)}>
+                    <SelectTrigger><SelectValue placeholder="Select Person" /></SelectTrigger>
+                    <SelectContent>
+                      {employees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.name || `${emp.firstName} ${emp.lastName}`}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="interviewNotes" className="text-[10px] font-bold uppercase text-slate-400">Interview Notes</Label>
+                <Textarea id="interviewNotes" placeholder="Internal notes for the meeting..." value={formData.interviewNotes || ""} onChange={(e) => handleChange("interviewNotes", e.target.value)} className="min-h-[100px]" />
+              </div>
+            </div>
+          )}
+
+          <div className={`space-y-2 pt-4 ${isDevelopment ? 'hidden' : ''}`}>
+            <Label htmlFor="remarks" className="text-xs font-bold uppercase text-slate-500">General Remarks</Label>
+            <Textarea id="remarks" placeholder="Any additional notes..." value={formData.remarks || ""} onChange={(e) => handleChange("remarks", e.target.value)} className="min-h-[80px]" />
           </div>
         </div>
       </div>
 
-      <div className="space-y-4 border-t border-slate-100 pt-6">
-        <h4 className="text-xs font-bold text-purple-600 uppercase tracking-widest flex items-center gap-2">
-          <Calendar className="w-4 h-4" /> Interview / Meeting Schedule
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <Label htmlFor="interviewDate" className="text-[10px] font-bold uppercase text-slate-400">Date</Label>
-            <Input id="interviewDate" type="date" value={formData.interviewDate} onChange={(e) => handleChange("interviewDate", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="interviewTime" className="text-[10px] font-bold uppercase text-slate-400">Time</Label>
-            <Input id="interviewTime" type="time" value={formData.interviewTime} onChange={(e) => handleChange("interviewTime", e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="interviewerName" className="text-[10px] font-bold uppercase text-slate-400">Interviewer / Contact</Label>
-            <Select value={formData.interviewerName} onValueChange={(v) => handleChange("interviewerName", v)}>
-              <SelectTrigger><SelectValue placeholder="Select Person" /></SelectTrigger>
-              <SelectContent>
-                {employees.map((emp) => (
-                  <SelectItem key={emp.id} value={emp.name || `${emp.firstName} ${emp.lastName}`}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="interviewNotes" className="text-[10px] font-bold uppercase text-slate-400">Interview Notes</Label>
-          <Textarea id="interviewNotes" placeholder="Internal notes for the meeting..." value={formData.interviewNotes} onChange={(e) => handleChange("interviewNotes", e.target.value)} className="min-h-[100px]" />
-        </div>
-      </div>
-
-      <div className="space-y-2 pt-4">
-        <Label htmlFor="remarks" className="text-xs font-bold uppercase text-slate-500">General Remarks</Label>
-        <Textarea id="remarks" placeholder="Any additional notes..." value={formData.remarks} onChange={(e) => handleChange("remarks", e.target.value)} className="min-h-[80px]" />
-      </div>
-
-      <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
-        <Button type="submit" className="bg-brand-teal hover:bg-brand-teal-light text-white px-8 h-11 font-bold" disabled={isSubmitting}>
+      <div className="flex justify-end gap-3 p-4 border-t border-slate-100 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <Button type="submit" className="bg-brand-teal hover:bg-brand-teal-light text-white px-8 h-10 font-bold" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {initialData ? "Update Client" : "Add Client"}
         </Button>

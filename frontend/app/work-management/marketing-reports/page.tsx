@@ -89,6 +89,7 @@ export default function MarketingReportsPage() {
     reach: 0,
     impression: 0,
     leads: 0,
+    followers: 0,
     spend: 0,
     cpl: 0
   });
@@ -174,6 +175,7 @@ export default function MarketingReportsPage() {
           reach: 0,
           impression: 0,
           leads: 0,
+          followers: 0,
           spend: 0,
           cpl: 0
         });
@@ -292,8 +294,9 @@ export default function MarketingReportsPage() {
     reach: acc.reach + (curr.reach || 0),
     impression: acc.impression + (curr.impression || 0),
     leads: acc.leads + (curr.leads || 0),
+    followers: acc.followers + (curr.followers || 0),
     spend: acc.spend + (curr.spend || 0)
-  }), { reach: 0, impression: 0, leads: 0, spend: 0 });
+  }), { reach: 0, impression: 0, leads: 0, followers: 0, spend: 0 });
 
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-100px)] overflow-hidden">
@@ -465,6 +468,7 @@ export default function MarketingReportsPage() {
                   <TableHead className="text-center font-bold text-slate-700">Reach</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Impressions</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Leads</TableHead>
+                  <TableHead className="text-center font-bold text-slate-700">Followers</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Spend (₹)</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">CPL (₹)</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Actions</TableHead>
@@ -513,6 +517,9 @@ export default function MarketingReportsPage() {
                       </TableCell>
                       <TableCell className="p-1">
                         <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.leads || ""} onChange={e => setDailyFormData({...dailyFormData, leads: parseInt(e.target.value) || 0})} />
+                      </TableCell>
+                      <TableCell className="p-1">
+                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.followers || ""} onChange={e => setDailyFormData({...dailyFormData, followers: parseInt(e.target.value) || 0})} />
                       </TableCell>
                       <TableCell className="p-1">
                         <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.spend || ""} onChange={e => setDailyFormData({...dailyFormData, spend: parseFloat(e.target.value) || 0})} />
@@ -639,6 +646,22 @@ export default function MarketingReportsPage() {
                       </TableCell>
 
                       <TableCell 
+                        className="text-center cursor-text hover:bg-slate-50"
+                        onClick={() => setInlineEditing({ id: report.id, field: 'followers' })}
+                      >
+                        {inlineEditing?.id === report.id && inlineEditing?.field === 'followers' ? (
+                          <Input 
+                            autoFocus
+                            type="number"
+                            className="h-8 text-xs text-center outline-none" 
+                            defaultValue={report.followers} 
+                            onBlur={e => handleInlineUpdate(report.id, 'followers', parseInt(e.target.value) || 0, 'daily')}
+                            onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'followers', parseInt(e.currentTarget.value) || 0, 'daily')}
+                          />
+                        ) : report.followers || 0}
+                      </TableCell>
+
+                      <TableCell 
                         className="text-center font-semibold text-brand-teal cursor-text hover:bg-slate-50"
                         onClick={() => setInlineEditing({ id: report.id, field: 'spend' })}
                       >
@@ -706,6 +729,7 @@ export default function MarketingReportsPage() {
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.reach.toLocaleString()}</TableCell>
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.impression.toLocaleString()}</TableCell>
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.leads.toLocaleString()}</TableCell>
+                    <TableCell className="text-center font-bold text-slate-900">{dailyTotals.followers.toLocaleString()}</TableCell>
                     <TableCell className="text-center font-bold text-brand-teal">₹{dailyTotals.spend.toLocaleString()}</TableCell>
                     <TableCell colSpan={2}></TableCell>
                   </TableRow>

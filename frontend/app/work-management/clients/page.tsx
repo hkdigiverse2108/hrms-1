@@ -200,8 +200,8 @@ export default function ClientsPage() {
               Add Client
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
+          <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden flex flex-col max-h-[90vh]">
+            <DialogHeader className="p-6 pb-0">
               <DialogTitle className="text-xl font-bold">
                 {editingClient ? "Edit Client Details" : "Add New Client"}
               </DialogTitle>

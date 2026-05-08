@@ -132,8 +132,8 @@ export default function GraphicsClientsPage() {
               Add Graphics Client
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden flex flex-col max-h-[90vh]">
+            <DialogHeader className="p-6 pb-0">
               <DialogTitle className="text-xl font-bold flex items-center gap-2">
                 <LayoutGrid className="w-5 h-5 text-brand-teal" />
                 {editingClient ? "Edit Client Details" : "Add New Client"}

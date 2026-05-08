@@ -818,6 +818,7 @@ class MarketingDailyReportBase(BaseModel):
     reach: int = 0
     impression: int = 0
     leads: int = 0
+    followers: int = 0
     spend: float = 0
     cpl: float = 0
 
@@ -833,6 +834,7 @@ class MarketingDailyReportUpdate(BaseModel):
     reach: Optional[int] = None
     impression: Optional[int] = None
     leads: Optional[int] = None
+    followers: Optional[int] = None
     spend: Optional[float] = None
     cpl: Optional[float] = None
     performedBy: Optional[str] = None
