@@ -239,7 +239,7 @@ async def upsert_salary_structure(salary: schemas.SalaryStructureCreate, db=Depe
 
 @app.get("/bonus-deductions", response_model=List[schemas.BonusDeduction])
 async def read_bonus_deductions(month: Optional[str] = None, year: Optional[int] = None, db=Depends(get_db)):
-    return await crud.get_bonus_deductions(db, month, year)
+    return await crud.get_bonus_deductions_with_remarks(db, month, year)
 
 @app.post("/bonus-deductions", response_model=schemas.BonusDeduction)
 async def create_bonus_deduction(item: schemas.BonusDeductionCreate, db=Depends(get_db)):

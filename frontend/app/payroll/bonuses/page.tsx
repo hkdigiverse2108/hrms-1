@@ -15,11 +15,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Loader2, Save, Trash2, Tag } from 'lucide-react'
+import { useUser } from '@/hooks/useUser'
 import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
 
 export default function BonusesPage() {
+  const { user } = useUser()
+  const canManage = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'hr';
   const { data, isLoading: loadingEmployees } = useApi()
   const employees = data?.employees || []
   const [adjustments, setAdjustments] = useState<any[]>([])
@@ -102,15 +105,17 @@ export default function BonusesPage() {
   return (
     <>
       <PageHeader title="Bonuses & Deductions" description="Add ad-hoc salary adjustments for specific months.">
-        <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={() => setModalOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Adjustment
-        </Button>
+        {canManage && (
+          <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={() => setModalOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Adjustment
+          </Button>
+        )}
       </PageHeader>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <DataTable
-          data={adjustments}
+          data={adjustments.filter(a => canManage || a.employeeId === user?.id || a.employeeId === user?.employeeId)}
           columns={columns}
           isLoading={loading}
           searchKey="reason"

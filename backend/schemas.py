@@ -806,9 +806,11 @@ class Lead(LeadBase):
 # System Settings Schemas
 class SystemSettingsBase(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = True
+    latePunchDeductionEnabled: Optional[bool] = True
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
+    latePunchDeductionEnabled: Optional[bool] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str

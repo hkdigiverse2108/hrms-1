@@ -212,6 +212,12 @@ export default function RemarksPage() {
   };
 
   const filteredRemarks = remarks.filter(r => {
+    // Role-based visibility check: Employees only see their own remarks
+    if (!canManageRemarks) {
+      const isOwnRemark = r.employeeId === user?.employeeId || r.employeeId === user?.id;
+      if (!isOwnRemark) return false;
+    }
+
     const matchesSearch = r.employeeName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          r.details?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === "All" || r.type === typeFilter;
@@ -236,7 +242,7 @@ export default function RemarksPage() {
     currentPage * itemsPerPage
   );
 
-  const totalPenalty = filteredRemarks.reduce((sum, r) => sum + getPenaltyAmount(r.type), 0);
+  const totalPenalty = filteredRemarks.reduce((sum, r) => sum + (r.amount || getPenaltyAmount(r.type)), 0);
 
   return (
     <div className="space-y-6 pb-10">
@@ -511,7 +517,7 @@ export default function RemarksPage() {
                 'Role': r.role,
                 'Violation Type': r.type,
                 'Remark Details': r.details,
-                'Penalty Amount': `₹${getPenaltyAmount(r.type)}`,
+                'Penalty Amount': `₹${r.amount || getPenaltyAmount(r.type)}`,
                 'Added By': r.addedBy
               }));
               
@@ -597,7 +603,7 @@ export default function RemarksPage() {
                       {remark.addedBy}
                     </td>
                     <td className="px-6 py-4 text-right font-bold text-red-600">
-                      ₹{getPenaltyAmount(remark.type)}
+                      ₹{remark.amount || getPenaltyAmount(remark.type)}
                     </td>
                     {canManageRemarks && (
                       <td className="px-6 py-4 text-right">

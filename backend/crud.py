@@ -79,8 +79,21 @@ async def get_salary_structures(db, skip: int = 0, limit: int = 100):
     return [fix_id(row) for row in rows]
 
 async def get_salary_structure_by_employee(db, employee_id: str):
+    # Try finding directly by the ID provided (could be custom ID or MongoDB ID)
     doc = await db.salary_structures.find_one({"employeeId": employee_id})
-    return fix_id(doc)
+    if doc:
+        return fix_id(doc)
+    
+    # If not found, check if employee_id is a MongoDB ID and look up the custom ID
+    try:
+        emp = await db.employees.find_one({"_id": ObjectId(employee_id)})
+        if emp:
+            doc = await db.salary_structures.find_one({"employeeId": emp.get("employeeId")})
+            if doc:
+                return fix_id(doc)
+    except:
+        pass
+    return None
 
 async def create_or_update_salary_structure(db, salary: schemas.SalaryStructureCreate):
     salary_dict = salary.dict()
@@ -99,6 +112,81 @@ async def get_bonus_deductions(db, month: str = None, year: int = None):
     cursor = db.bonus_deductions.find(query)
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
+
+async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = None):
+    # 1. Get manual adjustments
+    adjustments = await get_bonus_deductions(db, month, year)
+    
+    # 2. Get penalty types for lookup
+    penalty_types = await get_penalty_types(db)
+    penalty_names = [p["name"] for p in penalty_types]
+    
+    # 3. Get remarks
+    remark_query = {}
+    if month and year:
+        month_short = month[:3]
+        remark_query["date"] = {"$regex": f"{month_short}.* {year}"}
+    
+    cursor = db.remarks.find(remark_query)
+    remarks = await cursor.to_list(length=1000)
+    
+    # 4. Merge remarks that are deductions
+    for r in remarks:
+        is_penalty = r["type"] in penalty_names or r["type"] == "Late Punch-in"
+        if not is_penalty:
+            continue
+            
+        # Avoid duplication if already in bonus_deductions (e.g. Work Rejected)
+        # Check by reason/details matching
+        if any(a["reason"] in r["details"] or r["details"] in a["reason"] for a in adjustments if a["employeeId"] == r["employeeId"]):
+            continue
+
+        try:
+            date_parts = r["date"].split(" ")
+            r_month = date_parts[0]
+            r_year = int(date_parts[-1])
+        except:
+            r_month = month or "Unknown"
+            r_year = year or 2026
+
+        p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
+        
+        # Calculate one-day salary for Late Punch-in if amount is 0
+        if r["type"] == "Late Punch-in" and p_amount == 0:
+            salary_struct = await get_salary_structure_by_employee(db, r["employeeId"])
+            if salary_struct:
+                # Replicate working days calculation for accuracy
+                try:
+                    date_parts = r["date"].split(" ")
+                    r_month_name = date_parts[0].replace(",", "")
+                    r_year = int(date_parts[-1])
+                    # Use month_abbr for "May", "Jun", etc.
+                    try:
+                        month_num = list(calendar.month_abbr).index(r_month_name)
+                    except ValueError:
+                        month_num = list(calendar.month_name).index(r_month_name)
+                        
+                    _, num_days = calendar.monthrange(r_year, month_num)
+                    
+                    sundays = sum(1 for d in range(1, num_days + 1) if calendar.weekday(r_year, month_num, d) == 6)
+                    total_working_days = max(1, num_days - sundays)
+                    p_amount = round(salary_struct["monthlyGross"] / total_working_days, 2)
+                except Exception as e:
+                    print(f"Error calculating p_amount in merged list: {e}")
+                    p_amount = round(salary_struct["monthlyGross"] / 30, 2)
+
+        adjustments.append({
+            "id": f"remark_{str(r['_id'])}",
+            "employeeId": r["employeeId"],
+            "month": r_month,
+            "year": r_year,
+            "type": "deduction",
+            "amount": p_amount, # Note: Late punch will show 0 here as it's calculated at payroll
+            "reason": f"[Remark] {r['type']}: {r['details']}",
+            "status": "active"
+        })
+        
+    return adjustments
 
 async def create_bonus_deduction(db, item: schemas.BonusDeductionCreate):
     item_dict = item.dict()
@@ -121,6 +209,8 @@ async def run_payroll_processing(db, month: str, year: int):
     _, num_days = calendar.monthrange(year, month_num)
     
     penalty_types = await get_penalty_types(db)
+    system_settings = await get_system_settings(db)
+    late_punch_deduction_enabled = system_settings.get("latePunchDeductionEnabled", True)
     payroll_results = []
     
     for emp in employees:
@@ -200,8 +290,19 @@ async def run_payroll_processing(db, month: str, year: int):
         # Ad-hoc Bonus/Deductions
         adjustments = await get_bonus_deductions(db, month, year)
         emp_adjustments = [a for a in adjustments if a["employeeId"] == emp_id and a["status"] == "active"]
-        total_bonus = sum([a["amount"] for a in emp_adjustments if a["type"] == "bonus"])
-        total_adhoc_deduction = sum([a["amount"] for a in emp_adjustments if a["type"] == "deduction"])
+        
+        deduction_details = []
+        if lop_amount > 0:
+            deduction_details.append(f"LOP/Leave ({lop_days} days): ₹{round(lop_amount, 2)}")
+
+        total_bonus = 0
+        total_adhoc_deduction = 0
+        for a in emp_adjustments:
+            if a["type"] == "bonus":
+                total_bonus += a["amount"]
+            elif a["type"] == "deduction":
+                total_adhoc_deduction += a["amount"]
+                deduction_details.append(f"{a['reason']}: ₹{a.get('amount', 0)}")
         
         # Fetch Penalties from Remarks
         # Remarks date format: "May 7, 2026"
@@ -214,11 +315,16 @@ async def run_payroll_processing(db, month: str, year: int):
         emp_remarks = await remarks_cursor.to_list(length=100)
         
         penalty_total = 0
-        deduction_details = []
-        if lop_amount > 0:
-            deduction_details.append(f"LOP/Leave ({lop_days} days): ₹{round(lop_amount, 2)}")
             
         for r in emp_remarks:
+            if r["type"] == "Late Punch-in":
+                if late_punch_deduction_enabled:
+                    # Map to full-day salary deduction
+                    per_day_penalty = salary["monthlyGross"] / total_working_days
+                    penalty_total += per_day_penalty
+                    deduction_details.append(f"Late Punch-in: ₹{round(per_day_penalty, 2)}")
+                continue
+
             p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
             if p_amount > 0:
                 penalty_total += p_amount
@@ -435,7 +541,46 @@ async def create_review(db, review: schemas.ReviewCreate):
 async def update_review(db, review_id: str, update: schemas.ReviewUpdate): return await update_item(db, "reviews", review_id, update.dict(exclude_unset=True))
 async def delete_review(db, review_id: str): return await delete_item(db, "reviews", review_id)
 
-async def get_remarks(db, skip: int = 0, limit: int = 100): return await get_items(db, "remarks", skip, limit)
+async def get_remarks(db, skip: int = 0, limit: int = 100):
+    items = await get_items(db, "remarks", skip, limit)
+    # Enrich with penalty amount
+    penalty_types = await get_penalty_types(db)
+    
+    # Cache salary structures to avoid repeated DB calls
+    salary_cache = {}
+    
+    for item in items:
+        p_amount = next((p["amount"] for p in penalty_types if p["name"] == item.get("type")), 0)
+        
+        # Calculate one-day salary for Late Punch-in if amount is 0
+        if item.get("type") == "Late Punch-in" and p_amount == 0:
+            emp_id = item.get("employeeId")
+            if emp_id not in salary_cache:
+                salary_cache[emp_id] = await get_salary_structure_by_employee(db, emp_id)
+            
+            salary_struct = salary_cache[emp_id]
+            if salary_struct:
+                try:
+                    date_parts = item["date"].split(" ")
+                    r_month_name = date_parts[0].replace(",", "")
+                    r_year = int(date_parts[-1])
+                    try:
+                        month_num = list(calendar.month_abbr).index(r_month_name)
+                    except ValueError:
+                        month_num = list(calendar.month_name).index(r_month_name)
+
+                    _, num_days = calendar.monthrange(r_year, month_num)
+                    
+                    sundays = sum(1 for d in range(1, num_days + 1) if calendar.weekday(r_year, month_num, d) == 6)
+                    total_working_days = max(1, num_days - sundays)
+                    p_amount = round(salary_struct["monthlyGross"] / total_working_days, 2)
+                except Exception as e:
+                    print(f"Error calculating p_amount in remarks list: {e}")
+                    p_amount = round(salary_struct["monthlyGross"] / 30, 2)
+        
+        item["amount"] = p_amount
+        
+    return items
 async def create_remark(db, remark: schemas.RemarkCreate): 
     remark_dict = remark.dict()
     if not remark_dict.get("date"):
@@ -1158,7 +1303,10 @@ async def get_system_settings(db):
     settings = await db.system_settings.find_one({})
     if not settings:
         # Create default settings if none exist
-        default_settings = {"clientVisibilityAdminOnly": True}
+        default_settings = {
+            "clientVisibilityAdminOnly": True,
+            "latePunchDeductionEnabled": True
+        }
         result = await db.system_settings.insert_one(default_settings)
         settings = await db.system_settings.find_one({"_id": result.inserted_id})
     return fix_id(settings)
@@ -1620,7 +1768,7 @@ async def delete_employee_document(db, doc_id: str):
 # Employee Daily Report CRUD
 async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
     employee = await get_employee(db, employee_id)
-    if not employee or employee.get("department") != "Development":
+    if not employee:
         return
     
     salary_struct = await get_salary_structure_by_employee(db, employee_id)
@@ -1630,11 +1778,27 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
     try:
         dt = datetime.strptime(report_date, "%Y-%m-%d")
         month_name = calendar.month_name[dt.month]
+        month_num = dt.month
         year = dt.year
-        _, num_days = calendar.monthrange(year, dt.month)
+        _, num_days = calendar.monthrange(year, month_num)
         
-        per_day_salary = salary_struct["monthlyGross"] / num_days
-        reason = f"Work rejected by TL on {report_date}"
+        # Calculate working days in month (excluding Sundays and Holidays)
+        sundays = 0
+        for d in range(1, num_days + 1):
+            if calendar.weekday(year, month_num, d) == 6: # Sunday
+                sundays += 1
+        
+        # Count Holidays for this employee's company
+        emp_company = employee.get("company")
+        holiday_query = {"date": {"$regex": f"^{year}-{str(month_num).zfill(2)}"}}
+        if emp_company:
+            holiday_query["$or"] = [{"company": emp_company}, {"company": None}, {"company": ""}]
+        
+        holidays_count = await db.holidays.count_documents(holiday_query)
+        total_working_days = max(1, num_days - sundays - holidays_count)
+        
+        per_day_salary = salary_struct["monthlyGross"] / total_working_days
+        reason = f"Daily work report for {report_date} was rejected by Team Leader. Automatic full-day salary deduction applied."
         
         # Check if already deducted for this specific date
         existing = await db.bonus_deductions.find_one({
@@ -1654,6 +1818,24 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
                 status="active"
             )
             await create_bonus_deduction(db, deduction)
+            
+            # Add Remark for visibility
+            date_str = dt.strftime("%b %d, %Y")
+            if ", " in date_str and date_str[4] == '0': # Handle "May 05" -> "May 5"
+                date_str = date_str[:4] + date_str[5:]
+                
+            remark_data = {
+                "employeeId": employee_id,
+                "employeeName": employee["name"],
+                "role": employee.get("designation", "Staff"),
+                "avatar": employee.get("profilePhoto", ""),
+                "type": "Performance",
+                "details": f"Daily work report for {report_date} was rejected by Team Leader. Automatic full-day salary deduction applied.",
+                "addedBy": "System",
+                "date": date_str
+            }
+            await db.remarks.insert_one(remark_data)
+            
     except Exception as e:
         print(f"Error applying work rejection penalty: {e}")
 

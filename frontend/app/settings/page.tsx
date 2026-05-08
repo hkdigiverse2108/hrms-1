@@ -65,6 +65,24 @@ export default function SettingsPage() {
     }
   };
 
+  const handleToggleLatePunchDeduction = async (checked: boolean) => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ latePunchDeductionEnabled: checked })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const roles = [
     {
       id: "Admin",
@@ -131,6 +149,27 @@ export default function SettingsPage() {
                   <Switch 
                     checked={settings?.clientVisibilityAdminOnly ?? true}
                     onCheckedChange={handleToggleClientVisibility}
+                    disabled={isUpdating || user?.role !== 'Admin'}
+                  />
+                )}
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/30">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-[14px] font-bold">Late Punch Salary Cut</Label>
+                    <Badge variant="outline" className="text-[9px] h-4 font-bold bg-white">PAYROLL</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground max-w-[400px]">
+                    When enabled, system will automatically deduct salary for late punch-ins based on penalty rules.
+                  </p>
+                </div>
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-brand-teal" />
+                ) : (
+                  <Switch 
+                    checked={settings?.latePunchDeductionEnabled ?? true}
+                    onCheckedChange={handleToggleLatePunchDeduction}
                     disabled={isUpdating || user?.role !== 'Admin'}
                   />
                 )}
@@ -211,12 +250,12 @@ export default function SettingsPage() {
                  <span className="text-sm text-muted-foreground">Current Role</span>
                  <span className="text-sm font-bold text-brand-teal uppercase">{user?.role}</span>
                </div>
-               <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                 <span className="text-sm text-muted-foreground">Client Visibility</span>
-                 <span className="text-sm font-bold text-foreground">
-                   {settings?.clientVisibilityAdminOnly ? "Admin Only" : "All Roles"}
-                 </span>
-               </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                  <span className="text-sm text-muted-foreground">Late Punch Cut</span>
+                  <span className="text-sm font-bold text-foreground">
+                    {settings?.latePunchDeductionEnabled ? "Enabled" : "Disabled"}
+                  </span>
+                </div>
                <div className="flex justify-between items-center py-2">
                  <span className="text-sm text-muted-foreground">Last Settings Sync</span>
                  <span className="text-sm font-bold text-foreground">Success</span>
