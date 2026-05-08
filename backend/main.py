@@ -776,8 +776,8 @@ async def update_lead_follow_up(lead_id: str, follow_up_idx: int, follow_up: sch
 
 # Sales Target Routes
 @app.get("/sales-targets", response_model=List[schemas.SalesTarget])
-async def read_sales_targets(db=Depends(get_db)):
-    return await crud.get_sales_targets(db)
+async def read_sales_targets(month: Optional[str] = None, year: Optional[int] = None, type: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_sales_targets(db, month, year, type)
 
 @app.post("/sales-targets", response_model=schemas.SalesTarget)
 async def upsert_sales_target(target: schemas.SalesTargetCreate, db=Depends(get_db)):
@@ -789,6 +789,32 @@ async def update_sales_target(target_id: str, target_update: schemas.SalesTarget
     if not updated:
         raise HTTPException(status_code=404, detail="Target not found")
     return updated
+
+@app.delete("/sales-targets/{target_id}")
+async def delete_sales_target(target_id: str, db=Depends(get_db)):
+    await crud.delete_sales_target(db, target_id)
+    return {"message": "Sales target deleted successfully"}
+
+# Incentive Slab Routes
+@app.get("/incentive-slabs", response_model=List[schemas.IncentiveSlab])
+async def read_incentive_slabs(db=Depends(get_db)):
+    return await crud.get_incentive_slabs(db)
+
+@app.post("/incentive-slabs", response_model=schemas.IncentiveSlab)
+async def create_incentive_slab(slab: schemas.IncentiveSlabCreate, db=Depends(get_db)):
+    return await crud.create_incentive_slab(db, slab)
+
+@app.put("/incentive-slabs/{slab_id}", response_model=schemas.IncentiveSlab)
+async def update_incentive_slab(slab_id: str, slab_update: schemas.IncentiveSlabUpdate, db=Depends(get_db)):
+    updated = await crud.update_incentive_slab(db, slab_id, slab_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Slab not found")
+    return updated
+
+@app.delete("/incentive-slabs/{slab_id}")
+async def delete_incentive_slab(slab_id: str, db=Depends(get_db)):
+    await crud.delete_incentive_slab(db, slab_id)
+    return {"message": "Incentive slab deleted successfully"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))

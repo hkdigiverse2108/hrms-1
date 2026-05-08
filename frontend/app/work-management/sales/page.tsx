@@ -70,13 +70,63 @@ export default function SalesPage() {
   const [selectedMonth, setSelectedMonth] = useState(dayjs().format("MMMM"));
   const [selectedYear, setSelectedYear] = useState(dayjs().year());
   const [targets, setTargets] = useState<any[]>([]);
+  const [incentiveSlabs, setIncentiveSlabs] = useState<any[]>([]);
   const [isTargetSubmitting, setIsTargetSubmitting] = useState(false);
   const [targetForm, setTargetForm] = useState({
     employeeId: "",
+    type: "Monthly",
     month: dayjs().format("MMMM"),
     year: dayjs().year(),
+    week: 1,
     targetAmount: 0
   });
+
+  const [slabForm, setSlabForm] = useState({
+    minAmount: 0,
+    maxAmount: 0,
+    percentage: 0
+  });
+  const [isSlabDialogOpen, setIsSlabDialogOpen] = useState(false);
+
+  const fetchTargets = async () => {
+    try {
+      const res = await fetch(`${API_URL}/sales-targets`);
+      if (res.ok) setTargets(await res.json());
+    } catch (err) {
+      console.error("Error fetching targets:", err);
+    }
+  };
+
+  const fetchIncentiveSlabs = async () => {
+    try {
+      const res = await fetch(`${API_URL}/incentive-slabs`);
+      if (res.ok) setIncentiveSlabs(await res.json());
+    } catch (err) {
+      console.error("Error fetching slabs:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLeads();
+    fetchEmployees();
+    fetchTargets();
+    fetchIncentiveSlabs();
+  }, []);
+
+  useEffect(() => {
+    const existing = targets.find(t => 
+      t.employeeId === targetForm.employeeId && 
+      t.month === targetForm.month && 
+      t.year === targetForm.year &&
+      t.type === targetForm.type &&
+      (targetForm.type === "Monthly" || t.week === targetForm.week)
+    );
+    if (existing) {
+      setTargetForm(prev => ({ ...prev, targetAmount: existing.targetAmount }));
+    } else {
+      setTargetForm(prev => ({ ...prev, targetAmount: 0 }));
+    }
+  }, [targetForm.employeeId, targetForm.month, targetForm.year, targetForm.type, targetForm.week, targets]);
 
   const fetchLeadLogs = async (lead: any) => {
     setSelectedLeadForLogs(lead);
@@ -92,33 +142,36 @@ export default function SalesPage() {
     }
   };
 
-  useEffect(() => {
-    fetchLeads();
-    fetchEmployees();
-    fetchTargets();
-  }, []);
-
-  const fetchTargets = async () => {
+  const handleCreateSlab = async () => {
     try {
-      const res = await fetch(`${API_URL}/sales-targets`);
-      if (res.ok) setTargets(await res.json());
+      const res = await fetch(`${API_URL}/incentive-slabs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(slabForm),
+      });
+      if (res.ok) {
+        toast.success("Slab created successfully");
+        fetchIncentiveSlabs();
+        setIsSlabDialogOpen(false);
+        setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0 });
+      }
     } catch (err) {
-      console.error("Error fetching targets:", err);
+      toast.error("Failed to create slab");
     }
   };
 
-  useEffect(() => {
-    const existing = targets.find(t => 
-      t.employeeId === targetForm.employeeId && 
-      t.month === selectedMonth && 
-      t.year === selectedYear
-    );
-    if (existing) {
-      setTargetForm(prev => ({ ...prev, targetAmount: existing.targetAmount, month: selectedMonth, year: selectedYear }));
-    } else {
-      setTargetForm(prev => ({ ...prev, targetAmount: 0, month: selectedMonth, year: selectedYear }));
+  const handleDeleteSlab = async (id: string) => {
+    if (!confirm("Delete this slab?")) return;
+    try {
+      const res = await fetch(`${API_URL}/incentive-slabs/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Slab deleted");
+        fetchIncentiveSlabs();
+      }
+    } catch (err) {
+      toast.error("Failed to delete slab");
     }
-  }, [targetForm.employeeId, selectedMonth, selectedYear, targets]);
+  };
 
   const fetchEmployees = async () => {
     try {
@@ -263,7 +316,6 @@ export default function SalesPage() {
       if (res.ok) {
         toast.success("Target set successfully");
         fetchTargets();
-        setTargetForm({ ...targetForm, targetAmount: 0 });
       } else {
         toast.error("Failed to set target");
       }
@@ -783,72 +835,154 @@ export default function SalesPage() {
             <TabsContent value="targets">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {user?.role === "Admin" && (
-                  <Card className="border-none shadow-sm bg-white overflow-hidden lg:col-span-1">
-                    <CardHeader className="border-b border-slate-100">
-                      <CardTitle className="text-sm font-bold text-slate-700">Set Monthly Target</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-6 space-y-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Employee</label>
-                        <Select value={targetForm.employeeId} onValueChange={(val) => setTargetForm({...targetForm, employeeId: val})}>
-                          <SelectTrigger className="h-10 text-sm">
-                            <SelectValue placeholder="Select Employee" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {employees.map(emp => (
-                              <SelectItem key={emp.id} value={emp.id}>{emp.name || emp.firstName}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
+                  <div className="lg:col-span-1 space-y-6">
+                    <Card className="border-none shadow-sm bg-white overflow-hidden">
+                      <CardHeader className="border-b border-slate-100">
+                        <CardTitle className="text-sm font-bold text-slate-700">Set Sales Target</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-6 space-y-4">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Month</label>
-                          <Select value={targetForm.month} onValueChange={(val) => setTargetForm({...targetForm, month: val})}>
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Target Type</label>
+                          <Select value={targetForm.type} onValueChange={(val) => setTargetForm({...targetForm, type: val})}>
                             <SelectTrigger className="h-10 text-sm">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                                <SelectItem key={m} value={m}>{m}</SelectItem>
+                              <SelectItem value="Monthly">Monthly</SelectItem>
+                              <SelectItem value="Weekly">Weekly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Employee</label>
+                          <Select value={targetForm.employeeId} onValueChange={(val) => setTargetForm({...targetForm, employeeId: val})}>
+                            <SelectTrigger className="h-10 text-sm">
+                              <SelectValue placeholder="Select Employee" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {employees.map(emp => (
+                                <SelectItem key={emp.id} value={emp.id}>{emp.name || emp.firstName}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Month</label>
+                            <Select value={targetForm.month} onValueChange={(val) => setTargetForm({...targetForm, month: val})}>
+                              <SelectTrigger className="h-10 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Year</label>
+                            <Input 
+                              type="number" 
+                              className="h-10 text-sm" 
+                              value={targetForm.year} 
+                              onChange={(e) => setTargetForm({...targetForm, year: parseInt(e.target.value)})}
+                            />
+                          </div>
+                        </div>
+
+                        {targetForm.type === "Weekly" && (
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Week Number</label>
+                            <Select value={String(targetForm.week)} onValueChange={(val) => setTargetForm({...targetForm, week: parseInt(val)})}>
+                              <SelectTrigger className="h-10 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[1, 2, 3, 4, 5].map(w => (
+                                  <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Year</label>
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                            Target Amount (₹) {targets.some(t => t.employeeId === targetForm.employeeId && t.month === targetForm.month && t.year === targetForm.year && t.type === targetForm.type && (targetForm.type === "Monthly" || t.week === targetForm.week)) && <span className="text-brand-teal ml-1">(Existing)</span>}
+                          </label>
                           <Input 
                             type="number" 
-                            className="h-10 text-sm" 
-                            value={targetForm.year} 
-                            onChange={(e) => setTargetForm({...targetForm, year: parseInt(e.target.value)})}
+                            className="h-10 text-sm font-bold" 
+                            placeholder="e.g. 50000"
+                            value={targetForm.targetAmount || ""}
+                            onChange={(e) => setTargetForm({...targetForm, targetAmount: parseFloat(e.target.value)})}
                           />
                         </div>
-                      </div>
 
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                          Target Amount (₹) {targets.some(t => t.employeeId === targetForm.employeeId && t.month === targetForm.month && t.year === targetForm.year) && <span className="text-brand-teal ml-1">(Existing)</span>}
-                        </label>
-                        <Input 
-                          type="number" 
-                          className="h-10 text-sm font-bold" 
-                          placeholder="e.g. 50000"
-                          value={targetForm.targetAmount || ""}
-                          onChange={(e) => setTargetForm({...targetForm, targetAmount: parseFloat(e.target.value)})}
-                        />
-                      </div>
+                        <Button 
+                          className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-10 mt-2 shadow-sm"
+                          onClick={handleUpsertTarget}
+                          disabled={isTargetSubmitting}
+                        >
+                          {isTargetSubmitting ? "Setting Target..." : "Set Target"}
+                        </Button>
+                      </CardContent>
+                    </Card>
 
-                      <Button 
-                        className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-10 mt-2 shadow-sm"
-                        onClick={handleUpsertTarget}
-                        disabled={isTargetSubmitting}
-                      >
-                        {isTargetSubmitting ? "Setting Target..." : "Set Monthly Target"}
-                      </Button>
-                    </CardContent>
-                  </Card>
+                    <Card className="border-none shadow-sm bg-white overflow-hidden">
+                      <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
+                        <CardTitle className="text-sm font-bold text-slate-700">Incentive Slabs</CardTitle>
+                        <Dialog open={isSlabDialogOpen} onOpenChange={setIsSlabDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold text-brand-teal border-brand-teal/20 hover:bg-brand-teal/5">
+                              <Plus className="w-3 h-3 mr-1" /> Add Slab
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-sm">
+                            <DialogHeader>
+                              <DialogTitle>Add Incentive Slab</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] uppercase font-black text-slate-400">Min Amount (₹)</Label>
+                                  <Input type="number" value={slabForm.minAmount} onChange={e => setSlabForm({...slabForm, minAmount: parseFloat(e.target.value) || 0})} />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] uppercase font-black text-slate-400">Max Amount (₹)</Label>
+                                  <Input type="number" value={slabForm.maxAmount} onChange={e => setSlabForm({...slabForm, maxAmount: parseFloat(e.target.value) || 0})} />
+                                </div>
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
+                                <Input type="number" step="0.1" value={slabForm.percentage} onChange={e => setSlabForm({...slabForm, percentage: parseFloat(e.target.value) || 0})} />
+                              </div>
+                              <Button className="w-full bg-brand-teal text-white font-bold" onClick={handleCreateSlab}>Create Slab</Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="divide-y divide-slate-100">
+                          {incentiveSlabs.map((slab) => (
+                            <div key={slab.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50">
+                              <div className="space-y-0.5">
+                                <div className="text-sm font-bold text-slate-700">₹{slab.minAmount.toLocaleString()} - ₹{slab.maxAmount.toLocaleString()}</div>
+                                <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-rose-500" onClick={() => handleDeleteSlab(slab.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          {incentiveSlabs.length === 0 && <div className="p-6 text-center text-xs text-slate-400 italic">No slabs configured</div>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 )}
 
                 <Card className={`border-none shadow-sm bg-white overflow-hidden ${user?.role === "Admin" ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
@@ -863,11 +997,12 @@ export default function SalesPage() {
                         <thead>
                           <tr className="bg-slate-50/50 border-b border-slate-100">
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Employee</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Type</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Period</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Target</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Achieved</th>
-                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Progress</th>
-                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Incentive</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-indigo-600">Earned</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-brand-teal">Progress</th>
                             {user?.role === "Admin" && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
                           </tr>
                         </thead>
@@ -875,18 +1010,38 @@ export default function SalesPage() {
                           {targets.filter(t => user?.role === "Admin" || t.employeeName === user?.name).length > 0 ? (
                             targets
                               .filter(t => user?.role === "Admin" || t.employeeName === user?.name)
-                              .sort((a,b) => b.year - a.year)
+                              .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
                                 const achieved = leads.filter(l => {
                                   if (l.status !== "Client Won" || l.assignedTo !== t.employeeName) return false;
                                   const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-                                  return leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
+                                  
+                                  // Month/Year check
+                                  const monthMatch = leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
+                                  if (!monthMatch) return false;
+
+                                  // Weekly check
+                                  if (t.type === "Weekly") {
+                                    const dayOfMonth = leadDate.date();
+                                    const weekNum = Math.ceil(dayOfMonth / 7);
+                                    return weekNum === t.week;
+                                  }
+                                  return true;
                                 }).reduce((acc, l) => {
                                   const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
                                   return acc + val;
                                 }, 0);
                                 
                                 const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
+                                
+                                // Auto-calculate incentive based on slabs if incentiveAmount is 0
+                                let earnedIncentive = t.incentiveAmount || 0;
+                                if (earnedIncentive === 0 && achieved > 0) {
+                                  const applicableSlab = incentiveSlabs.find(s => achieved >= s.minAmount && achieved <= s.maxAmount);
+                                  if (applicableSlab) {
+                                    earnedIncentive = (achieved * applicableSlab.percentage) / 100;
+                                  }
+                                }
 
                                 return (
                                   <tr key={i} className="hover:bg-slate-50/50 transition-colors">
@@ -899,15 +1054,27 @@ export default function SalesPage() {
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                      <Badge variant="outline" className="text-[10px] font-bold border-slate-200 text-slate-600">
-                                        {t.month} {t.year}
+                                      <Badge className={`${t.type === 'Weekly' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'} border-none text-[10px] font-bold`}>
+                                        {t.type}
                                       </Badge>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-[10px] font-bold text-slate-600">{t.month} {t.year}</span>
+                                        {t.type === "Weekly" && <span className="text-[9px] font-black text-brand-teal uppercase">Week {t.week}</span>}
+                                      </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                       <span className="font-bold text-slate-900 text-sm">₹{t.targetAmount?.toLocaleString()}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                       <span className="font-bold text-emerald-600 text-sm">₹{achieved.toLocaleString()}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <div className="flex flex-col items-end">
+                                        <span className="font-bold text-indigo-600 text-sm">₹{earnedIncentive.toLocaleString()}</span>
+                                        {t.incentiveAmount === 0 && earnedIncentive > 0 && <span className="text-[8px] font-black text-slate-400 uppercase italic">Estimated</span>}
+                                      </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                       <div className="flex flex-col items-end gap-1">
@@ -922,43 +1089,50 @@ export default function SalesPage() {
                                         </div>
                                       </div>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                      <span className="font-bold text-indigo-600 text-sm">₹{t.incentiveAmount?.toLocaleString() || 0}</span>
-                                    </td>
                                     {user?.role === "Admin" && (
                                       <td className="px-6 py-4 text-right">
-                                        <Dialog>
-                                          <DialogTrigger asChild>
-                                            <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold text-brand-teal hover:text-brand-teal hover:bg-brand-teal/10">
-                                              Award
-                                            </Button>
-                                          </DialogTrigger>
-                                          <DialogContent className="max-w-sm">
-                                            <DialogHeader>
-                                              <DialogTitle className="text-sm">Award Performance Incentive</DialogTitle>
-                                            </DialogHeader>
-                                            <div className="space-y-4 py-4">
-                                              <div className="space-y-1.5">
-                                                <Label className="text-[10px] uppercase font-black text-slate-400">Incentive Amount (₹)</Label>
-                                                <Input 
-                                                  type="number" 
-                                                  defaultValue={t.incentiveAmount || 0}
-                                                  className="h-10 text-sm font-bold"
-                                                  id={`incentive-${t.id}`}
-                                                />
-                                              </div>
-                                              <Button 
-                                                className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold"
-                                                onClick={() => {
-                                                  const input = document.getElementById(`incentive-${t.id}`) as HTMLInputElement;
-                                                  handleAwardIncentive(t, parseFloat(input.value));
-                                                }}
-                                              >
-                                                Award Incentive
+                                        <div className="flex justify-end gap-1">
+                                          <Dialog>
+                                            <DialogTrigger asChild>
+                                              <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold text-brand-teal hover:text-brand-teal hover:bg-brand-teal/10">
+                                                Award
                                               </Button>
-                                            </div>
-                                          </DialogContent>
-                                        </Dialog>
+                                            </DialogTrigger>
+                                            <DialogContent className="max-w-sm">
+                                              <DialogHeader>
+                                                <DialogTitle className="text-sm">Award Performance Incentive</DialogTitle>
+                                              </DialogHeader>
+                                              <div className="space-y-4 py-4">
+                                                <div className="space-y-1.5">
+                                                  <Label className="text-[10px] uppercase font-black text-slate-400">Incentive Amount (₹)</Label>
+                                                  <Input 
+                                                    type="number" 
+                                                    defaultValue={earnedIncentive}
+                                                    className="h-10 text-sm font-bold"
+                                                    id={`incentive-${t.id}`}
+                                                  />
+                                                </div>
+                                                <Button 
+                                                  className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold"
+                                                  onClick={() => {
+                                                    const input = document.getElementById(`incentive-${t.id}`) as HTMLInputElement;
+                                                    handleAwardIncentive(t, parseFloat(input.value));
+                                                  }}
+                                                >
+                                                  Confirm Award
+                                                </Button>
+                                              </div>
+                                            </DialogContent>
+                                          </Dialog>
+                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-rose-500" onClick={async () => {
+                                            if (confirm("Delete target?")) {
+                                              await fetch(`${API_URL}/sales-targets/${t.id}`, { method: "DELETE" });
+                                              fetchTargets();
+                                            }
+                                          }}>
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </div>
                                       </td>
                                     )}
                                   </tr>
@@ -966,7 +1140,7 @@ export default function SalesPage() {
                               })
                           ) : (
                             <tr>
-                              <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
+                              <td colSpan={8} className="px-6 py-12 text-center text-slate-400 italic">
                                 No targets set yet.
                               </td>
                             </tr>

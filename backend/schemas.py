@@ -1018,11 +1018,31 @@ class EmployeeDailyReport(EmployeeDailyReportBase):
     id: str
 
 # Sales Target Schemas
+# Incentive Slab Schemas
+class IncentiveSlabBase(BaseModel):
+    minAmount: float
+    maxAmount: float
+    percentage: float
+
+class IncentiveSlabCreate(IncentiveSlabBase):
+    pass
+
+class IncentiveSlabUpdate(BaseModel):
+    minAmount: Optional[float] = None
+    maxAmount: Optional[float] = None
+    percentage: Optional[float] = None
+
+class IncentiveSlab(IncentiveSlabBase):
+    id: str
+
+# Sales Target Schemas
 class SalesTargetBase(BaseModel):
     employeeId: str
     employeeName: str
+    type: str = "Monthly" # Monthly, Weekly
     month: str
     year: int
+    week: Optional[int] = None # 1, 2, 3, 4, 5
     targetAmount: float
     currentAchievement: float = 0
     incentiveAmount: float = 0
@@ -1034,6 +1054,8 @@ class SalesTargetUpdate(BaseModel):
     targetAmount: Optional[float] = None
     currentAchievement: Optional[float] = None
     incentiveAmount: Optional[float] = None
+    type: Optional[str] = None
+    week: Optional[int] = None
 
 class SalesTarget(SalesTargetBase):
     id: str
