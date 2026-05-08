@@ -27,6 +27,8 @@ export function FollowUpDialog({ lead, onUpdate, userId, userName }: FollowUpDia
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editNote, setEditNote] = useState("");
 
   const handleAddFollowUp = async () => {
     if (!note.trim()) return;
@@ -48,6 +50,35 @@ export function FollowUpDialog({ lead, onUpdate, userId, userName }: FollowUpDia
         onUpdate();
       } else {
         toast.error("Failed to add follow-up");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateFollowUp = async (idx: number) => {
+    if (!editNote.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/leads/${lead.id}/follow-ups/${idx}?performedBy=${userId}&userName=${userName}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...lead.followUps[idx],
+          note: editNote,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Follow-up updated");
+        setEditingIdx(null);
+        setEditNote("");
+        onUpdate();
+      } else {
+        toast.error("Failed to update follow-up");
       }
     } catch (err) {
       console.error(err);
@@ -100,23 +131,70 @@ export function FollowUpDialog({ lead, onUpdate, userId, userName }: FollowUpDia
             <ScrollArea className="h-[250px] pr-4">
               {lead.followUps && lead.followUps.length > 0 ? (
                 <div className="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1px] before:bg-slate-200">
-                  {lead.followUps.slice().reverse().map((f: any, idx: number) => (
-                    <div key={idx} className="pl-6 relative">
-                      <div className="absolute left-[5px] top-1.5 w-1.5 h-1.5 rounded-full bg-brand-teal ring-4 ring-white" />
-                      <div className="bg-white border border-slate-100 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase">{f.date}</span>
-                          <div className="flex items-center gap-1 text-[10px] font-medium text-slate-500">
-                            <User className="w-3 h-3" />
-                            {f.performedBy || "System"}
+                  {lead.followUps.slice().reverse().map((f: any, revIdx: number) => {
+                    const originalIdx = lead.followUps.length - 1 - revIdx;
+                    const isEditing = editingIdx === originalIdx;
+
+                    return (
+                      <div key={revIdx} className="pl-6 relative">
+                        <div className="absolute left-[5px] top-1.5 w-1.5 h-1.5 rounded-full bg-brand-teal ring-4 ring-white" />
+                        <div className="bg-white border border-slate-100 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow group">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">{f.date}</span>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 text-[10px] font-medium text-slate-500">
+                                <User className="w-3 h-3" />
+                                {f.performedBy || "System"}
+                              </div>
+                              {!isEditing && (
+                                <button 
+                                  onClick={() => {
+                                    setEditingIdx(originalIdx);
+                                    setEditNote(f.note);
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 text-[10px] text-brand-teal font-bold transition-opacity"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
                           </div>
+                          
+                          {isEditing ? (
+                            <div className="space-y-2 mt-2">
+                              <Textarea 
+                                className="min-h-[60px] text-sm" 
+                                value={editNote} 
+                                onChange={(e) => setEditNote(e.target.value)} 
+                              />
+                              <div className="flex gap-2">
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 text-[10px] font-bold bg-brand-teal hover:bg-brand-teal-light text-white"
+                                  onClick={() => handleUpdateFollowUp(originalIdx)}
+                                  disabled={isSubmitting}
+                                >
+                                  {isSubmitting ? "..." : "Save"}
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-7 text-[10px] font-bold text-slate-500"
+                                  onClick={() => setEditingIdx(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                              {f.note}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                          {f.note}
-                        </p>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-[100px] text-slate-400 gap-2 border-2 border-dashed border-slate-100 rounded-xl">

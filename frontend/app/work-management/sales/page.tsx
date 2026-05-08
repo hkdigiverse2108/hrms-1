@@ -56,6 +56,7 @@ export default function SalesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pipelineDateFilter, setPipelineDateFilter] = useState("today");
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -65,6 +66,14 @@ export default function SalesPage() {
   const [leadLogs, setLeadLogs] = useState<any[]>([]);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
+  const [targets, setTargets] = useState<any[]>([]);
+  const [isTargetSubmitting, setIsTargetSubmitting] = useState(false);
+  const [targetForm, setTargetForm] = useState({
+    employeeId: "",
+    month: dayjs().format("MMMM"),
+    year: dayjs().year(),
+    targetAmount: 0
+  });
 
   const fetchLeadLogs = async (lead: any) => {
     setSelectedLeadForLogs(lead);
@@ -83,7 +92,30 @@ export default function SalesPage() {
   useEffect(() => {
     fetchLeads();
     fetchEmployees();
+    fetchTargets();
   }, []);
+
+  const fetchTargets = async () => {
+    try {
+      const res = await fetch(`${API_URL}/sales-targets`);
+      if (res.ok) setTargets(await res.json());
+    } catch (err) {
+      console.error("Error fetching targets:", err);
+    }
+  };
+
+  useEffect(() => {
+    const existing = targets.find(t => 
+      t.employeeId === targetForm.employeeId && 
+      t.month === targetForm.month && 
+      t.year === targetForm.year
+    );
+    if (existing) {
+      setTargetForm(prev => ({ ...prev, targetAmount: existing.targetAmount }));
+    } else {
+      setTargetForm(prev => ({ ...prev, targetAmount: 0 }));
+    }
+  }, [targetForm.employeeId, targetForm.month, targetForm.year, targets]);
 
   const fetchEmployees = async () => {
     try {
@@ -208,6 +240,38 @@ export default function SalesPage() {
     }
   };
 
+  const handleUpsertTarget = async () => {
+    if (!targetForm.employeeId || targetForm.targetAmount <= 0) {
+      toast.error("Please select an employee and set a valid target amount");
+      return;
+    }
+    setIsTargetSubmitting(true);
+    try {
+      const employee = employees.find(e => e.id === targetForm.employeeId);
+      const res = await fetch(`${API_URL}/sales-targets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...targetForm,
+          employeeName: employee?.name || employee?.firstName
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Target set successfully");
+        fetchTargets();
+        setTargetForm({ ...targetForm, targetAmount: 0 });
+      } else {
+        toast.error("Failed to set target");
+      }
+    } catch (err) {
+      console.error("Error setting target:", err);
+      toast.error("An error occurred");
+    } finally {
+      setIsTargetSubmitting(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "Client Won": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">Client Won</Badge>;
@@ -218,19 +282,65 @@ export default function SalesPage() {
     }
   };
 
-  const activeLeads = leads.filter(l => l.status !== "Client Won");
-  const convertedLeads = leads.filter(l => l.status === "Client Won");
+  const activeLeads = leads.filter(l => {
+    const isNotWon = l.status !== "Client Won";
+    if (pipelineDateFilter === "today") {
+      const today = dayjs().format('YYYY-MM-DD');
+      const leadDate = dayjs(l.date).format('YYYY-MM-DD');
+      return isNotWon && leadDate === today;
+    }
+    return isNotWon;
+  });
+
+  const convertedLeads = leads.filter(l => {
+    const isWon = l.status === "Client Won";
+    if (pipelineDateFilter === "today") {
+      const today = dayjs().format('YYYY-MM-DD');
+      const leadClosedDate = l.closedDate ? dayjs(l.closedDate).format('YYYY-MM-DD') : dayjs(l.date).format('YYYY-MM-DD');
+      return isWon && leadClosedDate === today;
+    }
+    return isWon;
+  });
 
   const totalRevenue = convertedLeads.reduce((acc, l) => {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
     return acc + val;
   }, 0);
 
+  const currentMonth = dayjs().format("MMMM");
+  const currentYear = dayjs().year();
+  
+  const monthlyTargets = targets.filter(t => t.month === currentMonth && t.year === currentYear);
+  const totalMonthlyTarget = monthlyTargets.reduce((acc, t) => acc + t.targetAmount, 0);
+  
+  const monthlyAchievement = leads.filter(l => {
+    if (l.status !== "Client Won") return false;
+    const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+    return leadDate.format("MMMM") === currentMonth && leadDate.year() === currentYear;
+  }).reduce((acc, l) => {
+    const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+    return acc + val;
+  }, 0);
+
+  const achievementRate = totalMonthlyTarget > 0 ? (monthlyAchievement / totalMonthlyTarget) * 100 : 0;
+
+  const myTarget = targets.find(t => t.employeeName === user?.name && t.month === currentMonth && t.year === currentYear);
+  const myAchievement = leads.filter(l => {
+    if (l.status !== "Client Won" || l.assignedTo !== user?.name) return false;
+    const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+    return leadDate.format("MMMM") === currentMonth && leadDate.year() === currentYear;
+  }).reduce((acc, l) => {
+    const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+    return acc + val;
+  }, 0);
+  
+  const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
+
   const stats = [
     { title: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, trend: "+12.5%", trendUp: true, icon: <DollarSign className="w-5 h-5" />, color: "text-emerald-600" },
+    { title: "Monthly Progress", value: `${achievementRate.toFixed(1)}%`, trend: `$${monthlyAchievement.toLocaleString()}`, trendUp: achievementRate >= 100, icon: <Target className="w-5 h-5" />, color: "text-indigo-600" },
     { title: "Active Leads", value: activeLeads.length.toString(), trend: "+5", trendUp: true, icon: <Users className="w-5 h-5" />, color: "text-blue-600" },
-    { title: "Converted", value: convertedLeads.length.toString(), trend: "+2", trendUp: true, icon: <Target className="w-5 h-5" />, color: "text-amber-600" },
-    { title: "Lead Source", value: "8 Active", trend: "High Qual", trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
+    { title: "Target (Monthly)", value: `$${totalMonthlyTarget.toLocaleString()}`, trend: currentMonth, trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
   ];
 
   const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' }) => (
@@ -489,20 +599,42 @@ export default function SalesPage() {
         title="Sales Management"
         description="Track leads, manage your sales pipeline, and monitor revenue growth in real-time."
       >
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm transition-all active:scale-95">
-              <Plus className="w-4 h-4 mr-2" />
-              Add New Lead
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Add New Sales Lead</DialogTitle>
-            </DialogHeader>
-            <LeadForm onSubmit={handleAddLead} isSubmitting={isSubmitting} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-4">
+          {myTarget && (
+            <div className="hidden sm:flex items-center gap-3 bg-white/50 backdrop-blur-sm border border-slate-200/50 rounded-xl px-4 py-2 shadow-sm">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">My {currentMonth} Target</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black text-slate-800">${myAchievement.toLocaleString()} / ${myTarget.targetAmount.toLocaleString()}</span>
+                  <div className="w-12 h-1.5 bg-slate-200/50 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full ${myProgress >= 100 ? 'bg-emerald-500' : 'bg-brand-teal'} transition-all`} 
+                      style={{ width: `${Math.min(myProgress, 100)}%` }} 
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold ${myProgress >= 100 ? 'bg-emerald-100 text-emerald-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
+                {myProgress.toFixed(0)}%
+              </div>
+            </div>
+          )}
+
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm transition-all active:scale-95">
+                <Plus className="w-4 h-4 mr-2" />
+                Add New Lead
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Add New Sales Lead</DialogTitle>
+              </DialogHeader>
+              <LeadForm onSubmit={handleAddLead} isSubmitting={isSubmitting} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </PageHeader>
 
       {/* Stats Grid */}
@@ -537,19 +669,34 @@ export default function SalesPage() {
             <TabsTrigger value="converted" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
               Converted Successes ({convertedLeads.length})
             </TabsTrigger>
+            <TabsTrigger value="targets" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
+              Monthly Targets
+            </TabsTrigger>
             {user?.role === "Admin" && (
-              <TabsTrigger value="reports" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
-                Performance Reports
-              </TabsTrigger>
+              <>
+                <TabsTrigger value="reports" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
+                  Performance Reports
+                </TabsTrigger>
+              </>
             )}
           </TabsList>
 
           <div className="flex items-center gap-2 mr-2">
+            <Select value={pipelineDateFilter} onValueChange={setPipelineDateFilter}>
+              <SelectTrigger className="h-9 w-[130px] border-slate-200 text-slate-600 font-bold text-xs bg-slate-50/50">
+                <Calendar className="w-3.5 h-3.5 mr-2 text-brand-teal" />
+                <SelectValue placeholder="Time Period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today Only</SelectItem>
+                <SelectItem value="all">All Time</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input 
                 placeholder="Search..." 
-                className="pl-9 h-9 w-[200px] border-slate-200 focus-visible:ring-brand-teal"
+                className="pl-9 h-9 w-[180px] border-slate-200 focus-visible:ring-brand-teal"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -582,6 +729,164 @@ export default function SalesPage() {
                   <LeadTable data={convertedLeads} type="converted" />
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="targets">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {user?.role === "Admin" && (
+                  <Card className="border-none shadow-sm bg-white overflow-hidden lg:col-span-1">
+                    <CardHeader className="border-b border-slate-100">
+                      <CardTitle className="text-sm font-bold text-slate-700">Set Monthly Target</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Employee</label>
+                        <Select value={targetForm.employeeId} onValueChange={(val) => setTargetForm({...targetForm, employeeId: val})}>
+                          <SelectTrigger className="h-10 text-sm">
+                            <SelectValue placeholder="Select Employee" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {employees.map(emp => (
+                              <SelectItem key={emp.id} value={emp.id}>{emp.name || emp.firstName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Month</label>
+                          <Select value={targetForm.month} onValueChange={(val) => setTargetForm({...targetForm, month: val})}>
+                            <SelectTrigger className="h-10 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                <SelectItem key={m} value={m}>{m}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Year</label>
+                          <Input 
+                            type="number" 
+                            className="h-10 text-sm" 
+                            value={targetForm.year} 
+                            onChange={(e) => setTargetForm({...targetForm, year: parseInt(e.target.value)})}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                          Target Amount ($) {targets.some(t => t.employeeId === targetForm.employeeId && t.month === targetForm.month && t.year === targetForm.year) && <span className="text-brand-teal ml-1">(Existing)</span>}
+                        </label>
+                        <Input 
+                          type="number" 
+                          className="h-10 text-sm font-bold" 
+                          placeholder="e.g. 50000"
+                          value={targetForm.targetAmount || ""}
+                          onChange={(e) => setTargetForm({...targetForm, targetAmount: parseFloat(e.target.value)})}
+                        />
+                      </div>
+
+                      <Button 
+                        className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-10 mt-2 shadow-sm"
+                        onClick={handleUpsertTarget}
+                        disabled={isTargetSubmitting}
+                      >
+                        {isTargetSubmitting ? "Setting Target..." : "Set Monthly Target"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Card className={`border-none shadow-sm bg-white overflow-hidden ${user?.role === "Admin" ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                  <CardHeader className="border-b border-slate-100">
+                    <CardTitle className="text-sm font-bold text-slate-700">
+                      {user?.role === "Admin" ? "Sales Performance Targets" : "My Performance Targets"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50/50 border-b border-slate-100">
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Employee</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Period</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Target</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Achieved</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Progress</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {targets.filter(t => user?.role === "Admin" || t.employeeName === user?.name).length > 0 ? (
+                            targets
+                              .filter(t => user?.role === "Admin" || t.employeeName === user?.name)
+                              .sort((a,b) => b.year - a.year)
+                              .map((t, i) => {
+                                const achieved = leads.filter(l => {
+                                  if (l.status !== "Client Won" || l.assignedTo !== t.employeeName) return false;
+                                  const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+                                  return leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
+                                }).reduce((acc, l) => {
+                                  const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+                                  return acc + val;
+                                }, 0);
+                                
+                                const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
+
+                                return (
+                                  <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-6 py-4">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[10px] font-bold uppercase">
+                                          {t.employeeName?.substring(0, 2)}
+                                        </div>
+                                        <span className="font-bold text-slate-700 text-sm">{t.employeeName}</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <Badge variant="outline" className="text-[10px] font-bold border-slate-200 text-slate-600">
+                                        {t.month} {t.year}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <span className="font-bold text-slate-900 text-sm">${t.targetAmount?.toLocaleString()}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <span className="font-bold text-emerald-600 text-sm">${achieved.toLocaleString()}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <div className="flex flex-col items-end gap-1">
+                                        <span className={`text-[11px] font-black ${percent >= 100 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                          {percent.toFixed(0)}%
+                                        </span>
+                                        <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                          <div 
+                                            className={`h-full ${percent >= 100 ? 'bg-emerald-500' : 'bg-brand-teal'} transition-all`} 
+                                            style={{ width: `${Math.min(percent, 100)}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                          ) : (
+                            <tr>
+                              <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
+                                No targets set yet.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
             <TabsContent value="reports">

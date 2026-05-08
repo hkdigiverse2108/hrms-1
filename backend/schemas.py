@@ -1021,3 +1021,24 @@ class EmployeeDailyReportUpdate(BaseModel):
 class EmployeeDailyReport(EmployeeDailyReportBase):
     id: str
 
+# Sales Target Schemas
+class SalesTargetBase(BaseModel):
+    employeeId: str
+    employeeName: str
+    month: str
+    year: int
+    targetAmount: float
+    currentAchievement: float = 0
+
+class SalesTargetCreate(SalesTargetBase):
+    pass
+
+class SalesTargetUpdate(BaseModel):
+    targetAmount: Optional[float] = None
+    currentAchievement: Optional[float] = None
+
+class SalesTarget(SalesTargetBase):
+    id: str
+    class Config:
+        from_attributes = True
+

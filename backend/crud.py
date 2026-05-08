@@ -1293,7 +1293,23 @@ async def add_lead_follow_up(db, lead_id: str, follow_up: schemas.FollowUp, perf
     )
     
     # Log activity
-    await log_activity(db, "Follow-up Added", performedBy, userName, f"Added follow-up: {follow_up_dict.get('notes', 'No notes provided')}", leadId=lead_id)
+    await log_activity(db, "Follow-up Added", performedBy, userName, f"Added follow-up: {follow_up_dict.get('note', 'No notes provided')}", leadId=lead_id)
+    
+    doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
+    return fix_id(doc)
+
+async def update_lead_follow_up(db, lead_id: str, follow_up_idx: int, follow_up: schemas.FollowUp, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    follow_up_dict = follow_up.dict()
+    
+    # Update specific element in the array using positional operator
+    # followUps.0, followUps.1, etc.
+    await db.leads.update_one(
+        {"_id": ObjectId(lead_id)},
+        {"$set": {f"followUps.{follow_up_idx}": follow_up_dict}}
+    )
+    
+    # Log activity
+    await log_activity(db, "Follow-up Updated", performedBy, userName, f"Updated follow-up at index {follow_up_idx}: {follow_up_dict.get('note', 'No notes provided')}", leadId=lead_id)
     
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
@@ -1865,6 +1881,36 @@ async def get_employee_daily_reports(db, employee_id: str = None, department: st
     async for doc in cursor:
         reports.append(fix_id(doc))
     return reports
+
+# Sales Target CRUD
+async def get_sales_targets(db, month: Optional[str] = None, year: Optional[int] = None):
+    query = {}
+    if month: query["month"] = month
+    if year: query["year"] = year
+    cursor = db.sales_targets.find(query)
+    rows = await cursor.to_list(length=500)
+    return [fix_id(row) for row in rows]
+
+async def create_or_update_sales_target(db, target: schemas.SalesTargetCreate):
+    target_dict = target.dict()
+    # Check if exists for this month/year/employee
+    existing = await db.sales_targets.find_one({
+        "employeeId": target_dict["employeeId"],
+        "month": target_dict["month"],
+        "year": target_dict["year"]
+    })
+    
+    if existing:
+        await db.sales_targets.update_one(
+            {"_id": existing["_id"]},
+            {"$set": {"targetAmount": target_dict["targetAmount"]}}
+        )
+        doc = await db.sales_targets.find_one({"_id": existing["_id"]})
+    else:
+        result = await db.sales_targets.insert_one(target_dict)
+        doc = await db.sales_targets.find_one({"_id": result.inserted_id})
+    
+    return fix_id(doc)
 
 async def update_employee_daily_report(db, report_id: str, report_update: schemas.EmployeeDailyReportUpdate):
     update_data = report_update.dict(exclude_unset=True)

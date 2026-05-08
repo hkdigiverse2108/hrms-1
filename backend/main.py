@@ -762,6 +762,19 @@ async def delete_lead(lead_id: str, db=Depends(get_db)):
 async def add_lead_follow_up(lead_id: str, follow_up: schemas.FollowUp, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
     return await crud.add_lead_follow_up(db, lead_id, follow_up, performedBy=performedBy, userName=userName)
 
+@app.put("/leads/{lead_id}/follow-ups/{follow_up_idx}", response_model=schemas.Lead)
+async def update_lead_follow_up(lead_id: str, follow_up_idx: int, follow_up: schemas.FollowUp, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.update_lead_follow_up(db, lead_id, follow_up_idx, follow_up, performedBy=performedBy, userName=userName)
+
+# Sales Target Routes
+@app.get("/sales-targets", response_model=List[schemas.SalesTarget])
+async def read_sales_targets(month: Optional[str] = None, year: Optional[int] = None, db=Depends(get_db)):
+    return await crud.get_sales_targets(db, month, year)
+
+@app.post("/sales-targets", response_model=schemas.SalesTarget)
+async def upsert_sales_target(target: schemas.SalesTargetCreate, db=Depends(get_db)):
+    return await crud.create_or_update_sales_target(db, target)
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
     # Using 127.0.0.1 explicitly can sometimes resolve connection issues on local machines
