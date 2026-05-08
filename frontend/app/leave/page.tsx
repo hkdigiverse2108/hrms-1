@@ -104,6 +104,7 @@ export default function LeavePage() {
     }
   }, [user?.id]);
 
+
   const fetchCompanies = async () => {
     try {
       const res = await fetch(`${API_URL}/companies`);
@@ -263,6 +264,10 @@ export default function LeavePage() {
       dateRange: filterDateRange
     });
   };
+
+  useEffect(() => {
+    handleSearch();
+  }, [filterType, filterStatus, filterDateRange]);
 
   const handleReset = () => {
     setFilterType("all");
@@ -830,50 +835,86 @@ export default function LeavePage() {
             
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-muted-foreground font-semibold bg-brand-light/40 border-b border-border uppercase">
+                <thead className="text-[12px] text-slate-500 font-bold bg-slate-50/50 border-b border-slate-100 tracking-wider">
                   <tr>
-                    <th className="px-6 py-4 font-medium tracking-wider">Leave Type</th>
-                    { (user?.role === 'Admin' || user?.role === 'HR') && <th className="px-6 py-4 font-medium tracking-wider">Employee</th> }
-                    <th className="px-6 py-4 font-medium tracking-wider">Date Range</th>
-                    <th className="px-6 py-4 font-medium tracking-wider">Duration</th>
-                    <th className="px-6 py-4 font-medium tracking-wider">Requested On</th>
-                    <th className="px-6 py-4 font-medium tracking-wider">Status</th>
-                    <th className="px-6 py-4 font-medium tracking-wider text-right"></th>
+                    <th className="px-6 py-4 font-bold text-center">Sr. No.</th>
+                    <th className="px-6 py-4 font-bold">Leave Type</th>
+                    <th className="px-6 py-4 font-bold">Day Type</th>
+                    <th className="px-6 py-4 font-bold text-center">From</th>
+                    <th className="px-6 py-4 font-bold text-center">Approved By</th>
+                    <th className="px-6 py-4 font-bold text-center">To</th>
+                    <th className="px-6 py-4 font-bold text-center">No of Days</th>
+                    <th className="px-6 py-4 font-bold text-center">Status</th>
+                    <th className="px-6 py-4 text-right"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody className="divide-y divide-border text-center">
                   {upcomingLeaves.length > 0 ? (
-                    upcomingLeaves.map((item) => {
+                    upcomingLeaves.map((item, index) => {
                       const Icon = getTypeIcon(item.type);
                       return (
                         <tr key={item.id} className="hover:bg-muted/50 transition-colors">
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 font-medium text-slate-500">
+                            {(index + 1).toString().padStart(2, '0')}
+                          </td>
+                          <td className="px-6 py-4 text-left">
                             <div className="flex items-center gap-3">
                               <div className="p-1.5 bg-brand-light rounded-md">
                                 <Icon className="w-4 h-4 text-brand-teal" />
                               </div>
-                              <span className="font-medium text-foreground">{item.type}</span>
+                              <span className="font-bold text-slate-700">{item.type}</span>
                             </div>
                           </td>
-                          { (user?.role === 'Admin' || user?.role === 'HR') && (
-                            <td className="px-6 py-4">
-                               <span className="font-medium">{item.employee_name}</span>
-                            </td>
-                          )}
                           <td className="px-6 py-4">
-                            <div className="font-medium">{item.start_date} - {item.end_date}</div>
-                            <div className="text-xs text-muted-foreground mt-0.5 max-w-[200px] truncate">{item.reason}</div>
+                            <span className="font-medium text-slate-600">{item.half_day ? 'Half Day' : 'Full Day'}</span>
                           </td>
-                          <td className="px-6 py-4 font-medium text-foreground">{item.duration}</td>
-                          <td className="px-6 py-4 text-muted-foreground">{item.requested_on}</td>
+                          <td className="px-6 py-4 font-medium text-slate-600">
+                            {item.start_date}
+                          </td>
                           <td className="px-6 py-4">
-                            <span className={`inline-flex px-2.5 py-1 text-[11px] font-bold rounded-md ${
-                              item.status === 'Approved' ? 'bg-green-50 text-green-700' : 
-                              item.status === 'Rejected' ? 'bg-red-50 text-red-700' : 
-                              'bg-orange-50 text-orange-600'
-                            }`}>
-                              {item.status}
-                            </span>
+                            {item.status === 'Approved' ? (
+                              <div className="flex items-center justify-center gap-3 w-fit mx-auto">
+                                <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0">
+                                  {item.approved_by_photo ? (
+                                    <img src={item.approved_by_photo} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-sm">
+                                      {(item.approved_by || "A")[0].toUpperCase()}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex flex-col text-left">
+                                  <span className="text-[14px] font-bold text-[#111827] leading-tight">{item.approved_by || "Admin"}</span>
+                                  <span className="text-[13px] font-medium text-slate-500">{item.approved_by_role || "Hr"}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <span className="text-slate-300 font-medium italic text-[13px]">Pending Review</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 font-medium text-slate-600">
+                            {item.end_date}
+                          </td>
+                          <td className="px-6 py-4 font-bold text-slate-900">
+                            {item.duration}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                item.status === 'Approved' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 
+                                item.status === 'Rejected' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
+                                'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                              }`} />
+                              <span className={`text-[12px] font-bold ${
+                                item.status === 'Approved' ? 'text-emerald-600' : 
+                                item.status === 'Rejected' ? 'text-rose-600' : 
+                                'text-amber-600'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
@@ -885,7 +926,7 @@ export default function LeavePage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-muted-foreground">
+                      <td colSpan={9} className="px-6 py-10 text-center text-muted-foreground">
                         No upcoming leave requests.
                       </td>
                     </tr>
