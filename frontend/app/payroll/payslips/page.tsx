@@ -18,10 +18,21 @@ function PayslipContent() {
   const searchParams = useSearchParams()
   const payrollId = searchParams.get('id')
   const [allPayrolls, setAllPayrolls] = useState<any[]>([])
+  const [employees, setEmployees] = useState<any[]>([])
   const [record, setRecord] = useState<any>(null)
   const [employee, setEmployee] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isDownloading, setIsDownloading] = useState(false)
+
+  const [selectedEmpId, setSelectedEmpId] = useState<string>('')
+  const [selectedMonth, setSelectedMonth] = useState<string>('April')
+  const [selectedYear, setSelectedYear] = useState<string>('2026')
+
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const years = ['2024', '2025', '2026'];
 
   const numberToWords = (num: number) => {
     const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
@@ -85,22 +96,34 @@ function PayslipContent() {
   }
 
   useEffect(() => {
-    fetchDetails()
-  }, [payrollId])
+    fetchInitialData()
+  }, [])
 
-  const fetchDetails = async () => {
+  useEffect(() => {
+    updateSelectedRecord()
+  }, [selectedEmpId, selectedMonth, selectedYear, allPayrolls])
+
+  const fetchInitialData = async () => {
+    setLoading(true)
     try {
-      const response = await fetch(`${API_URL}/payroll`)
-      if (response.ok) {
-        const data = await response.json()
-        setAllPayrolls(data)
-        
+      const [payrollRes, empRes] = await Promise.all([
+        fetch(`${API_URL}/payroll`),
+        fetch(`${API_URL}/employees`)
+      ])
+      
+      if (payrollRes.ok && empRes.ok) {
+        const payrollData = await payrollRes.json()
+        const empData = await empRes.json()
+        setAllPayrolls(payrollData)
+        setEmployees(empData)
+
+        // If ID in URL, set initial selections
         if (payrollId) {
-          const payrollRecord = data.find((p: any) => p.id === payrollId)
+          const payrollRecord = payrollData.find((p: any) => p.id === payrollId)
           if (payrollRecord) {
-            setRecord(payrollRecord)
-            const empRes = await fetch(`${API_URL}/employees/${payrollRecord.employeeId}`)
-            if (empRes.ok) setEmployee(await empRes.json())
+            setSelectedEmpId(payrollRecord.employeeId)
+            setSelectedMonth(payrollRecord.month)
+            setSelectedYear(String(payrollRecord.year))
           }
         }
       }
@@ -108,6 +131,25 @@ function PayslipContent() {
       console.error('Error fetching payslip details:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const updateSelectedRecord = async () => {
+    if (!selectedEmpId || !selectedMonth || !selectedYear) return
+
+    const match = allPayrolls.find(p => 
+      p.employeeId === selectedEmpId && 
+      p.month === selectedMonth && 
+      String(p.year) === selectedYear
+    )
+
+    if (match) {
+      setRecord(match)
+      const emp = employees.find(e => e.id === selectedEmpId)
+      setEmployee(emp || null)
+    } else {
+      setRecord(null)
+      setEmployee(null)
     }
   }
 
@@ -128,50 +170,58 @@ function PayslipContent() {
   const currentUser = userStr ? JSON.parse(userStr) : null
   const isAdminOrHR = currentUser?.role === 'Admin' || currentUser?.role === 'HR'
 
-  if (!record) {
-    return (
-      <div className="max-w-4xl mx-auto py-20 text-center bg-white rounded-xl border border-slate-100 shadow-sm">
-        <Loader2 className="h-10 w-10 animate-spin text-brand-teal mx-auto mb-4" />
-        <p className="text-slate-500 font-medium">Please select a payslip from the payroll dashboard to view details.</p>
-      </div>
-    )
-  }
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Print Styles */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          @page { size: auto; margin: 10mm; }
-          body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          body * { visibility: hidden !important; }
-          #payslip-card, #payslip-card * { visibility: visible !important; }
-          #payslip-card { 
-            position: absolute !important; 
-            left: 0 !important; 
-            top: 0 !important; 
-            width: 100% !important; 
-            max-width: 100% !important;
-            margin: 0 !important; 
-            padding: 10mm !important;
-            box-shadow: none !important; 
-            border: none !important;
-            border-radius: 0 !important;
-          }
-          .no-print { display: none !important; }
-        }
-      `}} />
+      {/* Selection Bar - Always Visible */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+        <div className="flex flex-wrap gap-3 flex-1 w-full md:w-auto">
+          <div className="min-w-[200px] flex-1">
+            <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
+              <SelectTrigger className="bg-slate-50 border-slate-200">
+                <SelectValue placeholder="Select Employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.map(emp => (
+                  <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-[140px]">
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="bg-slate-50 border-slate-200">
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map(m => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-[100px]">
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="bg-slate-50 border-slate-200">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map(y => (
+                  <SelectItem key={y} value={y}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-      <div className="flex justify-end items-center no-print">
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={() => window.print()} className="border-slate-300">
+        <div className="flex gap-2 w-full md:w-auto">
+          <Button variant="outline" onClick={() => window.print()} className="flex-1 md:flex-none border-slate-300">
             <Printer className="mr-2 h-4 w-4" />
             Print
           </Button>
           <Button 
             onClick={handleDownloadPDF} 
-            disabled={isDownloading}
-            className="bg-brand-teal hover:bg-brand-teal/90 shadow-md min-w-[140px]"
+            disabled={isDownloading || !record}
+            className="flex-1 md:flex-none bg-brand-teal hover:bg-brand-teal/90 shadow-md min-w-[140px]"
           >
             {isDownloading ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</>
@@ -181,6 +231,17 @@ function PayslipContent() {
           </Button>
         </div>
       </div>
+
+      {!record ? (
+        <div className="max-w-4xl mx-auto py-20 text-center bg-white rounded-xl border border-slate-100 shadow-sm">
+          <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+             <Calendar className="h-8 w-8 text-slate-300" />
+          </div>
+          <p className="text-slate-500 font-medium">Select an Employee and Month to generate their payslip.</p>
+          <p className="text-slate-400 text-xs mt-1 italic">Ensure payroll has been processed for the selected period.</p>
+        </div>
+      ) : (
+        <>
 
       <div id="payslip-card" className="bg-white p-16 rounded-lg shadow-sm border border-slate-200 print:shadow-none print:border-none print:p-0 font-sans">
         {/* Header - Brand Section */}
@@ -312,6 +373,29 @@ function PayslipContent() {
           </div>
         </div>
       </div>
+      </>
+      )}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          @page { size: auto; margin: 10mm; }
+          body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          body * { visibility: hidden !important; }
+          #payslip-card, #payslip-card * { visibility: visible !important; }
+          #payslip-card { 
+            position: absolute !important; 
+            left: 0 !important; 
+            top: 0 !important; 
+            width: 100% !important; 
+            max-width: 100% !important;
+            margin: 0 !important; 
+            padding: 10mm !important;
+            box-shadow: none !important; 
+            border: none !important;
+            border-radius: 0 !important;
+          }
+          .no-print { display: none !important; }
+        }
+      `}} />
     </div>
   )
 }

@@ -188,8 +188,16 @@ async def update_leave_request(leave_id: str, leave_update: schemas.LeaveRequest
     return await crud.update_leave_request(db, leave_id, leave_update.dict(exclude_unset=True))
 
 @app.patch("/leaves/{leave_id}/status", response_model=schemas.LeaveRequest)
-async def update_leave_status(leave_id: str, status: str, db=Depends(get_db)):
-    return await crud.update_leave_request_status(db, leave_id, status)
+async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUpdate, db=Depends(get_db)):
+    return await crud.update_leave_request_status(
+        db, 
+        leave_id, 
+        update_data.status, 
+        update_data.approved_by, 
+        update_data.approved_by_role,
+        update_data.approved_by_id,
+        update_data.approved_by_photo
+    )
 
 @app.delete("/leaves/{leave_id}")
 async def delete_leave_request(leave_id: str, db=Depends(get_db)):

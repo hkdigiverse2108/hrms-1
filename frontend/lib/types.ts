@@ -58,15 +58,21 @@ export interface Attendance {
 
 export interface LeaveRequest {
   id: string
-  employeeId: string
-  employeeName: string
-  leaveType: 'casual' | 'sick' | 'annual' | 'maternity' | 'paternity'
-  startDate: string
-  endDate: string
-  days: number
+  employee_id: string
+  employee_name: string
+  type: string
+  start_date: string
+  end_date: string
+  duration: string
   reason: string
-  status: 'pending' | 'approved' | 'rejected'
-  appliedOn: string
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled'
+  requested_on: string
+  day_type?: string
+  half_day?: boolean
+  approved_by?: string
+  approved_by_role?: string
+  approved_by_id?: string
+  approved_by_photo?: string
 }
 
 export interface Payroll {

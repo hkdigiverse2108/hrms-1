@@ -254,25 +254,59 @@ async def run_payroll_processing(db, month: str, year: int):
             if h["date"] not in sunday_dates:
                 unique_holidays += 1
 
-        # 1. Map out approved leaves for this month
+        # 1. Map out approved leaves for this month with deduction factors
+        # Robust query checking both camelCase and snake_case for employee ID
         leave_cursor = db.leave_requests.find({
-            "employeeId": emp_id,
+            "$or": [
+                {"employee_id": emp_id},
+                {"employeeId": emp_id}
+            ],
             "status": "Approved",
-            "startDate": {"$lte": end_date_str},
-            "endDate": {"$gte": start_date_str}
+            # We fetch all and filter dates in Python to handle multiple formats robustly
         })
-        month_leaves = await leave_cursor.to_list(length=100)
+        all_emp_leaves = await leave_cursor.to_list(length=100)
         
-        leave_dates_set = set()
-        for l in month_leaves:
+        leave_map = {} # date -> deduction_factor (1.0 for Full, 0.5 for Half)
+        for l in all_emp_leaves:
             try:
-                s = datetime.strptime(l["startDate"], "%Y-%m-%d")
-                e = datetime.strptime(l["endDate"], "%Y-%m-%d")
+                # Check both snake_case and camelCase for day type
+                day_type = l.get("day_type") or l.get("dayType") or "Full Day"
+                factor = 0.5 if day_type in ["Half Day", "First Half", "Second Half"] else 1.0
+                
+                # Check both snake_case and camelCase for dates
+                raw_start = l.get("start_date") or l.get("startDate")
+                raw_end = l.get("end_date") or l.get("endDate")
+                
+                if not raw_start or not raw_end:
+                    continue
+
+                # Try to parse different date formats robustly
+                def parse_date(d_str):
+                    for fmt in ("%d-%m-%Y", "%Y-%m-%d"):
+                        try:
+                            return datetime.strptime(d_str, fmt)
+                        except ValueError:
+                            continue
+                    return None
+
+                s = parse_date(raw_start)
+                e = parse_date(raw_end)
+                
+                if not s or not e:
+                    continue
+
                 curr = s
                 while curr <= e:
-                    leave_dates_set.add(curr.strftime("%Y-%m-%d"))
+                    # Only map if it falls within the requested month
+                    if curr.month == month_num and curr.year == year:
+                        d_str = curr.strftime("%Y-%m-%d")
+                        leave_map[d_str] = max(leave_map.get(d_str, 0), factor)
                     curr += timedelta(days=1)
-            except:
+                    # Safety break to prevent infinite loops
+                    if (curr - s).days > 365:
+                        break
+            except Exception as ex:
+                print(f"Robust leave parse error: {ex}")
                 pass
 
         # 2. Map out actual presence
@@ -285,37 +319,35 @@ async def run_payroll_processing(db, month: str, year: int):
         
         # 3. Calculate worked/absent based on priority: Leave > Attendance
         sunday_dates_set = set(sunday_dates)
-        holiday_dates_set = {h["date"] for h in month_holidays}
+        holiday_dates_set = {h["date"] for h in month_holidays if "date" in h}
         
-        actual_worked_days = 0
-        absent_working_days = []
-        leaves_applied_on_workdays = []
+        actual_worked_days = 0.0
+        lop_days = 0.0
 
         for d in range(1, num_days + 1):
             date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
             
             # We only care about scheduled working days
             if date_str not in sunday_dates_set and date_str not in holiday_dates_set:
-                if date_str in leave_dates_set:
-                    # Priority: If it's a leave day, it's NOT a worked day for salary deduction
-                    absent_working_days.append(date_str)
-                    leaves_applied_on_workdays.append(date_str)
+                if date_str in leave_map:
+                    factor = leave_map[date_str]
+                    lop_days += factor
+                    actual_worked_days += (1.0 - factor)
                 elif date_str in attendance_dates:
                     actual_worked_days += 1
                 else:
-                    absent_working_days.append(date_str)
+                    lop_days += 1
         
         total_working_days = num_days - sundays - unique_holidays
-        lop_days = len(absent_working_days)
         
         per_day_gross = salary["monthlyGross"] / total_working_days
         lop_amount = lop_days * per_day_gross
         
         deduction_details = []
         if lop_days > 0:
-            leave_types = {l["leaveType"] for l in month_leaves}
+            leave_types = {l.get("type") or l.get("leaveType") for l in all_emp_leaves if l.get("type") or l.get("leaveType")}
             leave_desc = f" ({', '.join(leave_types)})" if leave_types else ""
-            deduction_details.append(f"LOP/Leave{leave_desc} - {lop_days} days: ₹{round(lop_amount, 2)}")
+            deduction_details.append(f"LOP/Leave{leave_desc} - {round(lop_days, 1)} days: ₹{round(lop_amount, 2)}")
 
         # Ad-hoc Bonus/Deductions
         adjustments = await get_bonus_deductions(db, month, year)
@@ -355,13 +387,14 @@ async def run_payroll_processing(db, month: str, year: int):
         penalty_total = 0
             
         for r in emp_remarks:
-            if r["type"] == "Late Punch-in":
+            remark_type = r.get("type")
+            if remark_type == "Late Punch-in":
                 if late_punch_deduction_enabled:
                     penalty_total += per_day_gross
-                    deduction_details.append(f"Late Punch-in ({r['date']}): ₹{round(per_day_gross, 2)}")
+                    deduction_details.append(f"Late Punch-in ({r.get('date')}): ₹{round(per_day_gross, 2)}")
                 continue
 
-            p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
+            p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
             if p_amount > 0:
                 penalty_total += p_amount
                 deduction_details.append(f"{r['type']} ({r['date']}): ₹{p_amount}")
@@ -374,9 +407,9 @@ async def run_payroll_processing(db, month: str, year: int):
             "month": month,
             "year": year,
             "totalWorkingDays": int(total_working_days),
-            "workedDays": int(actual_worked_days),
-            "leaveDays": int(lop_days),
-            "lopDays": int(lop_days),
+            "workedDays": round(actual_worked_days, 1),
+            "leaveDays": round(lop_days, 1),
+            "lopDays": round(lop_days, 1),
             "basicSalary": salary["basic"],
             "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"] + incentive_amount,
             "bonus": total_bonus,
@@ -982,8 +1015,17 @@ async def update_leave_request(db, leave_id: str, update_data: dict):
     result = await db.leave_requests.find_one({"_id": ObjectId(leave_id)})
     return fix_id(result)
 
-async def update_leave_request_status(db, leave_id: str, status: str):
-    return await update_leave_request(db, leave_id, {"status": status})
+async def update_leave_request_status(db, leave_id: str, status: str, approved_by: str = None, approved_by_role: str = None, approved_by_id: str = None, approved_by_photo: str = None):
+    update_data = {"status": status}
+    if approved_by:
+        update_data["approved_by"] = approved_by
+    if approved_by_role:
+        update_data["approved_by_role"] = approved_by_role
+    if approved_by_id:
+        update_data["approved_by_id"] = approved_by_id
+    if approved_by_photo:
+        update_data["approved_by_photo"] = approved_by_photo
+    return await update_leave_request(db, leave_id, update_data)
 
 
 # Notification CRUD

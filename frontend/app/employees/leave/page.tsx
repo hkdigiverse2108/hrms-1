@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { API_URL } from "@/lib/config";
+import { useUserContext } from "@/context/UserContext";
 import { toast } from "sonner";
 
 import dayjs from "dayjs";
@@ -61,15 +62,25 @@ export default function LeaveRequestsPage() {
     }
   };
 
+  const { user } = useUserContext();
+
   const handleStatusUpdate = async (id: string, newStatus: string) => {
     setIsUpdating(true);
     try {
-      const res = await fetch(`${API_URL}/leaves/${id}`, {
-        method: 'PUT',
+      const body: any = { status: newStatus };
+      if (newStatus === 'Approved' && user) {
+        body.approved_by = user.name;
+        body.approved_by_role = user.role;
+        body.approved_by_id = user.id;
+        body.approved_by_photo = user.profilePhoto;
+      }
+      
+      const res = await fetch(`${API_URL}/leaves/${id}/status`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify(body)
       });
       if (res.ok) {
         toast.success(`Request ${newStatus.toLowerCase()} successfully`);
@@ -230,34 +241,39 @@ export default function LeaveRequestsPage() {
               </div>
               
               <div className="flex items-center gap-3 w-full sm:w-auto">
-                {selectedReq.status === 'Pending' && (
-                  <Button 
-                    variant="outline" 
-                    disabled={isUpdating}
-                    onClick={() => handleStatusUpdate(selectedReq.id, 'Rejected')}
-                    className="flex-1 sm:flex-none text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 font-medium"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Reject
-                  </Button>
-                )}
-                {selectedReq.status === 'Approved' && (
-                  <Button 
-                    variant="outline" 
-                    disabled={isUpdating}
-                    onClick={() => handleStatusUpdate(selectedReq.id, 'Cancelled')}
-                    className="flex-1 sm:flex-none text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 font-medium"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Cancel Leave
-                  </Button>
+                {(user?.role === 'Admin' || user?.role === 'HR') && (
+                  <>
+                    {selectedReq.status === 'Pending' && (
+                      <Button 
+                        variant="outline" 
+                        disabled={isUpdating}
+                        onClick={() => handleStatusUpdate(selectedReq.id, 'Rejected')}
+                        className="flex-1 sm:flex-none text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 font-medium"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Reject
+                      </Button>
+                    )}
+                    {selectedReq.status === 'Approved' && (
+                      <Button 
+                        variant="outline" 
+                        disabled={isUpdating}
+                        onClick={() => handleStatusUpdate(selectedReq.id, 'Cancelled')}
+                        className="flex-1 sm:flex-none text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 font-medium"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Cancel Leave
+                      </Button>
+                    )}
+                  </>
                 )}
 
                 <Button variant="outline" className="flex-1 sm:flex-none font-medium">
                   <MessageSquare className="w-4 h-4 mr-2" />
                   Message
                 </Button>
-                {selectedReq.status === 'Pending' && (
+                
+                {(user?.role === 'Admin' || user?.role === 'HR') && selectedReq.status === 'Pending' && (
                   <Dialog open={approveModalOpen} onOpenChange={setApproveModalOpen}>
                     <DialogTrigger asChild>
                       <Button 
@@ -381,9 +397,26 @@ export default function LeaveRequestsPage() {
                   
                   <div className="flex-1">
                     <div className="text-xl font-bold text-foreground mb-1">Status: {selectedReq.status}</div>
-                    <p className="text-sm text-muted-foreground">
-                      This request was submitted on {selectedReq.requested_on}.
-                    </p>
+                    <div className="text-sm text-muted-foreground mt-2">
+                      {selectedReq.status === 'Approved' && selectedReq.approved_by ? (
+                        <div className="flex items-center gap-3 mt-3 p-3 bg-gray-50 rounded-lg border border-border">
+                          <Avatar className="w-10 h-10 rounded-md">
+                            <AvatarImage src={selectedReq.approved_by_photo} className="object-cover" />
+                            <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
+                              {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-foreground">Approved by {selectedReq.approved_by}</span>
+                            <span className="text-xs text-muted-foreground">{selectedReq.approved_by_role || 'Admin'}</span>
+                          </div>
+                        </div>
+                      ) : selectedReq.status === 'Pending' ? (
+                        `This request was submitted on ${selectedReq.requested_on}.`
+                      ) : (
+                        `This request is ${selectedReq.status.toLowerCase()}.`
+                      )}
+                    </div>
                   </div>
                 </div>
 

@@ -101,18 +101,44 @@ class PunchRequest(BaseModel):
     employeeId: str
 
 class LeaveRequestBase(BaseModel):
-    employeeId: str
-    employeeName: str
-    leaveType: str
-    startDate: str
-    endDate: str
-    days: int
+    employee_id: str
+    employee_name: str
+    type: str  # annual, sick, unpaid, etc.
+    start_date: str
+    end_date: str
+    duration: str
     reason: str
-    status: str
-    appliedOn: str
+    status: str = "Pending"
+    requested_on: str = ""
+    day_type: Optional[str] = "Full Day"
+    half_day: bool = False
+    approved_by: Optional[str] = None
+    approved_by_role: Optional[str] = None
+    approved_by_id: Optional[str] = None
+    approved_by_photo: Optional[str] = None
+
+class LeaveRequestCreate(LeaveRequestBase):
+    pass
+
+class LeaveRequestUpdate(BaseModel):
+    type: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    duration: Optional[str] = None
+    reason: Optional[str] = None
+    half_day: Optional[bool] = None
+    day_type: Optional[str] = None
+    status: Optional[str] = None  # Pending, Approved, Rejected, Cancelled
+    approved_by: Optional[str] = None
+    approved_by_role: Optional[str] = None
+    approved_by_id: Optional[str] = None
+    approved_by_photo: Optional[str] = None
 
 class LeaveRequest(LeaveRequestBase):
     id: str
+
+    class Config:
+        from_attributes = True
 
 class DashboardStats(BaseModel):
     totalEmployees: int
@@ -140,9 +166,9 @@ class PayrollBase(BaseModel):
     month: str
     year: Optional[int] = None
     totalWorkingDays: int = 0
-    workedDays: int = 0
-    leaveDays: int = 0
-    lopDays: int = 0
+    workedDays: float = 0
+    leaveDays: float = 0
+    lopDays: float = 0
     basicSalary: float
     allowances: float
     bonus: float = 0
@@ -505,38 +531,6 @@ class EventUpdate(BaseModel):
 class Event(EventBase):
     id: str
 
-# Leave Request Schemas
-class LeaveRequestBase(BaseModel):
-    employee_id: str
-    employee_name: str
-    type: str  # annual, sick, unpaid
-    start_date: str
-    end_date: str
-    duration: str
-    reason: str
-    half_day: bool = False
-    day_type: str = "Full Day"
-    requested_on: str = ""
-
-class LeaveRequestCreate(LeaveRequestBase):
-    pass
-
-class LeaveRequestUpdate(BaseModel):
-    type: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    duration: Optional[str] = None
-    reason: Optional[str] = None
-    half_day: Optional[bool] = None
-    day_type: Optional[str] = None
-    status: Optional[str] = None  # Pending, Approved, Rejected, Cancelled
-
-class LeaveRequest(LeaveRequestBase):
-    id: str
-    status: str = "Pending"
-
-    class Config:
-        from_attributes = True
 
 # Notification Schemas
 class NotificationBase(BaseModel):
