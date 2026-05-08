@@ -337,10 +337,10 @@ export default function SalesPage() {
   const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
 
   const stats = [
-    { title: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, trend: "+12.5%", trendUp: true, icon: <DollarSign className="w-5 h-5" />, color: "text-emerald-600" },
-    { title: "Monthly Progress", value: `${achievementRate.toFixed(1)}%`, trend: `$${monthlyAchievement.toLocaleString()}`, trendUp: achievementRate >= 100, icon: <Target className="w-5 h-5" />, color: "text-indigo-600" },
+    { title: "Total Revenue", value: `₹${totalRevenue.toLocaleString()}`, trend: "+12.5%", trendUp: true, icon: <DollarSign className="w-5 h-5" />, color: "text-emerald-600" },
+    { title: "Monthly Progress", value: `${achievementRate.toFixed(1)}%`, trend: `₹${monthlyAchievement.toLocaleString()}`, trendUp: achievementRate >= 100, icon: <Target className="w-5 h-5" />, color: "text-indigo-600" },
     { title: "Active Leads", value: activeLeads.length.toString(), trend: "+5", trendUp: true, icon: <Users className="w-5 h-5" />, color: "text-blue-600" },
-    { title: "Target (Monthly)", value: `$${totalMonthlyTarget.toLocaleString()}`, trend: currentMonth, trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
+    { title: "Target (Monthly)", value: `₹${totalMonthlyTarget.toLocaleString()}`, trend: currentMonth, trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
   ];
 
   const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' }) => (
@@ -507,7 +507,7 @@ export default function SalesPage() {
                         onChange={(e) => setEditFormData({...editFormData, expectedIncome: e.target.value})} 
                       />
                     ) : (
-                      <span className="font-bold text-slate-900 text-sm">{lead.expectedIncome}</span>
+                      <span className="font-bold text-slate-900 text-sm">₹{lead.expectedIncome}</span>
                     )}
                     {type === 'converted' && !isEditing && (
                       <span className="text-[10px] text-emerald-600 font-bold uppercase mt-0.5">Won on {lead.closedDate}</span>
@@ -605,7 +605,7 @@ export default function SalesPage() {
               <div className="flex flex-col">
                 <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">My {currentMonth} Target</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-black text-slate-800">${myAchievement.toLocaleString()} / ${myTarget.targetAmount.toLocaleString()}</span>
+                  <span className="text-sm font-black text-slate-800">₹{myAchievement.toLocaleString()} / ₹{myTarget.targetAmount.toLocaleString()}</span>
                   <div className="w-12 h-1.5 bg-slate-200/50 rounded-full overflow-hidden">
                     <div 
                       className={`h-full ${myProgress >= 100 ? 'bg-emerald-500' : 'bg-brand-teal'} transition-all`} 
@@ -780,7 +780,7 @@ export default function SalesPage() {
 
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                          Target Amount ($) {targets.some(t => t.employeeId === targetForm.employeeId && t.month === targetForm.month && t.year === targetForm.year) && <span className="text-brand-teal ml-1">(Existing)</span>}
+                          Target Amount (₹) {targets.some(t => t.employeeId === targetForm.employeeId && t.month === targetForm.month && t.year === targetForm.year) && <span className="text-brand-teal ml-1">(Existing)</span>}
                         </label>
                         <Input 
                           type="number" 
@@ -853,10 +853,10 @@ export default function SalesPage() {
                                       </Badge>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                      <span className="font-bold text-slate-900 text-sm">${t.targetAmount?.toLocaleString()}</span>
+                                      <span className="font-bold text-slate-900 text-sm">₹{t.targetAmount?.toLocaleString()}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                      <span className="font-bold text-emerald-600 text-sm">${achieved.toLocaleString()}</span>
+                                      <span className="font-bold text-emerald-600 text-sm">₹{achieved.toLocaleString()}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                       <div className="flex flex-col items-end gap-1">

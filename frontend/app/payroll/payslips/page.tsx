@@ -216,7 +216,7 @@ function PayslipContent() {
           </div>
           <div className="space-y-1 text-right">
             <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Total Amount</p>
-            <p className="text-[18px] font-black text-slate-900">{record.netSalary?.toLocaleString()}</p>
+            <p className="text-[18px] font-black text-slate-900">₹{record.netSalary?.toLocaleString()}</p>
           </div>
         </div>
 
@@ -299,7 +299,7 @@ function PayslipContent() {
         <div className="mt-16 flex justify-end px-5">
            <div className="flex items-center gap-12">
              <span className="text-[14px] font-black text-slate-300 uppercase tracking-[0.2em]">Total Salary</span>
-             <span className="text-[28px] font-black text-slate-900 tracking-tighter">{record.netSalary?.toLocaleString()}</span>
+             <span className="text-[28px] font-black text-slate-900 tracking-tighter">₹{record.netSalary?.toLocaleString()}</span>
            </div>
         </div>
 

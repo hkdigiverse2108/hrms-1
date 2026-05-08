@@ -103,7 +103,7 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
           <Label htmlFor="expectedIncome">Expected Income</Label>
           <Input 
             id="expectedIncome" 
-            placeholder="e.g. $10,000" 
+            placeholder="e.g. ₹10,000" 
             {...register("expectedIncome")} 
           />
         </div>
