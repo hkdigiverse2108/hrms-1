@@ -259,12 +259,8 @@ function PayslipContent() {
               <span className="font-black text-slate-900">{record.basicSalary?.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-[13px]">
-              <span className="text-slate-400 font-bold">Allowances</span>
-              <span className="font-black text-slate-900">{record.allowances?.toLocaleString() || 0}</span>
-            </div>
-            <div className="flex justify-between text-[13px]">
-              <span className="text-slate-400 font-bold">Bonus</span>
-              <span className="font-black text-slate-900">{record.bonus?.toLocaleString() || 0}</span>
+              <span className="text-slate-400 font-bold">Bonus / Incentives</span>
+              <span className="font-black text-slate-900">{( (record.bonus || 0) + (record.allowances || 0) ).toLocaleString()}</span>
             </div>
           </div>
         </div>

@@ -224,29 +224,6 @@ async def run_payroll_processing(db, month: str, year: int):
         start_date_str = f"{year}-{str(month_num).zfill(2)}-01"
         end_date_str = f"{year}-{str(month_num).zfill(2)}-{num_days}"
         
-        # Count attendance
-        attendance_count = await db.attendance.count_documents({
-            "employeeId": emp_id,
-            "date": {"$gte": start_date_str, "$lte": end_date_str}
-        })
-        
-        # Approved Leaves
-        leave_cursor = db.leave_requests.find({
-            "employeeId": emp_id,
-            "status": "Approved",
-            "startDate": {"$gte": start_date_str},
-            "endDate": {"$lte": end_date_str}
-        })
-        leaves = await leave_cursor.to_list(length=100)
-        leave_days = 0
-        for l in leaves:
-            try:
-                s = datetime.strptime(l["startDate"], "%Y-%m-%d")
-                e = datetime.strptime(l["endDate"], "%Y-%m-%d")
-                leave_days += (e - s).days + 1
-            except:
-                pass
-        
         # Count Weekends (Sundays only)
         sundays = 0
         sunday_dates = []
@@ -276,24 +253,81 @@ async def run_payroll_processing(db, month: str, year: int):
             # Only count holiday if it doesn't fall on a Sunday
             if h["date"] not in sunday_dates:
                 unique_holidays += 1
+
+        # 1. Map out approved leaves for this month
+        leave_cursor = db.leave_requests.find({
+            "employeeId": emp_id,
+            "status": "Approved",
+            "startDate": {"$lte": end_date_str},
+            "endDate": {"$gte": start_date_str}
+        })
+        month_leaves = await leave_cursor.to_list(length=100)
+        
+        leave_dates_set = set()
+        for l in month_leaves:
+            try:
+                s = datetime.strptime(l["startDate"], "%Y-%m-%d")
+                e = datetime.strptime(l["endDate"], "%Y-%m-%d")
+                curr = s
+                while curr <= e:
+                    leave_dates_set.add(curr.strftime("%Y-%m-%d"))
+                    curr += timedelta(days=1)
+            except:
+                pass
+
+        # 2. Map out actual presence
+        attendance_cursor = db.attendance.find({
+            "employeeId": emp_id,
+            "date": {"$gte": start_date_str, "$lte": end_date_str}
+        })
+        attendance_records = await attendance_cursor.to_list(length=100)
+        attendance_dates = {att["date"] for att in attendance_records}
+        
+        # 3. Calculate worked/absent based on priority: Leave > Attendance
+        sunday_dates_set = set(sunday_dates)
+        holiday_dates_set = {h["date"] for h in month_holidays}
+        
+        actual_worked_days = 0
+        absent_working_days = []
+        leaves_applied_on_workdays = []
+
+        for d in range(1, num_days + 1):
+            date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
+            
+            # We only care about scheduled working days
+            if date_str not in sunday_dates_set and date_str not in holiday_dates_set:
+                if date_str in leave_dates_set:
+                    # Priority: If it's a leave day, it's NOT a worked day for salary deduction
+                    absent_working_days.append(date_str)
+                    leaves_applied_on_workdays.append(date_str)
+                elif date_str in attendance_dates:
+                    actual_worked_days += 1
+                else:
+                    absent_working_days.append(date_str)
         
         total_working_days = num_days - sundays - unique_holidays
-        
-        # LOP days are calculated based on missing working days
-        # attendance_count includes any day worked
-        # To "cut leave salary", we no longer add leave_days to the worked count
-        lop_days = max(0, total_working_days - attendance_count)
+        lop_days = len(absent_working_days)
         
         per_day_gross = salary["monthlyGross"] / total_working_days
         lop_amount = lop_days * per_day_gross
         
+        deduction_details = []
+        if lop_days > 0:
+            leave_types = {l["leaveType"] for l in month_leaves}
+            leave_desc = f" ({', '.join(leave_types)})" if leave_types else ""
+            deduction_details.append(f"LOP/Leave{leave_desc} - {lop_days} days: ₹{round(lop_amount, 2)}")
+
         # Ad-hoc Bonus/Deductions
         adjustments = await get_bonus_deductions(db, month, year)
         emp_adjustments = [a for a in adjustments if a["employeeId"] == emp_id and a["status"] == "active"]
         
-        deduction_details = []
-        if lop_amount > 0:
-            deduction_details.append(f"LOP/Leave ({lop_days} days): ₹{round(lop_amount, 2)}")
+        # Fetch Sales Incentive
+        sales_target = await db.sales_targets.find_one({
+            "employeeId": emp_id,
+            "month": month,
+            "year": year
+        })
+        incentive_amount = sales_target.get("incentiveAmount", 0) if sales_target else 0
 
         total_bonus = 0
         total_adhoc_deduction = 0
@@ -304,8 +338,12 @@ async def run_payroll_processing(db, month: str, year: int):
                 total_adhoc_deduction += a["amount"]
                 deduction_details.append(f"{a['reason']}: ₹{a.get('amount', 0)}")
         
+        # Add sales incentive to allowances (previously bonus)
+        # We will track it in deduction_details but it will be added to allowances field
+        if incentive_amount > 0:
+            deduction_details.append(f"Sales Incentive: ₹{incentive_amount}")
+        
         # Fetch Penalties from Remarks
-        # Remarks date format: "May 7, 2026"
         month_short = month[:3]
         remark_query = {
             "employeeId": emp_id,
@@ -319,18 +357,16 @@ async def run_payroll_processing(db, month: str, year: int):
         for r in emp_remarks:
             if r["type"] == "Late Punch-in":
                 if late_punch_deduction_enabled:
-                    # Map to full-day salary deduction
-                    per_day_penalty = salary["monthlyGross"] / total_working_days
-                    penalty_total += per_day_penalty
-                    deduction_details.append(f"Late Punch-in: ₹{round(per_day_penalty, 2)}")
+                    penalty_total += per_day_gross
+                    deduction_details.append(f"Late Punch-in ({r['date']}): ₹{round(per_day_gross, 2)}")
                 continue
 
             p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
             if p_amount > 0:
                 penalty_total += p_amount
-                deduction_details.append(f"{r['type']}: ₹{p_amount}")
+                deduction_details.append(f"{r['type']} ({r['date']}): ₹{p_amount}")
         
-        net_salary = (salary["monthlyGross"] - lop_amount + total_bonus - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"])
+        net_salary = (salary["monthlyGross"] - lop_amount + total_bonus + incentive_amount - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"])
         
         payroll_record = {
             "employeeId": emp_id,
@@ -338,11 +374,11 @@ async def run_payroll_processing(db, month: str, year: int):
             "month": month,
             "year": year,
             "totalWorkingDays": int(total_working_days),
-            "workedDays": int(attendance_count),
+            "workedDays": int(actual_worked_days),
             "leaveDays": int(lop_days),
             "lopDays": int(lop_days),
             "basicSalary": salary["basic"],
-            "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"],
+            "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"] + incentive_amount,
             "bonus": total_bonus,
             "deductions": salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + lop_amount + total_adhoc_deduction + penalty_total,
             "penalty": penalty_total,
@@ -623,6 +659,29 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
     
     holidays = await db.holidays.find(holiday_query).to_list(length=31)
     holiday_dates = [h["date"] for h in holidays]
+
+    # Get approved leaves to skip
+    start_date_str = f"{year}-{str(month_num).zfill(2)}-01"
+    end_date_str = f"{year}-{str(month_num).zfill(2)}-{num_days}"
+    leave_cursor = db.leave_requests.find({
+        "employeeId": employee_id,
+        "status": "Approved",
+        "startDate": {"$lte": end_date_str},
+        "endDate": {"$gte": start_date_str}
+    })
+    leaves = await leave_cursor.to_list(length=100)
+    leave_dates = set()
+    for l in leaves:
+        try:
+            from datetime import datetime, timedelta
+            s = datetime.strptime(l["startDate"], "%Y-%m-%d")
+            e = datetime.strptime(l["endDate"], "%Y-%m-%d")
+            curr = s
+            while curr <= e:
+                leave_dates.add(curr.strftime("%Y-%m-%d"))
+                curr += timedelta(days=1)
+        except:
+            pass
     
     attendance_records = []
     
@@ -634,6 +693,7 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
         date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
         if calendar.weekday(year, month_num, d) == 6: continue
         if date_str in holiday_dates: continue
+        if date_str in leave_dates: continue
         existing = await db.attendance.find_one({"employeeId": employee_id, "date": date_str})
         if existing: continue
         available_working_days.append(d)
@@ -1911,6 +1971,15 @@ async def create_or_update_sales_target(db, target: schemas.SalesTargetCreate):
         doc = await db.sales_targets.find_one({"_id": result.inserted_id})
     
     return fix_id(doc)
+
+async def update_sales_target(db, target_id: str, target_update: schemas.SalesTargetUpdate):
+    update_data = {k: v for k, v in target_update.dict().items() if v is not None}
+    result = await db.sales_targets.find_one_and_update(
+        {"_id": ObjectId(target_id)},
+        {"$set": update_data},
+        return_document=True
+    )
+    return fix_id(result)
 
 async def update_employee_daily_report(db, report_id: str, report_update: schemas.EmployeeDailyReportUpdate):
     update_data = report_update.dict(exclude_unset=True)

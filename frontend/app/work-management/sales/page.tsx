@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/useUser";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { API_URL } from "@/lib/config";
@@ -66,6 +67,8 @@ export default function SalesPage() {
   const [leadLogs, setLeadLogs] = useState<any[]>([]);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(dayjs().format("MMMM"));
+  const [selectedYear, setSelectedYear] = useState(dayjs().year());
   const [targets, setTargets] = useState<any[]>([]);
   const [isTargetSubmitting, setIsTargetSubmitting] = useState(false);
   const [targetForm, setTargetForm] = useState({
@@ -107,15 +110,15 @@ export default function SalesPage() {
   useEffect(() => {
     const existing = targets.find(t => 
       t.employeeId === targetForm.employeeId && 
-      t.month === targetForm.month && 
-      t.year === targetForm.year
+      t.month === selectedMonth && 
+      t.year === selectedYear
     );
     if (existing) {
-      setTargetForm(prev => ({ ...prev, targetAmount: existing.targetAmount }));
+      setTargetForm(prev => ({ ...prev, targetAmount: existing.targetAmount, month: selectedMonth, year: selectedYear }));
     } else {
-      setTargetForm(prev => ({ ...prev, targetAmount: 0 }));
+      setTargetForm(prev => ({ ...prev, targetAmount: 0, month: selectedMonth, year: selectedYear }));
     }
-  }, [targetForm.employeeId, targetForm.month, targetForm.year, targets]);
+  }, [targetForm.employeeId, selectedMonth, selectedYear, targets]);
 
   const fetchEmployees = async () => {
     try {
@@ -272,6 +275,29 @@ export default function SalesPage() {
     }
   };
 
+  const handleAwardIncentive = async (target: any, amount: number) => {
+    try {
+      const res = await fetch(`${API_URL}/sales-targets/${target.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incentiveAmount: amount
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(`Incentive of ₹${amount} awarded successfully`);
+        fetchTargets();
+      } else {
+        toast.error("Failed to award incentive");
+      }
+    } catch (err) {
+      console.error("Error awarding incentive:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "Client Won": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">Client Won</Badge>;
@@ -307,16 +333,13 @@ export default function SalesPage() {
     return acc + val;
   }, 0);
 
-  const currentMonth = dayjs().format("MMMM");
-  const currentYear = dayjs().year();
-  
-  const monthlyTargets = targets.filter(t => t.month === currentMonth && t.year === currentYear);
+  const monthlyTargets = targets.filter(t => t.month === selectedMonth && t.year === selectedYear);
   const totalMonthlyTarget = monthlyTargets.reduce((acc, t) => acc + t.targetAmount, 0);
   
   const monthlyAchievement = leads.filter(l => {
     if (l.status !== "Client Won") return false;
     const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-    return leadDate.format("MMMM") === currentMonth && leadDate.year() === currentYear;
+    return leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
   }).reduce((acc, l) => {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
     return acc + val;
@@ -324,11 +347,13 @@ export default function SalesPage() {
 
   const achievementRate = totalMonthlyTarget > 0 ? (monthlyAchievement / totalMonthlyTarget) * 100 : 0;
 
-  const myTarget = targets.find(t => t.employeeName === user?.name && t.month === currentMonth && t.year === currentYear);
+  const myTarget = targets.find(t => t.employeeName === user?.name && t.month === selectedMonth && t.year === selectedYear);
   const myAchievement = leads.filter(l => {
-    if (l.status !== "Client Won" || l.assignedTo !== user?.name) return false;
-    const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-    return leadDate.format("MMMM") === currentMonth && leadDate.year() === currentYear;
+    if (l.status !== "Client Won" || l.assignedTo === user?.name) {
+      const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+      return l.status === "Client Won" && l.assignedTo === user?.name && leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
+    }
+    return false;
   }).reduce((acc, l) => {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
     return acc + val;
@@ -337,10 +362,10 @@ export default function SalesPage() {
   const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
 
   const stats = [
-    { title: "Total Revenue", value: `₹${totalRevenue.toLocaleString()}`, trend: "+12.5%", trendUp: true, icon: <DollarSign className="w-5 h-5" />, color: "text-emerald-600" },
+    { title: "Monthly Revenue", value: `₹${monthlyAchievement.toLocaleString()}`, trend: "+12.5%", trendUp: true, icon: <DollarSign className="w-5 h-5" />, color: "text-emerald-600" },
     { title: "Monthly Progress", value: `${achievementRate.toFixed(1)}%`, trend: `₹${monthlyAchievement.toLocaleString()}`, trendUp: achievementRate >= 100, icon: <Target className="w-5 h-5" />, color: "text-indigo-600" },
     { title: "Active Leads", value: activeLeads.length.toString(), trend: "+5", trendUp: true, icon: <Users className="w-5 h-5" />, color: "text-blue-600" },
-    { title: "Target (Monthly)", value: `₹${totalMonthlyTarget.toLocaleString()}`, trend: currentMonth, trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
+    { title: "Target (Monthly)", value: `₹${totalMonthlyTarget.toLocaleString()}`, trend: selectedMonth, trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
   ];
 
   const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' }) => (
@@ -600,10 +625,34 @@ export default function SalesPage() {
         description="Track leads, manage your sales pipeline, and monitor revenue growth in real-time."
       >
         <div className="flex items-center gap-4">
+          <div className="hidden lg:flex items-center gap-2 bg-white border border-slate-100 rounded-xl px-2 py-1 shadow-sm">
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="h-8 w-[110px] border-none text-[11px] font-bold text-slate-600 focus:ring-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="w-px h-4 bg-slate-100" />
+            <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(parseInt(val))}>
+              <SelectTrigger className="h-8 w-[80px] border-none text-[11px] font-bold text-slate-600 focus:ring-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[2024, 2025, 2026].map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {myTarget && (
             <div className="hidden sm:flex items-center gap-3 bg-white/50 backdrop-blur-sm border border-slate-200/50 rounded-xl px-4 py-2 shadow-sm">
               <div className="flex flex-col">
-                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">My {currentMonth} Target</span>
+                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">My {selectedMonth} Target</span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-black text-slate-800">₹{myAchievement.toLocaleString()} / ₹{myTarget.targetAmount.toLocaleString()}</span>
                   <div className="w-12 h-1.5 bg-slate-200/50 rounded-full overflow-hidden">
@@ -818,6 +867,8 @@ export default function SalesPage() {
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Target</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Achieved</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Progress</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Incentive</th>
+                            {user?.role === "Admin" && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -871,6 +922,45 @@ export default function SalesPage() {
                                         </div>
                                       </div>
                                     </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <span className="font-bold text-indigo-600 text-sm">₹{t.incentiveAmount?.toLocaleString() || 0}</span>
+                                    </td>
+                                    {user?.role === "Admin" && (
+                                      <td className="px-6 py-4 text-right">
+                                        <Dialog>
+                                          <DialogTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold text-brand-teal hover:text-brand-teal hover:bg-brand-teal/10">
+                                              Award
+                                            </Button>
+                                          </DialogTrigger>
+                                          <DialogContent className="max-w-sm">
+                                            <DialogHeader>
+                                              <DialogTitle className="text-sm">Award Performance Incentive</DialogTitle>
+                                            </DialogHeader>
+                                            <div className="space-y-4 py-4">
+                                              <div className="space-y-1.5">
+                                                <Label className="text-[10px] uppercase font-black text-slate-400">Incentive Amount (₹)</Label>
+                                                <Input 
+                                                  type="number" 
+                                                  defaultValue={t.incentiveAmount || 0}
+                                                  className="h-10 text-sm font-bold"
+                                                  id={`incentive-${t.id}`}
+                                                />
+                                              </div>
+                                              <Button 
+                                                className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold"
+                                                onClick={() => {
+                                                  const input = document.getElementById(`incentive-${t.id}`) as HTMLInputElement;
+                                                  handleAwardIncentive(t, parseFloat(input.value));
+                                                }}
+                                              >
+                                                Award Incentive
+                                              </Button>
+                                            </div>
+                                          </DialogContent>
+                                        </Dialog>
+                                      </td>
+                                    )}
                                   </tr>
                                 );
                               })

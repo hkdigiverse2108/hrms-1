@@ -768,12 +768,19 @@ async def update_lead_follow_up(lead_id: str, follow_up_idx: int, follow_up: sch
 
 # Sales Target Routes
 @app.get("/sales-targets", response_model=List[schemas.SalesTarget])
-async def read_sales_targets(month: Optional[str] = None, year: Optional[int] = None, db=Depends(get_db)):
-    return await crud.get_sales_targets(db, month, year)
+async def read_sales_targets(db=Depends(get_db)):
+    return await crud.get_sales_targets(db)
 
 @app.post("/sales-targets", response_model=schemas.SalesTarget)
 async def upsert_sales_target(target: schemas.SalesTargetCreate, db=Depends(get_db)):
     return await crud.create_or_update_sales_target(db, target)
+
+@app.put("/sales-targets/{target_id}", response_model=schemas.SalesTarget)
+async def update_sales_target(target_id: str, target_update: schemas.SalesTargetUpdate, db=Depends(get_db)):
+    updated = await crud.update_sales_target(db, target_id, target_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Target not found")
+    return updated
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))

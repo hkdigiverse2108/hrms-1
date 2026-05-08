@@ -1029,6 +1029,7 @@ class SalesTargetBase(BaseModel):
     year: int
     targetAmount: float
     currentAchievement: float = 0
+    incentiveAmount: float = 0
 
 class SalesTargetCreate(SalesTargetBase):
     pass
@@ -1036,6 +1037,7 @@ class SalesTargetCreate(SalesTargetBase):
 class SalesTargetUpdate(BaseModel):
     targetAmount: Optional[float] = None
     currentAchievement: Optional[float] = None
+    incentiveAmount: Optional[float] = None
 
 class SalesTarget(SalesTargetBase):
     id: str

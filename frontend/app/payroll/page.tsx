@@ -61,9 +61,17 @@ export default function PayrollPage() {
 
   const filteredPayroll = payroll.filter(p => p.month === selectedMonth && String(p.year) === selectedYear)
 
-  const totalPayroll = filteredPayroll.reduce((sum, p) => sum + p.netSalary, 0)
-  const paidCount = filteredPayroll.filter((p) => p.status === 'paid').length
-  const pendingCount = filteredPayroll.filter((p) => p.status === 'processed').length
+  const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
+  const user = userStr ? JSON.parse(userStr) : null
+  const isAdminOrHR = user?.role === 'Admin' || user?.role === 'HR'
+
+  const finalPayroll = isAdminOrHR 
+    ? filteredPayroll 
+    : filteredPayroll.filter(p => p.employeeName === user?.name)
+
+  const totalPayroll = finalPayroll.reduce((sum, p) => sum + p.netSalary, 0)
+  const paidCount = finalPayroll.filter((p) => p.status === 'paid').length
+  const pendingCount = finalPayroll.filter((p) => p.status === 'processed').length
 
   const handleRunPayroll = async () => {
     setIsProcessing(true)
@@ -125,10 +133,10 @@ export default function PayrollPage() {
       render: (record: Payroll) => formatCurrency(record.basicSalary),
     },
     {
-      key: 'allowances' as const,
-      header: 'Allowances',
+      key: 'bonus' as const,
+      header: 'Bonus / Incentives',
       render: (record: Payroll) => (
-        <span className="text-green-600">+{formatCurrency(record.allowances)}</span>
+        <span className="text-green-600">+{formatCurrency((record.bonus || 0) + (record.allowances || 0))}</span>
       ),
     },
     {
@@ -195,7 +203,7 @@ export default function PayrollPage() {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" onClick={() => exportToCSV(filteredPayroll, `payroll_${selectedMonth}_${selectedYear}`)}>
+        <Button variant="outline" onClick={() => exportToCSV(finalPayroll, `payroll_${selectedMonth}_${selectedYear}`)}>
           <Download className="mr-2 h-4 w-4" />
           Export
         </Button>
@@ -217,7 +225,7 @@ export default function PayrollPage() {
         />
         <StatsCard
           title="Total Employees"
-          value={filteredPayroll.length}
+          value={finalPayroll.length}
           icon={<Users className="h-6 w-6" />}
         />
         <StatsCard
@@ -227,14 +235,14 @@ export default function PayrollPage() {
         />
         <StatsCard
           title="To Process"
-          value={filteredPayroll.length - (paidCount + pendingCount)}
+          value={finalPayroll.length - (paidCount + pendingCount)}
           icon={<Clock className="h-6 w-6 text-amber-500" />}
         />
       </div>
 
       <div className="mt-6">
         <DataTable
-          data={filteredPayroll}
+          data={finalPayroll}
           columns={columns}
           isLoading={isLoading}
           searchKey="employeeName"

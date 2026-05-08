@@ -97,7 +97,7 @@ export default function BonusesPage() {
             {record.type}
         </span>
     )},
-    { key: 'amount' as const, header: 'Amount', render: (record: any) => `$${record.amount?.toLocaleString() || 0}` },
+    { key: 'amount' as const, header: 'Amount', render: (record: any) => `₹${record.amount?.toLocaleString() || 0}` },
     { key: 'month' as const, header: 'Period', render: (record: any) => `${record.month} ${record.year}` },
     { key: 'reason' as const, header: 'Reason' },
   ]
