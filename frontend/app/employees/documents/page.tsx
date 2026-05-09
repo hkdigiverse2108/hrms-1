@@ -195,9 +195,54 @@ export default function EmployeeDocumentsPage() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Document URL</Label>
-                <Input placeholder="https://..." value={formData.fileUrl} onChange={(e) => setFormData({...formData, fileUrl: e.target.value, fileName: e.target.value.split('/').pop() || ''})} />
-                <p className="text-[10px] text-slate-400">Enter the link to the stored document (Google Drive, S3, etc.)</p>
+                <Label>Select Document</Label>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    type="file" 
+                    className="flex-1"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      
+                      setIsSubmitting(true)
+                      const formDataUpload = new FormData()
+                      formDataUpload.append('file', file)
+                      
+                      try {
+                        const response = await fetch(`${API_URL}/upload`, {
+                          method: 'POST',
+                          body: formDataUpload,
+                        })
+                        
+                        if (response.ok) {
+                          const data = await response.json()
+                          // Construct absolute URL
+                          const absoluteUrl = data.url.startsWith('http') 
+                            ? data.url 
+                            : `${API_URL}${data.url}`
+                          
+                          setFormData({
+                            ...formData, 
+                            fileUrl: absoluteUrl, 
+                            fileName: file.name
+                          })
+                          toast.success('File uploaded successfully')
+                        } else {
+                          toast.error('Failed to upload file')
+                        }
+                      } catch (error) {
+                        console.error('Upload error:', error)
+                        toast.error('Error uploading file')
+                      } finally {
+                        setIsSubmitting(false)
+                      }
+                    }}
+                  />
+                </div>
+                {formData.fileName && (
+                  <p className="text-[10px] text-brand-teal font-medium">Selected: {formData.fileName}</p>
+                )}
+                <p className="text-[10px] text-slate-400 font-medium tracking-tight">Upload official documents, certificates, or IDs.</p>
               </div>
 
               <div className="space-y-2">

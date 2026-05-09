@@ -62,7 +62,7 @@ export default function SalesPage() {
   const [editFormData, setEditFormData] = useState<any>(null);
   const [employees, setEmployees] = useState<any[]>([]);
   const [reportEmployeeFilter, setReportEmployeeFilter] = useState("all");
-  const [reportDateFilter, setReportDateFilter] = useState("");
+  const [reportDateFilter, setReportDateFilter] = useState(dayjs().format("YYYY-MM-DD"));
   const [selectedLeadForLogs, setSelectedLeadForLogs] = useState<any>(null);
   const [leadLogs, setLeadLogs] = useState<any[]>([]);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
@@ -91,7 +91,12 @@ export default function SalesPage() {
   const fetchTargets = async () => {
     try {
       const res = await fetch(`${API_URL}/sales-targets`);
-      if (res.ok) setTargets(await res.json());
+      if (res.ok) {
+        setTargets(await res.json());
+      } else {
+        const errorText = await res.text();
+        console.error(`Failed to fetch targets: ${res.status}`, errorText);
+      }
     } catch (err) {
       console.error("Error fetching targets:", err);
     }
@@ -246,11 +251,10 @@ export default function SalesPage() {
         setEditFormData(null);
         fetchLeads();
       } else {
-        toast.error("Failed to update lead");
+        toast.error(`Update failed: ${res.status}`);
       }
     } catch (err) {
-      console.error("Error updating lead:", err);
-      toast.error("An error occurred");
+      toast.error("Network error: Could not reach backend");
     } finally {
       setIsSubmitting(false);
     }

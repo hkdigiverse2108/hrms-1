@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import crud, schemas, database
@@ -7,12 +8,12 @@ import os
 from bson import ObjectId
 from database import get_db
 
+
 app = FastAPI(title="HRMS API")
 
-# Improved CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex="https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -527,8 +528,8 @@ async def create_marketing_monthly_report(report: schemas.MarketingMonthlyReport
     return await crud.create_marketing_monthly_report(db, report)
 
 @app.get("/marketing/reports/monthly", response_model=List[schemas.MarketingMonthlyReport])
-async def get_marketing_monthly_reports(client_id: str = None, db=Depends(get_db)):
-    return await crud.get_marketing_monthly_reports(db, client_id)
+async def get_marketing_monthly_reports(client_id: str = None, month: str = None, db=Depends(get_db)):
+    return await crud.get_marketing_monthly_reports(db, client_id, month)
 
 @app.put("/marketing/reports/monthly/{report_id}", response_model=schemas.MarketingMonthlyReport)
 async def update_marketing_monthly_report(report_id: str, report: schemas.MarketingMonthlyReportUpdate, db=Depends(get_db)):
@@ -757,8 +758,11 @@ async def create_lead(lead: schemas.LeadCreate, db=Depends(get_db)):
 
 @app.put("/leads/{lead_id}", response_model=schemas.Lead)
 async def update_lead(lead_id: str, lead_update: schemas.LeadUpdate, db=Depends(get_db)):
-    return await crud.update_lead(db, lead_id, lead_update)
-
+    result = await crud.update_lead(db, lead_id, lead_update)
+    if not result:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return result
+        
 @app.delete("/leads/{lead_id}")
 async def delete_lead(lead_id: str, db=Depends(get_db)):
     success = await crud.delete_lead(db, lead_id)
@@ -816,8 +820,11 @@ async def delete_incentive_slab(slab_id: str, db=Depends(get_db)):
     await crud.delete_incentive_slab(db, slab_id)
     return {"message": "Incentive slab deleted successfully"}
 
+# Department Routes
+# (Using existing routes defined earlier in the file)
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
     # Using 127.0.0.1 explicitly can sometimes resolve connection issues on local machines
-    print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    print(f"Starting HRMS Backend on http://0.0.0.0:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)

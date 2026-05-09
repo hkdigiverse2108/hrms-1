@@ -12,6 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { useApi } from '@/hooks/useApi'
 import { Save, Plus, Loader2, Image as ImageIcon, X, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
@@ -86,7 +93,7 @@ const defaultFormData: EmployeeFormData = {
 }
 
 export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: EmployeeFormProps) {
-  const { data } = useApi()
+  const { data, refresh } = useApi()
   const departments = data?.departments || []
   const designations = data?.designations || []
   const roles = data?.roles || []
@@ -167,8 +174,10 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
       if (response.ok) {
         const data = await response.json()
-        // Store the full URL returned by the backend
-        handleChange('profilePhoto', data.url)
+        const absoluteUrl = data.url.startsWith('http') 
+          ? data.url 
+          : `${API_URL}${data.url}`
+        handleChange('profilePhoto', absoluteUrl)
       } else {
         alert('Failed to upload image')
       }
@@ -296,7 +305,34 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           </>
         )}
         
-        <FormSelect key={`dept-${departments.length}`} label="Department" id="department" required value={formData.department} onValueChange={v => handleChange('department', v)} options={departments.map((d: any) => ({ label: d.name, value: d.name }))} placeholder="Select department" />
+        <div className="flex items-center gap-2">
+          <FormSelect 
+            key={`dept-${departments.length}`} 
+            label="Department" 
+            id="department" 
+            required 
+            value={formData.department} 
+            onValueChange={v => handleChange('department', v)} 
+            options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
+            placeholder="Select department" 
+            className="flex-1"
+          />
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button type="button" variant="outline" size="icon" className="mt-0 h-10 w-10 border-dashed border-brand-teal text-brand-teal hover:bg-brand-light">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Quick Add Department</DialogTitle>
+              </DialogHeader>
+              <QuickAddDept onAdded={() => {
+                refresh();
+              }} />
+            </DialogContent>
+          </Dialog>
+        </div>
         <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
         
         <FormSelect 
@@ -450,6 +486,48 @@ function FormSelect({ label, id, required, value, onValueChange, options, placeh
         </SelectContent>
       </Select>
 
+    </div>
+  )
+}
+
+function QuickAddDept({ onAdded }: { onAdded: () => void }) {
+  const [name, setName] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (!name.trim()) return
+    setIsSaving(true)
+    try {
+      const res = await fetch(`${API_URL}/departments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      })
+      if (res.ok) {
+        onAdded()
+        setName('')
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4 pt-4">
+      <div className="space-y-2">
+        <Label>Department Name</Label>
+        <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. HR, Tech" />
+      </div>
+      <Button 
+        type="button"
+        className="w-full bg-brand-teal text-white hover:bg-brand-teal-light" 
+        onClick={handleSave}
+        disabled={isSaving}
+      >
+        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Department'}
+      </Button>
     </div>
   )
 }

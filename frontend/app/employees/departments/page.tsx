@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
-import { Card, CardContent } from '@/components/ui/card'
+import { DataTable } from '@/components/hrms/data-table'
+import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,45 +13,50 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Users, Pencil, Trash2, Download } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Plus, MoreHorizontal, Pencil, Trash2, Loader2, Download } from 'lucide-react'
 import { exportToCSV } from "@/lib/export";
-
-import type { Department } from '@/lib/types'
-import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { useApi } from '@/hooks/useApi'
-import { useEffect } from 'react'
-import { Loader2 } from 'lucide-react'
 import { API_URL } from '@/lib/config'
+import type { Department } from '@/lib/types'
 
 export default function DepartmentsPage() {
-  const { data, isLoading: apiLoading } = useApi()
+  const { data, isLoading: apiLoading, refresh } = useApi()
   const [departments, setDepartments] = useState<Department[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  
+
   useEffect(() => {
     if (data?.departments) {
       setDepartments(data.departments)
     }
   }, [data?.departments])
-  
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [departmentToDelete, setDepartmentToDelete] = useState<Department | null>(null)
-  const [formData, setFormData] = useState({ name: '', head: '' })
+  const [formData, setFormData] = useState({ name: '' })
 
   const handleOpenModal = (department?: Department) => {
     if (department) {
       setEditingDepartment(department)
-      setFormData({ name: department.name, head: department.head })
+      setFormData({
+        name: department.name,
+      })
     } else {
       setEditingDepartment(null)
-      setFormData({ name: '', head: '' })
+      setFormData({ name: '' })
     }
     setModalOpen(true)
   }
 
   const handleSave = async () => {
+    if (!formData.name.trim()) return
     setIsLoading(true)
     try {
       if (editingDepartment) {
@@ -60,8 +66,8 @@ export default function DepartmentsPage() {
           body: JSON.stringify(formData),
         })
         if (response.ok) {
-          const updated = await response.json()
-          setDepartments(departments.map((d) => d.id === updated.id ? updated : d))
+          refresh()
+          setModalOpen(false)
         }
       } else {
         const response = await fetch(`${API_URL}/departments`, {
@@ -70,17 +76,20 @@ export default function DepartmentsPage() {
           body: JSON.stringify(formData),
         })
         if (response.ok) {
-          const created = await response.json()
-          setDepartments([...departments, created])
+          refresh()
+          setModalOpen(false)
         }
       }
-      setModalOpen(false)
-      setFormData({ name: '', head: '' })
     } catch (error) {
       console.error('Error saving department:', error)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleDeleteClick = (department: Department) => {
+    setDepartmentToDelete(department)
+    setDeleteDialogOpen(true)
   }
 
   const handleDeleteConfirm = async () => {
@@ -90,7 +99,7 @@ export default function DepartmentsPage() {
           method: 'DELETE',
         })
         if (response.ok) {
-          setDepartments(departments.filter((d) => d.id !== departmentToDelete.id))
+          refresh()
           setDepartmentToDelete(null)
         }
       } catch (error) {
@@ -100,69 +109,62 @@ export default function DepartmentsPage() {
     setDeleteDialogOpen(false)
   }
 
-  const handleDeleteClick = (department: Department) => {
-    setDepartmentToDelete(department)
-    setDeleteDialogOpen(true)
-  }
+  const columns = [
+    { key: 'name' as const, header: 'Department Name' },
+    { key: 'employeeCount' as const, header: 'Employee Count' },
+  ]
 
+  const renderActions = (department: Department) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => handleOpenModal(department)}>
+          <Pencil className="mr-2 h-4 w-4" />
+          Edit
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => handleDeleteClick(department)}
+          className="text-destructive"
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 
   return (
     <>
-      <PageHeader title="Departments" description="Manage departments in your organization.">
+      <PageHeader title="Departments" description="Manage company departments and organization units.">
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={() => exportToCSV(departments, 'departments')}>
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button onClick={() => handleOpenModal()}>
+          <Button onClick={() => handleOpenModal()} className="bg-brand-teal hover:bg-brand-teal-light text-white">
             <Plus className="mr-2 h-4 w-4" />
             Add Department
           </Button>
         </div>
       </PageHeader>
 
-
       {(apiLoading && departments.length === 0) ? (
         <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-brand-teal" />
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {departments.map((department) => (
-            <Card key={department.id} className="group relative">
-              <CardContent className="pt-6">
-                <div className="absolute right-4 top-4 flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleOpenModal(department)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteClick(department)}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="flex items-start gap-4">
-                  <div className="rounded-lg bg-primary/10 p-3">
-                    <Users className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold">{department.name}</h3>
-                    <p className="text-sm text-muted-foreground">Head: {department.head}</p>
-                    <p className="mt-2 text-2xl font-bold">{department.employeeCount}</p>
-                    <p className="text-sm text-muted-foreground">Employees</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="bg-white rounded-xl border shadow-sm">
+          <DataTable
+            data={departments}
+            columns={columns}
+            searchKey="name"
+            searchPlaceholder="Search departments..."
+            actions={renderActions}
+          />
         </div>
       )}
 
@@ -173,28 +175,25 @@ export default function DepartmentsPage() {
               {editingDepartment ? 'Edit Department' : 'Add New Department'}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 pt-2">
             <div className="space-y-2">
               <Label htmlFor="name">Department Name</Label>
               <Input
                 id="name"
+                placeholder="e.g. Sales, Marketing, HR"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="head">Department Head</Label>
-              <Input
-                id="head"
-                value={formData.head}
-                onChange={(e) => setFormData({ ...formData, head: e.target.value })}
-              />
-            </div>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setModalOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isLoading}>
+              <Button 
+                onClick={handleSave} 
+                disabled={isLoading}
+                className="bg-brand-teal hover:bg-brand-teal-light text-white"
+              >
                 {isLoading ? (editingDepartment ? 'Saving...' : 'Adding...') : (editingDepartment ? 'Save Changes' : 'Add Department')}
               </Button>
             </div>

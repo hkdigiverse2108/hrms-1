@@ -14,8 +14,11 @@ async def delete_employee(db, employee_id: str):
     return True
 
 async def get_employee(db, employee_id: str):
-    doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
-    return fix_id(doc)
+    try:
+        doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
+        return fix_id(doc)
+    except:
+        return None
 
 async def update_employee(db, employee_id: str, employee_update: schemas.EmployeeUpdate):
     # Fetch existing employee first to handle name recalculation
@@ -717,7 +720,7 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
     leave_dates = set()
     for l in leaves:
         try:
-            from datetime import datetime, timedelta
+
             s = datetime.strptime(l["startDate"], "%Y-%m-%d")
             e = datetime.strptime(l["endDate"], "%Y-%m-%d")
             curr = s
@@ -1374,35 +1377,46 @@ async def create_lead(db, lead: schemas.LeadCreate):
     return fix_id(doc)
 
 async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
+    try:
+        oid = ObjectId(lead_id)
+    except:
+        return None
+        
     update_data = lead_update.dict(exclude_unset=True)
     performedBy = update_data.pop("performedBy", "Unknown")
     userName = update_data.pop("userName", "Unknown User")
     
     if update_data:
         # If status changed to 'Client Won', set closedDate if not provided
-        old_lead = await db.leads.find_one({"_id": ObjectId(lead_id)})
+        old_lead = await db.leads.find_one({"_id": oid})
         if update_data.get("status") == "Client Won" and not update_data.get("closedDate"):
             update_data["closedDate"] = datetime.now().strftime("%Y-%m-%d")
             
-        await db.leads.update_one({"_id": ObjectId(lead_id)}, {"$set": update_data})
+        await db.leads.update_one({"_id": oid}, {"$set": update_data})
         
         # Log the update
         await log_activity(db, "Lead Updated", performedBy, userName, f"Lead details were updated. Status: {update_data.get('status', 'Unchanged')}", leadId=lead_id)
         
         # Trigger recalculation if status is Client Won or assignedTo changed
         if update_data.get("status") == "Client Won" or "assignedTo" in update_data:
-            updated_lead = await db.leads.find_one({"_id": ObjectId(lead_id)})
+            updated_lead = await db.leads.find_one({"_id": oid})
             emp_name = updated_lead.get("assignedTo")
             if emp_name:
                 emp = await db.employees.find_one({"name": emp_name})
                 if emp:
                     ld_str = updated_lead.get("closedDate") or updated_lead.get("date")
                     try:
-                        from datetime import datetime
+
                         ld = None
-                        for fmt in ("%b %d, %Y", "%Y-%m-%d"):
-                            try: ld = datetime.strptime(ld_str, fmt); break
+                        for fmt in ("%b %d, %Y", "%Y-%m-%d", "%d/%m/%Y"):
+                            try: 
+                                if isinstance(ld_str, datetime):
+                                    ld = ld_str
+                                else:
+                                    ld = datetime.strptime(str(ld_str), fmt)
+                                break
                             except: continue
+                        
                         if ld:
                             month_name = ld.strftime("%B")
                             week_num = (ld.day - 1) // 7 + 1
@@ -1416,8 +1430,11 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
     return fix_id(doc)
 
 async def delete_lead(db, lead_id: str):
-    result = await db.leads.delete_one({"_id": ObjectId(lead_id)})
-    return result.deleted_count > 0
+    try:
+        result = await db.leads.delete_one({"_id": ObjectId(lead_id)})
+        return result.deleted_count > 0
+    except:
+        return False
 
 async def add_lead_follow_up(db, lead_id: str, follow_up: schemas.FollowUp, performedBy: str = "Unknown", userName: str = "Unknown User"):
     follow_up_dict = follow_up.dict()
@@ -1526,10 +1543,13 @@ async def create_marketing_monthly_report(db, report: schemas.MarketingMonthlyRe
     report_dict["id"] = str(result.inserted_id)
     return report_dict
 
-async def get_marketing_monthly_reports(db, client_id: str = None):
+async def get_marketing_monthly_reports(db, client_id: str = None, month: str = None):
     query = {}
     if client_id:
         query["clientId"] = client_id
+    if month:
+        query["month"] = month
+        
     cursor = db.marketing_monthly_reports.find(query)
     reports = []
     async for doc in cursor:
@@ -2112,73 +2132,87 @@ async def calculate_sales_incentive(db, revenue: float):
     return 0.0
 
 async def recalculate_sales_target(db, employee_id: str, month: str, year: int, target_type: str = "Monthly", week: Optional[int] = None):
-    # 1. Calculate Achievement from Leads
-    query = {
-        "assignedTo": None, # Will be filled below
-        "status": "Client Won"
-    }
-    
-    # Get employee name for query
-    emp = await get_employee(db, employee_id)
-    if not emp: return
-    emp_name = emp["name"]
-    query["assignedTo"] = emp_name
-
-    cursor = db.leads.find(query)
-    all_won_leads = await cursor.to_list(length=1000)
-    
-    total_achievement = 0.0
-    for lead in all_won_leads:
-        try:
-            # Parse date and check if it matches period
-            lead_date_str = lead.get("closedDate") or lead.get("date")
-            # Expected format: "May 08, 2026" or "2026-05-08"
-            ld = None
-            for fmt in ("%b %d, %Y", "%Y-%m-%d"):
-                try:
-                    ld = datetime.strptime(lead_date_str, fmt)
-                    break
-                except: continue
-            
-            if not ld: continue
-            
-            # Check month/year
-            month_name = ld.strftime("%B")
-            if month_name != month or ld.year != year:
-                continue
-            
-            # Weekly check
-            if target_type == "Weekly" and week:
-                lead_week = (ld.day - 1) // 7 + 1
-                if lead_week != week:
-                    continue
-            
-            # Extract income amount
-            income_str = str(lead.get("expectedIncome", "0")).replace("₹", "").replace(",", "")
-            total_achievement += float(income_str)
-        except:
-            continue
-            
-    # 2. Calculate Incentive
-    incentive = await calculate_sales_incentive(db, total_achievement)
-    
-    # 3. Update Target record
-    target_query = {
-        "employeeId": employee_id,
-        "month": month,
-        "year": year,
-        "type": target_type
-    }
-    if target_type == "Weekly":
-        target_query["week"] = week
+    try:
+        # 1. Calculate Achievement from Leads
+        query = {
+            "assignedTo": None, # Will be filled below
+            "status": "Client Won"
+        }
         
-    await db.sales_targets.update_one(
-        target_query,
-        {"$set": {
-            "currentAchievement": total_achievement,
-            "incentiveAmount": incentive
-        }}
-    )
+        # Get employee name for query
+        emp = await get_employee(db, employee_id)
+        if not emp: return
+        emp_name = emp["name"]
+        query["assignedTo"] = emp_name
+
+        cursor = db.leads.find(query)
+        all_won_leads = await cursor.to_list(length=1000)
+        
+        total_achievement = 0.0
+        for lead in all_won_leads:
+            try:
+                # Parse date and check if it matches period
+                lead_date_str = lead.get("closedDate") or lead.get("date")
+                if not lead_date_str: continue
+
+                # Expected format: "May 08, 2026" or "2026-05-08"
+                ld = None
+                if isinstance(lead_date_str, datetime):
+                    ld = lead_date_str
+                else:
+                    for fmt in ("%b %d, %Y", "%Y-%m-%d", "%d/%m/%Y"):
+                        try:
+                            ld = datetime.strptime(str(lead_date_str), fmt)
+                            break
+                        except: continue
+                
+                if not ld: continue
+                
+                # Check month/year
+                month_name = ld.strftime("%B")
+                if month_name != month or ld.year != year:
+                    continue
+                
+                # Weekly check
+                if target_type == "Weekly" and week:
+                    lead_week = (ld.day - 1) // 7 + 1
+                    if lead_week != week:
+                        continue
+                
+                # Extract income amount
+                income_str = str(lead.get("expectedIncome", "0")).replace("₹", "").replace(",", "").strip()
+                if not income_str: income_str = "0"
+                total_achievement += float(income_str)
+            except Exception as e:
+                print(f"Error processing lead in recalculate_sales_target: {e}")
+                continue
+                
+        # 2. Calculate Incentive
+        incentive = await calculate_sales_incentive(db, total_achievement)
+        
+        # 3. Update Target record
+        target_query = {
+            "employeeId": employee_id,
+            "month": month,
+            "year": year,
+            "type": target_type
+        }
+        if target_type == "Weekly":
+            target_query["week"] = week
+            
+        await db.sales_targets.update_one(
+            target_query,
+            {"$set": {
+                "currentAchievement": total_achievement,
+                "incentiveAmount": incentive
+            }, "$setOnInsert": {
+                "employeeName": emp.get("name", "Unknown") if emp else "Unknown",
+                "targetAmount": 0
+            }},
+            upsert=True
+        )
+    except Exception as e:
+        print(f"Global error in recalculate_sales_target: {e}")
 
 async def update_employee_daily_report(db, report_id: str, report_update: schemas.EmployeeDailyReportUpdate):
     update_data = report_update.dict(exclude_unset=True)

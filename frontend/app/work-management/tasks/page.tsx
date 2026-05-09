@@ -667,11 +667,18 @@ export default function TasksPage() {
                                         </div>
                                       </div>
 
-                                      <div className="flex items-center justify-between gap-3">
+                                      <div className="flex flex-wrap items-center gap-2">
                                         <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0">
                                           <Briefcase className="w-3 h-3 text-brand-teal shrink-0" />
-                                          <span className="text-[11px] font-bold text-slate-600 truncate">
+                                          <span className="text-[11px] font-bold text-slate-600 truncate max-w-[80px]">
                                             {task.projectName || "General"}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0">
+                                          <User className="w-3 h-3 text-brand-teal shrink-0" />
+                                          <span className="text-[11px] font-bold text-slate-600 truncate max-w-[100px]">
+                                            {task.assignedToName || (employees.find(e => e.id === task.assignedToId) ? `${employees.find(e => e.id === task.assignedToId).firstName} ${employees.find(e => e.id === task.assignedToId).lastName}` : "Unassigned")}
                                           </span>
                                         </div>
 
@@ -682,7 +689,7 @@ export default function TasksPage() {
                                         )}
                                         
                                         {isOverdue(task.dueDate, task.status) && (
-                                          <div className="flex items-center gap-1 text-red-600">
+                                          <div className="flex items-center gap-1 text-red-600 ml-auto">
                                             <AlertTriangle className="w-3.5 h-3.5" />
                                             <span className="text-[10px] font-bold uppercase">Overdue</span>
                                           </div>

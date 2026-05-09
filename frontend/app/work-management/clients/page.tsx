@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Users, Plus, Pencil, Trash2, Mail, Phone, Building2, Loader2, Search, History, ClipboardList } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Mail, Phone, Building2, Loader2, Search, History, ClipboardList, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
@@ -482,13 +482,16 @@ export default function ClientsPage() {
                     <div className="space-y-3">
                       <div>
                         <h3 className="font-bold text-lg text-foreground leading-tight">{client.companyName}</h3>
-                        <p className="text-sm text-muted-foreground">{client.industry || "No Industry Specified"}</p>
                       </div>
 
                       <div className="space-y-2 pt-2 border-t border-border/50">
                         <div className="flex items-center gap-2 text-sm text-foreground font-medium">
                           <Users className="w-4 h-4 text-brand-teal" />
                           {client.name}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Briefcase className="w-4 h-4 text-brand-teal" />
+                          <span className="uppercase text-[11px] font-bold tracking-tight">{client.department || "No Department"}</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Mail className="w-4 h-4" />

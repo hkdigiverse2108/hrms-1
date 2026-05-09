@@ -1038,12 +1038,12 @@ class IncentiveSlab(IncentiveSlabBase):
 # Sales Target Schemas
 class SalesTargetBase(BaseModel):
     employeeId: str
-    employeeName: str
+    employeeName: Optional[str] = "Unknown"
     type: str = "Monthly" # Monthly, Weekly
     month: str
     year: int
     week: Optional[int] = None # 1, 2, 3, 4, 5
-    targetAmount: float
+    targetAmount: float = 0
     currentAchievement: float = 0
     incentiveAmount: float = 0
 
@@ -1062,3 +1062,5 @@ class SalesTarget(SalesTargetBase):
     class Config:
         from_attributes = True
 
+# Department Schemas
+# (Using existing schemas defined earlier in the file)

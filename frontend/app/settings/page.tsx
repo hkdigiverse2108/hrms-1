@@ -14,7 +14,8 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Loader2
+  Loader2,
+  Building2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -22,9 +23,11 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { API_URL } from "@/lib/config";
+import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
+  const router = useRouter();
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -240,6 +243,7 @@ export default function SettingsPage() {
               ))}
             </div>
           </Card>
+
         </div>
 
         <div className="space-y-6">

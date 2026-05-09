@@ -79,7 +79,8 @@ export default function MarketingReportsPage() {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [monthlyItemsPerPage, setMonthlyItemsPerPage] = useState(10);
 
-  const [dateFilter, setDateFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  const [monthFilter, setMonthFilter] = useState(new Date().toLocaleString('default', { month: 'long' }));
 
   // Form States
   const [dailyFormData, setDailyFormData] = useState({
@@ -111,7 +112,7 @@ export default function MarketingReportsPage() {
   useEffect(() => {
     fetchData();
     fetchClients();
-  }, [activeTab, selectedClientFilter, dateFilter]);
+  }, [activeTab, selectedClientFilter, dateFilter, monthFilter]);
 
   const fetchClients = async () => {
     try {
@@ -131,7 +132,11 @@ export default function MarketingReportsPage() {
       let endpoint = activeTab === "daily" ? "/marketing/reports/daily" : "/marketing/reports/monthly";
       const params = new URLSearchParams();
       if (selectedClientFilter !== "all") params.append("client_id", selectedClientFilter);
-      if (dateFilter) params.append("date", dateFilter);
+      if (activeTab === "daily") {
+        if (dateFilter) params.append("date", dateFilter);
+      } else {
+        if (monthFilter !== "all") params.append("month", monthFilter);
+      }
       
       const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
       if (res.ok) {
@@ -252,7 +257,7 @@ export default function MarketingReportsPage() {
   useEffect(() => {
     setDailyPage(1);
     setMonthlyPage(1);
-  }, [searchQuery, selectedClientFilter, dateFilter]);
+  }, [searchQuery, selectedClientFilter, dateFilter, monthFilter]);
 
   const fetchLogs = async (report: any, type: "daily" | "monthly") => {
     setIsLoadingLogs(true);
@@ -283,7 +288,8 @@ export default function MarketingReportsPage() {
     const matchesSearch = r.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          r.month.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClient = selectedClientFilter === "all" || r.clientId === selectedClientFilter;
-    return matchesSearch && matchesClient;
+    const matchesMonth = !monthFilter || r.month === monthFilter;
+    return matchesSearch && matchesClient && matchesMonth;
   });
 
   // Pagination Logic
@@ -437,8 +443,24 @@ export default function MarketingReportsPage() {
               <Label className="text-xs text-slate-500">Filter by Date</Label>
               <Input type="date" className="h-9" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
             </div>
+            {activeTab === "monthly" && (
+              <div className="flex-1 min-w-[150px] space-y-1.5">
+                <Label className="text-xs text-slate-500">Filter by Month</Label>
+                <Select value={monthFilter} onValueChange={setMonthFilter}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Months</SelectItem>
+                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex items-end h-9 pt-6">
-              {(selectedClientFilter !== "all" || dateFilter || searchQuery) && (
+              {(selectedClientFilter !== "all" || dateFilter || searchQuery || monthFilter !== "all") && (
                 <Button 
                   variant="ghost" 
                   size="sm" 
@@ -446,6 +468,7 @@ export default function MarketingReportsPage() {
                   onClick={() => {
                     setSelectedClientFilter("all");
                     setDateFilter("");
+                    setMonthFilter("all");
                     setSearchQuery("");
                   }}
                 >
