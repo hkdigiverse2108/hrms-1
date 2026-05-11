@@ -245,8 +245,16 @@ export default function EmployeeListPage() {
                         <span className="text-gray-400 italic text-xs">Not set</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-muted-foreground">{emp.department}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{emp.designation}</td>
+                    <td className="px-6 py-4 text-muted-foreground hover:text-brand-teal transition-colors">
+                      <Link href="/employees/organization/departments">
+                        {emp.department}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4 text-muted-foreground hover:text-brand-teal transition-colors">
+                      <Link href="/employees/organization/designations">
+                        {emp.designation}
+                      </Link>
+                    </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-md border ${
                         emp.status === 'active' 

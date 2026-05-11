@@ -85,6 +85,16 @@ async def delete_employee(employee_id: str, db=Depends(get_db)):
     await crud.delete_employee(db, employee_id)
     return {"message": "Employee deleted successfully"}
 
+@app.put("/employees/{employee_id}/status", response_model=schemas.Employee)
+async def update_employee_status(employee_id: str, status: str, emoji: str, db=Depends(get_db)):
+    updated = await crud.update_employee(db, employee_id, schemas.EmployeeUpdate(
+        customStatus=status,
+        customEmoji=emoji
+    ))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return updated
+
 # Attendance Endpoints
 @app.get("/attendance", response_model=List[schemas.Attendance])
 async def read_attendance(skip: int = 0, limit: int = 100, db=Depends(get_db)):
@@ -340,6 +350,10 @@ async def update_application(app_id: str, app_update: schemas.ApplicationUpdate,
 async def delete_application(app_id: str, db=Depends(get_db)):
     await crud.delete_application(db, app_id)
     return {"message": "Application deleted successfully"}
+
+@app.get("/applications/{app_id}/logs")
+async def read_application_logs(app_id: str, db=Depends(get_db)):
+    return await crud.get_application_logs(db, app_id)
 
 @app.get("/interns", response_model=List[schemas.Intern])
 async def read_interns(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_interns(db, skip, limit)

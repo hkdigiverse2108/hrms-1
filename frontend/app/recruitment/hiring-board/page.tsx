@@ -23,7 +23,9 @@ import {
   User,
   MessageSquare,
   Grab,
-  X
+  X,
+  CheckCircle,
+  History
 } from 'lucide-react'
 import { API_URL } from '@/lib/config'
 import { 
@@ -58,6 +60,7 @@ interface Application {
   interviewDate?: string
   interviewTime?: string
   interviewerName?: string
+  interviewerId?: string
   interviewNotes?: string
   interviewLink?: string
 }
@@ -76,7 +79,8 @@ interface Employee {
 
 const STAGES = [
   { id: 'new', title: 'New Applied', color: 'bg-blue-500', lightColor: 'bg-blue-50', textColor: 'text-blue-700' },
-  { id: 'interview', title: 'Interview', color: 'bg-purple-500', lightColor: 'bg-purple-50', textColor: 'text-purple-700' },
+  { id: 'tl_approved', title: 'TL Approved', color: 'bg-cyan-500', lightColor: 'bg-cyan-50', textColor: 'text-cyan-700' },
+  { id: 'interview', title: 'Scheduled Interview', color: 'bg-purple-500', lightColor: 'bg-purple-50', textColor: 'text-purple-700' },
   { id: 'selected', title: 'Selected', color: 'bg-emerald-500', lightColor: 'bg-emerald-50', textColor: 'text-emerald-700' },
   { id: 'rejected', title: 'Rejected', color: 'bg-rose-500', lightColor: 'bg-rose-50', textColor: 'text-rose-700' }
 ]
@@ -104,7 +108,12 @@ export default function HiringBoardPage() {
     interviewNotes: '',
     interviewLink: '',
     resume: '',
+    interviewerId: '',
   })
+  const [appLogs, setAppLogs] = useState<Record<string, any[]>>({})
+  const [isSchedulingMode, setIsSchedulingMode] = useState(false)
+  const [selectedLogAppId, setSelectedLogAppId] = useState<string | null>(null)
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -130,8 +139,19 @@ export default function HiringBoardPage() {
     }
   }
 
+  const fetchAppLogs = async (appId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/applications/${appId}/logs`)
+      const data = await res.json()
+      setAppLogs(prev => ({ ...prev, [appId]: data }))
+    } catch (err) {
+      console.error("Failed to fetch logs")
+    }
+  }
+
   const handleEditClick = (app: Application) => {
     setEditingAppId(app.id)
+    setIsSchedulingMode(false)
     setFormData({
       candidateName: app.candidateName || '',
       status: app.status || 'new',
@@ -143,8 +163,30 @@ export default function HiringBoardPage() {
       interviewNotes: app.interviewNotes || '',
       interviewLink: app.interviewLink || '',
       resume: app.resume || '',
+      interviewerId: app.interviewerId || '',
     })
     setIsAddModalOpen(true)
+  }
+
+  const handleStatusChange = async (appId: string, newStatus: string) => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const res = await fetch(`${API_URL}/applications/${appId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          status: newStatus,
+          performedBy: user.id || 'Unknown',
+          userName: user.name || 'System User'
+        })
+      })
+      if (res.ok) {
+        setApplications(apps => apps.map(app => app.id === appId ? { ...app, status: newStatus } : app))
+        toast.success(`Candidate moved to ${STAGES.find(s => s.id === newStatus)?.title}`)
+      }
+    } catch (err) {
+      toast.error("Status update failed")
+    }
   }
 
   const handleDragEnd = async (result: DropResult) => {
@@ -213,6 +255,7 @@ export default function HiringBoardPage() {
       const url = editingAppId ? `${API_URL}/applications/${editingAppId}` : `${API_URL}/applications`
       const method = editingAppId ? 'PUT' : 'POST'
       
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
       const res = await fetch(url, {
         method: method,
         headers: { 'Content-Type': 'application/json' },
@@ -220,7 +263,9 @@ export default function HiringBoardPage() {
           ...formData,
           email: 'not_provided@example.com',
           phone: 'N/A',
-          resume: resumeUrl
+          resume: resumeUrl,
+          performedBy: user.id || 'Unknown',
+          userName: user.name || 'System User'
         })
       })
       
@@ -240,6 +285,7 @@ export default function HiringBoardPage() {
           interviewNotes: '',
           interviewLink: '',
           resume: '',
+          interviewerId: '',
         })
         toast.success(editingAppId ? "Candidate updated successfully" : "Candidate added successfully")
       }
@@ -291,6 +337,20 @@ export default function HiringBoardPage() {
             className="bg-brand-teal hover:bg-brand-teal/90 shadow-md shadow-brand-teal/10"
             onClick={() => {
               setEditingAppId(null)
+              setIsSchedulingMode(false)
+              setFormData({
+                candidateName: '',
+                status: 'new',
+                appliedDate: new Date().toISOString().split('T')[0],
+                jobTitle: '',
+                interviewDate: '',
+                interviewTime: '',
+                interviewerName: '',
+                interviewNotes: '',
+                interviewLink: '',
+                resume: '',
+                interviewerId: '',
+              })
               setIsAddModalOpen(true)
             }}
           >
@@ -455,8 +515,65 @@ export default function HiringBoardPage() {
                                         <ExternalLink className="w-3.5 h-3.5" />
                                       </Button>
                                     )}
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-6 w-6 rounded hover:bg-brand-teal/10 hover:text-brand-teal text-slate-400 hover:text-brand-teal"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setSelectedLogAppId(app.id)
+                                        fetchAppLogs(app.id)
+                                        setIsLogModalOpen(true)
+                                      }}
+                                      title="View Activity Logs"
+                                    >
+                                      <History className="w-3.5 h-3.5" />
+                                    </Button>
                                   </div>
                                 </div>
+                                
+                                {app.status === 'new' && (
+                                  <div className="pt-2">
+                                    <Button 
+                                      className="w-full h-8 text-[10px] font-bold uppercase bg-brand-teal hover:bg-brand-teal/90 text-white shadow-sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleStatusChange(app.id, 'tl_approved')
+                                      }}
+                                    >
+                                      <CheckCircle className="w-3.5 h-3.5 mr-2" /> Approve Resume
+                                    </Button>
+                                  </div>
+                                )}
+                                {app.status === 'tl_approved' && (
+                                  <div className="pt-2">
+                                    <Button 
+                                      className="w-full h-8 text-[10px] font-bold uppercase bg-brand-teal hover:bg-brand-teal/90 text-white shadow-sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        // Open edit modal with status set to interview
+                                        setEditingAppId(app.id)
+                                        setIsSchedulingMode(true)
+                                        setFormData({
+                                          candidateName: app.candidateName || '',
+                                          status: 'interview', // Force interview status
+                                          appliedDate: app.appliedDate || new Date().toISOString().split('T')[0],
+                                          jobTitle: app.jobTitle || '',
+                                          interviewDate: app.interviewDate || '',
+                                          interviewTime: app.interviewTime || '',
+                                          interviewerName: app.interviewerName || '',
+                                          interviewNotes: app.interviewNotes || '',
+                                          interviewLink: app.interviewLink || '',
+                                          resume: app.resume || '',
+                                          interviewerId: app.interviewerId || '',
+                                        })
+                                        setIsAddModalOpen(true)
+                                      }}
+                                    >
+                                      <Calendar className="w-3.5 h-3.5 mr-2" /> Schedule Interview
+                                    </Button>
+                                  </div>
+                                )}
                               </CardContent>
                             </Card>
                           )}
@@ -559,54 +676,65 @@ export default function HiringBoardPage() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-gray-100">
-              <h4 className="text-[10px] font-bold uppercase tracking-widest text-brand-teal mb-4 flex items-center gap-2">
-                <Calendar className="w-3.5 h-3.5" /> Interview Details (Optional)
-              </h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Interview Date</Label>
-                  <Input 
-                    type="date" 
-                    value={formData.interviewDate}
-                    onChange={(e) => setFormData({...formData, interviewDate: e.target.value})}
-                  />
+            {isSchedulingMode && (
+              <div className="pt-4 border-t border-gray-100">
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-brand-teal mb-4 flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5" /> Interview Details
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="interviewDate" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Interview Date</Label>
+                    <Input 
+                      type="date" 
+                      id="interviewDate"
+                      value={formData.interviewDate}
+                      onChange={(e) => setFormData({...formData, interviewDate: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="interviewTime" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Interview Time</Label>
+                    <Input 
+                      type="time" 
+                      id="interviewTime"
+                      value={formData.interviewTime}
+                      onChange={(e) => setFormData({...formData, interviewTime: e.target.value})}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Interview Time</Label>
-                  <Input 
-                    type="time" 
-                    value={formData.interviewTime}
-                    onChange={(e) => setFormData({...formData, interviewTime: e.target.value})}
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 gap-4 mt-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Interviewer</Label>
-                  <select 
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={formData.interviewerName}
-                    onChange={(e) => setFormData({...formData, interviewerName: e.target.value})}
-                  >
-                    <option value="">Select Interviewer</option>
-                    {employees.filter(emp => emp.role === 'Team Leader' || emp.role === 'Manager' || emp.role === 'Admin').map(emp => (
-                      <option key={emp.id} value={emp.name || emp.id}>{emp.name || emp.id}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="interviewNotes" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Internal Notes</Label>
-                  <Textarea 
-                    placeholder="Notes for the interviewer..."
-                    className="min-h-[80px]"
-                    value={formData.interviewNotes}
-                    onChange={(e) => setFormData({...formData, interviewNotes: e.target.value})}
-                  />
+                <div className="grid grid-cols-1 gap-4 mt-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Interviewer</Label>
+                    <select 
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={formData.interviewerId}
+                      onChange={(e) => {
+                        const emp = employees.find(emp => emp.id === e.target.value);
+                        setFormData({
+                          ...formData, 
+                          interviewerId: e.target.value,
+                          interviewerName: emp?.name || ''
+                        })
+                      }}
+                    >
+                      <option value="">Select Interviewer</option>
+                      {employees.filter(emp => emp.role === 'Team Leader' || emp.role === 'Manager' || emp.role === 'Admin').map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name || emp.id}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="interviewNotes" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Internal Notes</Label>
+                    <Textarea 
+                      placeholder="Notes for the interviewer..."
+                      className="min-h-[80px]"
+                      value={formData.interviewNotes}
+                      onChange={(e) => setFormData({...formData, interviewNotes: e.target.value})}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <DialogFooter className="pt-4 border-t border-gray-100">
               <Button type="button" variant="ghost" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
@@ -620,6 +748,42 @@ export default function HiringBoardPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isLogModalOpen} onOpenChange={setIsLogModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <History className="w-5 h-5 text-brand-teal" />
+              Activity Logs
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+            {selectedLogAppId && appLogs[selectedLogAppId]?.map((log, idx) => (
+              <div key={idx} className="relative pl-6 pb-4 border-l-2 border-brand-teal/20 last:pb-0">
+                <div className="absolute left-[-9px] top-0 w-4 h-4 rounded-full bg-white border-2 border-brand-teal" />
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-xs font-bold text-gray-900">{log.userName}</span>
+                    <span className="text-[10px] text-gray-500">{log.timestamp}</span>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed">{log.details}</p>
+                </div>
+              </div>
+            ))}
+            {selectedLogAppId && (!appLogs[selectedLogAppId] || appLogs[selectedLogAppId].length === 0) && (
+              <div className="text-center py-12">
+                <div className="bg-gray-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <History className="w-6 h-6 text-gray-300" />
+                </div>
+                <p className="text-sm text-gray-500">No activity logged yet</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsLogModalOpen(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

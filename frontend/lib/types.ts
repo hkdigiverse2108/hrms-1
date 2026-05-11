@@ -111,9 +111,16 @@ export interface Application {
   candidateName: string
   email: string
   phone: string
-  status: 'new' | 'screening' | 'interview' | 'offered' | 'hired' | 'rejected'
+  status: 'new' | 'awaiting_approval' | 'tl_approved' | 'screening' | 'interview' | 'offered' | 'hired' | 'rejected'
   appliedDate: string
   resume?: string
+  jobTitle?: string
+  interviewDate?: string
+  interviewTime?: string
+  interviewerName?: string
+  interviewerId?: string
+  interviewLink?: string
+  interviewNotes?: string
 }
 
 export interface Intern {

@@ -31,6 +31,8 @@ class EmployeeBase(BaseModel):
     startTime: Optional[str] = None
     endTime: Optional[str] = None
     profilePhoto: Optional[str] = None
+    customStatus: Optional[str] = None
+    customEmoji: Optional[str] = None
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -63,6 +65,8 @@ class EmployeeUpdate(BaseModel):
     startTime: Optional[str] = None
     endTime: Optional[str] = None
     profilePhoto: Optional[str] = None
+    customStatus: Optional[str] = None
+    customEmoji: Optional[str] = None
 
 class Employee(EmployeeBase):
     id: str
@@ -320,6 +324,9 @@ class ApplicationBase(BaseModel):
     interviewerName: Optional[str] = None
     interviewLink: Optional[str] = None
     interviewNotes: Optional[str] = None
+    interviewerId: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class ApplicationCreate(ApplicationBase):
     pass
@@ -335,6 +342,9 @@ class ApplicationUpdate(BaseModel):
     interviewerName: Optional[str] = None
     interviewLink: Optional[str] = None
     interviewNotes: Optional[str] = None
+    interviewerId: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class Application(ApplicationBase):
     id: str

@@ -101,10 +101,10 @@ export function SidebarNav() {
       employeeChildren.push(getItem(<Link href="/employees">Employee List</Link>, "/employees"));
     }
     if (isAdmin || checkPermission('departments', 'canView')) {
-      employeeChildren.push(getItem(<Link href="/employees/departments">Departments</Link>, "/employees/departments"));
+      employeeChildren.push(getItem(<Link href="/employees/organization/departments">Departments</Link>, "/employees/organization/departments"));
     }
     if (isAdmin || checkPermission('designations', 'canView')) {
-      employeeChildren.push(getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"));
+      employeeChildren.push(getItem(<Link href="/employees/organization/designations">Designations</Link>, "/employees/organization/designations"));
     }
     if (isAdmin || checkPermission('employee-attendance', 'canView')) {
       employeeChildren.push(getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"));
@@ -136,9 +136,6 @@ export function SidebarNav() {
     }
     if (isAdmin || checkPermission('hirings', 'canView')) {
       recruitmentChildren.push(getItem(<Link href="/recruitment">Hirings</Link>, "/recruitment"));
-    }
-    if (isAdmin || checkPermission('applications', 'canView')) {
-      recruitmentChildren.push(getItem(<Link href="/recruitment/applications">Applications</Link>, "/recruitment/applications"));
     }
 
     return [

@@ -574,8 +574,56 @@ async def update_job_opening(db, job_id: str, update: schemas.JobOpeningUpdate):
 async def delete_job_opening(db, job_id: str): return await delete_item(db, "job_openings", job_id)
 
 async def get_applications(db, skip: int = 0, limit: int = 100): return await get_items(db, "applications", skip, limit)
-async def create_application(db, app: schemas.ApplicationCreate): return await create_item(db, "applications", app.dict())
-async def update_application(db, app_id: str, update: schemas.ApplicationUpdate): return await update_item(db, "applications", app_id, update.dict(exclude_unset=True))
+async def create_application(db, app: schemas.ApplicationCreate): 
+    app_dict = app.dict()
+    performedBy = app_dict.pop("performedBy", "Unknown")
+    userName = app_dict.pop("userName", "Unknown User")
+    
+    result = await create_item(db, "applications", app_dict)
+    
+    await log_activity(db, "Created", performedBy, userName, f"Candidate '{app_dict.get('candidateName')}' was added to the system.", applicationId=result["id"])
+    
+    return result
+async def update_application(db, app_id: str, update: schemas.ApplicationUpdate):
+    # Fetch existing to check for status change
+    existing = await db.applications.find_one({"_id": ObjectId(app_id)})
+    update_dict = update.dict(exclude_unset=True)
+    
+    performedBy = update_dict.pop("performedBy", "Unknown")
+    userName = update_dict.pop("userName", "Unknown User")
+    
+    await db.applications.update_one(
+        {"_id": ObjectId(app_id)},
+        {"$set": update_dict}
+    )
+    
+    if existing:
+        details = []
+        if "status" in update_dict and existing.get("status") != update_dict["status"]:
+            details.append(f"Status changed from '{existing.get('status')}' to '{update_dict['status']}'")
+        if "interviewerId" in update_dict and existing.get("interviewerId") != update_dict["interviewerId"]:
+            details.append(f"Interviewer assigned: {update_dict.get('interviewerName')}")
+        if "interviewDate" in update_dict and existing.get("interviewDate") != update_dict["interviewDate"]:
+            details.append(f"Interview scheduled for {update_dict['interviewDate']} at {update_dict.get('interviewTime')}")
+            
+        if details:
+            log_details = f"Candidate '{existing.get('candidateName')}': " + ", ".join(details)
+            await log_activity(db, "Updated", performedBy, userName, log_details, applicationId=app_id)
+    
+    # If moved to interview and has an interviewer, notify them
+    if existing and update_dict.get("status") == "interview" and existing.get("status") != "interview":
+        interviewer_id = update_dict.get("interviewerId") or existing.get("interviewerId")
+        if interviewer_id:
+            await create_notification(db, schemas.NotificationCreate(
+                employee_id=interviewer_id,
+                title="New Interview Assigned",
+                message=f"You have been assigned an interview for {update_dict.get('candidateName') or existing.get('candidateName')} on {update_dict.get('interviewDate') or existing.get('interviewDate')} at {update_dict.get('interviewTime') or existing.get('interviewTime')}.",
+                type="recruitment",
+                created_at=datetime.now().strftime("%d-%m-%Y %H:%M")
+            ))
+            
+    updated_doc = await db.applications.find_one({"_id": ObjectId(app_id)})
+    return fix_id(updated_doc)
 async def delete_application(db, app_id: str): return await delete_item(db, "applications", app_id)
 
 async def get_interns(db, skip: int = 0, limit: int = 100): return await get_items(db, "interns", skip, limit)
@@ -1380,7 +1428,7 @@ async def delete_wm_task(db, task_id: str):
     return result.deleted_count > 0
 
 # Activity Log CRUD
-async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None):
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None):
     log_entry = {
         "action": action,
         "performedBy": performedBy,
@@ -1394,8 +1442,16 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
     if leadId: log_entry["leadId"] = leadId
     if dailyReportId: log_entry["dailyReportId"] = dailyReportId
     if monthlyReportId: log_entry["monthlyReportId"] = monthlyReportId
+    if applicationId: log_entry["applicationId"] = applicationId
     
     await db.task_logs.insert_one(log_entry)
+
+async def get_application_logs(db, application_id: str):
+    cursor = db.task_logs.find({"applicationId": application_id}).sort("timestamp", -1)
+    logs = []
+    async for doc in cursor:
+        logs.append(fix_id(doc))
+    return logs
 
 async def get_lead_logs(db, lead_id: str):
     cursor = db.task_logs.find({"leadId": lead_id}).sort("timestamp", -1)
