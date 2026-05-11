@@ -680,7 +680,17 @@ async def delete_event(db, event_id: str): return await delete_item(db, "events"
 async def authenticate_user(db, login_data: schemas.LoginRequest):
     user = await db.employees.find_one({"email": login_data.email})
     if user and user.get("password") == login_data.password:
-        return fix_id(user)
+        user_id = str(user["_id"])
+        user_fixed = fix_id(user)
+        
+        # Fetch permissions
+        permissions_doc = await db.user_permissions.find_one({"employeeId": user_id})
+        if permissions_doc:
+            user_fixed["permissions"] = fix_id(permissions_doc).get("permissions", [])
+        else:
+            user_fixed["permissions"] = []
+            
+        return user_fixed
     return None
 
 async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
@@ -751,25 +761,33 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
     for d in available_working_days:
         date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
         
+        sys_settings = await get_system_settings(db)
+        office_start = sys_settings.get("officeStartTime", "09:30")
+        office_end = sys_settings.get("officeEndTime", "18:30")
+        
+        try:
+            sh, sm = map(int, office_start.split(':'))
+            eh, em = map(int, office_end.split(':'))
+        except:
+            sh, sm = 9, 30
+            eh, em = 18, 30
+
         # Generate random punch times
         is_late = d in late_days_indices
         if is_late:
-            # Late: 09:45 - 10:15
-            in_hour = 9
-            in_min = random.randint(45, 59)
-            if random.random() > 0.5:
-                in_hour = 10
-                in_min = random.randint(0, 15)
+            # Late: starts 15-45 mins after shift start
+            total_start_mins = sh * 60 + sm + random.randint(15, 45)
+            in_hour, in_min = divmod(total_start_mins, 60)
         else:
-            # On-time: 09:00 - 09:35
-            in_hour = 9
-            in_min = random.randint(0, 35)
+            # On-time: starts 30 mins before to 5 mins after shift start
+            total_start_mins = sh * 60 + sm + random.randint(-30, 5)
+            in_hour, in_min = divmod(total_start_mins, 60)
             
         check_in = f"{str(in_hour).zfill(2)}:{str(in_min).zfill(2)}:00"
         
-        # 18:00 - 19:00
-        out_hour = 18
-        out_min = random.randint(0, 59)
+        # Shift end +/- 30 mins
+        total_end_mins = eh * 60 + em + random.randint(-5, 45)
+        out_hour, out_min = divmod(total_end_mins, 60)
         check_out = f"{str(out_hour).zfill(2)}:{str(out_min).zfill(2)}:00"
         
         # Calculate working minutes correctly
@@ -822,11 +840,14 @@ async def punch_in(db, employee_id: str):
         "workHours": None
     }
     
-    # Check for late punch-in (10 mins buffer from startTime)
+    # Check for late punch-in (using system settings)
     try:
-        start_time_str = employee.get("startTime", "09:30")
+        sys_settings = await get_system_settings(db)
+        start_time_str = employee.get("startTime") or sys_settings.get("officeStartTime", "09:30")
+        buffer_mins = sys_settings.get("lateBufferMins", 10)
+        
         start_time_obj = datetime.strptime(start_time_str, "%H:%M")
-        limit_time_obj = start_time_obj + timedelta(minutes=10)
+        limit_time_obj = start_time_obj + timedelta(minutes=buffer_mins)
         
         current_time_str = today.strftime("%H:%M")
         current_time_obj = datetime.strptime(current_time_str, "%H:%M")
@@ -842,7 +863,7 @@ async def punch_in(db, employee_id: str):
                 "role": employee.get("designation", "Staff"),
                 "avatar": employee.get("profilePhoto", ""),
                 "type": "Late Punch-in",
-                "details": f"Late Punch-in detected at {current_time_str}. Shift starts at {start_time_str} with a 10-minute buffer (Limit: {limit_time_obj.strftime('%H:%M')}).",
+                "details": f"Late Punch-in detected at {current_time_str}. Shift starts at {start_time_str} with a {buffer_mins}-minute buffer (Limit: {limit_time_obj.strftime('%H:%M')}).",
                 "addedBy": "System",
                 "date": date_str
             }
@@ -985,11 +1006,38 @@ async def break_out(db, employee_id: str):
 async def create_leave_request(db, leave: schemas.LeaveRequestCreate):
     leave_dict = leave.dict()
     leave_dict["status"] = "Pending"
-    leave_dict["requested_on"] = datetime.now().strftime("%d-%m-%Y")
+    leave_dict["requested_on"] = datetime.now().strftime("%d-%m-%Y %H:%M")
     result = await db.leave_requests.insert_one(leave_dict)
     leave_dict["id"] = str(result.inserted_id)
     if "_id" in leave_dict:
         leave_dict.pop("_id")
+
+    # Notify HR and Admin
+    try:
+        # Find all HR and Admin users
+        admins_and_hr = await db.employees.find({
+            "role": {"$regex": "^(Admin|HR)$", "$options": "i"}
+        }).to_list(length=100)
+
+        for staff in admins_and_hr:
+            staff_id = str(staff["_id"])
+            # Don't notify the person who requested the leave if they are an admin/hr
+            if staff_id == leave_dict["employee_id"]:
+                continue
+                
+            notification = {
+                "employee_id": staff_id,
+                "title": "New Leave Request",
+                "message": f"{leave_dict['employee_name']} has requested {leave_dict['type']} leave for {leave_dict['duration']}. Reason: {leave_dict['reason']}",
+                "type": "leave",
+                "reference_id": leave_dict["id"],
+                "is_read": False,
+                "created_at": datetime.now().strftime("%d-%m-%Y %H:%M")
+            }
+            await db.notifications.insert_one(notification)
+    except Exception as e:
+        print(f"Error creating notifications for leave request: {e}")
+
     return leave_dict
 
 async def get_all_leave_requests(db, skip: int = 0, limit: int = 100):
@@ -1124,34 +1172,38 @@ async def delete_client(db, client_id: str):
 # Project CRUD
 async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() != "admin" and userId:
-        # Get projects where user is Team Leader
-        # OR projects where user has assigned tasks
-        
-        # 1. Get projects where user is TL
-        tl_query = {"teamLeaderId": userId}
-        
-        # 2. Get projects where user has tasks
-        task_cursor = db.wm_tasks.find({"assignedToId": userId})
-        task_list = await task_cursor.to_list(length=1000)
-        project_ids_from_tasks = list(set([task.get("projectId") for task in task_list if task.get("projectId")]))
-        
-        # Combine using $or
-        or_conditions = [{"teamLeaderId": userId}]
-        if project_ids_from_tasks:
-            # Handle both string and ObjectId if necessary, but usually they are strings in the db for simplicity or vice versa
-            # Let's check for both
-            project_ids_as_obj = []
-            for pid in project_ids_from_tasks:
-                try:
-                    project_ids_as_obj.append(ObjectId(pid))
-                except:
-                    pass
+    if role and role.lower() not in ["admin", "hr"] and userId:
+        # Fetch user to get department
+        user = await get_employee(db, userId)
+        if user:
+            dept = user.get("department")
             
-            or_conditions.append({"_id": {"$in": project_ids_as_obj}})
-            or_conditions.append({"id": {"$in": project_ids_from_tasks}}) # fallback for string IDs
-            
-        query["$or"] = or_conditions
+            if role.lower() == "team leader":
+                # TL sees projects where they are TL OR projects in their department
+                query["$or"] = [
+                    {"teamLeaderId": userId},
+                    {"department": dept}
+                ]
+            else:
+                # Employee sees projects where they have tasks
+                task_cursor = db.wm_tasks.find({"assignedToId": userId})
+                task_list = await task_cursor.to_list(length=1000)
+                project_ids = list(set([t.get("projectId") for t in task_list if t.get("projectId")]))
+                
+                or_conditions = [{"teamLeaderId": userId}]
+                if project_ids:
+                    project_ids_as_obj = []
+                    for pid in project_ids:
+                        try:
+                            project_ids_as_obj.append(ObjectId(pid))
+                        except:
+                            pass
+                    
+                    if project_ids_as_obj:
+                        or_conditions.append({"_id": {"$in": project_ids_as_obj}})
+                    or_conditions.append({"id": {"$in": project_ids}}) # fallback for string IDs
+                
+                query["$or"] = or_conditions
 
     cursor = db.projects.find(query).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
@@ -1220,8 +1272,24 @@ async def delete_project(db, project_id: str):
     return result.deleted_count > 0
 
 # Work Management Task CRUD
-async def get_wm_tasks(db, skip: int = 0, limit: int = 100):
-    cursor = db.wm_tasks.find().skip(skip).limit(limit)
+async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
+    query = {}
+    if role and role.lower() not in ["admin", "hr"] and userId:
+        user = await get_employee(db, userId)
+        if user:
+            dept = user.get("department")
+            
+            if role.lower() == "team leader":
+                # TL sees tasks assigned to them OR tasks assigned to employees in their dept
+                dept_employees = await db.employees.find({"department": dept}).to_list(length=1000)
+                dept_emp_ids = [str(e["_id"]) for e in dept_employees]
+                
+                query["assignedToId"] = {"$in": dept_emp_ids}
+            else:
+                # Employee sees only their own tasks
+                query["assignedToId"] = userId
+                
+    cursor = db.wm_tasks.find(query).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -1475,7 +1543,10 @@ async def get_system_settings(db):
         # Create default settings if none exist
         default_settings = {
             "clientVisibilityAdminOnly": True,
-            "latePunchDeductionEnabled": True
+            "latePunchDeductionEnabled": True,
+            "officeStartTime": "09:30",
+            "officeEndTime": "18:30",
+            "lateBufferMins": 10
         }
         result = await db.system_settings.insert_one(default_settings)
         settings = await db.system_settings.find_one({"_id": result.inserted_id})
@@ -2229,4 +2300,21 @@ async def update_employee_daily_report(db, report_id: str, report_update: schema
         await apply_work_rejection_penalty(db, existing["employeeId"], existing["date"])
         
     doc = await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)})
+    return fix_id(doc)
+
+# Permission CRUD
+async def get_user_permissions(db, employee_id: str):
+    doc = await db.user_permissions.find_one({"employeeId": employee_id})
+    if not doc:
+        return None
+    return fix_id(doc)
+
+async def save_user_permissions(db, employee_id: str, permissions_data: schemas.UserPermissionUpdate):
+    # Upsert pattern
+    await db.user_permissions.update_one(
+        {"employeeId": employee_id},
+        {"$set": {"permissions": [p.dict() for p in permissions_data.permissions]}},
+        upsert=True
+    )
+    doc = await db.user_permissions.find_one({"employeeId": employee_id})
     return fix_id(doc)

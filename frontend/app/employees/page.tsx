@@ -18,10 +18,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Key } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function EmployeeListPage() {
   const router = useRouter();
   const { data: apiData } = useApi();
+  const { checkPermission, isAdmin } = usePermissions();
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -102,12 +105,14 @@ export default function EmployeeListPage() {
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
-          <Link href="/employees/add" className="flex-1 sm:flex-none flex">
-            <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Employee
-            </Button>
-          </Link>
+          {(isAdmin || checkPermission('add-employee', 'canAdd') || checkPermission('add-employee', 'canView')) && (
+            <Link href="/employees/add" className="flex-1 sm:flex-none flex">
+              <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Employee
+              </Button>
+            </Link>
+          )}
         </div>
       </PageHeader>
 
@@ -161,7 +166,6 @@ export default function EmployeeListPage() {
           <table className="w-full text-sm text-left whitespace-nowrap">
             <thead className="text-xs text-muted-foreground font-semibold bg-gray-50/50 border-b border-border">
               <tr>
-                <th className="px-6 py-4 w-12"><input type="checkbox" className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal accent-brand-teal" /></th>
                 <th className="px-6 py-4 font-medium">Employee Name</th>
                 <th className="px-6 py-4 font-medium">Employee ID</th>
                 <th className="px-6 py-4 font-medium">Department</th>
@@ -196,9 +200,6 @@ export default function EmployeeListPage() {
               ) : (
                 filteredEmployees.map((emp) => (
                   <tr key={emp.id} className="hover:bg-muted/50 transition-colors group cursor-pointer">
-                    <td className="px-6 py-4">
-                      <input type="checkbox" className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal accent-brand-teal" />
-                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <Avatar className="w-9 h-9">
@@ -247,6 +248,15 @@ export default function EmployeeListPage() {
                               <Trash2 className="w-4 h-4 mr-2" />
                               Delete
                             </DropdownMenuItem>
+                            {(isAdmin || checkPermission('access-control', 'canView')) && (
+                              <DropdownMenuItem 
+                                onClick={() => router.push(`/employees/permissions/${emp.id}`)}
+                                className="cursor-pointer text-brand-teal focus:text-brand-teal"
+                              >
+                                <Key className="w-4 h-4 mr-2" />
+                                Permissions
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Filter, 
   Plus, 
@@ -8,7 +8,8 @@ import {
   Calendar as CalendarIcon,
   Flag,
   MoreHorizontal,
-  Download
+  Download,
+  Loader2
 } from "lucide-react";
 import { exportToCSV } from "@/lib/export";
 
@@ -19,104 +20,77 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/common/PageHeader";
-
-// Mock Data
-const tasks = [
-  {
-    id: "T1",
-    title: "Finalize offer letters",
-    desc: "Review salary details and upload signed copies",
-    assignee: "Sarah Jenkins",
-    avatar: "/placeholder-user.jpg",
-    status: "In progress",
-    priority: "High",
-    dueDate: "Today, 4:30 PM",
-  },
-  {
-    id: "T2",
-    title: "Collect attendance exceptions",
-    desc: "HR needs to confirm missing punch reports",
-    assignee: "Mia Clark",
-    avatar: "/placeholder-user.jpg",
-    status: "Pending",
-    priority: "Medium",
-    dueDate: "Apr 19, 2026",
-  },
-  {
-    id: "T3",
-    title: "Prepare onboarding checklist",
-    desc: "Set laptop, documents, and workspace tasks for new joiners",
-    assignee: "Aisha Rahman",
-    avatar: "/placeholder-user.jpg",
-    status: "To do",
-    priority: "High",
-    dueDate: "Apr 20, 2026",
-  },
-  {
-    id: "T4",
-    title: "Submit monthly policy notes",
-    desc: "Send the monthly task summary to leadership",
-    assignee: "Sarah Jenkins",
-    avatar: "/placeholder-user.jpg",
-    status: "In progress",
-    priority: "Medium",
-    dueDate: "Apr 21, 2026",
-  },
-  {
-    id: "T5",
-    title: "Approve leave balance update",
-    desc: "Close request after payroll confirms adjustment",
-    assignee: "Jason Reed",
-    avatar: "/placeholder-user.jpg",
-    status: "Complete",
-    priority: "Low",
-    dueDate: "Completed",
-  },
-  {
-    id: "T6",
-    title: "Arrange interview panel",
-    desc: "Confirm availability with finance and product leads",
-    assignee: "Elena Torres",
-    avatar: "/placeholder-user.jpg",
-    status: "Pending",
-    priority: "High",
-    dueDate: "Apr 22, 2026",
-  }
-];
+import { useUser } from "@/hooks/useUser";
+import { API_URL } from "@/lib/config";
 
 // Helper to get status pill style
 const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "In progress": return "bg-brand-light/50 text-brand-teal border-brand-teal/20";
-    case "Pending": return "bg-amber-100/50 text-amber-700 border-amber-200";
-    case "To do": return "bg-gray-100 text-gray-700 border-gray-200";
-    case "Complete": return "bg-emerald-50 text-emerald-600 border-emerald-200";
+  const s = status?.toLowerCase();
+  switch (s) {
+    case "in-progress": 
+    case "in progress": return "bg-brand-light/50 text-brand-teal border-brand-teal/20";
+    case "pending": 
+    case "review": return "bg-amber-100/50 text-amber-700 border-amber-200";
+    case "to do": 
+    case "todo": return "bg-gray-100 text-gray-700 border-gray-200";
+    case "complete": 
+    case "completed": return "bg-emerald-50 text-emerald-600 border-emerald-200";
     default: return "bg-gray-100 text-gray-700";
   }
 };
 
 const getStatusDot = (status: string) => {
-  switch (status) {
-    case "In progress": return "bg-brand-teal";
-    case "Pending": return "bg-amber-500";
-    case "To do": return "bg-slate-400";
-    case "Complete": return "bg-emerald-500";
+  const s = status?.toLowerCase();
+  switch (s) {
+    case "in-progress": 
+    case "in progress": return "bg-brand-teal";
+    case "pending": 
+    case "review": return "bg-amber-500";
+    case "to do": 
+    case "todo": return "bg-slate-400";
+    case "complete": 
+    case "completed": return "bg-emerald-500";
     default: return "bg-slate-400";
   }
 };
 
 const getPriorityColor = (priority: string) => {
-  switch (priority) {
-    case "High": return "text-red-500";
-    case "Medium": return "text-amber-500";
-    case "Low": return "text-slate-500";
+  const p = priority?.toLowerCase();
+  switch (p) {
+    case "high": 
+    case "urgent": return "text-red-500";
+    case "medium": return "text-amber-500";
+    case "low": return "text-slate-500";
     default: return "text-slate-500";
   }
 };
 
 export default function TaskManagementPage() {
+  const { user } = useUser();
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+
+  useEffect(() => {
+    fetchTasks();
+  }, [user]);
+
+  const fetchTasks = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/wm-tasks?userId=${user.id}&role=${user.role}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data);
+      }
+    } catch (err) {
+      console.error("Error fetching tasks:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filter State
   const [activeStatuses, setActiveStatuses] = useState<string[]>(["To do", "Pending", "In progress"]);
@@ -367,10 +341,10 @@ export default function TaskManagementPage() {
       {/* Summary Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { title: "To do", count: "18", desc: "New tasks waiting to be picked up and scheduled.", dot: "bg-slate-400" },
-          { title: "Pending", count: "09", desc: "Tasks paused for approval, documents, or feedback.", dot: "bg-amber-400" },
-          { title: "In progress", count: "14", desc: "Active work items currently being handled this week.", dot: "bg-brand-teal" },
-          { title: "Complete task", count: "31", desc: "Completed tasks that have been reviewed and closed.", dot: "bg-emerald-600" },
+          { title: "To do", count: tasks.filter(t => t.status === 'todo').length.toString().padStart(2, '0'), desc: "New tasks waiting to be picked up and scheduled.", dot: "bg-slate-400" },
+          { title: "Pending", count: tasks.filter(t => t.status === 'pending').length.toString().padStart(2, '0'), desc: "Tasks paused for approval, documents, or feedback.", dot: "bg-amber-400" },
+          { title: "In progress", count: tasks.filter(t => t.status === 'in-progress').length.toString().padStart(2, '0'), desc: "Active work items currently being handled this week.", dot: "bg-brand-teal" },
+          { title: "Complete task", count: tasks.filter(t => t.status === 'completed').length.toString().padStart(2, '0'), desc: "Completed tasks that have been reviewed and closed.", dot: "bg-emerald-600" },
         ].map((stat, i) => (
           <div key={i} className="bg-white border border-border rounded-xl p-5 shadow-sm flex flex-col h-full">
             <div className="flex items-center justify-between mb-4">
@@ -391,51 +365,65 @@ export default function TaskManagementPage() {
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left whitespace-nowrap">
-            <thead className="text-xs text-muted-foreground font-semibold border-b border-border">
-              <tr>
-                <th className="px-6 py-4 font-medium w-[40%]">Task</th>
-                <th className="px-6 py-4 font-medium">Assignee</th>
-                <th className="px-6 py-4 font-medium">Status</th>
-                <th className="px-6 py-4 font-medium">Priority</th>
-                <th className="px-6 py-4 font-medium">Due date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {tasks.map((task) => (
-                <tr key={task.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer group">
-                  <td className="px-6 py-4 whitespace-normal min-w-[250px]">
-                    <div className="font-semibold text-foreground mb-1">{task.title}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-1">{task.desc}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="w-6 h-6">
-                        <AvatarImage src={task.avatar} />
-                        <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                          {task.assignee.split(' ').map(n => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="font-medium text-foreground text-sm">{task.assignee}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border ${getStatusBadge(task.status)}`}>
-                      {task.status}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className={`font-semibold text-xs ${getPriorityColor(task.priority)}`}>
-                      {task.priority}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium text-foreground">
-                    {task.dueDate}
-                  </td>
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+              <p className="text-sm text-muted-foreground font-medium">Loading tasks...</p>
+            </div>
+          ) : tasks.length > 0 ? (
+            <table className="w-full text-sm text-left whitespace-nowrap">
+              <thead className="text-xs text-muted-foreground font-semibold border-b border-border">
+                <tr>
+                  <th className="px-6 py-4 font-medium w-[40%]">Task</th>
+                  <th className="px-6 py-4 font-medium">Assignee</th>
+                  <th className="px-6 py-4 font-medium">Status</th>
+                  <th className="px-6 py-4 font-medium">Priority</th>
+                  <th className="px-6 py-4 font-medium">Due date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {tasks.map((task) => (
+                  <tr key={task.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer group">
+                    <td className="px-6 py-4 whitespace-normal min-w-[250px]">
+                      <div className="font-semibold text-foreground mb-1">{task.title}</div>
+                      <div className="text-xs text-muted-foreground line-clamp-1">{task.description || task.desc}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-6 h-6">
+                          <AvatarImage src={task.avatar} />
+                          <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
+                            {(task.assignedToName || task.assignee || 'U').split(' ').map((n:any) => n[0]).join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium text-foreground text-sm">{task.assignedToName || task.assignee}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border capitalize ${getStatusBadge(task.status)}`}>
+                        {task.status.replace('-', ' ')}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className={`font-semibold text-xs capitalize ${getPriorityColor(task.priority)}`}>
+                        {task.priority}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium text-foreground">
+                      {task.dueDate}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
+              <p className="text-lg font-bold text-slate-800">No Tasks Found</p>
+              <p className="text-sm text-muted-foreground max-w-[250px]">
+                Tasks assigned to you will appear here.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

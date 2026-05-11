@@ -190,7 +190,7 @@ export default function LeavePage() {
           ...leaveRequest,
           employee_id: user?.id,
           employee_name: user?.name,
-          requested_on: dayjs().format("DD-MM-YYYY"),
+          requested_on: dayjs().format("DD-MM-YYYY HH:mm"),
           status: "Pending"
         })
       });

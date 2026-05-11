@@ -225,7 +225,10 @@ export default function DashboardPage() {
     );
   }
  
-  const role = user?.role || "Employee";
+  const userRole = user?.role?.toLowerCase() || "employee";
+  const isAdmin = userRole === "admin";
+  const isHR = userRole === "hr";
+  const isEmployee = userRole === "employee";
  
   return (
     <div className="space-y-6">
@@ -233,19 +236,19 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Here's what's happening in your organization today."
       >
-        {role === "Admin" && (
+        {isAdmin && (
           <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium">
             <Plus className="w-4 h-4 mr-2" />
             New Report
           </Button>
         )}
-        {role === "HR" && (
+        {isHR && (
           <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium">
             <UserPlus className="w-4 h-4 mr-2" />
             Add Employee
           </Button>
         )}
-        {role === "Employee" && (
+        {isEmployee && (
           <Button 
             onClick={() => setIsRequestDialogOpen(true)}
             className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9 px-4 rounded-lg shadow-sm flex items-center gap-2"
@@ -256,15 +259,15 @@ export default function DashboardPage() {
         )}
       </PageHeader>
  
-      {role === "Admin" && <AdminView user={user} leaves={leaveRequests} />}
-      {role === "HR" && (
+      {isAdmin && <AdminView user={user} leaves={leaveRequests} />}
+      {isHR && (
         <div className="mb-8">
           <HRView user={user} leaves={leaveRequests} />
           <div className="my-8 border-t border-gray-100" />
         </div>
       )}
 
-      {(role === "Employee" || role === "HR" || role === "Team Leader") && (
+      {(isEmployee || isHR || userRole === "team leader") && (
         <EmployeeView 
           user={user} 
           attendanceStatus={attendanceStatus} 
