@@ -31,6 +31,10 @@ import { toast } from 'sonner'
  
 export default function AttendancePage() {
   const { user } = useUserContext();
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+  const isHR = user?.role?.toLowerCase() === 'hr';
+  const canManageAttendance = isAdmin || isHR;
+
   const [attendance, setAttendance] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -72,13 +76,33 @@ export default function AttendancePage() {
     totalWorkTime: "0H 0M",
     totalBreakTime: "0M"
   });
+  const [sysSettings, setSysSettings] = useState<any>(null);
  
   useEffect(() => {
     if (user) {
       fetchAttendance();
       fetchEmployees();
+      fetchSysSettings();
     }
   }, [user]);
+
+  const fetchSysSettings = async () => {
+    try {
+      const res = await fetch(`${API_URL}/system-settings`);
+      if (res.ok) {
+        const data = await res.json();
+        setSysSettings(data);
+        // Update createForm defaults if needed
+        setCreateForm(prev => ({
+          ...prev,
+          checkIn: data.officeStartTime ? `${data.officeStartTime}:00` : "09:30:00",
+          checkOut: data.officeEndTime ? `${data.officeEndTime}:00` : "18:30:00"
+        }));
+      }
+    } catch (err) {
+      console.error("Error fetching system settings:", err);
+    }
+  };
 
   const fetchEmployees = async () => {
     try {
@@ -98,8 +122,8 @@ export default function AttendancePage() {
       if (res.ok) {
         let data = await res.json();
         
-        if (user.role !== "Admin" && user.role !== "HR") {
-          data = data.filter((a: any) => a.employeeId === user.id);
+        if (!canManageAttendance) {
+          data = data.filter((a: any) => a.employeeId === user?.id || a.employeeId === user?.employeeId);
         }
  
         data.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -421,7 +445,7 @@ export default function AttendancePage() {
             </Button>
           )}
 
-          {(user?.role === "Admin" || user?.role === "HR") && (
+          {canManageAttendance && (
             <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm w-full sm:w-auto">
@@ -483,7 +507,8 @@ export default function AttendancePage() {
             </Dialog>
           )}
 
-          <Dialog open={bulkModalOpen} onOpenChange={setBulkModalOpen}>
+          {canManageAttendance && (
+            <Dialog open={bulkModalOpen} onOpenChange={setBulkModalOpen}>
             <DialogTrigger asChild>
               <Button className="bg-orange-600 hover:bg-orange-700 text-white font-medium shadow-sm w-full sm:w-auto">
                 <CalendarIcon className="w-4 h-4 mr-2" />
@@ -540,30 +565,29 @@ export default function AttendancePage() {
                   </div>
                 </div>
               </div>
-              <DialogFooter>
-                <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                  <Button variant="outline" className="sm:flex-1" onClick={() => setBulkModalOpen(false)}>Cancel</Button>
-                  <Button 
-                    variant="destructive" 
-                    className="sm:flex-1" 
-                    onClick={handleBulkDelete}
-                    disabled={isDeleting}
-                  >
-                    {isDeleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Clear Month"}
-                  </Button>
-                  <Button 
-                    className="bg-orange-600 hover:bg-orange-700 text-white sm:flex-1" 
-                    onClick={handleBulkGenerate}
-                    disabled={isBulkGenerating}
-                  >
-                    {isBulkGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Generate Data"}
-                  </Button>
-                </DialogFooter>
+              <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                <Button variant="outline" className="sm:flex-1" onClick={() => setBulkModalOpen(false)}>Cancel</Button>
+                <Button 
+                  variant="destructive" 
+                  className="sm:flex-1" 
+                  onClick={handleBulkDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Clear Month"}
+                </Button>
+                <Button 
+                  className="bg-orange-600 hover:bg-orange-700 text-white sm:flex-1" 
+                  onClick={handleBulkGenerate}
+                  disabled={isBulkGenerating}
+                >
+                  {isBulkGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Generate Data"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
-      </PageHeader>
+        )}
+      </div>
+    </PageHeader>
  
       <div className="flex flex-col gap-6">
         <div className="flex flex-col xl:flex-row gap-6">
@@ -615,7 +639,7 @@ export default function AttendancePage() {
                   <CalendarIcon className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.presentDays}</div>
-                <p className="text-xs text-muted-foreground">{user?.role === "Admin" || user?.role === "HR" ? "All employee records" : "Days recorded this month"}</p>
+                <p className="text-xs text-muted-foreground">{canManageAttendance ? "All employee records" : "Days recorded this month"}</p>
 
               </div>
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
@@ -719,17 +743,40 @@ export default function AttendancePage() {
                       const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
                       const productionStr = productionMinutes > 0 ? (productionMinutes >= 60 ? `${Math.floor(productionMinutes/60)}H ${productionMinutes%60}Min` : `${productionMinutes}Min`) : "-";
                       
-                      // Late (9:30 AM start)
-                      const startTime = dayjs(`${row.date} 09:30:00`);
-                      const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(startTime, 'minute')) : 0;
-                      const lateStr = lateMinutes > 0 ? `${lateMinutes}Min` : "-";
+                      // Late
+                      const isLate = (() => {
+                        if (!row.checkIn || row.checkIn === "--") return false;
+                        const officeStartTime = sysSettings?.officeStartTime || "09:30";
+                        const bufferMins = sysSettings?.lateBufferMins || 10;
+                        
+                        const [h, m] = row.checkIn.split(':').map(Number);
+                        const [sh, sm] = officeStartTime.split(':').map(Number);
+                        
+                        const punchMins = h * 60 + m;
+                        const limitMins = sh * 60 + sm + bufferMins;
+                        
+                        return punchMins > limitMins;
+                      })();
                       
-                      // Overtime (Assuming 9h shift)
-                      const overtimeMinutes = Math.max(0, productionMinutes - 540);
+                      const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${row.date} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
+                      const lateStr = isLate ? `${lateMinutes}Min` : "-";
+                      
+                      // Overtime
+                      const shiftDurationMinutes = (() => {
+                        const officeStartTime = sysSettings?.officeStartTime || "09:30";
+                        const officeEndTime = sysSettings?.officeEndTime || "18:30";
+                        const [sh, sm] = officeStartTime.split(':').map(Number);
+                        const [eh, em] = officeEndTime.split(':').map(Number);
+                        return (eh * 60 + em) - (sh * 60 + sm);
+                      })();
+                      
+                      const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
                       const overtimeStr = overtimeMinutes > 0 ? (overtimeMinutes >= 60 ? `${Math.floor(overtimeMinutes/60)}H ${overtimeMinutes%60}Min` : `${overtimeMinutes}Min`) : "-";
 
-                      let statusLabel = "Present";
-                      let statusClass = "bg-green-50 text-green-600 border-green-100";
+                      let statusLabel = isLate ? "Late Entry" : "Present";
+                      let statusClass = isLate 
+                        ? "bg-amber-50 text-amber-600 border-amber-100" 
+                        : "bg-green-50 text-green-600 border-green-100";
                       
                       const currentStatus = row.checkOut ? "punch-out" : "punch-in";
                       const day = dayjs(row.date).format("dddd");
@@ -748,7 +795,7 @@ export default function AttendancePage() {
                           <td className="px-4 py-4 text-muted-foreground">{currentStatus}</td>
                           <td className="px-4 py-4">
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${statusClass}`}>
-                              <CheckCircle2 className="w-3 h-3" /> {statusLabel}
+                              {isLate ? <AlertCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />} {statusLabel}
                             </span>
                           </td>
                           <td className="px-4 py-4 font-medium text-foreground">{row.checkIn || "-"}</td>
@@ -767,7 +814,7 @@ export default function AttendancePage() {
                           </td>
                           <td className="px-4 py-4 font-medium text-foreground">{totalWorkingStr}</td>
                           <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate">
-                            {lateMinutes > 0 ? `Late punch-in; ${lateMinutes} minutes after expected start time (09:30 AM)` : "-"}
+                            {isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-"}
                           </td>
                           <td className="px-4 py-4 text-right">
                               <div className="flex justify-end gap-2">
@@ -779,31 +826,35 @@ export default function AttendancePage() {
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Button>
-                                <Button 
-                                  onClick={() => { 
-                                    setEditForm({
-                                      id: row.id,
-                                      date: row.date,
-                                      checkIn: row.checkIn,
-                                      checkOut: row.checkOut || "",
-                                      status: row.status || "Logged"
-                                    }); 
-                                    setEditModalOpen(true); 
-                                  }}
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full"
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </Button>
-                                <Button 
-                                  onClick={() => handleDelete(row.id)}
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-red-600 bg-red-50 hover:bg-red-100 rounded-full"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                {canManageAttendance && (
+                                  <>
+                                    <Button 
+                                      onClick={() => { 
+                                        setEditForm({
+                                          id: row.id,
+                                          date: row.date,
+                                          checkIn: row.checkIn,
+                                          checkOut: row.checkOut || "",
+                                          status: row.status || "Logged"
+                                        }); 
+                                        setEditModalOpen(true); 
+                                      }}
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full"
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button 
+                                      onClick={() => handleDelete(row.id)}
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 text-red-600 bg-red-50 hover:bg-red-100 rounded-full"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                           </td>
                         </tr>

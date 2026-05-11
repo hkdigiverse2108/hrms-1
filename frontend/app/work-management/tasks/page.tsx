@@ -302,10 +302,6 @@ export default function TasksPage() {
         description="Manage your team's workflow. Click any task card to update details."
       >
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => fetchLogs()} className="border-slate-300 text-slate-600 h-9 px-4 text-[12px] rounded-lg">
-            <History className="w-4 h-4 mr-2" />
-            Activity Logs
-          </Button>
 
           <Dialog open={modalOpen} onOpenChange={(open) => {
             setModalOpen(open);

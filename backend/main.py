@@ -468,8 +468,8 @@ async def delete_project(project_id: str, db=Depends(get_db)):
 
 # WM Task Endpoints
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
-async def read_wm_tasks(skip: int = 0, limit: int = 100, db=Depends(get_db)):
-    return await crud.get_wm_tasks(db, skip=skip, limit=limit)
+async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)
 
 @app.post("/wm-tasks", response_model=schemas.WMTask)
 async def create_wm_task(task: schemas.WMTaskCreate, db=Depends(get_db)):
@@ -819,6 +819,15 @@ async def update_incentive_slab(slab_id: str, slab_update: schemas.IncentiveSlab
 async def delete_incentive_slab(slab_id: str, db=Depends(get_db)):
     await crud.delete_incentive_slab(db, slab_id)
     return {"message": "Incentive slab deleted successfully"}
+
+# User Permission Routes
+@app.get("/user-permissions/{employee_id}", response_model=Optional[schemas.UserPermission])
+async def read_user_permissions(employee_id: str, db=Depends(get_db)):
+    return await crud.get_user_permissions(db, employee_id)
+
+@app.post("/user-permissions/{employee_id}", response_model=schemas.UserPermission)
+async def update_user_permissions(employee_id: str, permissions: schemas.UserPermissionUpdate, db=Depends(get_db)):
+    return await crud.save_user_permissions(db, employee_id, permissions)
 
 # Department Routes
 # (Using existing routes defined earlier in the file)

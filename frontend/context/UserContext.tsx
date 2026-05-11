@@ -2,6 +2,7 @@
  
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '@/hooks/useUser';
+import { API_URL } from '@/lib/config';
  
 interface UserContextType {
   user: User | null;
@@ -21,7 +22,36 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        
+        const userId = parsedUser.id || parsedUser._id;
+        if (userId) {
+          const fetchUrl = `${API_URL}/employees/${userId}`;
+          console.log("Syncing user data from:", fetchUrl);
+          // Fetch fresh user data to get updated permissions
+          fetch(fetchUrl)
+            .then(res => {
+              if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+              return res.json();
+            })
+            .then(freshUser => {
+              if (freshUser && !freshUser.detail) {
+                // Fetch permissions separately
+                fetch(`${API_URL}/user-permissions/${userId}`)
+                  .then(pRes => pRes.ok ? pRes.json() : { permissions: [] })
+                  .then(pData => {
+                    const updatedUser = { 
+                      ...freshUser, 
+                      permissions: pData?.permissions || [] 
+                    };
+                    localStorage.setItem('user', JSON.stringify(updatedUser));
+                    setUser(updatedUser);
+                  });
+              }
+            })
+            .catch(err => console.error("Failed to sync user data:", err));
+        }
       } catch (err) {
         console.error("Failed to parse user", err);
         localStorage.removeItem('user');

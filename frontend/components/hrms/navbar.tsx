@@ -1,7 +1,7 @@
 'use client'
  
 import React, { useState, useEffect } from 'react'
-import { Bell, Search, ChevronDown, LogOut, User, Settings } from 'lucide-react'
+import { Bell, Search, ChevronDown, LogOut, User, Settings, Eye, Check } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -23,10 +23,42 @@ export function HRMSNavbar() {
   const [searchQuery, setSearchQuery] = useState('')
   const { user, isLoading } = useUser();
   const [mounted, setMounted] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
  
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (user?.id) {
+      fetchNotifications();
+    }
+  }, [user]);
+
+  const fetchNotifications = async () => {
+    try {
+      const { API_URL } = await import('@/lib/config');
+      const response = await fetch(`${API_URL}/notifications/${user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setNotifications(data);
+        setUnreadCount(data.filter((n: any) => !n.is_read).length);
+      }
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+    }
+  };
+
+  const markAsRead = async (id: string) => {
+    try {
+      const { API_URL } = await import('@/lib/config');
+      const response = await fetch(`${API_URL}/notifications/${id}/read`, { method: 'PUT' });
+      if (response.ok) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (err) {
+      console.error("Error marking notification as read:", err);
+    }
+  };
  
   const userName = user?.name || "Guest";
   const designation = user?.designation || "Employee";
@@ -58,34 +90,78 @@ export function HRMSNavbar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
-              <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs">
-                3
-              </Badge>
+              {unreadCount > 0 && (
+                <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center bg-brand-danger">
+                  {unreadCount}
+                </Badge>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+            <DropdownMenuLabel className="flex justify-between items-center">
+              <span>Notifications</span>
+              {unreadCount > 0 && <span className="text-[10px] font-normal text-muted-foreground">{unreadCount} unread</span>}
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="flex flex-col items-start gap-1 py-3">
-              <span className="font-medium">Leave Request Pending</span>
-              <span className="text-sm text-muted-foreground">
-                Sarah Johnson requested 2 days leave
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1 py-3">
-              <span className="font-medium">New Application</span>
-              <span className="text-sm text-muted-foreground">
-                5 new applications for Senior React Developer
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1 py-3">
-              <span className="font-medium">Expense Approval</span>
-              <span className="text-sm text-muted-foreground">
-                3 expense claims awaiting approval
-              </span>
-            </DropdownMenuItem>
+            <div className="max-h-[300px] overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  No notifications yet
+                </div>
+              ) : (
+                notifications.map((n) => (
+                  <DropdownMenuItem 
+                    key={n.id} 
+                    className={`flex flex-col items-start gap-1 py-3 cursor-pointer ${!n.is_read ? 'bg-slate-50/50' : ''}`}
+                    onClick={() => {
+                      if (n.type === 'leave' && n.reference_id) {
+                        router.push(`/employees/leave?id=${n.reference_id}`);
+                      }
+                      markAsRead(n.id);
+                    }}
+                  >
+                    <div className="flex justify-between w-full">
+                      <span className={`font-medium ${!n.is_read ? 'text-brand-teal' : ''}`}>{n.title}</span>
+                      <span className="text-[10px] text-muted-foreground">{n.created_at}</span>
+                    </div>
+                    <span className="text-sm text-muted-foreground leading-snug">
+                      {n.message}
+                    </span>
+                    <div className="flex gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+                      {n.reference_id && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-7 px-2 text-[10px] border-brand-teal text-brand-teal hover:bg-brand-light"
+                          onClick={() => {
+                            if (n.type === 'leave' && n.reference_id) {
+                              router.push(`/employees/leave?id=${n.reference_id}`);
+                            }
+                            markAsRead(n.id);
+                          }}
+                        >
+                          <Eye className="w-3 h-3 mr-1" />
+                          View
+                        </Button>
+                      )}
+                      {!n.is_read && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 px-2 text-[10px] text-muted-foreground hover:text-brand-teal"
+                          onClick={() => markAsRead(n.id)}
+                        >
+                          <Check className="w-3 h-3 mr-1" />
+                          Mark as Read
+                        </Button>
+                      )}
+                    </div>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="justify-center text-primary">
+            <DropdownMenuItem className="justify-center text-brand-teal font-medium">
               View all notifications
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -23,161 +23,203 @@ import {
   Building2,
 } from 'lucide-react'
 
-interface NavItem {
-  title: string
-  href: string
-  icon: React.ComponentType<{ className?: string }>
-  children?: { title: string; href: string }[]
-}
+import { useUserContext } from '@/context/UserContext'
+ 
+ interface NavItem {
+   title: string
+   href: string
+   icon: React.ComponentType<{ className?: string }>
+   children?: { title: string; href: string }[]
+   roles?: string[]
+   moduleName?: string
+ }
+ 
+ const navItems: NavItem[] = [
+   {
+     title: 'Dashboard',
+     href: '/',
+     icon: LayoutDashboard,
+     moduleName: 'dashboard',
+     children: [
+       { title: 'Overview', href: '/' },
+       { title: 'Analytics', href: '/analytics' },
+     ],
+   },
+   {
+     title: 'Employee Management',
+     href: '/employees',
+     icon: Users,
+     roles: ['admin', 'hr'],
+     moduleName: 'employees',
+     children: [
+       { title: 'All Employees', href: '/employees' },
+       { title: 'Add Employee', href: '/employees/add' },
+       { title: 'Departments', href: '/employees/departments' },
+       { title: 'Designations', href: '/employees/designations' },
+       { title: 'Employee Lifecycle', href: '/employees/lifecycle' },
+     ],
+   },
+   {
+     title: 'Attendance & Time',
+     href: '/attendance',
+     icon: Clock,
+     moduleName: 'attendance',
+     children: [
+       { title: 'Attendance', href: '/attendance' },
+       { title: 'Leave Management', href: '/attendance/leave' },
+       { title: 'Late & Penalty', href: '/attendance/late-penalty' },
+       { title: 'Shift Management', href: '/attendance/shifts' },
+     ],
+   },
+   {
+     title: 'Payroll',
+     href: '/payroll',
+     icon: DollarSign,
+     roles: ['admin', 'hr'],
+     moduleName: 'payroll',
+     children: [
+       { title: 'Salary Structure', href: '/payroll/salary-structure' },
+       { title: 'Payroll Processing', href: '/payroll' },
+       { title: 'Payslips', href: '/payroll/payslips' },
+       { title: 'Bonuses & Deductions', href: '/payroll/bonuses' },
+     ],
+   },
+   {
+     title: 'Recruitment',
+     href: '/recruitment',
+     icon: Briefcase,
+     roles: ['admin', 'hr'],
+     moduleName: 'recruitment',
+     children: [
+       { title: 'Interviews', href: '/recruitment/hiring-board' },
+       { title: 'Hirings', href: '/recruitment' },
+       { title: 'Applications', href: '/recruitment/applications' },
+       { title: 'Interviews (Old)', href: '/recruitment/interviews' },
+       { title: 'Offer Letters', href: '/recruitment/offers' },
+     ],
+   },
+   {
+     title: 'Internship Module',
+     href: '/internships',
+     icon: GraduationCap,
+     roles: ['admin', 'hr'],
+     moduleName: 'internships',
+     children: [
+       { title: 'Intern List', href: '/internships' },
+       { title: 'Internship Offers', href: '/internships/offers' },
+       { title: 'Certificates', href: '/internships/certificates' },
+     ],
+   },
+   {
+     title: 'Performance',
+     href: '/performance',
+     icon: Target,
+     moduleName: 'performance',
+     children: [
+       { title: 'KPI Tracking', href: '/performance' },
+       { title: 'Reviews', href: '/performance/reviews' },
+       { title: 'Targets', href: '/performance/targets' },
+     ],
+   },
+   {
+     title: 'Assets',
+     href: '/assets',
+     icon: Package,
+     moduleName: 'assets',
+     children: [
+       { title: 'Asset Management', href: '/assets' },
+       { title: 'Assign Assets', href: '/assets/assign' },
+     ],
+   },
+   {
+     title: 'Finance & Expenses',
+     href: '/expenses',
+     icon: Receipt,
+     moduleName: 'expenses',
+     children: [
+       { title: 'Expense Claims', href: '/expenses' },
+       { title: 'Approvals', href: '/expenses/approvals' },
+     ],
+   },
+   {
+     title: 'Communication',
+     href: '/communication',
+     icon: Bell,
+     moduleName: 'communication',
+     children: [
+       { title: 'Announcements', href: '/communication' },
+       { title: 'Notifications', href: '/communication/notifications' },
+     ],
+   },
+   {
+     title: 'Documents',
+     href: '/documents',
+     icon: FileText,
+     moduleName: 'documents',
+     children: [
+       { title: 'HR Documents', href: '/documents' },
+       { title: 'Employee Docs', href: '/documents/employee' },
+     ],
+   },
+   {
+     title: 'Settings',
+     href: '/settings',
+     icon: Settings,
+     roles: ['admin', 'hr'],
+     moduleName: 'settings',
+     children: [
+       { title: 'Company Settings', href: '/settings' },
+       { title: 'Roles & Permissions', href: '/settings/roles' },
+       { title: 'Leave Policy', href: '/settings/leave-policy' },
+       { title: 'Holiday Calendar', href: '/settings/holidays' },
+     ],
+   },
+   {
+     title: 'Reports',
+     href: '/reports',
+     icon: BarChart3,
+     roles: ['admin', 'hr'],
+     moduleName: 'reports',
+     children: [
+       { title: 'Attendance Report', href: '/reports/attendance' },
+       { title: 'Payroll Report', href: '/reports/payroll' },
+       { title: 'Employee Report', href: '/reports/employees' },
+     ],
+   },
+ ]
+ 
+ export function HRMSSidebar() {
+   const pathname = usePathname()
+   const { user } = useUserContext()
+   const [expandedItems, setExpandedItems] = useState<string[]>(['Dashboard'])
+ 
+   const userRole = user?.role?.toLowerCase() || 'employee'
+ 
+   const filteredNavItems = navItems.filter((item) => {
+     // Admin always sees everything
+     if (userRole === 'admin') return true;
+     
+     // Check granular permissions first
+     if (item.moduleName && user?.permissions) {
+       const perm = user.permissions.find((p: any) => p.moduleName === item.moduleName);
+       if (perm) return perm.canView;
+     }
 
-const navItems: NavItem[] = [
-  {
-    title: 'Dashboard',
-    href: '/',
-    icon: LayoutDashboard,
-    children: [
-      { title: 'Overview', href: '/' },
-      { title: 'Analytics', href: '/analytics' },
-    ],
-  },
-  {
-    title: 'Employee Management',
-    href: '/employees',
-    icon: Users,
-    children: [
-      { title: 'All Employees', href: '/employees' },
-      { title: 'Add Employee', href: '/employees/add' },
-      { title: 'Organization Structure', href: '/employees/departments' },
-      { title: 'Employee Lifecycle', href: '/employees/lifecycle' },
-    ],
-  },
-  {
-    title: 'Attendance & Time',
-    href: '/attendance',
-    icon: Clock,
-    children: [
-      { title: 'Attendance', href: '/attendance' },
-      { title: 'Leave Management', href: '/attendance/leave' },
-      { title: 'Late & Penalty', href: '/attendance/late-penalty' },
-      { title: 'Shift Management', href: '/attendance/shifts' },
-    ],
-  },
-  {
-    title: 'Payroll',
-    href: '/payroll',
-    icon: DollarSign,
-    children: [
-      { title: 'Salary Structure', href: '/payroll/salary-structure' },
-      { title: 'Payroll Processing', href: '/payroll' },
-      { title: 'Payslips', href: '/payroll/payslips' },
-      { title: 'Bonuses & Deductions', href: '/payroll/bonuses' },
-    ],
-  },
-  {
-    title: 'Recruitment',
-    href: '/recruitment',
-    icon: Briefcase,
-    children: [
-      { title: 'Interviews', href: '/recruitment/hiring-board' },
-      { title: 'Hirings', href: '/recruitment' },
-      { title: 'Applications', href: '/recruitment/applications' },
-      { title: 'Interviews (Old)', href: '/recruitment/interviews' },
-      { title: 'Offer Letters', href: '/recruitment/offers' },
-    ],
-  },
-  {
-    title: 'Internship Module',
-    href: '/internships',
-    icon: GraduationCap,
-    children: [
-      { title: 'Intern List', href: '/internships' },
-      { title: 'Internship Offers', href: '/internships/offers' },
-      { title: 'Certificates', href: '/internships/certificates' },
-    ],
-  },
-  {
-    title: 'Performance',
-    href: '/performance',
-    icon: Target,
-    children: [
-      { title: 'KPI Tracking', href: '/performance' },
-      { title: 'Reviews', href: '/performance/reviews' },
-      { title: 'Targets', href: '/performance/targets' },
-    ],
-  },
-  {
-    title: 'Assets',
-    href: '/assets',
-    icon: Package,
-    children: [
-      { title: 'Asset Management', href: '/assets' },
-      { title: 'Assign Assets', href: '/assets/assign' },
-    ],
-  },
-  {
-    title: 'Finance & Expenses',
-    href: '/expenses',
-    icon: Receipt,
-    children: [
-      { title: 'Expense Claims', href: '/expenses' },
-      { title: 'Approvals', href: '/expenses/approvals' },
-    ],
-  },
-  {
-    title: 'Communication',
-    href: '/communication',
-    icon: Bell,
-    children: [
-      { title: 'Announcements', href: '/communication' },
-      { title: 'Notifications', href: '/communication/notifications' },
-    ],
-  },
-  {
-    title: 'Documents',
-    href: '/documents',
-    icon: FileText,
-    children: [
-      { title: 'HR Documents', href: '/documents' },
-      { title: 'Employee Docs', href: '/documents/employee' },
-    ],
-  },
-  {
-    title: 'Settings',
-    href: '/settings',
-    icon: Settings,
-    children: [
-      { title: 'Company Settings', href: '/settings' },
-      { title: 'Roles & Permissions', href: '/settings/roles' },
-      { title: 'Leave Policy', href: '/settings/leave-policy' },
-      { title: 'Holiday Calendar', href: '/settings/holidays' },
-    ],
-  },
-  {
-    title: 'Reports',
-    href: '/reports',
-    icon: BarChart3,
-    children: [
-      { title: 'Attendance Report', href: '/reports/attendance' },
-      { title: 'Payroll Report', href: '/reports/payroll' },
-      { title: 'Employee Report', href: '/reports/employees' },
-    ],
-  },
-]
-
-export function HRMSSidebar() {
-  const pathname = usePathname()
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Dashboard', 'Employee Management'])
-
-  const toggleExpanded = (title: string) => {
-    setExpandedItems((prev) =>
-      prev.includes(title) ? prev.filter((item) => item !== title) : [...prev, title]
-    )
-  }
-
-  const isActive = (href: string) => {
-    if (href === '/') return pathname === '/'
-    return pathname.startsWith(href)
-  }
+     // Fallback to role-based access if no granular permission found
+     if (!item.roles) return true
+     return item.roles.includes(userRole)
+   })
+ 
+   const toggleExpanded = (title: string) => {
+     setExpandedItems((prev) =>
+       prev.includes(title) ? prev.filter((item) => item !== title) : [...prev, title]
+     )
+   }
+ 
+   const isActive = (href: string) => {
+     if (href === '/') return pathname === '/'
+     return pathname.startsWith(href)
+   }
 
   const isChildActive = (children?: { title: string; href: string }[]) => {
     if (!children) return false
@@ -198,7 +240,7 @@ export function HRMSSidebar() {
 
       <nav className="h-[calc(100vh-4rem)] overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const Icon = item.icon
             const isExpanded = expandedItems.includes(item.title)
             const hasActiveChild = isChildActive(item.children)

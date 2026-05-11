@@ -538,6 +538,7 @@ class NotificationBase(BaseModel):
     title: str
     message: str
     type: str  # leave, attendance, payroll, etc.
+    reference_id: Optional[str] = None
     is_read: bool = False
     created_at: str = ""
 
@@ -801,10 +802,16 @@ class Lead(LeadBase):
 class SystemSettingsBase(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = True
     latePunchDeductionEnabled: Optional[bool] = True
+    officeStartTime: Optional[str] = "09:30"
+    officeEndTime: Optional[str] = "18:30"
+    lateBufferMins: Optional[int] = 10
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
     latePunchDeductionEnabled: Optional[bool] = None
+    officeStartTime: Optional[str] = None
+    officeEndTime: Optional[str] = None
+    lateBufferMins: Optional[int] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1062,5 +1069,27 @@ class SalesTarget(SalesTargetBase):
     class Config:
         from_attributes = True
 
-# Department Schemas
-# (Using existing schemas defined earlier in the file)
+# Permission Schemas
+class ModulePermission(BaseModel):
+    moduleName: str
+    displayName: str
+    tabUrl: str
+    canAdd: bool = False
+    canEdit: bool = False
+    canDelete: bool = False
+    canView: bool = False
+
+class UserPermissionBase(BaseModel):
+    employeeId: str
+    permissions: List[ModulePermission]
+
+class UserPermissionCreate(UserPermissionBase):
+    pass
+
+class UserPermissionUpdate(BaseModel):
+    permissions: List[ModulePermission]
+
+class UserPermission(UserPermissionBase):
+    id: str
+    class Config:
+        from_attributes = True

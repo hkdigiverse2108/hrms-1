@@ -55,7 +55,7 @@ export default function ProjectsPage() {
     try {
       const [pRes, tRes] = await Promise.all([
         fetch(`${API_URL}/projects?userId=${user.id}&role=${user.role}`),
-        fetch(`${API_URL}/wm-tasks`)
+        fetch(`${API_URL}/wm-tasks?userId=${user.id}&role=${user.role}`)
       ]);
       
       if (pRes.ok) setProjects(await pRes.json());

@@ -459,19 +459,21 @@ export default function RemarksPage() {
               />
             </div>
 
-            <div className="w-full sm:w-auto">
-              <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}>
-                <SelectTrigger className="w-full sm:w-[180px] font-medium border-border shadow-sm">
-                  <SelectValue placeholder="All Employees" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Employees</SelectItem>
-                  {employees.map(emp => (
-                    <SelectItem key={emp.id} value={emp.id || emp.name}>{emp.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {canManageRemarks && (
+              <div className="w-full sm:w-auto">
+                <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full sm:w-[180px] font-medium border-border shadow-sm">
+                    <SelectValue placeholder="All Employees" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Employees</SelectItem>
+                    {employees.map(emp => (
+                      <SelectItem key={emp.id} value={emp.id || emp.name}>{emp.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             
             <div className="w-full sm:w-auto">
               <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setCurrentPage(1); }}>

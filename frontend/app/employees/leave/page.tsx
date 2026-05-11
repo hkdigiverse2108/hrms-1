@@ -14,12 +14,14 @@ import {
   ChevronLeft,
   Loader2
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "antd";
 
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
@@ -27,8 +29,12 @@ import { toast } from "sonner";
 
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 
 dayjs.extend(relativeTime);
+dayjs.extend(isSameOrAfter);
+dayjs.extend(isSameOrBefore);
 
 
 export default function LeaveRequestsPage() {
@@ -38,10 +44,24 @@ export default function LeaveRequestsPage() {
   const [isMobileDetailView, setIsMobileDetailView] = useState(false);
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [timeFilter, setTimeFilter] = useState("today"); // "today" | "custom"
+  const [filterDate, setFilterDate] = useState(dayjs());
+  const searchParams = useSearchParams();
+  const targetId = searchParams.get('id');
 
   useEffect(() => {
     fetchRequests();
   }, []);
+
+  useEffect(() => {
+    if (targetId && requests.length > 0) {
+      setSelectedId(targetId);
+      // If we are looking for a specific request, we should probably show "All" 
+      // or at least ensure the date filter doesn't hide it.
+      // For now, let's switch to All Requests to be safe.
+      setTimeFilter("all");
+    }
+  }, [targetId, requests.length]);
 
   const fetchRequests = async () => {
     setIsLoading(true);
@@ -50,8 +70,14 @@ export default function LeaveRequestsPage() {
       if (res.ok) {
         const data = await res.json();
         setRequests(data);
-        if (data.length > 0 && !selectedId) {
-          setSelectedId(data[0].id);
+        
+        // Handle targetId from URL immediately
+        if (targetId) {
+          setSelectedId(targetId);
+          setTimeFilter("all");
+        } else if (data.length > 0 && !selectedId) {
+          // Default selection if no targetId (Optional: based on previous user request, I disabled this, but keeping logic for clarity)
+          // setSelectedId(data[0].id);
         }
       }
     } catch (err) {
@@ -126,12 +152,38 @@ export default function LeaveRequestsPage() {
         {/* Header */}
         <div className="p-4 border-b border-border bg-white z-10 shrink-0">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-lg text-foreground">Pending Review</h2>
-            <Button variant="outline" size="icon" className="h-8 w-8 text-muted-foreground shadow-sm">
-              <Filter className="w-4 h-4" />
-            </Button>
+            <h2 className="font-bold text-lg text-foreground">Leave Requests</h2>
           </div>
           
+          <div className="grid grid-cols-2 gap-2 mb-6">
+            <button 
+              onClick={() => {
+                setTimeFilter("today");
+                setFilterDate(dayjs());
+              }}
+              className={`h-10 text-[11px] font-bold rounded-lg border transition-all flex items-center justify-center gap-2 ${timeFilter === 'today' ? 'bg-brand-teal text-white border-brand-teal shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-brand-teal hover:text-brand-teal'}`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Today</span>
+            </button>
+            
+            <div className={`h-10 px-2 rounded-lg border transition-all flex items-center ${timeFilter === 'custom' ? 'bg-white border-brand-teal shadow-sm' : 'bg-gray-50/50 border-slate-200'}`}>
+              <DatePicker 
+                value={filterDate}
+                onChange={(date) => {
+                  if (date) {
+                    setFilterDate(date);
+                    setTimeFilter("custom");
+                  }
+                }}
+                allowClear={false}
+                variant="borderless"
+                className="w-full h-8 text-[11px] font-bold p-0"
+                format="DD-MM-YYYY"
+              />
+            </div>
+          </div>
+
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
@@ -166,7 +218,16 @@ export default function LeaveRequestsPage() {
             <div className="p-8 text-center text-muted-foreground text-sm">
               No leave requests found
             </div>
-          ) : requests.map((req) => (
+          ) : requests
+              .filter((req) => {
+                if (timeFilter === "all") return true;
+                if (!req.start_date || !req.end_date) return false;
+                const targetDate = filterDate.startOf('day');
+                const start = dayjs(req.start_date, "DD-MM-YYYY").startOf('day');
+                const end = dayjs(req.end_date, "DD-MM-YYYY").endOf('day');
+                return targetDate.isSameOrAfter(start) && targetDate.isSameOrBefore(end);
+              })
+              .map((req) => (
             <div 
               key={req.id}
               onClick={() => handleSelect(req.id)}
@@ -185,7 +246,13 @@ export default function LeaveRequestsPage() {
                   </Avatar>
                   <span className="font-semibold text-sm text-foreground">{req.employee_name}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{dayjs(req.requested_on, "DD-MM-YYYY").fromNow()}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full 
+                  ${req.status === 'Approved' ? 'bg-green-100 text-green-700' : 
+                    req.status === 'Rejected' ? 'bg-red-100 text-red-700' : 
+                    req.status === 'Cancelled' ? 'bg-amber-100 text-amber-700' : 
+                    'bg-brand-light text-brand-teal'}`}>
+                  {req.status}
+                </span>
               </div>
               
               <div className="pl-11">

@@ -23,6 +23,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
+import { usePermissions } from "@/hooks/usePermissions";
 import { API_URL } from "@/lib/config";
 
 type MenuItem = Required<MenuProps>["items"][number];
@@ -46,6 +47,7 @@ function getItem(
 export function SidebarNav() {
   const pathname = usePathname();
   const { user } = useUser();
+  const { checkPermission, isAdmin, permissions } = usePermissions();
   const [settings, setSettings] = useState<any>(null);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function SidebarNav() {
     }
   };
 
-  const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
+
 
   const showClients = () => {
     if (isAdmin) return true;
@@ -73,39 +75,78 @@ export function SidebarNav() {
   };
 
   const items = React.useMemo(() => {
-    const isSalesDept = user?.department?.toLowerCase() === "sales";
-    const isMarketingDept = user?.department?.toLowerCase() === "marketing";
-    const isAdminRole = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
-
     const workManagementChildren: MenuItem[] = [];
 
-    // All employees (including Sales/Marketing) see Daily Progress
-    if (isSalesDept && !isAdminRole) {
+    if (isAdmin || checkPermission('projects', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"));
+    }
+    if (isAdmin || checkPermission('tasks', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"));
+    }
+    if (isAdmin || checkPermission('daily-progress', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
+    }
+    if (isAdmin || checkPermission('sales', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
-    } else if (isMarketingDept && !isAdminRole) {
+    }
+    if (isAdmin || checkPermission('clients', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
+    }
+    if (isAdmin || checkPermission('marketing', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/marketing-reports">Marketing Reports</Link>, "/work-management/marketing-reports"));
-    } else {
-      workManagementChildren.push(
-        getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"),
-        getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks")
-      );
     }
 
-    // Common for all departments in Work Management
-    workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
-    
-    // Admin specific additions
-    if (isAdminRole) {
-      if (!isSalesDept) workManagementChildren.push(getItem(<Link href="/work-management/sales">Sales</Link>, "/work-management/sales"));
-      workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
-      if (!isMarketingDept) workManagementChildren.push(getItem(<Link href="/work-management/marketing-reports">Marketing Reports</Link>, "/work-management/marketing-reports"));
+    const employeeChildren: MenuItem[] = [];
+    if (isAdmin || checkPermission('employee-list', 'canView')) {
+      employeeChildren.push(getItem(<Link href="/employees">Employee List</Link>, "/employees"));
+    }
+    if (isAdmin || checkPermission('departments', 'canView')) {
+      employeeChildren.push(getItem(<Link href="/employees/departments">Departments</Link>, "/employees/departments"));
+    }
+    if (isAdmin || checkPermission('designations', 'canView')) {
+      employeeChildren.push(getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"));
+    }
+    if (isAdmin || checkPermission('employee-attendance', 'canView')) {
+      employeeChildren.push(getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"));
+    }
+    if (isAdmin || checkPermission('leave-requests', 'canView')) {
+      employeeChildren.push(getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"));
+    }
+    if (isAdmin || checkPermission('employee-documents', 'canView')) {
+      employeeChildren.push(getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"));
+    }
+
+    const payrollChildren: MenuItem[] = [];
+    if (isAdmin || checkPermission('salary-structure', 'canView')) {
+      payrollChildren.push(getItem(<Link href="/payroll/salary-structure">Salary Structure</Link>, "/payroll/salary-structure"));
+    }
+    if (isAdmin || checkPermission('payroll-processing', 'canView')) {
+      payrollChildren.push(getItem(<Link href="/payroll">Payroll Processing</Link>, "/payroll"));
+    }
+    if (isAdmin || checkPermission('payslips', 'canView')) {
+      payrollChildren.push(getItem(<Link href="/payroll/payslips">Payslips</Link>, "/payroll/payslips"));
+    }
+    if (isAdmin || checkPermission('bonuses-deductions', 'canView')) {
+      payrollChildren.push(getItem(<Link href="/payroll/bonuses">Bonuses & Deductions</Link>, "/payroll/bonuses"));
+    }
+
+    const recruitmentChildren: MenuItem[] = [];
+    if (isAdmin || checkPermission('interviews', 'canView')) {
+      recruitmentChildren.push(getItem(<Link href="/recruitment/hiring-board">Interviews</Link>, "/recruitment/hiring-board"));
+    }
+    if (isAdmin || checkPermission('hirings', 'canView')) {
+      recruitmentChildren.push(getItem(<Link href="/recruitment">Hirings</Link>, "/recruitment"));
+    }
+    if (isAdmin || checkPermission('applications', 'canView')) {
+      recruitmentChildren.push(getItem(<Link href="/recruitment/applications">Applications</Link>, "/recruitment/applications"));
     }
 
     return [
       getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
       getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
         getItem(<Link href="/employees">Employee List</Link>, "/employees"),
-        getItem(<Link href="/employees/departments">Organization Structure</Link>, "/employees/departments"),
+        getItem(<Link href="/employees/departments">Departments</Link>, "/employees/departments"),
+        getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"),
         getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"),
         getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
         getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
@@ -141,7 +182,7 @@ export function SidebarNav() {
       getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren),
       getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />),
     ];
-  }, [user, settings, pathname]);
+  }, [user, settings, pathname, permissions, checkPermission]);
 
   // Helper to determine open keys and selected keys
   const getSelectedKeys = () => {
