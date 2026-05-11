@@ -140,51 +140,44 @@ export function SidebarNav() {
 
     return [
       getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
-      ...(employeeChildren.length > 0 ? [
-        getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, employeeChildren)
-      ] : []),
-      ...(payrollChildren.length > 0 ? [
-        getItem("Payroll", "payroll-sub", <DollarSign className="w-5 h-5" />, payrollChildren)
-      ] : []),
-      ...(recruitmentChildren.length > 0 ? [
-        getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, recruitmentChildren)
-      ] : []),
-      ...(isAdmin || checkPermission('attendance', 'canView') ? [
-        getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />)
-      ] : []),
-      ...(isAdmin || checkPermission('leave', 'canView') ? [
-        getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />)
-      ] : []),
-      ...(isAdmin || checkPermission('workspace', 'canView') ? [
-        getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
-          getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"),
-          getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
-          ...(isAdmin || checkPermission('resource-management', 'canView') ? [
-            getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource")
-          ] : []),
-        ])
-      ] : []),
-      ...(isAdmin || checkPermission('remarks', 'canView') ? [
-        getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />)
-      ] : []),
-      ...(isAdmin || checkPermission('review', 'canView') ? [
-        getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />)
-      ] : []),
-      ...(isAdmin || checkPermission('invoice', 'canView') ? [
-        getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, [
-          getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"),
-          getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"),
-        ])
-      ] : []),
-      ...(isAdmin || checkPermission('chat', 'canView') ? [
-        getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />)
-      ] : []),
-      ...(isAdmin || checkPermission('projects', 'canView') || checkPermission('tasks', 'canView') || checkPermission('daily-progress', 'canView') ? [
-        getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren)
-      ] : []),
-      ...(isAdmin || checkPermission('settings', 'canView') ? [
-        getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />)
-      ] : []),
+      getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
+        getItem(<Link href="/employees">Employee List</Link>, "/employees"),
+        getItem(<Link href="/employees/departments">Departments</Link>, "/employees/departments"),
+        getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"),
+        getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"),
+        getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
+        getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
+        getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"),
+      ]),
+      getItem("Payroll", "payroll-sub", <DollarSign className="w-5 h-5" />, [
+        getItem(<Link href="/payroll/salary-structure">Salary Structure</Link>, "/payroll/salary-structure"),
+        getItem(<Link href="/payroll">Payroll Processing</Link>, "/payroll"),
+        getItem(<Link href="/payroll/payslips">Payslips</Link>, "/payroll/payslips"),
+        getItem(<Link href="/payroll/bonuses">Bonuses & Deductions</Link>, "/payroll/bonuses"),
+      ]),
+      getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, [
+        getItem(<Link href="/recruitment/hiring-board">Interviews</Link>, "/recruitment/hiring-board"),
+        getItem(<Link href="/recruitment">Hirings</Link>, "/recruitment"),
+        getItem(<Link href="/recruitment/applications">Applications</Link>, "/recruitment/applications"),
+      ]),
+      getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
+      getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
+      getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
+        getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"),
+        getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
+        ...(user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "hr" ? [
+          getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource")
+        ] : []),
+      ]),
+      getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />),
+      getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />),
+      getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, [
+        getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"),
+        getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"),
+      ]),
+      getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />),
+      getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren),
+      getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />),
     ];
   }, [user, settings, pathname, permissions, checkPermission]);
 
