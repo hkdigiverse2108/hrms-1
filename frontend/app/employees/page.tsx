@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { SearchBar } from "@/components/common/SearchBar";
 import { TablePagination } from "@/components/common/TablePagination";
 import { Button } from "@/components/ui/button";
-import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2 } from "lucide-react";
+import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2, Eye, EyeOff } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,6 +29,20 @@ export default function EmployeeListPage() {
   const [filterDept, setFilterDept] = useState("All Departments");
   const [filterRole, setFilterRole] = useState("All Roles");
   const [filterStatus, setFilterStatus] = useState("Status");
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
+
+  const togglePasswordVisibility = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setVisiblePasswords(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -164,6 +178,7 @@ export default function EmployeeListPage() {
                 <th className="px-6 py-4 w-12"><input type="checkbox" className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal accent-brand-teal" /></th>
                 <th className="px-6 py-4 font-medium">Employee Name</th>
                 <th className="px-6 py-4 font-medium">Employee ID</th>
+                <th className="px-6 py-4 font-medium">Password</th>
                 <th className="px-6 py-4 font-medium">Department</th>
                 <th className="px-6 py-4 font-medium">Role</th>
                 <th className="px-6 py-4 font-medium">Status</th>
@@ -174,7 +189,7 @@ export default function EmployeeListPage() {
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-20 text-center">
+                  <td colSpan={9} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3 text-muted-foreground">
                       <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
                       <p>Loading employees...</p>
@@ -183,13 +198,13 @@ export default function EmployeeListPage() {
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-20 text-center text-destructive">
+                  <td colSpan={9} className="px-6 py-20 text-center text-destructive">
                     {error}
                   </td>
                 </tr>
               ) : filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-20 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-6 py-20 text-center text-muted-foreground">
                     No employees found matching your criteria.
                   </td>
                 </tr>
@@ -212,6 +227,23 @@ export default function EmployeeListPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 font-medium">{emp.employeeId}</td>
+                    <td className="px-6 py-4">
+                      {emp.password ? (
+                        <div className="flex items-center justify-between w-full min-w-[140px] max-w-[200px] bg-gray-100 px-2.5 py-1.5 rounded border border-gray-200/60">
+                          <span className="font-mono text-xs text-muted-foreground truncate mr-2">
+                            {visiblePasswords.has(emp.id) ? emp.password : "••••••••"}
+                          </span>
+                          <button
+                            onClick={(e) => togglePasswordVisibility(e, emp.id)}
+                            className="text-gray-400 hover:text-gray-600 transition-colors shrink-0 flex items-center justify-center"
+                          >
+                            {visiblePasswords.has(emp.id) ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic text-xs">Not set</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-muted-foreground">{emp.department}</td>
                     <td className="px-6 py-4 text-muted-foreground">{emp.designation}</td>
                     <td className="px-6 py-4">
