@@ -105,8 +105,7 @@ export function SidebarNav() {
       getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
       getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
         getItem(<Link href="/employees">Employee List</Link>, "/employees"),
-        getItem(<Link href="/employees/departments">Departments</Link>, "/employees/departments"),
-        getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"),
+        getItem(<Link href="/employees/departments">Organization Structure</Link>, "/employees/departments"),
         getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"),
         getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
         getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),

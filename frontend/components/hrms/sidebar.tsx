@@ -47,8 +47,7 @@ const navItems: NavItem[] = [
     children: [
       { title: 'All Employees', href: '/employees' },
       { title: 'Add Employee', href: '/employees/add' },
-      { title: 'Departments', href: '/employees/departments' },
-      { title: 'Designations', href: '/employees/designations' },
+      { title: 'Organization Structure', href: '/employees/departments' },
       { title: 'Employee Lifecycle', href: '/employees/lifecycle' },
     ],
   },
