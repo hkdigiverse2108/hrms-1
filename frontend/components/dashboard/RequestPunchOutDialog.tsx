@@ -26,16 +26,56 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { API_URL } from "@/lib/config";
 import dayjs from "dayjs";
  
 interface RequestPunchOutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isPunchedIn: boolean;
+  punchInTime: string;
   onGoToPunchOut: () => void;
+  employeeId: string;
+  employeeName: string;
 }
  
-export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, onGoToPunchOut }: RequestPunchOutDialogProps) {
+export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchInTime, onGoToPunchOut, employeeId, employeeName }: RequestPunchOutDialogProps) {
+  const [formData, setFormData] = useState({
+    punchOutTime: "18:30",
+    reason: "forgot",
+    otherReason: ""
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/time_recovery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: employeeId,
+          employee_name: employeeName,
+          date: dayjs().format("YYYY-MM-DD"),
+          late_minutes: 0,
+          recovery_minutes: 0,
+          reason: `Forgot Punch-Out. Actual Punch-Out: ${formData.punchOutTime}. Reason: ${formData.reason === 'other' ? formData.otherReason : formData.reason}`,
+          status: "pending"
+        })
+      });
+      
+      if (res.ok) {
+        onOpenChange(false);
+      } else {
+        alert("Failed to submit request.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error submitting request.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden border-none shadow-2xl rounded-[24px]">
@@ -150,7 +190,7 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, onGoToP
                     <LogIn className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#9CA3AF]" />
                     <Input 
                       disabled 
-                      value="09:00 AM" 
+                      value={punchInTime} 
                       className="pl-11 h-[52px] bg-[#F9FAFB] border-[#F3F4F6] rounded-xl text-[#374151] font-medium text-[15px] disabled:opacity-100" 
                     />
                   </div>
@@ -160,8 +200,11 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, onGoToP
                   <label className="text-[14px] font-bold text-[#374151]">
                     Recover Punch-Out Time <span className="text-red-500">*</span>
                   </label>
-                  <Select>
-                    <SelectTrigger className="h-[52px] bg-white border-[#E5E7EB] rounded-xl px-4 font-medium text-[#9CA3AF] text-[15px] focus:ring-0 focus:border-[#00A389]">
+                  <Select 
+                    value={formData.punchOutTime} 
+                    onValueChange={(val) => setFormData({...formData, punchOutTime: val})}
+                  >
+                    <SelectTrigger className="h-[52px] bg-white border-[#E5E7EB] rounded-xl px-4 font-medium text-[#374151] text-[15px] focus:ring-0 focus:border-[#00A389]">
                       <div className="flex items-center gap-3">
                         <LogOut className="w-[18px] h-[18px] text-[#9CA3AF]" />
                         <SelectValue placeholder="Select time..." />
@@ -171,6 +214,8 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, onGoToP
                       <SelectItem value="18:00">06:00 PM</SelectItem>
                       <SelectItem value="18:30">06:30 PM</SelectItem>
                       <SelectItem value="19:00">07:00 PM</SelectItem>
+                      <SelectItem value="19:30">07:30 PM</SelectItem>
+                      <SelectItem value="20:00">08:00 PM</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -179,7 +224,10 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, onGoToP
                   <label className="text-[14px] font-bold text-[#374151]">
                     Reason <span className="text-red-500">*</span>
                   </label>
-                  <Select defaultValue="forgot">
+                  <Select 
+                    value={formData.reason} 
+                    onValueChange={(val) => setFormData({...formData, reason: val})}
+                  >
                     <SelectTrigger className="h-[52px] bg-[#F9FAFB] border-[#F3F4F6] rounded-xl px-4 font-medium text-[#374151] text-[15px] focus:ring-0 focus:border-[#00A389]">
                       <SelectValue placeholder="Reason for request" />
                     </SelectTrigger>
@@ -190,6 +238,20 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, onGoToP
                     </SelectContent>
                   </Select>
                 </div>
+
+                {formData.reason === 'other' && (
+                  <div className="space-y-2.5 animate-in slide-in-from-top-2 duration-200">
+                    <label className="text-[14px] font-bold text-[#374151]">
+                      Specific Reason <span className="text-red-500">*</span>
+                    </label>
+                    <Input 
+                      placeholder="Please specify..."
+                      value={formData.otherReason}
+                      onChange={(e) => setFormData({...formData, otherReason: e.target.value})}
+                      className="h-[52px] bg-white border-[#E5E7EB] rounded-xl px-4 font-medium text-[#374151] text-[15px] focus:ring-0 focus:border-[#00A389]"
+                    />
+                  </div>
+                )}
               </div>
  
               <div className="flex w-full gap-4 mt-12">
@@ -201,10 +263,11 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, onGoToP
                   Cancel
                 </Button>
                 <Button 
-                  className="flex-1 h-[52px] rounded-xl font-bold bg-[#00A389] hover:bg-[#008F78] text-white text-[15px] shadow-lg shadow-[#00A389]/10"
-                  onClick={() => onOpenChange(false)}
+                  className="flex-1 h-[52px] rounded-xl font-bold bg-[#00A389] hover:bg-[#008F78] text-white text-[15px] shadow-lg shadow-[#00A389]/10 disabled:opacity-50"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || (formData.reason === 'other' && !formData.otherReason)}
                 >
-                  Submit Request
+                  {isSubmitting ? "Submitting..." : "Submit Request"}
                 </Button>
               </div>
             </div>

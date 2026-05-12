@@ -245,7 +245,7 @@ export default function DashboardPage() {
             New Report
           </Button>
         )}
-        {isEmployee && (
+        {(isEmployee || isHR || userRole === "team leader") && (
           <Button 
             onClick={() => setIsRequestDialogOpen(true)}
             className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9 px-4 rounded-lg shadow-sm flex items-center gap-2"
@@ -283,6 +283,9 @@ export default function DashboardPage() {
         open={isRequestDialogOpen}
         onOpenChange={setIsRequestDialogOpen}
         isPunchedIn={attendanceStatus?.isPunchedIn || false}
+        punchInTime={attendanceStatus?.record?.checkIn || "Not Started"}
+        employeeId={user?.id || ""}
+        employeeName={user?.name || ""}
         onGoToPunchOut={() => {
           setIsRequestDialogOpen(false);
           punchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
