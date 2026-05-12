@@ -18,13 +18,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useApi } from '@/hooks/useApi'
-import type { Employee } from '@/lib/types'
+import { Building2, Landmark, Users2, Clock, ShieldCheck, CreditCard, UserCircle } from 'lucide-react'
 
 interface EmployeeModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  employee?: Employee | null
-  onSave: (employee: Partial<Employee>) => void
+  employee?: any | null
+  onSave: (employee: any) => void
   mode: 'add' | 'edit' | 'view'
 }
 
@@ -39,185 +39,388 @@ export function EmployeeModal({
   const departments = data?.departments || []
   const designations = data?.designations || []
 
-  const [formData, setFormData] = useState<Partial<Employee>>({
-    name: '',
+  const initialData = {
+    firstName: '',
+    middleName: '',
+    lastName: '',
     email: '',
     phone: '',
+    password: '',
+    dob: '',
+    joinDate: '',
+    salary: '',
+    role: 'Employee',
+    upiId: '',
+    accountNumber: '',
+    ifscCode: '',
+    bankName: '',
+    accountHolderName: '',
+    parentName: '',
+    parentNumber: '',
+    relationship: 'Father',
+    employeeId: '',
+    aadharCard: '',
+    panCard: '',
     department: '',
     designation: '',
-    salary: 0,
     status: 'active',
-  })
+    workingHoursStart: '09:30 AM',
+    workingHoursEnd: '06:30 PM',
+  }
+
+  const [formData, setFormData] = useState<any>(initialData)
 
   useEffect(() => {
     if (employee) {
-      setFormData(employee)
+      setFormData({ ...initialData, ...employee })
     } else {
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        department: '',
-        designation: '',
-        salary: 0,
-        status: 'active',
-      })
+      setFormData(initialData)
     }
-  }, [employee])
+  }, [employee, open])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSave(formData)
-    onOpenChange(false)
   }
 
   const isViewMode = mode === 'view'
 
+  const SectionTitle = ({ icon: Icon, title }: { icon: any, title: string }) => (
+    <div className="flex items-center gap-2 pb-2 mb-4 border-b border-slate-100">
+      <div className="p-1.5 rounded-lg bg-brand-teal/10">
+        <Icon className="w-4 h-4 text-brand-teal" />
+      </div>
+      <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">{title}</h3>
+    </div>
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === 'add'
-              ? 'Add New Employee'
-              : mode === 'edit'
-              ? 'Edit Employee'
-              : 'Employee Details'}
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-50/50">
+        <DialogHeader className="bg-white p-6 -m-6 mb-6 border-b border-slate-100">
+          <DialogTitle className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-teal flex items-center justify-center shadow-lg shadow-brand-teal/20 text-white">
+              <UserCircle className="w-6 h-6" />
+            </div>
+            {mode === 'add' ? 'Add New Employee' : mode === 'edit' ? 'Edit Employee' : 'Employee Details'}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                disabled={isViewMode}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                disabled={isViewMode}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input
-                id="phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                disabled={isViewMode}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
-              <Select
-                value={formData.department}
-                onValueChange={(value) => setFormData({ ...formData, department: value })}
-                disabled={isViewMode}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((dept: any) => (
-                    <SelectItem key={dept.id} value={dept.name}>
-                      {dept.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="designation">Designation</Label>
-              <Select
-                value={formData.designation}
-                onValueChange={(value) => setFormData({ ...formData, designation: value })}
-                disabled={isViewMode}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select designation" />
-                </SelectTrigger>
-                <SelectContent>
-                  {designations.filter((d: any) => d.department === formData.department).map((desg: any) => (
-                    <SelectItem key={desg.id} value={desg.title}>
-                      {desg.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="salary">Annual Salary</Label>
-              <Input
-                id="salary"
-                type="number"
-                value={formData.salary}
-                onChange={(e) =>
-                  setFormData({ ...formData, salary: parseInt(e.target.value) || 0 })
-                }
-                disabled={isViewMode}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value: 'active' | 'inactive' | 'probation') =>
-                  setFormData({ ...formData, status: value })
-                }
-                disabled={isViewMode}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="probation">Probation</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {(mode === 'edit' || mode === 'view') && (
+        <form onSubmit={handleSubmit} className="space-y-8 px-2 pb-6">
+          {/* Basic Information */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+            <SectionTitle icon={UserCircle} title="Basic Information" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="joinDate">Join Date</Label>
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">First Name *</Label>
                 <Input
-                  id="joinDate"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  placeholder="Enter first name"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Middle Name</Label>
+                <Input
+                  value={formData.middleName}
+                  onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
+                  placeholder="Enter middle name"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Last Name *</Label>
+                <Input
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  placeholder="Enter last name"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Email *</Label>
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="name@company.com"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Phone Number *</Label>
+                <Input
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="+91 XXXXX XXXXX"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Password</Label>
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="••••••••"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Date of Birth *</Label>
+                <Input
+                  type="date"
+                  value={formData.dob}
+                  onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Joining Date *</Label>
+                <Input
                   type="date"
                   value={formData.joinDate}
                   onChange={(e) => setFormData({ ...formData, joinDate: e.target.value })}
-                  disabled={isViewMode}
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
                 />
               </div>
-            )}
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Salary *</Label>
+                <Input
+                  type="number"
+                  value={formData.salary}
+                  onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                  placeholder="Monthly Salary"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Role *</Label>
+                <Select value={formData.role} onValueChange={(v) => setFormData({ ...formData, role: v })}>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Admin">Admin</SelectItem>
+                    <SelectItem value="HR">HR</SelectItem>
+                    <SelectItem value="Employee">Employee</SelectItem>
+                    <SelectItem value="Team Leader">Team Leader</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
 
-          {!isViewMode && (
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button type="submit">{mode === 'add' ? 'Add Employee' : 'Save Changes'}</Button>
+          {/* Bank Details */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+            <SectionTitle icon={Landmark} title="Bank Details" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">UPI ID *</Label>
+                <Input
+                  value={formData.upiId}
+                  onChange={(e) => setFormData({ ...formData, upiId: e.target.value })}
+                  placeholder="user@upi"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Account Number *</Label>
+                <Input
+                  value={formData.accountNumber}
+                  onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                  placeholder="XXXX XXXX XXXX XXXX"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">IFSC Code *</Label>
+                <Input
+                  value={formData.ifscCode}
+                  onChange={(e) => setFormData({ ...formData, ifscCode: e.target.value })}
+                  placeholder="BANK0000123"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Bank Name *</Label>
+                <Input
+                  value={formData.bankName}
+                  onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                  placeholder="Bank Name"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="md:col-span-2 space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Account Holder Name *</Label>
+                <Input
+                  value={formData.accountHolderName}
+                  onChange={(e) => setFormData({ ...formData, accountHolderName: e.target.value })}
+                  placeholder="As per bank records"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
             </div>
-          )}
+          </div>
+
+          {/* Parent Details */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+            <SectionTitle icon={Users2} title="Parent Details" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Parent Name *</Label>
+                <Input
+                  value={formData.parentName}
+                  onChange={(e) => setFormData({ ...formData, parentName: e.target.value })}
+                  placeholder="Father/Mother Name"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Parent Number *</Label>
+                <Input
+                  value={formData.parentNumber}
+                  onChange={(e) => setFormData({ ...formData, parentNumber: e.target.value })}
+                  placeholder="Emergency contact"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Relationship</Label>
+                <Select value={formData.relationship} onValueChange={(v) => setFormData({ ...formData, relationship: v })}>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Select relationship" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Father">Father</SelectItem>
+                    <SelectItem value="Mother">Mother</SelectItem>
+                    <SelectItem value="Guardian">Guardian</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Identification & Org */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+            <SectionTitle icon={ShieldCheck} title="Identification & Organization" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Employee ID</Label>
+                <Input
+                  value={formData.employeeId}
+                  onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+                  placeholder="EMP001"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Aadhar Card Number</Label>
+                <Input
+                  value={formData.aadharCard}
+                  onChange={(e) => setFormData({ ...formData, aadharCard: e.target.value })}
+                  placeholder="XXXX XXXX XXXX"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">PAN Card Number</Label>
+                <Input
+                  value={formData.panCard}
+                  onChange={(e) => setFormData({ ...formData, panCard: e.target.value })}
+                  placeholder="ABCDE1234F"
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Department *</Label>
+                <Select value={formData.department} onValueChange={(v) => setFormData({ ...formData, department: v })}>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((d: any) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Designation *</Label>
+                <Select value={formData.designation} onValueChange={(v) => setFormData({ ...formData, designation: v })}>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Select designation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {designations.filter((d:any) => d.department === formData.department || !formData.department).map((d: any) => (
+                      <SelectItem key={d.id} value={d.title}>{d.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Status *</Label>
+                <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="probation">Probation</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Working Hours */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+            <SectionTitle icon={Clock} title="Working Hours" />
+            <div className="flex items-center gap-4">
+              <div className="flex-1 space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Start Time</Label>
+                <Input
+                  type="time"
+                  value={formData.workingHoursStart}
+                  onChange={(e) => setFormData({ ...formData, workingHoursStart: e.target.value })}
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                />
+              </div>
+              <div className="pt-6 text-slate-400 font-bold">to</div>
+              <div className="flex-1 space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">End Time</Label>
+                <Input
+                  type="time"
+                  value={formData.workingHoursEnd}
+                  onChange={(e) => setFormData({ ...formData, workingHoursEnd: e.target.value })}
+                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-4 pt-4 sticky bottom-0 bg-slate-50/90 backdrop-blur-sm p-4 -m-4 border-t border-slate-200 z-10">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="px-8 h-12 rounded-xl font-bold text-slate-600 hover:bg-slate-100 border-slate-200">
+              Cancel
+            </Button>
+            <Button type="submit" className="px-8 h-12 rounded-xl font-bold bg-brand-teal hover:bg-brand-teal/90 text-white shadow-lg shadow-brand-teal/20 transition-all">
+              {mode === 'add' ? 'Save Employee' : 'Update Employee'}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
