@@ -98,18 +98,6 @@ export default function DepartmentsPage() {
       )
     },
     { 
-      key: 'head' as const, 
-      header: 'Department Head',
-      render: (dept: Department) => (
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
-            <UserCircle2 className="w-3.5 h-3.5 text-slate-400" />
-          </div>
-          <span className="text-sm font-medium text-slate-600">{dept.head || 'Not Assigned'}</span>
-        </div>
-      )
-    },
-    { 
       key: 'employeeCount' as const, 
       header: 'Employees',
       render: (dept: Department) => (
