@@ -57,28 +57,32 @@ export function DataTable<T extends { id: string }>({
   return (
     <div className="space-y-4">
       {searchKey && (
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder={searchPlaceholder}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setCurrentPage(1)
-            }}
-            className="pl-10"
-          />
+        <div className="flex items-center px-4 pt-2">
+          <div className="relative w-full max-w-sm group">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-teal transition-colors" />
+            <Input
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="pl-10 h-10 border-slate-200 focus-visible:ring-brand-teal rounded-xl bg-slate-50/50"
+            />
+          </div>
         </div>
       )}
 
       <div className="rounded-lg border">
         <Table>
-          <TableHeader>
-            <TableRow>
+          <TableHeader className="bg-slate-50/50 border-b border-slate-100">
+            <TableRow className="hover:bg-transparent">
               {columns.map((column) => (
-                <TableHead key={String(column.key)}>{column.header}</TableHead>
+                <TableHead key={String(column.key)} className="text-[12px] font-bold uppercase tracking-wider text-slate-500 py-4 px-6">
+                  {column.header}
+                </TableHead>
               ))}
-              {actions && <TableHead className="w-24">Actions</TableHead>}
+              {actions && <TableHead className="w-24 text-[12px] font-bold uppercase tracking-wider text-slate-500 py-4 px-6 text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -92,16 +96,16 @@ export function DataTable<T extends { id: string }>({
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedData.map((item) => (
-                <TableRow key={item.id}>
+              paginatedData.map((item, idx) => (
+                <TableRow key={item.id} className={`group transition-colors hover:bg-brand-teal/[0.02] border-slate-100 ${idx % 2 === 0 ? 'bg-transparent' : 'bg-slate-50/30'}`}>
                   {columns.map((column) => (
-                    <TableCell key={String(column.key)}>
+                    <TableCell key={String(column.key)} className="py-4 px-6">
                       {column.render
                         ? column.render(item)
-                        : String(item[column.key as keyof T] ?? '')}
+                        : <span className="text-slate-600 font-semibold">{String(item[column.key as keyof T] ?? '')}</span>}
                     </TableCell>
                   ))}
-                  {actions && <TableCell>{actions(item)}</TableCell>}
+                  {actions && <TableCell className="py-4 px-6 text-right">{actions(item)}</TableCell>}
                 </TableRow>
               ))
             )}
@@ -110,28 +114,30 @@ export function DataTable<T extends { id: string }>({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Showing {startIndex + 1} to {Math.min(startIndex + pageSize, filteredData.length)} of{' '}
-            {filteredData.length} results
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/30">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+            Showing <span className="text-slate-700">{startIndex + 1}</span> to <span className="text-slate-700">{Math.min(startIndex + pageSize, filteredData.length)}</span> of{' '}
+            <span className="text-slate-700">{filteredData.length}</span>
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
+              className="rounded-xl h-9 w-9 p-0 border-slate-200 hover:bg-white hover:text-brand-teal disabled:opacity-30"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm">
-              Page {currentPage} of {totalPages}
+            <span className="text-xs font-extrabold text-slate-600">
+              {currentPage} / {totalPages}
             </span>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
+              className="rounded-xl h-9 w-9 p-0 border-slate-200 hover:bg-white hover:text-brand-teal disabled:opacity-30"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

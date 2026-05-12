@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, MoreHorizontal, Pencil, Trash2, Loader2, Building2 } from 'lucide-react'
+import { Plus, MoreHorizontal, Pencil, Trash2, Loader2, Building2, UserCircle2 } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
 import type { Department } from '@/lib/types'
@@ -85,8 +85,42 @@ export default function DepartmentsPage() {
   }
 
   const columns = [
-    { key: 'name' as const, header: 'Department Name' },
-    { key: 'employeeCount' as const, header: 'Employees' },
+    { 
+      key: 'name' as const, 
+      header: 'Department Name',
+      render: (dept: Department) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover:bg-brand-teal/10 transition-colors">
+            <Building2 className="w-4 h-4 text-slate-500 group-hover:text-brand-teal transition-colors" />
+          </div>
+          <span className="font-bold text-slate-700">{dept.name}</span>
+        </div>
+      )
+    },
+    { 
+      key: 'head' as const, 
+      header: 'Department Head',
+      render: (dept: Department) => (
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
+            <UserCircle2 className="w-3.5 h-3.5 text-slate-400" />
+          </div>
+          <span className="text-sm font-medium text-slate-600">{dept.head || 'Not Assigned'}</span>
+        </div>
+      )
+    },
+    { 
+      key: 'employeeCount' as const, 
+      header: 'Employees',
+      render: (dept: Department) => (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-teal/10 text-brand-teal border border-brand-teal/20">
+            {dept.employeeCount || 0}
+          </span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Active</span>
+        </div>
+      )
+    },
   ]
 
   const renderActions = (item: Department) => (
@@ -114,26 +148,34 @@ export default function DepartmentsPage() {
   )
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-brand-teal/10 flex items-center justify-center">
-            <Building2 className="w-5 h-5 text-brand-teal" />
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+      {/* Integrated Header */}
+      <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-brand-teal/10 flex items-center justify-center shadow-inner">
+            <Building2 className="w-6 h-6 text-brand-teal" />
           </div>
           <div>
-            <h3 className="font-bold text-slate-800">Departments</h3>
-            <p className="text-xs text-slate-500">{departments.length} active departments</p>
+            <h3 className="text-lg font-extrabold text-slate-800 tracking-tight">Department Directory</h3>
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-widest">{departments.length} active departments</p>
           </div>
         </div>
-        <Button size="sm" onClick={() => handleOpenModal()} className="bg-brand-teal hover:bg-brand-teal/90 text-white shadow-md shadow-brand-teal/10">
-          <Plus className="w-4 h-4 mr-2" /> Add Department
+        <Button 
+          onClick={() => handleOpenModal()} 
+          className="bg-brand-teal hover:bg-brand-teal/90 text-white shadow-lg shadow-brand-teal/20 px-6 h-11 rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+        >
+          <Plus className="w-5 h-5 mr-2" /> Add Department
         </Button>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-[400px]">
+      {/* Table Content */}
+      <div className="p-2 flex-1">
         {apiLoading && departments.length === 0 ? (
           <div className="flex h-64 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-brand-teal" />
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-10 w-10 animate-spin text-brand-teal/50" />
+              <p className="text-sm font-bold text-slate-400 animate-pulse">Syncing Directory...</p>
+            </div>
           </div>
         ) : (
           <DataTable
