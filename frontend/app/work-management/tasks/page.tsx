@@ -21,6 +21,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 
 const STAGES = [
   { id: "todo", label: "To Do", color: "text-slate-700 bg-transparent" },
@@ -330,45 +331,14 @@ export default function TasksPage() {
         </div>
       </PageHeader>
 
-      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
-        <DialogContent className="sm:max-w-[700px] h-[85vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-4 pb-2 border-b">
-            <DialogTitle className="flex flex-col gap-1 text-base">
-              <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-brand-teal" />
-                {logFilter.taskId ? "Task History" : "Company Activity Logs"}
-              </div>
-              {logFilter.taskTitle && <p className="text-xs text-muted-foreground italic">"{logFilter.taskTitle}"</p>}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto bg-slate-50/30 p-4 custom-scrollbar">
-            {isLoadingLogs ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-2">
-                <Loader2 className="w-6 h-6 animate-spin text-brand-teal" />
-                <p className="text-xs text-muted-foreground">Loading...</p>
-              </div>
-            ) : taskLogs.length > 0 ? (
-              <div className="space-y-3">
-                {taskLogs.map((log) => (
-                  <div key={log.id} className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm">
-                    <div className="flex items-center justify-between mb-1 text-[11px]">
-                      <span className="font-bold">{log.userName}</span>
-                      <span className="text-muted-foreground">{log.timestamp}</span>
-                    </div>
-                    <Badge variant="outline" className="text-[9px] h-4 mb-1 uppercase font-bold">{log.action}</Badge>
-                    <p className="text-[12px] text-slate-600 border-l-2 border-slate-100 pl-2 mt-1">{log.details}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-20 text-xs text-muted-foreground">No history.</div>
-            )}
-          </div>
-          <div className="p-3 border-t flex gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setLogsOpen(false)} className="flex-1 text-xs h-8">Close</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ActivityLogDialog 
+        open={logsOpen}
+        onOpenChange={setLogsOpen}
+        title={logFilter.taskId ? "Task History" : "Company Activity Logs"}
+        subtitle={logFilter.taskTitle}
+        logs={taskLogs}
+        isLoading={isLoadingLogs}
+      />
       
       <div className="flex items-center gap-4">
         <div className="flex-1 flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-slate-200 shadow-sm">

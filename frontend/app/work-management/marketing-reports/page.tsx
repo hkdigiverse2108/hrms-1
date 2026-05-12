@@ -18,6 +18,7 @@ import {
   Trash2,
   Users
 } from "lucide-react";
+import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -304,76 +305,23 @@ export default function MarketingReportsPage() {
     spend: acc.spend + (curr.spend || 0)
   }), { reach: 0, impression: 0, leads: 0, followers: 0, spend: 0 });
 
+  const monthlyTotals = filteredMonthly.reduce((acc, curr) => ({
+    totalSpend: acc.totalSpend + (curr.totalSpend || 0),
+    totalLeads: acc.totalLeads + (curr.totalLeads || 0),
+    totalSales: acc.totalSales + (curr.totalSales || 0),
+    totalRevenue: acc.totalRevenue + (curr.totalRevenue || 0),
+  }), { totalSpend: 0, totalLeads: 0, totalSales: 0, totalRevenue: 0 });
+
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-100px)] overflow-hidden">
-      {/* Report Logs Dialog */}
-      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
-        <DialogContent className="sm:max-w-[700px] h-[80vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-6 pb-2 border-b">
-            <DialogTitle className="flex flex-col gap-1">
-              <div className="flex items-center gap-2 text-xl font-bold">
-                <History className="w-6 h-6 text-brand-teal" />
-                Report Activity History
-              </div>
-              {activeReport && (
-                <p className="text-sm font-medium text-muted-foreground ml-8 italic">
-                  Showing updates for: "{activeReport.type === 'daily' ? activeReport.campaignName : activeReport.clientName}"
-                </p>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="flex-1 overflow-y-auto bg-slate-50/30 p-6 custom-scrollbar">
-            {isLoadingLogs ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-3">
-                <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
-                <p className="text-sm text-muted-foreground font-medium">Fetching history...</p>
-              </div>
-            ) : reportLogs.length > 0 ? (
-              <div className="space-y-4">
-                {reportLogs.map((log) => (
-                  <div key={log.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div className="flex items-center justify-between mb-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center font-bold text-brand-teal">
-                          {log.userName?.split(' ').map((n:any) => n[0]).join('') || '?'}
-                        </div>
-                        <span className="font-bold text-slate-800">{log.userName}</span>
-                      </div>
-                      <span className="text-muted-foreground bg-slate-100 px-2 py-0.5 rounded-full">{log.timestamp}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-600">
-                        {log.action}
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-600 border-l-2 border-slate-100 pl-3 leading-relaxed">
-                      {log.details}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
-                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
-                  <ClipboardList className="w-8 h-8" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-lg font-bold text-slate-800">No History Recorded</p>
-                  <p className="text-sm text-muted-foreground max-w-[250px]">
-                    Actions performed on this report will appear here.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="p-4 bg-white border-t text-center">
-            <Button variant="secondary" onClick={() => setLogsOpen(false)} className="w-full sm:w-auto">
-              Close History
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ActivityLogDialog 
+        open={logsOpen}
+        onOpenChange={setLogsOpen}
+        title="Report Activity History"
+        subtitle={activeReport ? (activeReport.type === 'daily' ? activeReport.campaignName : activeReport.clientName) : undefined}
+        logs={reportLogs}
+        isLoading={isLoadingLogs}
+      />
 
       {/* Header Area */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -500,15 +448,9 @@ export default function MarketingReportsPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-20">
+                    <TableCell colSpan={11} className="text-center py-20">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
                       <p className="mt-2 text-slate-500">Loading daily reports...</p>
-                    </TableCell>
-                  </TableRow>
-                ) : filteredDaily.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-20 text-slate-400 italic">
-                      No daily reports found.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -557,191 +499,197 @@ export default function MarketingReportsPage() {
                       </TableCell>
                     </TableRow>
 
-                    {paginatedDaily.map((report, idx) => {
-                      // Calculate global index for S.N
-                      const globalIdx = (dailyPage - 1) * dailyItemsPerPage + idx + 1;
-                      
-                      return (
-                        <TableRow key={report.id} className="hover:bg-slate-50/50">
-                          <TableCell className="text-center text-slate-400">{globalIdx}</TableCell>
-                      
-                      <TableCell 
-                        className="font-medium cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'date' })}
-                      >
-                        {inlineEditing?.id === report.id && inlineEditing?.field === 'date' ? (
-                          <Input 
-                            autoFocus
-                            type="date" 
-                            className="h-8 text-xs outline-none" 
-                            defaultValue={report.date} 
-                            onBlur={e => handleInlineUpdate(report.id, 'date', e.target.value, 'daily')}
-                            onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'date', e.currentTarget.value, 'daily')}
-                          />
-                        ) : report.date}
-                      </TableCell>
-
-                       <TableCell 
-                        className="font-semibold text-slate-600 cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'client' })}
-                      >
-                        {inlineEditing?.id === report.id && inlineEditing?.field === 'client' ? (
-                          <Select 
-                            onValueChange={(v) => {
-                              const client = clients.find(c => c.id === v);
-                              handleInlineUpdate(report.id, { clientId: v, clientName: client?.companyName }, null, 'daily');
-                            }}
-                            defaultValue={report.clientId}
+                    {filteredDaily.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={11} className="text-center py-20 text-slate-400 italic">
+                          No daily reports found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedDaily.map((report, idx) => {
+                        const globalIdx = (dailyPage - 1) * dailyItemsPerPage + idx + 1;
+                        return (
+                          <TableRow key={report.id} className="hover:bg-slate-50/50">
+                              <TableCell className="text-center text-slate-400">{globalIdx}</TableCell>
+                          
+                          <TableCell 
+                            className="font-medium cursor-text hover:bg-slate-50"
+                            onClick={() => setInlineEditing({ id: report.id, field: 'date' })}
                           >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Select Client" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {clients.map(c => (
-                                <SelectItem key={c.id} value={c.id}>{c.companyName}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : report.clientName || "N/A"}
-                      </TableCell>
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'date' ? (
+                              <Input 
+                                autoFocus
+                                type="date" 
+                                className="h-8 text-xs outline-none" 
+                                defaultValue={report.date} 
+                                onBlur={e => handleInlineUpdate(report.id, 'date', e.target.value, 'daily')}
+                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'date', e.currentTarget.value, 'daily')}
+                              />
+                            ) : report.date}
+                          </TableCell>
 
-                      <TableCell 
-                        className="cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'campaignName' })}
-                      >
-                        {inlineEditing?.id === report.id && inlineEditing?.field === 'campaignName' ? (
-                          <Input 
-                            autoFocus
-                            className="h-8 text-xs outline-none" 
-                            defaultValue={report.campaignName} 
-                            onBlur={e => handleInlineUpdate(report.id, 'campaignName', e.target.value, 'daily')}
-                            onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'campaignName', e.currentTarget.value, 'daily')}
-                          />
-                        ) : report.campaignName}
-                      </TableCell>
-
-                      <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'reach' })}
-                      >
-                        {inlineEditing?.id === report.id && inlineEditing?.field === 'reach' ? (
-                          <Input 
-                            autoFocus
-                            type="number"
-                            className="h-8 text-xs text-center outline-none" 
-                            defaultValue={report.reach} 
-                            onBlur={e => handleInlineUpdate(report.id, 'reach', parseInt(e.target.value) || 0, 'daily')}
-                            onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'reach', parseInt(e.currentTarget.value) || 0, 'daily')}
-                          />
-                        ) : report.reach.toLocaleString()}
-                      </TableCell>
-
-                      <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'impression' })}
-                      >
-                        {inlineEditing?.id === report.id && inlineEditing?.field === 'impression' ? (
-                          <Input 
-                            autoFocus
-                            type="number"
-                            className="h-8 text-xs text-center outline-none" 
-                            defaultValue={report.impression} 
-                            onBlur={e => handleInlineUpdate(report.id, 'impression', parseInt(e.target.value) || 0, 'daily')}
-                            onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'impression', parseInt(e.currentTarget.value) || 0, 'daily')}
-                          />
-                        ) : report.impression.toLocaleString()}
-                      </TableCell>
-
-                      <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'leads' })}
-                      >
-                        {inlineEditing?.id === report.id && inlineEditing?.field === 'leads' ? (
-                          <Input 
-                            autoFocus
-                            type="number"
-                            className="h-8 text-xs text-center outline-none" 
-                            defaultValue={report.leads} 
-                            onBlur={e => handleInlineUpdate(report.id, 'leads', parseInt(e.target.value) || 0, 'daily')}
-                            onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'leads', parseInt(e.currentTarget.value) || 0, 'daily')}
-                          />
-                        ) : report.leads}
-                      </TableCell>
-
-                      <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'followers' })}
-                      >
-                        {inlineEditing?.id === report.id && inlineEditing?.field === 'followers' ? (
-                          <Input 
-                            autoFocus
-                            type="number"
-                            className="h-8 text-xs text-center outline-none" 
-                            defaultValue={report.followers} 
-                            onBlur={e => handleInlineUpdate(report.id, 'followers', parseInt(e.target.value) || 0, 'daily')}
-                            onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'followers', parseInt(e.currentTarget.value) || 0, 'daily')}
-                          />
-                        ) : report.followers || 0}
-                      </TableCell>
-
-                      <TableCell 
-                        className="text-center font-semibold text-brand-teal cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'spend' })}
-                      >
-                        {inlineEditing?.id === report.id && inlineEditing?.field === 'spend' ? (
-                          <Input 
-                            autoFocus
-                            type="number"
-                            step="0.01"
-                            className="h-8 text-xs text-center outline-none" 
-                            defaultValue={report.spend} 
-                            onBlur={e => handleInlineUpdate(report.id, 'spend', parseFloat(e.target.value) || 0, 'daily')}
-                            onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'spend', parseFloat(e.currentTarget.value) || 0, 'daily')}
-                          />
-                        ) : `₹${report.spend.toFixed(2)}`}
-                      </TableCell>
-
-                      <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'cpl' })}
-                      >
-                        {inlineEditing?.id === report.id && inlineEditing?.field === 'cpl' ? (
-                          <Input 
-                            autoFocus
-                            type="number"
-                            step="0.01"
-                            className="h-8 text-xs text-center outline-none" 
-                            defaultValue={report.cpl} 
-                            onBlur={e => handleInlineUpdate(report.id, 'cpl', parseFloat(e.target.value) || 0, 'daily')}
-                            onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'cpl', parseFloat(e.currentTarget.value) || 0, 'daily')}
-                          />
-                        ) : `₹${report.cpl.toFixed(2)}`}
-                      </TableCell>
-
-                      <TableCell className="text-center">
-                        <div className="flex justify-center gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-                            onClick={() => fetchLogs(report, "daily")}
+                           <TableCell 
+                            className="font-semibold text-slate-600 cursor-text hover:bg-slate-50"
+                            onClick={() => setInlineEditing({ id: report.id, field: 'client' })}
                           >
-                            <History className="w-4 h-4" />
-                          </Button>
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'client' ? (
+                              <Select 
+                                onValueChange={(v) => {
+                                  const client = clients.find(c => c.id === v);
+                                  handleInlineUpdate(report.id, { clientId: v, clientName: client?.companyName }, null, 'daily');
+                                }}
+                                defaultValue={report.clientId}
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue placeholder="Select Client" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {clients.map(c => (
+                                    <SelectItem key={c.id} value={c.id}>{c.companyName}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : report.clientName || "N/A"}
+                          </TableCell>
 
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                            onClick={() => handleDelete(report.id, "daily")}
+                          <TableCell 
+                            className="cursor-text hover:bg-slate-50"
+                            onClick={() => setInlineEditing({ id: report.id, field: 'campaignName' })}
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'campaignName' ? (
+                              <Input 
+                                autoFocus
+                                className="h-8 text-xs outline-none" 
+                                defaultValue={report.campaignName} 
+                                onBlur={e => handleInlineUpdate(report.id, 'campaignName', e.target.value, 'daily')}
+                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'campaignName', e.currentTarget.value, 'daily')}
+                              />
+                            ) : report.campaignName}
+                          </TableCell>
+
+                          <TableCell 
+                            className="text-center cursor-text hover:bg-slate-50"
+                            onClick={() => setInlineEditing({ id: report.id, field: 'reach' })}
+                          >
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'reach' ? (
+                              <Input 
+                                autoFocus
+                                type="number"
+                                className="h-8 text-xs text-center outline-none" 
+                                defaultValue={report.reach} 
+                                onBlur={e => handleInlineUpdate(report.id, 'reach', parseInt(e.target.value) || 0, 'daily')}
+                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'reach', parseInt(e.currentTarget.value) || 0, 'daily')}
+                              />
+                            ) : report.reach.toLocaleString()}
+                          </TableCell>
+
+                          <TableCell 
+                            className="text-center cursor-text hover:bg-slate-50"
+                            onClick={() => setInlineEditing({ id: report.id, field: 'impression' })}
+                          >
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'impression' ? (
+                              <Input 
+                                autoFocus
+                                type="number"
+                                className="h-8 text-xs text-center outline-none" 
+                                defaultValue={report.impression} 
+                                onBlur={e => handleInlineUpdate(report.id, 'impression', parseInt(e.target.value) || 0, 'daily')}
+                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'impression', parseInt(e.currentTarget.value) || 0, 'daily')}
+                              />
+                            ) : report.impression.toLocaleString()}
+                          </TableCell>
+
+                          <TableCell 
+                            className="text-center cursor-text hover:bg-slate-50"
+                            onClick={() => setInlineEditing({ id: report.id, field: 'leads' })}
+                          >
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'leads' ? (
+                              <Input 
+                                autoFocus
+                                type="number"
+                                className="h-8 text-xs text-center outline-none" 
+                                defaultValue={report.leads} 
+                                onBlur={e => handleInlineUpdate(report.id, 'leads', parseInt(e.target.value) || 0, 'daily')}
+                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'leads', parseInt(e.currentTarget.value) || 0, 'daily')}
+                              />
+                            ) : report.leads}
+                          </TableCell>
+
+                          <TableCell 
+                            className="text-center cursor-text hover:bg-slate-50"
+                            onClick={() => setInlineEditing({ id: report.id, field: 'followers' })}
+                          >
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'followers' ? (
+                              <Input 
+                                autoFocus
+                                type="number"
+                                className="h-8 text-xs text-center outline-none" 
+                                defaultValue={report.followers} 
+                                onBlur={e => handleInlineUpdate(report.id, 'followers', parseInt(e.target.value) || 0, 'daily')}
+                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'followers', parseInt(e.currentTarget.value) || 0, 'daily')}
+                              />
+                            ) : report.followers || 0}
+                          </TableCell>
+
+                          <TableCell 
+                            className="text-center font-semibold text-brand-teal cursor-text hover:bg-slate-50"
+                            onClick={() => setInlineEditing({ id: report.id, field: 'spend' })}
+                          >
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'spend' ? (
+                              <Input 
+                                autoFocus
+                                type="number"
+                                step="0.01"
+                                className="h-8 text-xs text-center outline-none" 
+                                defaultValue={report.spend} 
+                                onBlur={e => handleInlineUpdate(report.id, 'spend', parseFloat(e.target.value) || 0, 'daily')}
+                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'spend', parseFloat(e.currentTarget.value) || 0, 'daily')}
+                              />
+                            ) : `₹${report.spend.toFixed(2)}`}
+                          </TableCell>
+
+                          <TableCell 
+                            className="text-center cursor-text hover:bg-slate-50"
+                            onClick={() => setInlineEditing({ id: report.id, field: 'cpl' })}
+                          >
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'cpl' ? (
+                              <Input 
+                                autoFocus
+                                type="number"
+                                step="0.01"
+                                className="h-8 text-xs text-center outline-none" 
+                                defaultValue={report.cpl} 
+                                onBlur={e => handleInlineUpdate(report.id, 'cpl', parseFloat(e.target.value) || 0, 'daily')}
+                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'cpl', parseFloat(e.currentTarget.value) || 0, 'daily')}
+                              />
+                            ) : `₹${report.cpl.toFixed(2)}`}
+                          </TableCell>
+
+                          <TableCell className="text-center">
+                            <div className="flex justify-center gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                onClick={() => fetchLogs(report, "daily")}
+                              >
+                                <History className="w-4 h-4" />
+                              </Button>
+
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                onClick={() => handleDelete(report.id, "daily")}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                            </TableRow>
+                        );
+                      })
+                    )}
                   </>
                 )}
               </TableBody>
@@ -794,15 +742,9 @@ export default function MarketingReportsPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-20">
+                    <TableCell colSpan={12} className="text-center py-20">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
                       <p className="mt-2 text-slate-500">Loading monthly reports...</p>
-                    </TableCell>
-                  </TableRow>
-                ) : filteredMonthly.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={12} className="text-center py-20 text-slate-400 italic">
-                      No monthly reports found.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -864,7 +806,14 @@ export default function MarketingReportsPage() {
                       </TableCell>
                     </TableRow>
 
-                    {paginatedMonthly.map((report, idx) => (
+                    {filteredMonthly.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={12} className="text-center py-20 text-slate-400 italic">
+                          No monthly reports found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedMonthly.map((report, idx) => (
                     <TableRow key={report.id} className="hover:bg-slate-50/50">
                       <TableCell className="text-center text-slate-400">{(monthlyPage - 1) * monthlyItemsPerPage + idx + 1}</TableCell>
 
@@ -1076,10 +1025,23 @@ export default function MarketingReportsPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    )))}
                 </>
               )}
             </TableBody>
+            {filteredMonthly.length > 0 && (
+              <tfoot className="bg-slate-50 border-t-2">
+                <TableRow>
+                  <TableCell colSpan={3} className="text-right font-bold text-slate-900">Total</TableCell>
+                  <TableCell className="text-center font-bold text-slate-900">₹{monthlyTotals.totalSpend.toLocaleString()}</TableCell>
+                  <TableCell className="text-center font-bold text-slate-900">{monthlyTotals.totalLeads.toLocaleString()}</TableCell>
+                  <TableCell className="text-center font-bold text-slate-900">{monthlyTotals.totalSales.toLocaleString()}</TableCell>
+                  <TableCell colSpan={2}></TableCell>
+                  <TableCell className="text-center font-bold text-brand-teal">₹{monthlyTotals.totalRevenue.toLocaleString()}</TableCell>
+                  <TableCell colSpan={3}></TableCell>
+                </TableRow>
+              </tfoot>
+            )}
             </Table>
             </div>
             <TablePagination

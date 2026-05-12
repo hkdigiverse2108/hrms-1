@@ -27,6 +27,7 @@ import {
   CheckCircle,
   History
 } from 'lucide-react'
+import { ActivityLogDialog } from '@/components/common/ActivityLogDialog'
 import { API_URL } from '@/lib/config'
 import { 
   Dialog, 
@@ -751,41 +752,13 @@ export default function HiringBoardPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isLogModalOpen} onOpenChange={setIsLogModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <History className="w-5 h-5 text-brand-teal" />
-              Activity Logs
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-            {selectedLogAppId && appLogs[selectedLogAppId]?.map((log, idx) => (
-              <div key={idx} className="relative pl-6 pb-4 border-l-2 border-brand-teal/20 last:pb-0">
-                <div className="absolute left-[-9px] top-0 w-4 h-4 rounded-full bg-white border-2 border-brand-teal" />
-                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-bold text-gray-900">{log.userName}</span>
-                    <span className="text-[10px] text-gray-500">{log.timestamp}</span>
-                  </div>
-                  <p className="text-xs text-gray-600 leading-relaxed">{log.details}</p>
-                </div>
-              </div>
-            ))}
-            {selectedLogAppId && (!appLogs[selectedLogAppId] || appLogs[selectedLogAppId].length === 0) && (
-              <div className="text-center py-12">
-                <div className="bg-gray-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <History className="w-6 h-6 text-gray-300" />
-                </div>
-                <p className="text-sm text-gray-500">No activity logged yet</p>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setIsLogModalOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ActivityLogDialog 
+        open={isLogModalOpen}
+        onOpenChange={setIsLogModalOpen}
+        title="Activity Logs"
+        subtitle={selectedLogAppId ? applications.find(a => a.id === selectedLogAppId)?.candidateName : undefined}
+        logs={selectedLogAppId ? appLogs[selectedLogAppId] || [] : []}
+      />
     </div>
   )
 }
