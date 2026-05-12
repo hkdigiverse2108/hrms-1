@@ -53,8 +53,7 @@ import { useUserContext } from '@/context/UserContext'
      moduleName: 'employees',
      children: [
        { title: 'All Employees', href: '/employees' },
-       { title: 'Add Employee', href: '/employees/add' },
-       { title: 'Org Structure', href: '/employees/departments' },
+       { title: 'Org Structure', href: '/employees/organization/departments' },
        { title: 'Employee Lifecycle', href: '/employees/lifecycle' },
      ],
    },

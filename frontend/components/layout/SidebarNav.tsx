@@ -100,11 +100,8 @@ export function SidebarNav() {
     if (isAdmin || checkPermission('employee-list', 'canView')) {
       employeeChildren.push(getItem(<Link href="/employees">Employee List</Link>, "/employees"));
     }
-    if (isAdmin || checkPermission('departments', 'canView')) {
-      employeeChildren.push(getItem(<Link href="/employees/organization/departments">Departments</Link>, "/employees/organization/departments"));
-    }
-    if (isAdmin || checkPermission('designations', 'canView')) {
-      employeeChildren.push(getItem(<Link href="/employees/organization/designations">Designations</Link>, "/employees/organization/designations"));
+    if (isAdmin || checkPermission('departments', 'canView') || checkPermission('designations', 'canView')) {
+      employeeChildren.push(getItem(<Link href="/employees/organization/departments">Org Structure</Link>, "/employees/organization/departments"));
     }
     if (isAdmin || checkPermission('employee-attendance', 'canView')) {
       employeeChildren.push(getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"));
@@ -142,10 +139,8 @@ export function SidebarNav() {
       getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
       getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
         getItem(<Link href="/employees">Employee List</Link>, "/employees"),
-        getItem(<Link href="/employees/departments">Departments</Link>, "/employees/departments"),
-        getItem(<Link href="/employees/designations">Designations</Link>, "/employees/designations"),
+        getItem(<Link href="/employees/organization/departments">Org Structure</Link>, "/employees/organization/departments"),
         getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"),
-        getItem(<Link href="/employees/add">Add Employee</Link>, "/employees/add"),
         getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
         getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"),
       ]),

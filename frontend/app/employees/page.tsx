@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Key } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { EmployeeModal } from "@/components/hrms/employee-modal";
 
 export default function EmployeeListPage() {
   const router = useRouter();
@@ -33,6 +34,7 @@ export default function EmployeeListPage() {
   const [filterRole, setFilterRole] = useState("All Roles");
   const [filterStatus, setFilterStatus] = useState("Status");
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const togglePasswordVisibility = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -86,6 +88,28 @@ export default function EmployeeListPage() {
     }
   };
 
+  const handleAddEmployee = async (employeeData: any) => {
+    try {
+      const response = await fetch(`${API_URL}/employees`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(employeeData),
+      });
+
+      if (response.ok) {
+        const newEmployee = await response.json();
+        setEmployees([newEmployee, ...employees]);
+        setIsAddModalOpen(false);
+      } else {
+        const errorData = await response.json();
+        alert(errorData.detail || "Failed to add employee");
+      }
+    } catch (err) {
+      console.error("Add error:", err);
+      alert("An error occurred while adding the employee");
+    }
+  };
+
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch = 
       emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -120,12 +144,13 @@ export default function EmployeeListPage() {
             Export
           </Button>
           {(isAdmin || checkPermission('add-employee', 'canAdd') || checkPermission('add-employee', 'canView')) && (
-            <Link href="/employees/add" className="flex-1 sm:flex-none flex">
-              <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Employee
-              </Button>
-            </Link>
+            <Button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm flex-1 sm:flex-none"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Employee
+            </Button>
           )}
         </div>
       </PageHeader>
@@ -311,6 +336,13 @@ export default function EmployeeListPage() {
         {/* Pagination Setup */}
         <TablePagination totalItems={filteredEmployees.length} itemsPerPage={filteredEmployees.length} currentPage={1} itemName="employees" />
       </div>
+
+      <EmployeeModal 
+        open={isAddModalOpen} 
+        onOpenChange={setIsAddModalOpen} 
+        onSave={handleAddEmployee} 
+        mode="add" 
+      />
     </div>
   );
 }

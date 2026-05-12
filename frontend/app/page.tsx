@@ -242,12 +242,6 @@ export default function DashboardPage() {
             New Report
           </Button>
         )}
-        {isHR && (
-          <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium">
-            <UserPlus className="w-4 h-4 mr-2" />
-            Add Employee
-          </Button>
-        )}
         {isEmployee && (
           <Button 
             onClick={() => setIsRequestDialogOpen(true)}
