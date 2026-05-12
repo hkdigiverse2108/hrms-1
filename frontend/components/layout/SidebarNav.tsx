@@ -135,45 +135,67 @@ export function SidebarNav() {
       recruitmentChildren.push(getItem(<Link href="/recruitment">Hirings</Link>, "/recruitment"));
     }
 
-    return [
+    const menuItems: MenuItem[] = [
       getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
-      getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
-        getItem(<Link href="/employees">Employee List</Link>, "/employees"),
-        getItem(<Link href="/employees/organization/departments">Org Structure</Link>, "/employees/organization/departments"),
-        getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"),
-        getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
-        getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"),
-        getItem(<Link href="/employees/documents/generate">Document Generator</Link>, "/employees/documents/generate"),
-      ]),
-      getItem("Payroll", "payroll-sub", <DollarSign className="w-5 h-5" />, [
-        getItem(<Link href="/payroll/salary-structure">Salary Structure</Link>, "/payroll/salary-structure"),
-        getItem(<Link href="/payroll">Payroll Processing</Link>, "/payroll"),
-        getItem(<Link href="/payroll/payslips">Payslips</Link>, "/payroll/payslips"),
-        getItem(<Link href="/payroll/bonuses">Bonuses & Deductions</Link>, "/payroll/bonuses"),
-      ]),
-      getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, [
-        getItem(<Link href="/recruitment/hiring-board">Interviews</Link>, "/recruitment/hiring-board"),
-        getItem(<Link href="/recruitment">Hirings</Link>, "/recruitment"),
-      ]),
-      getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
-      getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
-      getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
-        getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"),
-        getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
-        ...(user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "hr" ? [
-          getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource")
-        ] : []),
-      ]),
-      getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />),
-      getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />),
-      getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, [
-        getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"),
-        getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"),
-      ]),
-      getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />),
-      getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren),
-      getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />),
     ];
+
+    if (isAdmin || employeeChildren.length > 0) {
+      menuItems.push(getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, employeeChildren));
+    }
+
+    if (isAdmin || payrollChildren.length > 0) {
+      menuItems.push(getItem("Payroll", "payroll-sub", <DollarSign className="w-5 h-5" />, payrollChildren));
+    }
+
+    if (isAdmin || recruitmentChildren.length > 0) {
+      menuItems.push(getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, recruitmentChildren));
+    }
+
+    menuItems.push(getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />));
+    menuItems.push(getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />));
+    
+    const workspaceChildren: MenuItem[] = [
+      getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"),
+      getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
+    ];
+
+    if (isAdmin || checkPermission('resource-management', 'canView')) {
+      workspaceChildren.push(getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"));
+    }
+
+    menuItems.push(getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, workspaceChildren));
+    
+    if (isAdmin || checkPermission('remarks', 'canView')) {
+      menuItems.push(getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />));
+    }
+
+    if (isAdmin || checkPermission('review', 'canView')) {
+      menuItems.push(getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />));
+    }
+
+    const invoiceChildren: MenuItem[] = [];
+    if (isAdmin || checkPermission('invoice', 'canView')) {
+      invoiceChildren.push(getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"));
+      invoiceChildren.push(getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"));
+    }
+
+    if (isAdmin || invoiceChildren.length > 0) {
+      menuItems.push(getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, invoiceChildren));
+    }
+
+    if (isAdmin || checkPermission('chat', 'canView')) {
+      menuItems.push(getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />));
+    }
+
+    if (isAdmin || workManagementChildren.length > 0) {
+      menuItems.push(getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren));
+    }
+
+    if (isAdmin || checkPermission('settings', 'canView')) {
+      menuItems.push(getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />));
+    }
+
+    return menuItems;
   }, [user, settings, pathname, permissions, checkPermission]);
 
   // Helper to determine open keys and selected keys
