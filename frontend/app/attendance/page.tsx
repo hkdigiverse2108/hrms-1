@@ -1,6 +1,7 @@
 "use client";
  
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -70,6 +71,13 @@ export default function AttendancePage() {
     checkOut: "18:30:00",
     status: "Logged"
   });
+  const [recoveryForm, setRecoveryForm] = useState({
+    date: dayjs().format("YYYY-MM-DD"),
+    recordedBreakIn: "13:00:00",
+    actualBreakOut: "14:00:00",
+    reason: ""
+  });
+  const [recoveryRequests, setRecoveryRequests] = useState<any[]>([]);
   const [stats, setStats] = useState({
     presentDays: 0,
     avgHours: "0",
@@ -83,8 +91,21 @@ export default function AttendancePage() {
       fetchAttendance();
       fetchEmployees();
       fetchSysSettings();
+      fetchRecoveryRequests();
     }
   }, [user]);
+
+  const fetchRecoveryRequests = async () => {
+    try {
+      const url = isAdmin || isHR ? `${API_URL}/time-recovery` : `${API_URL}/time-recovery/employee/${user?.id || user?.employeeId}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        setRecoveryRequests(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching recovery requests:", err);
+    }
+  };
 
   const fetchSysSettings = async () => {
     try {
@@ -345,6 +366,37 @@ export default function AttendancePage() {
     }
   };
  
+  const handleRecoverSubmit = async () => {
+    if (!recoveryForm.reason) {
+      toast.error("Please provide a reason for recovery");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/time-recovery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_id: user?.id || user?.employeeId,
+          employee_name: user?.name || "Unknown",
+          date: recoveryForm.date,
+          late_minutes: 0, // Not used in this version
+          recovery_minutes: 0, // Not used in this version
+          reason: `Break-In: ${recoveryForm.recordedBreakIn}, Actual Break-Out: ${recoveryForm.actualBreakOut}. ${recoveryForm.reason}`,
+          status: "pending"
+        })
+      });
+      if (res.ok) {
+        toast.success("Recovery request submitted successfully");
+        setRecoverModalOpen(false);
+        fetchRecoveryRequests();
+      } else {
+        toast.error("Failed to submit recovery request");
+      }
+    } catch (err) {
+      console.error("Error submitting recovery:", err);
+    }
+  };
+
   const currentRecord = attendance.find(a => a.date === dayjs().format("YYYY-MM-DD"));
  
   const CalendarWidget = () => (
@@ -394,6 +446,16 @@ export default function AttendancePage() {
                 Recover Time
               </Button>
             </DialogTrigger>
+            
+            {canManageAttendance && (
+              <Link href="/attendance/recovery-requests">
+                <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium border-brand-teal text-brand-teal hover:bg-brand-light/20">
+                  <Eye className="w-4 h-4 mr-2" />
+                  View Requests
+                </Button>
+              </Link>
+            )}
+
             <DialogContent className="sm:max-w-[450px]">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">Recover Time Request</DialogTitle>
@@ -407,22 +469,47 @@ export default function AttendancePage() {
                   <DatePicker 
                     className="w-full h-9 hover:border-brand-teal focus-within:border-brand-teal"
                     format="MMMM D, YYYY"
+                    value={dayjs(recoveryForm.date)}
+                    onChange={(date) => setRecoveryForm({...recoveryForm, date: date ? date.format("YYYY-MM-DD") : ""})}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2 flex flex-col">
                     <label className="text-sm font-medium text-foreground">Recorded Break-In</label>
-                    <TimePicker className="w-full h-9" format="hh:mm A" use12Hours />
+                    <TimePicker 
+                      className="w-full h-9" 
+                      format="hh:mm:ss A" 
+                      use12Hours 
+                      showNow={false}
+                      value={recoveryForm.recordedBreakIn ? dayjs(`2000-01-01 ${recoveryForm.recordedBreakIn}`, "YYYY-MM-DD HH:mm:ss") : null}
+                      onChange={(time) => setRecoveryForm({...recoveryForm, recordedBreakIn: time ? time.format("HH:mm:ss") : ""})}
+                    />
                   </div>
                   <div className="space-y-2 flex flex-col">
                     <label className="text-sm font-medium text-foreground">Actual Break-Out Time</label>
-                    <TimePicker className="w-full h-9" format="hh:mm A" use12Hours />
+                    <TimePicker 
+                      className="w-full h-9" 
+                      format="hh:mm:ss A" 
+                      use12Hours 
+                      showNow={false}
+                      value={recoveryForm.actualBreakOut ? dayjs(`2000-01-01 ${recoveryForm.actualBreakOut}`, "YYYY-MM-DD HH:mm:ss") : null}
+                      onChange={(time) => setRecoveryForm({...recoveryForm, actualBreakOut: time ? time.format("HH:mm:ss") : ""})}
+                    />
                   </div>
+                </div>
+                <div className="space-y-2 flex flex-col">
+                  <label className="text-sm font-medium text-foreground">Reason / Explanation</label>
+                  <textarea 
+                    className="w-full p-2 border rounded-md min-h-[80px] text-sm"
+                    placeholder="Provide details about the missing break-out..."
+                    value={recoveryForm.reason}
+                    onChange={(e) => setRecoveryForm({...recoveryForm, reason: e.target.value})}
+                  />
                 </div>
               </div>
               <DialogFooter className="gap-2 sm:gap-2 mt-4">
                 <Button variant="outline" onClick={() => setRecoverModalOpen(false)}>Cancel</Button>
-                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={() => setRecoverModalOpen(false)}>
+                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={handleRecoverSubmit}>
                   Send Request
                 </Button>
               </DialogFooter>
@@ -729,12 +816,15 @@ export default function AttendancePage() {
                       const totalBreakMinutes = (row.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
                       const breakStr = totalBreakMinutes > 0 ? (totalBreakMinutes >= 60 ? `${Math.floor(totalBreakMinutes/60)}H ${totalBreakMinutes%60}Min` : `${totalBreakMinutes}Min`) : "-";
                       
+                      const isToday = dayjs(row.date).isSame(dayjs(), 'day');
                       const checkIn = dayjs(`${row.date} ${row.checkIn}`);
-                      const checkOut = row.checkOut ? dayjs(`${row.date} ${row.checkOut}`) : null;
+                      const checkOut = row.checkOut 
+                        ? dayjs(`${row.date} ${row.checkOut}`) 
+                        : (isToday && row.checkIn && row.checkIn !== "--" ? dayjs() : null);
                       
                       // Total Working Hours
                       let totalWorkingMinutes = 0;
-                      if (checkOut && checkOut.isValid() && checkIn.isValid()) {
+                      if (checkIn.isValid() && checkOut && checkOut.isValid()) {
                         totalWorkingMinutes = checkOut.diff(checkIn, 'minute');
                       }
                       const totalWorkingStr = totalWorkingMinutes > 0 ? (totalWorkingMinutes >= 60 ? `${Math.floor(totalWorkingMinutes/60)}H ${totalWorkingMinutes%60}Min` : `${totalWorkingMinutes}Min`) : "-";
@@ -744,7 +834,15 @@ export default function AttendancePage() {
                       const productionStr = productionMinutes > 0 ? (productionMinutes >= 60 ? `${Math.floor(productionMinutes/60)}H ${productionMinutes%60}Min` : `${productionMinutes}Min`) : "-";
                       
                       // Late
+                      // Check for approved recovery request
+                      const recoveryReq = recoveryRequests.find(req => 
+                        req.date === row.date && 
+                        (req.employee_id === row.employeeId || req.employee_id === row.employeeId) && 
+                        req.status === 'approved'
+                      );
+
                       const isLate = (() => {
+                        if (recoveryReq) return false; // Recovery approved, no longer late
                         if (!row.checkIn || row.checkIn === "--") return false;
                         const officeStartTime = sysSettings?.officeStartTime || "09:30";
                         const bufferMins = sysSettings?.lateBufferMins || 10;
@@ -759,7 +857,10 @@ export default function AttendancePage() {
                       })();
                       
                       const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${row.date} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
-                      const lateStr = isLate ? `${lateMinutes}Min` : "-";
+                      // Just show the actual minutes as requested
+                      const lateStr = isLate || recoveryReq 
+                        ? `${lateMinutes}Min` 
+                        : "-";
                       
                       // Overtime
                       const shiftDurationMinutes = (() => {
@@ -773,12 +874,18 @@ export default function AttendancePage() {
                       const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
                       const overtimeStr = overtimeMinutes > 0 ? (overtimeMinutes >= 60 ? `${Math.floor(overtimeMinutes/60)}H ${overtimeMinutes%60}Min` : `${overtimeMinutes}Min`) : "-";
 
-                      let statusLabel = isLate ? "Late Entry" : "Present";
-                      let statusClass = isLate 
-                        ? "bg-amber-50 text-amber-600 border-amber-100" 
-                        : "bg-green-50 text-green-600 border-green-100";
+                      let statusLabel = row.status === "Leave" ? "Leave" : (row.checkIn ? "Present" : "Absent");
+                      let statusClass = statusLabel === "Present" 
+                        ? "bg-green-50 text-green-600 border-green-100" 
+                        : (statusLabel === "Leave" ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-red-50 text-red-600 border-red-100");
                       
-                      const currentStatus = row.checkOut ? "punch-out" : "punch-in";
+                      const lastBreak = row.breaks && row.breaks.length > 0 ? row.breaks[row.breaks.length - 1] : null;
+                      const isOnBreak = lastBreak && !lastBreak.endTime;
+                      const currentStatus = row.checkOut 
+                        ? "punch-out" 
+                        : (isOnBreak 
+                            ? "break-in" 
+                            : (lastBreak?.endTime ? "break-out" : "punch-in"));
                       const day = dayjs(row.date).format("dddd");
 
                       return (

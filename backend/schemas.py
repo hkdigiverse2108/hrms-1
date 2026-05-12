@@ -1107,3 +1107,19 @@ class UserPermission(UserPermissionBase):
     id: str
     class Config:
         from_attributes = True
+
+class TimeRecoveryBase(BaseModel):
+    employee_id: str
+    employee_name: str
+    date: str
+    late_minutes: int
+    recovery_minutes: int
+    reason: str
+    status: str = 'pending' # pending, approved, rejected
+    created_at: Optional[str] = None
+
+class TimeRecoveryCreate(TimeRecoveryBase):
+    pass
+
+class TimeRecovery(TimeRecoveryBase):   
+    id: str

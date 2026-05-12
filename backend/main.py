@@ -846,8 +846,25 @@ async def update_user_permissions(employee_id: str, permissions: schemas.UserPer
 # Department Routes
 # (Using existing routes defined earlier in the file)
 
+# Time Recovery Endpoints
+@app.post('/time-recovery', response_model=schemas.TimeRecovery)
+async def create_time_recovery(recovery: schemas.TimeRecoveryCreate, db=Depends(get_db)):
+    return await crud.create_time_recovery(db, recovery)
+
+@app.get('/time-recovery', response_model=List[schemas.TimeRecovery])
+async def read_time_recoveries(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_time_recoveries(db, skip=skip, limit=limit)
+
+@app.get('/time-recovery/employee/{employee_id}', response_model=List[schemas.TimeRecovery])
+async def read_employee_time_recoveries(employee_id: str, db=Depends(get_db)):
+    return await crud.get_employee_time_recoveries(db, employee_id)
+
+@app.put('/time-recovery/{recovery_id}/status', response_model=schemas.TimeRecovery)
+async def update_time_recovery_status(recovery_id: str, status: str, db=Depends(get_db)):
+    return await crud.update_time_recovery_status(db, recovery_id, status)
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
-    # Using 127.0.0.1 explicitly can sometimes resolve connection issues on local machines
     print(f"Starting HRMS Backend on http://0.0.0.0:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
+
