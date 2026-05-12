@@ -23,6 +23,8 @@ import {
   Coffee,
   Play,
   Sun,
+  Moon,
+  CloudSun,
   LogOut,
   LogIn,
   CheckCircle2,
@@ -476,8 +478,16 @@ function EmployeeView({
             <div className="flex justify-between items-start mb-8">
               <div className="flex flex-col gap-4">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-light/50 border border-brand-teal/20 rounded-full w-fit">
-                   <Sun className="w-4 h-4 text-brand-teal" />
-                   <span className="text-[11px] font-bold text-brand-teal">Good morning, {firstName}</span>
+                   {currentTime.getHours() < 12 ? (
+                     <Sun className="w-4 h-4 text-brand-teal" />
+                   ) : currentTime.getHours() < 17 ? (
+                     <CloudSun className="w-4 h-4 text-brand-teal" />
+                   ) : (
+                     <Moon className="w-4 h-4 text-brand-teal" />
+                   )}
+                   <span className="text-[11px] font-bold text-brand-teal">
+                     {currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening"}, {firstName}
+                   </span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="relative">
