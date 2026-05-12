@@ -224,7 +224,7 @@ export default function LeaveRequestsPage() {
                   setFilterDate(dayjs());
                 }
               }}
-              className={`cursor-pointer border-2 rounded-lg p-3 transition-all ${statusFilter === 'Approved' ? 'bg-green-600 text-white border-green-600 shadow-md' : 'bg-gray-50 border-border hover:border-green-500'}`}
+              className={`cursor-pointer border-2 rounded-lg p-3 transition-all ${statusFilter === 'Approved' ? 'bg-brand-teal text-white border-brand-teal shadow-md' : 'bg-gray-50 border-border hover:border-brand-teal'}`}
             >
               <div className={`text-xl font-bold ${statusFilter === 'Approved' ? 'text-white' : 'text-foreground'}`}>
                 {requests.filter(r => r.status?.toLowerCase() === 'approved').length}

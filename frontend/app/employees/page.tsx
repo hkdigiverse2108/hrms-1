@@ -144,13 +144,14 @@ export default function EmployeeListPage() {
             Export
           </Button>
           {(isAdmin || checkPermission('add-employee', 'canAdd') || checkPermission('add-employee', 'canView')) && (
-            <Button 
-              onClick={() => setIsAddModalOpen(true)}
-              className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm flex-1 sm:flex-none"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Employee
-            </Button>
+            <Link href="/employees/add" className="flex-1 sm:flex-none">
+              <Button 
+                className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Employee
+              </Button>
+            </Link>
           )}
         </div>
       </PageHeader>
