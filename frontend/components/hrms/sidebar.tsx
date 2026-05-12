@@ -54,6 +54,8 @@ import { useUserContext } from '@/context/UserContext'
      children: [
        { title: 'All Employees', href: '/employees' },
        { title: 'Org Structure', href: '/employees/organization/departments' },
+       { title: 'Employee Documents', href: '/employees/documents' },
+       { title: 'Document Generator', href: '/employees/documents/generate' },
        { title: 'Employee Lifecycle', href: '/employees/lifecycle' },
      ],
    },

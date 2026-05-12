@@ -208,6 +208,7 @@ export default function EmployeeListPage() {
               <tr>
                 <th className="px-6 py-4 font-medium">Employee Name</th>
                 <th className="px-6 py-4 font-medium">Employee ID</th>
+                <th className="px-6 py-4 font-medium">Gender</th>
                 <th className="px-6 py-4 font-medium">Password</th>
                 <th className="px-6 py-4 font-medium">Department</th>
                 <th className="px-6 py-4 font-medium">Role</th>
@@ -254,6 +255,13 @@ export default function EmployeeListPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 font-medium">{emp.employeeId}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        emp.gender === 'Female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {emp.gender || 'Male'}
+                      </span>
+                    </td>
                     <td className="px-6 py-4">
                       {emp.password ? (
                         <div className="flex items-center justify-between w-full min-w-[140px] max-w-[200px] bg-gray-100 px-2.5 py-1.5 rounded border border-gray-200/60">

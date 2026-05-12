@@ -15,6 +15,8 @@ class EmployeeBase(BaseModel):
     designation: str
     joinDate: str
     status: Optional[str] = "active"
+    gender: Optional[str] = "Male"
+    position: Optional[str] = "Intern"
     salary: float
     company: Optional[str] = None
     role: Optional[str] = None
@@ -47,8 +49,10 @@ class EmployeeUpdate(BaseModel):
     dob: Optional[str] = None
     department: Optional[str] = None
     designation: Optional[str] = None
+    position: Optional[str] = None
     joinDate: Optional[str] = None
     status: Optional[str] = None
+    gender: Optional[str] = None
     salary: Optional[float] = None
     company: Optional[str] = None
     role: Optional[str] = None

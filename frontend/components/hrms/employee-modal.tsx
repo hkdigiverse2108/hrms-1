@@ -384,6 +384,19 @@ export function EmployeeModal({
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Gender *</Label>
+                <Select value={formData.gender || 'Male'} onValueChange={(v) => setFormData({ ...formData, gender: v })}>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 

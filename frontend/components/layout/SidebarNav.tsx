@@ -143,6 +143,7 @@ export function SidebarNav() {
         getItem(<Link href="/employees/attendance">Employee Attendance List</Link>, "/employees/attendance"),
         getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
         getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"),
+        getItem(<Link href="/employees/documents/generate">Document Generator</Link>, "/employees/documents/generate"),
       ]),
       getItem("Payroll", "payroll-sub", <DollarSign className="w-5 h-5" />, [
         getItem(<Link href="/payroll/salary-structure">Salary Structure</Link>, "/payroll/salary-structure"),
@@ -182,6 +183,7 @@ export function SidebarNav() {
     if (pathname.startsWith("/employees")) {
       if (pathname === "/employees/attendance") return ["/employees/attendance"];
       if (pathname === "/employees/documents") return ["/employees/documents"];
+      if (pathname === "/employees/documents/generate") return ["/employees/documents/generate"];
       return [pathname];
     }
     if (pathname.startsWith("/workspace")) return [pathname];
