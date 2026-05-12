@@ -137,6 +137,7 @@ export function SidebarNav() {
 
     return [
       getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
+      getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren),
       getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, [
         getItem(<Link href="/employees">Employee List</Link>, "/employees"),
         getItem(<Link href="/employees/organization/departments">Org Structure</Link>, "/employees/organization/departments"),
@@ -144,6 +145,8 @@ export function SidebarNav() {
         getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"),
         getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"),
       ]),
+      getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
+      getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
       getItem("Payroll", "payroll-sub", <DollarSign className="w-5 h-5" />, [
         getItem(<Link href="/payroll/salary-structure">Salary Structure</Link>, "/payroll/salary-structure"),
         getItem(<Link href="/payroll">Payroll Processing</Link>, "/payroll"),
@@ -154,8 +157,6 @@ export function SidebarNav() {
         getItem(<Link href="/recruitment/hiring-board">Interviews</Link>, "/recruitment/hiring-board"),
         getItem(<Link href="/recruitment">Hirings</Link>, "/recruitment"),
       ]),
-      getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
-      getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
       getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, [
         getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"),
         getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
@@ -165,13 +166,17 @@ export function SidebarNav() {
       ]),
       getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />),
       getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />),
+      getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />),
       getItem("Invoice", "invoice", <FileText className="w-5 h-5" />, [
         getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"),
         getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"),
       ]),
-      getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />),
-      getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren),
-      getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />),
+      getItem("System", "system-sub", <Settings className="w-5 h-5" />, [
+        getItem(<Link href="/settings">Settings</Link>, "/settings"),
+        ...(isAdmin || checkPermission('access-control', 'canView') ? [
+          getItem(<Link href="/employees/permissions">Access Control</Link>, "/employees/permissions")
+        ] : []),
+      ]),
     ];
   }, [user, settings, pathname, permissions, checkPermission]);
 
