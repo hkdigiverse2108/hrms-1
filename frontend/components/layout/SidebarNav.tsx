@@ -142,20 +142,8 @@ export function SidebarNav() {
       getItem(<Link href="/">Dashboard</Link>, "/", <LayoutDashboard className="w-5 h-5" />),
     ];
 
-    if (isAdmin || workManagementChildren.length > 0) {
-      menuItems.push(getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren));
-    }
-
     if (isAdmin || employeeChildren.length > 0) {
       menuItems.push(getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, employeeChildren));
-    }
-
-    if (isAdmin || checkPermission('attendance', 'canView')) {
-      menuItems.push(getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />));
-    }
-
-    if (isAdmin || checkPermission('leave', 'canView')) {
-      menuItems.push(getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />));
     }
 
     if (isAdmin || payrollChildren.length > 0) {
@@ -164,6 +152,14 @@ export function SidebarNav() {
 
     if (isAdmin || recruitmentChildren.length > 0) {
       menuItems.push(getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, recruitmentChildren));
+    }
+
+    if (isAdmin || checkPermission('attendance', 'canView')) {
+      menuItems.push(getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />));
+    }
+
+    if (isAdmin || checkPermission('leave', 'canView')) {
+      menuItems.push(getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />));
     }
     
     const workspaceChildren: MenuItem[] = [];
@@ -203,13 +199,12 @@ export function SidebarNav() {
       menuItems.push(getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />));
     }
 
+    if (isAdmin || workManagementChildren.length > 0) {
+      menuItems.push(getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren));
+    }
+
     if (isAdmin || checkPermission('settings', 'canView')) {
-      menuItems.push(getItem("System", "system-sub", <Settings className="w-5 h-5" />, [
-        getItem(<Link href="/settings">Settings</Link>, "/settings"),
-        ...(isAdmin || checkPermission('access-control', 'canView') ? [
-          getItem(<Link href="/employees/permissions">Access Control</Link>, "/employees/permissions")
-        ] : []),
-      ]));
+      menuItems.push(getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />));
     }
 
     return menuItems;
@@ -245,7 +240,6 @@ export function SidebarNav() {
     if (pathname.startsWith("/work-management")) return ["work-management"];
     if (pathname.startsWith("/recruitment")) return ["recruitment-sub"];
     if (pathname.startsWith("/payroll")) return ["payroll-sub"];
-    if (pathname.startsWith("/settings") || pathname.startsWith("/employees/permissions")) return ["system-sub"];
     return [];
   };
  

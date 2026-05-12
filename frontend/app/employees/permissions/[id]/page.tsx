@@ -22,13 +22,6 @@ interface ModulePermission {
 
 const PERMISSION_GROUPS = [
   {
-    name: 'General',
-    icon: LayoutDashboard,
-    modules: [
-      { moduleName: 'dashboard', displayName: 'Dashboard', tabUrl: '/' },
-    ]
-  },
-  {
     name: 'Employees',
     icon: Users,
     modules: [
