@@ -53,6 +53,8 @@ export interface EmployeeFormData {
   endTime: string
   profilePhoto: string
   status: string
+  gender: string
+  position: string
 }
 
 interface EmployeeFormProps {
@@ -90,6 +92,8 @@ const defaultFormData: EmployeeFormData = {
   endTime: '',
   profilePhoto: '',
   status: 'active',
+  gender: 'Male',
+  position: 'Intern',
 }
 
 export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: EmployeeFormProps) {
@@ -235,6 +239,23 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         <FormField label="Salary" id="salary" type="number" required value={formData.salary} onChange={v => handleChange('salary', v)} placeholder="Enter salary" />
 
         <FormSelect
+          label="Gender"
+          id="gender"
+          required
+          value={formData.gender}
+          onValueChange={(v) => {
+            console.log("Gender changed to:", v);
+            handleChange('gender', v);
+          }}
+          options={[
+            { label: 'Male', value: 'Male' },
+            { label: 'Female', value: 'Female' },
+            { label: 'Other', value: 'Other' }
+          ]}
+          placeholder="Select gender"
+        />
+
+        <FormSelect
           key={`role-${roles.length}`}
           label="Role"
           id="role"
@@ -305,35 +326,18 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           </>
         )}
         
-        <div className="flex items-center gap-2">
-          <FormSelect 
-            key={`dept-${departments.length}`} 
-            label="Department" 
-            id="department" 
-            required 
-            value={formData.department} 
-            onValueChange={v => handleChange('department', v)} 
-            options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
-            placeholder="Select department" 
-            className="flex-1"
-          />
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button type="button" variant="outline" size="icon" className="mt-0 h-10 w-10 border-dashed border-brand-teal text-brand-teal hover:bg-brand-light">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Quick Add Department</DialogTitle>
-              </DialogHeader>
-              <QuickAddDept onAdded={() => {
-                refresh();
-              }} />
-            </DialogContent>
-          </Dialog>
-        </div>
+        <FormSelect 
+          key={`dept-${departments.length}`} 
+          label="Department" 
+          id="department" 
+          required 
+          value={formData.department} 
+          onValueChange={v => handleChange('department', v)} 
+          options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
+          placeholder="Select department" 
+        />
         <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+        <FormField label="Position" id="position" value={formData.position} onChange={v => handleChange('position', v)} placeholder="Intern" />
         
         <FormSelect 
           label="Status" 
