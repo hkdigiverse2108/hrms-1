@@ -33,11 +33,11 @@ const PERMISSION_GROUPS = [
     icon: Users,
     modules: [
       { moduleName: 'employee-list', displayName: 'Employee List', tabUrl: '/employees' },
-      { moduleName: 'departments', displayName: 'Departments', tabUrl: '/employees/organization/departments' },
-      { moduleName: 'designations', displayName: 'Designations', tabUrl: '/employees/organization/designations' },
-      { moduleName: 'employee-attendance', displayName: 'Employee Attendance', tabUrl: '/employees/attendance' },
+      { moduleName: 'org-structure', displayName: 'Org Structure', tabUrl: '/employees/organization/departments' },
+      { moduleName: 'employee-attendance', displayName: 'Employee Attendance List', tabUrl: '/employees/attendance' },
       { moduleName: 'leave-requests', displayName: 'Leave Requests', tabUrl: '/employees/leave' },
       { moduleName: 'employee-documents', displayName: 'Employee Documents', tabUrl: '/employees/documents' },
+      { moduleName: 'document-generator', displayName: 'Document Generator', tabUrl: '/employees/documents/generate' },
     ]
   },
   {
@@ -56,7 +56,6 @@ const PERMISSION_GROUPS = [
     modules: [
       { moduleName: 'interviews', displayName: 'Interviews', tabUrl: '/recruitment/hiring-board' },
       { moduleName: 'hirings', displayName: 'Hirings', tabUrl: '/recruitment' },
-      { moduleName: 'applications', displayName: 'Applications', tabUrl: '/recruitment/applications' },
     ]
   },
   {
@@ -83,7 +82,8 @@ const PERMISSION_GROUPS = [
     name: 'Workspace',
     icon: MonitorPlay,
     modules: [
-      { moduleName: 'workspace', displayName: 'Workspace', tabUrl: '/workspace' },
+      { moduleName: 'blank-canvas', displayName: 'Blank Canvas', tabUrl: '/workspace/blank-canvas' },
+      { moduleName: 'seating-arrangement', displayName: 'Seating Arrangement', tabUrl: '/workspace/seating' },
       { moduleName: 'resource-management', displayName: 'Resource Management', tabUrl: '/workspace/resource' },
     ]
   },
@@ -307,65 +307,53 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {PERMISSION_GROUPS.map((group) => (
-                    <React.Fragment key={group.name}>
-                      <tr className="bg-slate-50/80">
-                        <td colSpan={7} className="px-6 py-3">
-                          <div className="flex items-center gap-2">
-                            <group.icon className="w-4 h-4 text-brand-teal" />
-                            <span className="text-xs font-black uppercase tracking-widest text-slate-700">{group.name}</span>
-                          </div>
+                  {DEFAULT_MODULES.map((m, mIdx) => {
+                    const p = permissions.find(per => per.moduleName === m.moduleName) || { ...m, canAdd: false, canEdit: false, canDelete: false, canView: false }
+                    return (
+                      <tr key={m.moduleName} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 text-slate-500 font-medium">{(mIdx + 1).toString().padStart(2, '0')}</td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-900">{p.displayName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{p.tabUrl}</div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <Checkbox 
+                            checked={p.canAdd} 
+                            onCheckedChange={() => handleToggle(p.moduleName, 'canAdd')}
+                            className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                          />
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <Checkbox 
+                            checked={p.canEdit} 
+                            onCheckedChange={() => handleToggle(p.moduleName, 'canEdit')}
+                            className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                          />
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <Checkbox 
+                            checked={p.canDelete} 
+                            onCheckedChange={() => handleToggle(p.moduleName, 'canDelete')}
+                            className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                          />
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <Checkbox 
+                            checked={p.canView} 
+                            onCheckedChange={() => handleToggle(p.moduleName, 'canView')}
+                            className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                          />
+                        </td>
+                        <td className="px-6 py-4 text-center bg-slate-50/30">
+                          <Checkbox 
+                            checked={p.canAdd && p.canEdit && p.canDelete && p.canView} 
+                            onCheckedChange={(checked) => handleToggleAll(p.moduleName, !!checked)}
+                            className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-orange data-[state=checked]:border-brand-orange"
+                          />
                         </td>
                       </tr>
-                      {group.modules.map((m, mIdx) => {
-                        const p = permissions.find(per => per.moduleName === m.moduleName) || { ...m, canAdd: false, canEdit: false, canDelete: false, canView: false }
-                        return (
-                          <tr key={m.moduleName} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-6 py-4 text-slate-500 font-medium">{(mIdx + 1).toString().padStart(2, '0')}</td>
-                            <td className="px-6 py-4">
-                              <div className="font-bold text-slate-900">{p.displayName}</div>
-                              <div className="text-[10px] text-slate-400 font-mono">{p.tabUrl}</div>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <Checkbox 
-                                checked={p.canAdd} 
-                                onCheckedChange={() => handleToggle(p.moduleName, 'canAdd')}
-                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                              />
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <Checkbox 
-                                checked={p.canEdit} 
-                                onCheckedChange={() => handleToggle(p.moduleName, 'canEdit')}
-                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                              />
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <Checkbox 
-                                checked={p.canDelete} 
-                                onCheckedChange={() => handleToggle(p.moduleName, 'canDelete')}
-                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                              />
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <Checkbox 
-                                checked={p.canView} 
-                                onCheckedChange={() => handleToggle(p.moduleName, 'canView')}
-                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                              />
-                            </td>
-                            <td className="px-6 py-4 text-center bg-slate-50/30">
-                              <Checkbox 
-                                checked={p.canAdd && p.canEdit && p.canDelete && p.canView} 
-                                onCheckedChange={(checked) => handleToggleAll(p.moduleName, !!checked)}
-                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-orange data-[state=checked]:border-brand-orange"
-                              />
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </React.Fragment>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

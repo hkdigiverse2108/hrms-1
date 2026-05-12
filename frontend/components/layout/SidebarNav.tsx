@@ -100,7 +100,7 @@ export function SidebarNav() {
     if (isAdmin || checkPermission('employee-list', 'canView')) {
       employeeChildren.push(getItem(<Link href="/employees">Employee List</Link>, "/employees"));
     }
-    if (isAdmin || checkPermission('departments', 'canView') || checkPermission('designations', 'canView')) {
+    if (isAdmin || checkPermission('org-structure', 'canView')) {
       employeeChildren.push(getItem(<Link href="/employees/organization/departments">Org Structure</Link>, "/employees/organization/departments"));
     }
     if (isAdmin || checkPermission('employee-attendance', 'canView')) {
@@ -111,6 +111,9 @@ export function SidebarNav() {
     }
     if (isAdmin || checkPermission('employee-documents', 'canView')) {
       employeeChildren.push(getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"));
+    }
+    if (isAdmin || checkPermission('document-generator', 'canView')) {
+      employeeChildren.push(getItem(<Link href="/employees/documents/generate">Document Generator</Link>, "/employees/documents/generate"));
     }
 
     const payrollChildren: MenuItem[] = [];
@@ -154,16 +157,20 @@ export function SidebarNav() {
     menuItems.push(getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />));
     menuItems.push(getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />));
     
-    const workspaceChildren: MenuItem[] = [
-      getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"),
-      getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"),
-    ];
-
+    const workspaceChildren: MenuItem[] = [];
+    if (isAdmin || checkPermission('blank-canvas', 'canView')) {
+      workspaceChildren.push(getItem(<Link href="/workspace/blank-canvas">Blank Canvas</Link>, "/workspace/blank-canvas"));
+    }
+    if (isAdmin || checkPermission('seating-arrangement', 'canView')) {
+      workspaceChildren.push(getItem(<Link href="/workspace/seating">Seating Arrangement</Link>, "/workspace/seating"));
+    }
     if (isAdmin || checkPermission('resource-management', 'canView')) {
       workspaceChildren.push(getItem(<Link href="/workspace/resource">Resource Management</Link>, "/workspace/resource"));
     }
 
-    menuItems.push(getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, workspaceChildren));
+    if (isAdmin || workspaceChildren.length > 0) {
+      menuItems.push(getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, workspaceChildren));
+    }
     
     if (isAdmin || checkPermission('remarks', 'canView')) {
       menuItems.push(getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />));
