@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { 
   Plus, 
   Users, 
@@ -323,21 +324,39 @@ function AdminView({ user, leaves }: { user: any, leaves: any[] }) {
 }
  
 function HRView({ user, leaves }: { user: any, leaves: any[] }) {
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+
+  const filteredLeaves = activeFilter 
+    ? leaves.filter(l => l.status === activeFilter) 
+    : leaves;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Pending Leaves" 
-          value={leaves.filter(l => l.status === 'Pending').length.toString().padStart(2, '0')} 
-          trend="Action Required" 
-          trendLabel="awaiting approval" 
-          icon={<CalendarIcon className="w-5 h-5 text-muted-foreground" />} 
-        />
+        <div onClick={() => setActiveFilter(activeFilter === 'Pending' ? null : 'Pending')} className="cursor-pointer">
+          <StatCard 
+            title="Pending Leaves" 
+            value={leaves.filter(l => l.status === 'Pending').length.toString().padStart(2, '0')} 
+            trend="Action Required" 
+            trendLabel="awaiting approval" 
+            icon={<CalendarIcon className={`w-5 h-5 ${activeFilter === 'Pending' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
+            color={activeFilter === 'Pending' ? 'brand' : undefined}
+          />
+        </div>
 
         <Link href="/recruitment/hiring-board">
           <StatCard title="New Applications" value="24" trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
         </Link>
+        <div onClick={() => setActiveFilter(activeFilter === 'Approved' ? null : 'Approved')} className="cursor-pointer">
+          <StatCard 
+            title="Approved Leaves" 
+            value={leaves.filter(l => l.status === 'Approved').length.toString().padStart(2, '0')} 
+            trend="Past & Future" 
+            trendLabel="approved requests" 
+            icon={<CheckCircle2 className={`w-5 h-5 ${activeFilter === 'Approved' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
+            color={activeFilter === 'Approved' ? 'brand' : undefined}
+          />
+        </div>
         <StatCard title="Asset Requests" value="03" trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
       </div>
  
@@ -345,13 +364,21 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white border border-border rounded-xl shadow-sm">
             <div className="p-5 border-b border-border flex justify-between items-center">
-              <h3 className="font-bold text-lg text-[#111827]">Recent Leave Requests</h3>
+              <div className="flex items-center gap-3">
+                <h3 className="font-bold text-lg text-[#111827]">Recent Leave Requests</h3>
+                {activeFilter && (
+                  <Badge variant="outline" className="bg-brand-light text-brand-teal border-brand-teal/20 px-2 py-0">
+                    {activeFilter}
+                    <X className="w-3 h-3 ml-1 cursor-pointer" onClick={() => setActiveFilter(null)} />
+                  </Badge>
+                )}
+              </div>
               <Link href="/attendance/leave">
                 <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
               </Link>
             </div>
             <div className="p-0">
-              {leaves.length > 0 ? leaves.slice(0, 5).map((leave, i) => (
+              {filteredLeaves.length > 0 ? filteredLeaves.slice(0, 5).map((leave, i) => (
                 <div key={i} className="flex items-center justify-between p-4 border-b last:border-0 border-border hover:bg-gray-50 transition-colors">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9">
@@ -370,12 +397,11 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
                   </span>
                 </div>
               )) : (
-                <div className="p-8 text-center text-sm text-muted-foreground">No recent leave requests</div>
+                <div className="p-8 text-center text-sm text-muted-foreground">No {activeFilter ? activeFilter.toLowerCase() : ''} leave requests found</div>
               )}
             </div>
-
           </div>
- 
+
           <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-lg text-[#111827]">Upcoming Interviews</h3>

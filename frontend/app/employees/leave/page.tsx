@@ -46,6 +46,8 @@ export default function LeaveRequestsPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [timeFilter, setTimeFilter] = useState("today"); // "today" | "custom"
   const [filterDate, setFilterDate] = useState(dayjs());
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const searchParams = useSearchParams();
   const targetId = searchParams.get('id');
 
@@ -189,21 +191,45 @@ export default function LeaveRequestsPage() {
             <Input 
               placeholder="Search requests..." 
               className="pl-9 bg-gray-50/50 border-border"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-brand-light/40 border border-brand-teal/10 rounded-lg p-3">
-              <div className="text-xl font-bold text-foreground">
-                {requests.filter(r => r.status === 'Pending').length}
+            <div 
+              onClick={() => {
+                const next = statusFilter === 'Pending' ? null : 'Pending';
+                setStatusFilter(next);
+                if (next) setTimeFilter("all");
+                else {
+                  setTimeFilter("today");
+                  setFilterDate(dayjs());
+                }
+              }}
+              className={`cursor-pointer border-2 rounded-lg p-3 transition-all ${statusFilter === 'Pending' ? 'bg-brand-teal text-white border-brand-teal shadow-md' : 'bg-brand-light/40 border-brand-teal/10 hover:border-brand-teal/30'}`}
+            >
+              <div className={`text-xl font-bold ${statusFilter === 'Pending' ? 'text-white' : 'text-foreground'}`}>
+                {requests.filter(r => r.status?.toLowerCase() === 'pending').length}
               </div>
-              <div className="text-xs text-muted-foreground font-medium">Pending</div>
+              <div className={`text-xs font-bold ${statusFilter === 'Pending' ? 'text-white/90' : 'text-muted-foreground'}`}>Pending</div>
             </div>
-            <div className="bg-gray-50 border border-border rounded-lg p-3">
-              <div className="text-xl font-bold text-foreground">
-                {requests.filter(r => r.status === 'Approved').length}
+            <div 
+              onClick={() => {
+                const next = statusFilter === 'Approved' ? null : 'Approved';
+                setStatusFilter(next);
+                if (next) setTimeFilter("all");
+                else {
+                  setTimeFilter("today");
+                  setFilterDate(dayjs());
+                }
+              }}
+              className={`cursor-pointer border-2 rounded-lg p-3 transition-all ${statusFilter === 'Approved' ? 'bg-green-600 text-white border-green-600 shadow-md' : 'bg-gray-50 border-border hover:border-green-500'}`}
+            >
+              <div className={`text-xl font-bold ${statusFilter === 'Approved' ? 'text-white' : 'text-foreground'}`}>
+                {requests.filter(r => r.status?.toLowerCase() === 'approved').length}
               </div>
-              <div className="text-xs text-muted-foreground font-medium">Approved</div>
+              <div className={`text-xs font-bold ${statusFilter === 'Approved' ? 'text-white/90' : 'text-muted-foreground'}`}>Approved</div>
             </div>
           </div>
         </div>
@@ -220,6 +246,15 @@ export default function LeaveRequestsPage() {
             </div>
           ) : requests
               .filter((req) => {
+                const matchesStatus = statusFilter ? req.status?.toLowerCase() === statusFilter.toLowerCase() : true;
+                if (!matchesStatus) return false;
+
+                const matchesSearch = req.employee_name?.toLowerCase().includes(searchTerm.toLowerCase());
+                if (!matchesSearch) return false;
+
+                // If a status filter (Pending/Approved) is active, show ALL requests for that status regardless of date
+                if (statusFilter) return true;
+
                 if (timeFilter === "all") return true;
                 if (!req.start_date || !req.end_date) return false;
                 const targetDate = filterDate.startOf('day');
