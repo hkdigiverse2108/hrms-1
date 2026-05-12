@@ -2502,7 +2502,7 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                         await apply_updates(attn, breaks)
 
             # Case 2: Late Arrival Correction
-            if "Late" in reason or "Punch" in reason:
+            if "Late" in reason or "Punch-in" in reason:
                 time_match = re.search(r'Actual:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
                 if time_match:
                     actual_time = time_match.group(1)
@@ -2511,6 +2511,19 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     earliest_attn = min(attn_list, key=lambda x: x.get('checkIn', '23:59:59'))
                     earliest_attn['checkIn'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
                     await apply_updates(earliest_attn, earliest_attn.get('breaks', []))
+
+            # Case 3: Punch-Out Correction
+            if "Punch-Out" in reason:
+                time_match = re.search(r'Actual Punch-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
+                if time_match:
+                    actual_time = time_match.group(1)
+                    if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
+                    print(f"DEBUG: Processing Punch-Out correction: {actual_time}")
+                    
+                    # Apply to the latest record of the day
+                    latest_attn = max(attn_list, key=lambda x: x.get('checkIn', '00:00:00'))
+                    latest_attn['checkOut'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
+                    await apply_updates(latest_attn, latest_attn.get('breaks', []))
 
         except Exception as e:
             print(f"Correction logic error: {e}")
