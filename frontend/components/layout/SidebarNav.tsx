@@ -154,7 +154,6 @@ export function SidebarNav() {
       getItem("Recruitment", "recruitment-sub", <Briefcase className="w-5 h-5" />, [
         getItem(<Link href="/recruitment/hiring-board">Interviews</Link>, "/recruitment/hiring-board"),
         getItem(<Link href="/recruitment">Hirings</Link>, "/recruitment"),
-        getItem(<Link href="/recruitment/applications">Applications</Link>, "/recruitment/applications"),
       ]),
       getItem(<Link href="/attendance">Attendance</Link>, "/attendance", <Clock className="w-5 h-5" />),
       getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />),
