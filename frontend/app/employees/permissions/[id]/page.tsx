@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import React, { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, Save, ShieldAlert, ArrowLeft, Search, User, ChevronRight } from 'lucide-react'
+import { Loader2, Save, ShieldAlert, ArrowLeft, Search, User, ChevronRight, LayoutDashboard, Users, Clock, Calendar, Briefcase, DollarSign, MonitorPlay, MessagesSquare, Star, FileText, Settings, ShieldHalf } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
@@ -20,37 +20,94 @@ interface ModulePermission {
   canView: boolean
 }
 
-const DEFAULT_MODULES = [
-  { moduleName: 'dashboard', displayName: 'Dashboard', tabUrl: '/' },
-  { moduleName: 'employee-list', displayName: 'Employee List', tabUrl: '/employees' },
-  { moduleName: 'departments', displayName: 'Departments', tabUrl: '/employees/organization/departments' },
-  { moduleName: 'designations', displayName: 'Designations', tabUrl: '/employees/organization/designations' },
-  { moduleName: 'employee-attendance', displayName: 'Employee Attendance', tabUrl: '/employees/attendance' },
-  { moduleName: 'leave-requests', displayName: 'Leave Requests', tabUrl: '/employees/leave' },
-  { moduleName: 'employee-documents', displayName: 'Employee Documents', tabUrl: '/employees/documents' },
-  { moduleName: 'salary-structure', displayName: 'Salary Structure', tabUrl: '/payroll/salary-structure' },
-  { moduleName: 'payroll-processing', displayName: 'Payroll Processing', tabUrl: '/payroll' },
-  { moduleName: 'payslips', displayName: 'Payslips', tabUrl: '/payroll/payslips' },
-  { moduleName: 'bonuses-deductions', displayName: 'Bonuses & Deductions', tabUrl: '/payroll/bonuses' },
-  { moduleName: 'attendance', displayName: 'Attendance', tabUrl: '/attendance' },
-  { moduleName: 'leave', displayName: 'Leave', tabUrl: '/leave' },
-  { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
-  { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
-  { moduleName: 'marketing', displayName: 'Marketing Reports', tabUrl: '/work-management/marketing-reports' },
-  { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-  { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
-  { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
-  { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
-  { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
-  { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
-  { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
-  { moduleName: 'interviews', displayName: 'Interviews', tabUrl: '/recruitment/hiring-board' },
-  { moduleName: 'hirings', displayName: 'Hirings', tabUrl: '/recruitment' },
-  { moduleName: 'workspace', displayName: 'Workspace', tabUrl: '/workspace' },
-  { moduleName: 'resource-management', displayName: 'Resource Management', tabUrl: '/workspace/resource' },
-  { moduleName: 'access-control', displayName: 'Access Control', tabUrl: '/settings' },
-  { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
+const PERMISSION_GROUPS = [
+  {
+    name: 'General',
+    icon: LayoutDashboard,
+    modules: [
+      { moduleName: 'dashboard', displayName: 'Dashboard', tabUrl: '/' },
+    ]
+  },
+  {
+    name: 'Employees',
+    icon: Users,
+    modules: [
+      { moduleName: 'employee-list', displayName: 'Employee List', tabUrl: '/employees' },
+      { moduleName: 'departments', displayName: 'Departments', tabUrl: '/employees/organization/departments' },
+      { moduleName: 'designations', displayName: 'Designations', tabUrl: '/employees/organization/designations' },
+      { moduleName: 'employee-attendance', displayName: 'Employee Attendance', tabUrl: '/employees/attendance' },
+      { moduleName: 'leave-requests', displayName: 'Leave Requests', tabUrl: '/employees/leave' },
+      { moduleName: 'employee-documents', displayName: 'Employee Documents', tabUrl: '/employees/documents' },
+    ]
+  },
+  {
+    name: 'Payroll',
+    icon: DollarSign,
+    modules: [
+      { moduleName: 'salary-structure', displayName: 'Salary Structure', tabUrl: '/payroll/salary-structure' },
+      { moduleName: 'payroll-processing', displayName: 'Payroll Processing', tabUrl: '/payroll' },
+      { moduleName: 'payslips', displayName: 'Payslips', tabUrl: '/payroll/payslips' },
+      { moduleName: 'bonuses-deductions', displayName: 'Bonuses & Deductions', tabUrl: '/payroll/bonuses' },
+    ]
+  },
+  {
+    name: 'Recruitment',
+    icon: Briefcase,
+    modules: [
+      { moduleName: 'interviews', displayName: 'Interviews', tabUrl: '/recruitment/hiring-board' },
+      { moduleName: 'hirings', displayName: 'Hirings', tabUrl: '/recruitment' },
+      { moduleName: 'applications', displayName: 'Applications', tabUrl: '/recruitment/applications' },
+    ]
+  },
+  {
+    name: 'Attendance & Leave',
+    icon: Clock,
+    modules: [
+      { moduleName: 'attendance', displayName: 'Attendance', tabUrl: '/attendance' },
+      { moduleName: 'leave', displayName: 'Leave', tabUrl: '/leave' },
+    ]
+  },
+  {
+    name: 'Work Management',
+    icon: Briefcase,
+    modules: [
+      { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
+      { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
+      { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
+      { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
+      { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
+      { moduleName: 'marketing', displayName: 'Marketing Reports', tabUrl: '/work-management/marketing-reports' },
+    ]
+  },
+  {
+    name: 'Workspace',
+    icon: MonitorPlay,
+    modules: [
+      { moduleName: 'workspace', displayName: 'Workspace', tabUrl: '/workspace' },
+      { moduleName: 'resource-management', displayName: 'Resource Management', tabUrl: '/workspace/resource' },
+    ]
+  },
+  {
+    name: 'More',
+    icon: MessagesSquare,
+    modules: [
+      { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
+      { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
+      { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
+      { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
+    ]
+  },
+  {
+    name: 'System',
+    icon: Settings,
+    modules: [
+      { moduleName: 'access-control', displayName: 'Access Control', tabUrl: '/settings' },
+      { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
+    ]
+  },
 ]
+
+const DEFAULT_MODULES = PERMISSION_GROUPS.flatMap(g => g.modules)
 
 export default function UserPermissionsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
@@ -250,49 +307,64 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {permissions.map((p, idx) => (
-                    <tr key={p.moduleName} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4 text-slate-500 font-medium">{(idx + 1).toString().padStart(2, '0')}</td>
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-900">{p.displayName}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">{p.tabUrl}</div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <Checkbox 
-                          checked={p.canAdd} 
-                          onCheckedChange={() => handleToggle(p.moduleName, 'canAdd')}
-                          className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                        />
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <Checkbox 
-                          checked={p.canEdit} 
-                          onCheckedChange={() => handleToggle(p.moduleName, 'canEdit')}
-                          className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                        />
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <Checkbox 
-                          checked={p.canDelete} 
-                          onCheckedChange={() => handleToggle(p.moduleName, 'canDelete')}
-                          className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                        />
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <Checkbox 
-                          checked={p.canView} 
-                          onCheckedChange={() => handleToggle(p.moduleName, 'canView')}
-                          className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                        />
-                      </td>
-                      <td className="px-6 py-4 text-center bg-slate-50/30">
-                        <Checkbox 
-                          checked={p.canAdd && p.canEdit && p.canDelete && p.canView} 
-                          onCheckedChange={(checked) => handleToggleAll(p.moduleName, !!checked)}
-                          className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-orange data-[state=checked]:border-brand-orange"
-                        />
-                      </td>
-                    </tr>
+                  {PERMISSION_GROUPS.map((group) => (
+                    <React.Fragment key={group.name}>
+                      <tr className="bg-slate-50/80">
+                        <td colSpan={7} className="px-6 py-3">
+                          <div className="flex items-center gap-2">
+                            <group.icon className="w-4 h-4 text-brand-teal" />
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-700">{group.name}</span>
+                          </div>
+                        </td>
+                      </tr>
+                      {group.modules.map((m, mIdx) => {
+                        const p = permissions.find(per => per.moduleName === m.moduleName) || { ...m, canAdd: false, canEdit: false, canDelete: false, canView: false }
+                        return (
+                          <tr key={m.moduleName} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-6 py-4 text-slate-500 font-medium">{(mIdx + 1).toString().padStart(2, '0')}</td>
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-slate-900">{p.displayName}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{p.tabUrl}</div>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <Checkbox 
+                                checked={p.canAdd} 
+                                onCheckedChange={() => handleToggle(p.moduleName, 'canAdd')}
+                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                              />
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <Checkbox 
+                                checked={p.canEdit} 
+                                onCheckedChange={() => handleToggle(p.moduleName, 'canEdit')}
+                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                              />
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <Checkbox 
+                                checked={p.canDelete} 
+                                onCheckedChange={() => handleToggle(p.moduleName, 'canDelete')}
+                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                              />
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <Checkbox 
+                                checked={p.canView} 
+                                onCheckedChange={() => handleToggle(p.moduleName, 'canView')}
+                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                              />
+                            </td>
+                            <td className="px-6 py-4 text-center bg-slate-50/30">
+                              <Checkbox 
+                                checked={p.canAdd && p.canEdit && p.canDelete && p.canView} 
+                                onCheckedChange={(checked) => handleToggleAll(p.moduleName, !!checked)}
+                                className="w-5 h-5 border-slate-300 data-[state=checked]:bg-brand-orange data-[state=checked]:border-brand-orange"
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
