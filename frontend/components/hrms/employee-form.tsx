@@ -313,7 +313,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
       {/* Professional Details Section */}
       <div className="space-y-6 pt-6 max-w-4xl">
         <div className="flex items-center gap-4">
-          <Label className="w-32 text-gray-500 font-medium">Employee ID:</Label>
+          <Label className="w-44 text-left font-medium text-gray-700">Employee ID:</Label>
           <div className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-600 font-mono text-sm">
             {formData.employeeId || 'System Generated'}
           </div>
@@ -354,8 +354,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
         {/* Working Hours */}
         <div className="flex items-center gap-4">
-          <Label className="w-44 text-right pr-4 font-medium text-gray-700">
-            <span className="text-red-500 mr-2 text-lg font-bold">*</span>Working Hours:
+          <Label className="w-44 text-left font-medium text-gray-700">
+            Working Hours{<span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
           </Label>
           <div className="flex items-center gap-4 flex-1 max-w-[400px]">
             <Input type="time" value={formData.startTime} onChange={(e) => handleChange('startTime', e.target.value)} />
@@ -366,8 +366,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
         {/* Profile Photo */}
         <div className="flex items-start gap-4">
-          <Label className="w-44 text-right pr-4 font-medium text-gray-700 pt-3">
-            <span className="text-red-500 mr-2 text-lg font-bold">*</span>Profile Photo:
+          <Label className="w-44 text-left font-medium text-gray-700 pt-3">
+            Profile Photo{<span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
           </Label>
           <div 
             onClick={triggerFileUpload}
@@ -443,9 +443,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 function FormField({ label, id, required, value, onChange, placeholder, type = 'text', className = "", rightElement }: any) {
   return (
     <div className={`flex items-center gap-4 ${className}`}>
-      <Label htmlFor={id} className="w-44 text-right pr-2 font-medium text-gray-700 whitespace-nowrap">
-        {required && <span className="text-red-500 mr-2 text-lg font-bold">*</span>}
-        {label}:
+      <Label htmlFor={id} className="w-44 text-left font-medium text-gray-700 whitespace-nowrap">
+        {label}{required && <span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
       </Label>
       <div className="relative flex-1">
         <Input
@@ -466,9 +465,8 @@ function FormField({ label, id, required, value, onChange, placeholder, type = '
 function FormSelect({ label, id, required, value, onValueChange, options, placeholder, className = "" }: any) {
   return (
     <div className={`flex items-center gap-4 ${className}`}>
-      <Label htmlFor={id} className="w-44 text-right pr-2 font-medium text-gray-700 whitespace-nowrap">
-        {required && <span className="text-red-500 mr-2 text-lg font-bold">*</span>}
-        {label}:
+      <Label htmlFor={id} className="w-44 text-left font-medium text-gray-700 whitespace-nowrap">
+        {label}{required && <span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
       </Label>
       <Select 
         key={`${id}-${value}-${options.length}`} 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   Download, 
   Clock, 
@@ -94,35 +94,80 @@ export default function EmployeeAttendanceListPage() {
   };
 
   const getCalculatedStatus = (record: any) => {
-    return record.status === "Leave" ? "Leave" : (record.checkIn && record.checkIn !== "--" ? "Present" : "Absent");
+    return record.status === "Leave" ? "Leave" : (record.checkIn && record.checkIn !== "--:--" && record.checkIn !== "--" ? "Present" : "Absent");
   };
 
-  const filteredAttendance = attendance.filter(a => {
-    const emp = employees.find(e => e.id === a.employeeId || e.employeeId === a.employeeId);
-    const matchesSearch = a.employeeName?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const calcStatus = getCalculatedStatus(a);
-    const matchesStatus = selectedStatus === "all" || calcStatus.toLowerCase() === selectedStatus.toLowerCase();
-    
-    const matchesDept = selectedDept === "all" || emp?.department?.toLowerCase() === selectedDept.toLowerCase();
-    
-    let matchesDate = true;
-    const recordDate = dayjs(a.date);
+  const filteredAttendance = useMemo(() => {
+    let baseRecords = [...attendance];
     const todayStr = dayjs().format('YYYY-MM-DD');
-    const yesterdayStr = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
     
+    // Determine the range of dates to synthesize based on filter
+    let datesToSynthesize: string[] = [];
     if (dateFilter === "today") {
-      matchesDate = a.date === todayStr;
+      datesToSynthesize = [todayStr];
     } else if (dateFilter === "yesterday") {
-      matchesDate = a.date === yesterdayStr;
+      datesToSynthesize = [dayjs().subtract(1, 'day').format('YYYY-MM-DD')];
     } else if (dateFilter === "last_7_days") {
-      matchesDate = recordDate.valueOf() >= dayjs().subtract(7, 'day').startOf('day').valueOf();
+      for (let i = 0; i < 7; i++) {
+        datesToSynthesize.push(dayjs().subtract(i, 'day').format('YYYY-MM-DD'));
+      }
     } else if (dateFilter === "this_month") {
-      matchesDate = recordDate.month() === dayjs().month() && recordDate.year() === dayjs().year();
+      const daysInMonth = dayjs().daysInMonth();
+      for (let i = 1; i <= daysInMonth; i++) {
+        const d = dayjs().date(i).format('YYYY-MM-DD');
+        if (dayjs(d).isAfter(dayjs())) break; // Don't synthesize future dates
+        datesToSynthesize.push(d);
+      }
     }
 
-    return matchesSearch && matchesStatus && matchesDept && matchesDate;
-  });
+    // Synthesize missing records for each employee and each date in the range
+    datesToSynthesize.forEach(dateStr => {
+      employees.forEach(emp => {
+        // We use employeeId for the check because some records might use emp.id or emp.employeeId
+        const existing = baseRecords.find(a => (a.employeeId === emp.id || a.employeeId === emp.employeeId) && a.date === dateStr);
+        if (!existing) {
+          baseRecords.push({
+            id: `synthesized-${emp.id}-${dateStr}`,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            date: dateStr,
+            checkIn: "--:--",
+            checkOut: "--:--",
+            workHours: "--",
+            status: "Absent",
+            punches: [],
+            breaks: []
+          });
+        }
+      });
+    });
+
+    return baseRecords.filter(a => {
+      const emp = employees.find(e => e.id === a.employeeId || e.employeeId === a.employeeId);
+      const matchesSearch = a.employeeName?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const calcStatus = getCalculatedStatus(a);
+      const matchesStatus = selectedStatus === "all" || calcStatus.toLowerCase() === selectedStatus.toLowerCase();
+      
+      const matchesDept = selectedDept === "all" || emp?.department?.toLowerCase() === selectedDept.toLowerCase();
+      
+      let matchesDate = true;
+      const recordDate = dayjs(a.date);
+      const yesterdayStr = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
+      
+      if (dateFilter === "today") {
+        matchesDate = a.date === todayStr;
+      } else if (dateFilter === "yesterday") {
+        matchesDate = a.date === yesterdayStr;
+      } else if (dateFilter === "last_7_days") {
+        matchesDate = recordDate.valueOf() >= dayjs().subtract(7, 'day').startOf('day').valueOf();
+      } else if (dateFilter === "this_month") {
+        matchesDate = recordDate.month() === dayjs().month() && recordDate.year() === dayjs().year();
+      }
+
+      return matchesSearch && matchesStatus && matchesDept && matchesDate;
+    }).sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf() || a.employeeName?.localeCompare(b.employeeName));
+  }, [attendance, employees, dateFilter, selectedStatus, selectedDept, searchQuery]);
 
   const CalendarView = () => {
     const daysInMonth = currentMonth.daysInMonth();
