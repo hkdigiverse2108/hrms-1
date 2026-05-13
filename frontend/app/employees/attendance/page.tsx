@@ -18,6 +18,7 @@ import {
   FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -36,7 +37,11 @@ export default function EmployeeAttendanceListPage() {
   const [selectedDept, setSelectedDept] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [dateFilter, setDateFilter] = useState("today");
+  const [specificDate, setSpecificDate] = useState("");
   const [currentMonth, setCurrentMonth] = useState(dayjs());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [modalSearchQuery, setModalSearchQuery] = useState("");
 
   // Modals
   const [isDailyModalOpen, setIsDailyModalOpen] = useState(false);
@@ -103,7 +108,9 @@ export default function EmployeeAttendanceListPage() {
     
     // Determine the range of dates to synthesize based on filter
     let datesToSynthesize: string[] = [];
-    if (dateFilter === "today") {
+    if (specificDate) {
+      datesToSynthesize = [dayjs(specificDate).format('YYYY-MM-DD')];
+    } else if (dateFilter === "today") {
       datesToSynthesize = [todayStr];
     } else if (dateFilter === "yesterday") {
       datesToSynthesize = [dayjs().subtract(1, 'day').format('YYYY-MM-DD')];
@@ -155,7 +162,9 @@ export default function EmployeeAttendanceListPage() {
       const recordDate = dayjs(a.date);
       const yesterdayStr = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
       
-      if (dateFilter === "today") {
+      if (specificDate) {
+        matchesDate = a.date === dayjs(specificDate).format('YYYY-MM-DD');
+      } else if (dateFilter === "today") {
         matchesDate = a.date === todayStr;
       } else if (dateFilter === "yesterday") {
         matchesDate = a.date === yesterdayStr;
@@ -167,7 +176,12 @@ export default function EmployeeAttendanceListPage() {
 
       return matchesSearch && matchesStatus && matchesDept && matchesDate;
     }).sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf() || a.employeeName?.localeCompare(b.employeeName));
-  }, [attendance, employees, dateFilter, selectedStatus, selectedDept, searchQuery]);
+  }, [attendance, employees, dateFilter, specificDate, selectedStatus, selectedDept, searchQuery]);
+
+  const paginatedAttendance = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredAttendance.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredAttendance, currentPage, itemsPerPage]);
 
   const CalendarView = () => {
     const daysInMonth = currentMonth.daysInMonth();
@@ -219,9 +233,42 @@ export default function EmployeeAttendanceListPage() {
         <div className="grid grid-cols-7">
           {calendarDays.map((d, i) => {
             const dayAttendance = attendance.filter(a => a.date === d.date);
-            const present = dayAttendance.filter(a => a.status?.toLowerCase() === 'present' || a.status?.toLowerCase() === 'active' || a.status?.toLowerCase() === 'logged').length;
-            const late = dayAttendance.filter(a => a.status?.toLowerCase() === 'late' || a.status?.toLowerCase() === 'late entry').length;
-            const absent = dayAttendance.filter(a => a.status?.toLowerCase() === 'absent').length;
+            
+            const dayStats = (() => {
+              let p = 0, l = 0, lv = 0;
+              dayAttendance.forEach(record => {
+                const status = getCalculatedStatus(record);
+                if (status === "Leave") {
+                  lv++;
+                } else if (status === "Present") {
+                  // Check if late
+                  const recoveryReq = recoveryRequests.find(req => 
+                    req.date === record.date && 
+                    (req.employee_id === record.employeeId || req.employee_id === record.employeeId) && 
+                    req.status === 'approved'
+                  );
+                  
+                  const isLate = (() => {
+                    if (recoveryReq) return false;
+                    if (!record.checkIn || record.checkIn === "--") return false;
+                    const officeStartTime = sysSettings?.officeStartTime || "09:30";
+                    const bufferMins = sysSettings?.lateBufferMins || 10;
+                    const [h, m] = record.checkIn.split(':').map(Number);
+                    const [sh, sm] = officeStartTime.split(':').map(Number);
+                    return (h * 60 + m) > (sh * 60 + sm + bufferMins);
+                  })();
+                  
+                  if (isLate) l++;
+                  else p++;
+                }
+              });
+              
+              const totalLogged = p + l + lv;
+              const a = Math.max(0, employees.length - totalLogged);
+              
+              return { present: p, late: l, absent: a, leave: lv };
+            })();
+
             const isSunday = dayjs(d.date).day() === 0;
 
             return (
@@ -235,7 +282,7 @@ export default function EmployeeAttendanceListPage() {
               >
                 <div className="flex justify-between items-start mb-1">
                   <span className={`text-xs font-bold ${!d.currentMonth ? 'text-slate-300' : 'text-slate-600'}`}>{d.day}</span>
-                  {d.currentMonth && !isSunday && <span className="text-[9px] font-medium text-slate-400">48 Total</span>}
+                  {d.currentMonth && !isSunday && <span className="text-[9px] font-medium text-slate-400">{employees.length} Total</span>}
                 </div>
 
                 {isSunday ? (
@@ -246,15 +293,15 @@ export default function EmployeeAttendanceListPage() {
                   <div className="space-y-1 mt-auto">
                     <div className="flex items-center justify-between px-2 py-0.5 bg-[#ecfdf5] text-[#10b981] text-[9px] font-bold rounded border border-[#d1fae5]">
                       <span>Present</span>
-                      <span>{present}</span>
+                      <span>{dayStats.present}</span>
                     </div>
                     <div className="flex items-center justify-between px-2 py-0.5 bg-[#fffbeb] text-[#f59e0b] text-[9px] font-bold rounded border border-[#fef3c7]">
                       <span>Late</span>
-                      <span>{late}</span>
+                      <span>{dayStats.late}</span>
                     </div>
                     <div className="flex items-center justify-between px-2 py-0.5 bg-[#fef2f2] text-[#ef4444] text-[9px] font-bold rounded border border-[#fee2e2]">
                       <span>Absent</span>
-                      <span>{absent}</span>
+                      <span>{dayStats.absent}</span>
                     </div>
                   </div>
                 )}
@@ -266,12 +313,47 @@ export default function EmployeeAttendanceListPage() {
     );
   };
 
-  const dailySummary = selectedDay ? {
-    present: attendance.filter(a => a.date === selectedDay && (a.status?.toLowerCase() === 'present' || a.status?.toLowerCase() === 'active' || a.status?.toLowerCase() === 'logged')).length,
-    late: attendance.filter(a => a.date === selectedDay && (a.status?.toLowerCase() === 'late' || a.status?.toLowerCase() === 'late entry')).length,
-    absent: attendance.filter(a => a.date === selectedDay && a.status?.toLowerCase() === 'absent').length,
-    records: attendance.filter(a => a.date === selectedDay)
-  } : null;
+  const dailySummary = useMemo(() => {
+    if (!selectedDay) return null;
+    
+    const dayAttendance = attendance.filter(a => a.date === selectedDay);
+    const dayEmployees = employees.map(emp => {
+      const existing = dayAttendance.find(a => a.employeeId === emp.id || a.employeeId === emp.employeeId);
+      if (existing) return existing;
+      
+      return {
+        id: `synthesized-${emp.id}-${selectedDay}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        date: selectedDay,
+        checkIn: "--:--",
+        checkOut: "--:--",
+        status: "Absent"
+      };
+    });
+
+    const filteredRecords = dayEmployees.filter(r => 
+      r.employeeName?.toLowerCase().includes(modalSearchQuery.toLowerCase())
+    );
+
+    return {
+      present: dayAttendance.filter(a => getCalculatedStatus(a) === "Present").length,
+      late: dayAttendance.filter(a => {
+        if (getCalculatedStatus(a) !== "Present") return false;
+        const recoveryReq = recoveryRequests.find(req => 
+          req.date === a.date && (req.employee_id === a.employeeId || req.employee_id === a.employeeId) && req.status === 'approved'
+        );
+        if (recoveryReq) return false;
+        const officeStartTime = sysSettings?.officeStartTime || "09:30";
+        const bufferMins = sysSettings?.lateBufferMins || 10;
+        const [h, m] = (a.checkIn || "00:00").split(':').map(Number);
+        const [sh, sm] = officeStartTime.split(':').map(Number);
+        return (h * 60 + m) > (sh * 60 + sm + bufferMins);
+      }).length,
+      absent: dayEmployees.filter(a => a.status === "Absent").length,
+      records: filteredRecords
+    };
+  }, [selectedDay, attendance, employees, modalSearchQuery, recoveryRequests, sysSettings]);
 
   return (
     <div className="space-y-6">
@@ -279,7 +361,7 @@ export default function EmployeeAttendanceListPage() {
         title="Employee Attendance List" 
         description="Manage your team members and their account permissions here."
       >
-        <Button variant="outline" className="h-9 shadow-sm" onClick={() => exportToCSV(attendance, 'employee_attendance')}>
+        <Button variant="outline" className="h-9 shadow-sm" onClick={() => exportToCSV(filteredAttendance, 'employee_attendance')}>
           <Download className="w-4 h-4 mr-2" />
           Export
         </Button>
@@ -287,7 +369,22 @@ export default function EmployeeAttendanceListPage() {
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
-          <Select value={dateFilter} onValueChange={setDateFilter}>
+          <div className="flex items-center gap-2">
+            <Input 
+              type="date" 
+              value={specificDate} 
+              onChange={(e) => {
+                setSpecificDate(e.target.value);
+                if (e.target.value) setDateFilter("all");
+              }}
+              className="w-[150px] h-9 bg-white border-border shadow-sm text-xs"
+            />
+          </div>
+
+          <Select value={dateFilter} onValueChange={(v) => {
+            setDateFilter(v);
+            setSpecificDate("");
+          }}>
             <SelectTrigger className="w-[150px] h-9">
               <SelectValue placeholder="Time Period" />
             </SelectTrigger>
@@ -385,7 +482,7 @@ export default function EmployeeAttendanceListPage() {
                     <td colSpan={13} className="px-6 py-20 text-center text-slate-400 italic">No attendance records found.</td>
                   </tr>
                 ) : (
-                  filteredAttendance.map((record, idx) => {
+                  paginatedAttendance.map((record, idx) => {
                     const totalBreakMinutes = (record.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
                     const breakStr = totalBreakMinutes > 0 ? (totalBreakMinutes >= 60 ? `${Math.floor(totalBreakMinutes/60)}H ${totalBreakMinutes%60}Min` : `${totalBreakMinutes}Min`) : "-";
                     
@@ -504,7 +601,14 @@ export default function EmployeeAttendanceListPage() {
               </tbody>
             </table>
           </div>
-          <TablePagination totalItems={filteredAttendance.length} itemsPerPage={10} currentPage={1} onPageChange={() => {}} />
+          <TablePagination 
+            totalItems={filteredAttendance.length} 
+            itemsPerPage={itemsPerPage} 
+            currentPage={currentPage} 
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+            itemName="records"
+          />
         </div>
       ) : (
         <CalendarView />
@@ -547,6 +651,8 @@ export default function EmployeeAttendanceListPage() {
               <input 
                 type="text" 
                 placeholder="Search employees..." 
+                value={modalSearchQuery}
+                onChange={(e) => setModalSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/20 transition-all"
               />
             </div>
@@ -582,7 +688,10 @@ export default function EmployeeAttendanceListPage() {
           </div>
 
           <div className="p-4 bg-slate-50 border-t border-border">
-            <Button className="w-full bg-[#0d9488] hover:bg-[#0f766e] text-white font-bold h-11 rounded-xl shadow-md transition-all active:scale-[0.98]">
+            <Button 
+              className="w-full bg-[#0d9488] hover:bg-[#0f766e] text-white font-bold h-11 rounded-xl shadow-md transition-all active:scale-[0.98]"
+              onClick={() => exportToCSV(dailySummary?.records || [], `attendance_report_${selectedDay}`)}
+            >
               <Download className="w-4 h-4 mr-2" /> Export Daily Report
             </Button>
           </div>

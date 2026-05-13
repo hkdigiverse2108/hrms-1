@@ -996,7 +996,7 @@ class EmployeeDocumentBase(BaseModel):
     employeeId: str
     employeeName: str
     documentName: str
-    category: str # ID Proof, Education, Experience, Other
+    category: Optional[str] = "Other"
     fileName: str
     fileUrl: str
     uploadDate: str

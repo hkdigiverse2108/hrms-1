@@ -54,6 +54,7 @@ export default function RemarksPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState("This Month");
+  const [specificDate, setSpecificDate] = useState("");
   const { user } = useUser();
 
   const canManageRemarks = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'hr';
@@ -63,6 +64,7 @@ export default function RemarksPage() {
   const [penaltyTypes, setPenaltyTypes] = useState<any[]>([]);
   const [manageTypesOpen, setManageTypesOpen] = useState(false);
   const [newType, setNewType] = useState({ name: "", amount: 0 });
+  const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const getPenaltyAmount = (type: string) => {
     const p = penaltyTypes.find(item => item.name === type);
@@ -108,17 +110,30 @@ export default function RemarksPage() {
   const handleAddType = async () => {
     if (!newType.name || newType.amount <= 0) return;
     try {
-      const res = await fetch(`${API_URL}/penalty-types`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newType)
-      });
-      if (res.ok) {
-        setNewType({ name: "", amount: 0 });
-        fetchData();
+      if (editingTypeId) {
+        const res = await fetch(`${API_URL}/penalty-types/${editingTypeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newType)
+        });
+        if (res.ok) {
+          setNewType({ name: "", amount: 0 });
+          setEditingTypeId(null);
+          fetchData();
+        }
+      } else {
+        const res = await fetch(`${API_URL}/penalty-types`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newType)
+        });
+        if (res.ok) {
+          setNewType({ name: "", amount: 0 });
+          fetchData();
+        }
       }
     } catch (err) {
-      console.error("Error adding penalty type:", err);
+      console.error("Error saving penalty type:", err);
     }
   };
 
@@ -231,6 +246,12 @@ export default function RemarksPage() {
     } else if (dateFilter === "This Month") {
        const currentMonth = new Date().toLocaleString('default', { month: 'short' });
        matchesDate = r.date?.includes(currentMonth);
+    } else if (dateFilter === "Specific Date" && specificDate) {
+       // Convert input date (YYYY-MM-DD) to the format stored in remarks (e.g. "May 13, 2026")
+       const d = new Date(specificDate);
+       // Handle timezone offset to ensure it doesn't jump a day back
+       const customDate = new Date(d.getTime() + Math.abs(d.getTimezoneOffset() * 60000)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+       matchesDate = r.date === customDate;
     }
     
     return matchesSearch && matchesType && matchesDate && matchesEmployee;
@@ -504,9 +525,21 @@ export default function RemarksPage() {
                   <SelectItem value="All Time">All Time</SelectItem>
                   <SelectItem value="Today">Today</SelectItem>
                   <SelectItem value="This Month">This Month</SelectItem>
+                  <SelectItem value="Specific Date">Specific Date...</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {dateFilter === "Specific Date" && (
+              <div className="w-full sm:w-auto animate-in fade-in slide-in-from-left-2 duration-200">
+                <Input 
+                  type="date" 
+                  value={specificDate} 
+                  onChange={(e) => { setSpecificDate(e.target.value); setCurrentPage(1); }}
+                  className="bg-white border-border shadow-sm h-10 min-w-[140px]"
+                />
+              </div>
+            )}
           </div>
 
           <Button 
@@ -655,7 +688,7 @@ export default function RemarksPage() {
           
           <div className="space-y-6 py-4">
             <div className="bg-gray-50/50 p-4 rounded-lg border border-border space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Add New Violation Type</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{editingTypeId ? "Update Violation Type" : "Add New Violation Type"}</h4>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Input 
                   placeholder="Violation Name" 
@@ -671,9 +704,14 @@ export default function RemarksPage() {
                   className="bg-white w-full sm:w-[120px]"
                 />
                 <Button onClick={handleAddType} className="bg-brand-teal hover:bg-brand-teal-light text-white shrink-0">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add
+                  {editingTypeId ? <Edit2 className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                  {editingTypeId ? 'Update' : 'Add'}
                 </Button>
+                {editingTypeId && (
+                  <Button variant="ghost" onClick={() => { setNewType({ name: "", amount: 0 }); setEditingTypeId(null); }} className="shrink-0 text-muted-foreground">
+                    Cancel
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -693,14 +731,27 @@ export default function RemarksPage() {
                       <td className="px-4 py-3 text-right font-bold text-red-600">₹{type.amount}</td>
                       <td className="px-4 py-3 text-right">
                         {type.id && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7 text-muted-foreground hover:text-red-600"
-                            onClick={() => handleDeleteType(type.id)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-muted-foreground hover:text-brand-teal"
+                              onClick={() => {
+                                setNewType({ name: type.name, amount: type.amount });
+                                setEditingTypeId(type.id);
+                              }}
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-muted-foreground hover:text-red-600"
+                              onClick={() => handleDeleteType(type.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
                         )}
                       </td>
                     </tr>
