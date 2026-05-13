@@ -31,7 +31,7 @@ import { exportToCSV } from "@/lib/export";
 import { toast } from 'sonner'
  
 export default function AttendancePage() {
-  const { user } = useUserContext();
+  const { user, getISTNow } = useUserContext();
   const isAdmin = user?.role?.toLowerCase() === 'admin';
   const isHR = user?.role?.toLowerCase() === 'hr';
   const canManageAttendance = isAdmin || isHR;
@@ -53,8 +53,8 @@ export default function AttendancePage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState({
     employeeId: "",
-    month: dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"})).format("MMMM"),
-    year: dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"})).format("YYYY")
+    month: dayjs(getISTNow()).format("MMMM"),
+    year: dayjs(getISTNow()).format("YYYY")
   });
   const [editForm, setEditForm] = useState<any>({
     id: "",
@@ -66,13 +66,13 @@ export default function AttendancePage() {
   const [createForm, setCreateForm] = useState<any>({
     employeeId: "",
     employeeName: "",
-    date: dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"})).format("YYYY-MM-DD"),
+    date: dayjs(getISTNow()).format("YYYY-MM-DD"),
     checkIn: "09:30:00",
     checkOut: "18:30:00",
     status: "Logged"
   });
   const [recoveryForm, setRecoveryForm] = useState({
-    date: dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"})).format("YYYY-MM-DD"),
+    date: dayjs(getISTNow()).format("YYYY-MM-DD"),
     type: "break", // "break" or "punch-out"
     recordedBreakIn: "13:00:00",
     actualBreakOut: "14:00:00",
@@ -96,6 +96,26 @@ export default function AttendancePage() {
       fetchRecoveryRequests();
     }
   }, [user]);
+
+  // Update form defaults when time synchronization is complete
+  useEffect(() => {
+    if (getISTNow().getTime() !== new Date().getTime()) {
+      const now = getISTNow();
+      setBulkForm(prev => ({
+        ...prev,
+        month: dayjs(now).format("MMMM"),
+        year: dayjs(now).format("YYYY")
+      }));
+      setCreateForm(prev => ({
+        ...prev,
+        date: dayjs(now).format("YYYY-MM-DD")
+      }));
+      setRecoveryForm(prev => ({
+        ...prev,
+        date: dayjs(now).format("YYYY-MM-DD")
+      }));
+    }
+  }, [getISTNow]);
 
   const fetchRecoveryRequests = async () => {
     try {
@@ -401,12 +421,12 @@ export default function AttendancePage() {
     }
   };
 
-  const currentRecord = attendance.find(a => a.date === dayjs().format("YYYY-MM-DD"));
+  const currentRecord = attendance.find(a => a.date === dayjs(getISTNow()).format("YYYY-MM-DD"));
  
   const CalendarWidget = () => (
     <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-foreground text-lg">{dayjs().format("MMMM YYYY")}</h3>
+        <h3 className="font-bold text-foreground text-lg">{dayjs(getISTNow()).format("MMMM YYYY")}</h3>
         <div className="bg-brand-light/50 text-brand-teal text-xs font-medium px-2 py-1 rounded-md">
           {stats.presentDays} present
         </div>
@@ -417,8 +437,9 @@ export default function AttendancePage() {
         ))}
         {Array.from({ length: 31 }).map((_, i) => {
           const dayNum = i + 1;
-          const isToday = dayNum === dayjs().date();
-          const hasRecord = attendance.some(a => dayjs(a.date).date() === dayNum && dayjs(a.date).month() === dayjs().month());
+          const istNow = dayjs(getISTNow());
+          const isToday = dayNum === istNow.date();
+          const hasRecord = attendance.some(a => dayjs(a.date).date() === dayNum && dayjs(a.date).month() === istNow.month());
           
           return (
             <div 

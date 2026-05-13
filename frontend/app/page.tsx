@@ -47,13 +47,13 @@ import { AddEventDialog } from "@/components/dashboard/AddEventDialog";
 import { ViewAllEventsDialog } from "@/components/dashboard/ViewAllEventsDialog";
  
 export default function DashboardPage() {
-  const { user, isLoading } = useUserContext();
+  const { user, isLoading, getISTNow, isTimeSynced } = useUserContext();
   const [attendanceStatus, setAttendanceStatus] = useState<{isPunchedIn: boolean, record: any} | null>(null);
   const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
   const [isPunching, setIsPunching] = useState(false);
   const [workTime, setWorkTime] = useState("00:00:00");
   const [totalBreakTime, setTotalBreakTime] = useState("0m");
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState(getISTNow());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
 
@@ -84,20 +84,22 @@ export default function DashboardPage() {
 
  
   useEffect(() => {
+    // Update immediately when getISTNow changes (e.g. after sync)
+    setCurrentTime(getISTNow());
+    
     const timer = setInterval(() => {
-      // Show time in IST regardless of device time
-      const istTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
-      setCurrentTime(istTime);
+      // Show time in IST regardless of device time using synchronized offset
+      setCurrentTime(getISTNow());
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [getISTNow]);
  
   useEffect(() => {
     let interval: any;
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.checkIn) {
       interval = setInterval(() => {
-        // Use IST for current time in calculations
-        const istNow = dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+        // Use IST for current time in calculations using synchronized offset
+        const istNow = dayjs(getISTNow());
         const dateStr = istNow.format('YYYY-MM-DD');
         // Support both 12h and 24h formats
         const checkIn = dayjs(`${dateStr} ${attendanceStatus.record.checkIn}`, ['YYYY-MM-DD hh:mm A', 'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD HH:mm']);
@@ -133,7 +135,7 @@ export default function DashboardPage() {
       }
 
       return () => clearInterval(interval);
-    }, [attendanceStatus]);
+    }, [attendanceStatus, getISTNow]);
 
   const [allTimeHours, setAllTimeHours] = useState("0h 0m");
 
@@ -276,6 +278,8 @@ export default function DashboardPage() {
           allTimeHours={allTimeHours}
           recentAttendance={recentAttendance}
           currentTime={currentTime}
+          isTimeSynced={isTimeSynced}
+          getISTNow={getISTNow}
           punchCardRef={punchCardRef}
         />
       )}
@@ -453,6 +457,8 @@ function EmployeeView({
   allTimeHours,
   recentAttendance,
   currentTime,
+  isTimeSynced,
+  getISTNow,
   punchCardRef
 }: { 
   user: any, 
@@ -464,6 +470,8 @@ function EmployeeView({
   allTimeHours: string,
   recentAttendance: any[],
   currentTime: Date,
+  isTimeSynced: boolean,
+  getISTNow: () => Date,
   punchCardRef: React.RefObject<HTMLDivElement>
 }) {
   const userName = user?.name || "Guest";
@@ -482,15 +490,15 @@ function EmployeeView({
             <div className="flex justify-between items-start mb-8">
               <div className="flex flex-col gap-4">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-light/50 border border-brand-teal/20 rounded-full w-fit">
-                   {currentTime.getHours() < 12 ? (
+                   {getISTNow().getHours() < 12 ? (
                      <Sun className="w-4 h-4 text-brand-teal" />
-                   ) : currentTime.getHours() < 17 ? (
+                   ) : getISTNow().getHours() < 17 ? (
                      <CloudSun className="w-4 h-4 text-brand-teal" />
                    ) : (
                      <Moon className="w-4 h-4 text-brand-teal" />
                    )}
                    <span className="text-[11px] font-bold text-brand-teal">
-                     {currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 17 ? "Good afternoon" : "Good evening"}, {firstName}
+                     {getISTNow().getHours() < 12 ? "Good morning" : getISTNow().getHours() < 17 ? "Good afternoon" : "Good evening"}, {firstName}
                    </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -522,11 +530,19 @@ function EmployeeView({
  
             <div className="bg-[#EAF7F6]/40 rounded-2xl p-10 mb-8 text-center border border-brand-teal/10">
               <span className="text-xs text-gray-500 font-bold uppercase tracking-widest block mb-1">Current Time</span>
-              <div className="text-5xl font-black text-[#111827] tracking-tighter mb-2">
-                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+              <div className="text-5xl font-black text-[#111827] tracking-tighter mb-2 min-h-[48px] flex items-center justify-center">
+                {!isTimeSynced ? (
+                  <span className="text-brand-teal/20 animate-pulse">--:-- --</span>
+                ) : (
+                  getISTNow().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+                )}
               </div>
-              <div className="text-sm text-gray-500 font-medium">
-                {currentTime.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              <div className="text-sm text-gray-500 font-medium min-h-[20px]">
+                {!isTimeSynced ? (
+                  <span className="text-brand-teal/20 animate-pulse italic">Synchronizing IST...</span>
+                ) : (
+                  dayjs(getISTNow()).format('dddd, MMMM D, YYYY')
+                )}
               </div>
             </div>
  

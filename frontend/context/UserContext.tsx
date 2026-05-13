@@ -1,6 +1,6 @@
 "use client";
  
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '@/hooks/useUser';
 import { API_URL } from '@/lib/config';
  
@@ -10,6 +10,9 @@ interface UserContextType {
   login: (userData: User) => void;
   updateUser: (updates: Partial<User>) => void;
   logout: () => void;
+  getISTNow: () => Date;
+  timeAnchor: { real: number; mono: number };
+  isTimeSynced: boolean;
 }
  
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -17,6 +20,36 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [timeAnchor, setTimeAnchor] = useState({ real: 0, mono: 0 });
+  const [isTimeSynced, setIsTimeSynced] = useState(false);
+ 
+  useEffect(() => {
+    const syncTime = async () => {
+      try {
+        const start = performance.now();
+        const res = await fetch(`${API_URL}/time`);
+        if (res.ok) {
+          const data = await res.json();
+          const end = performance.now();
+          const latency = (end - start) / 2;
+          const realTime = new Date(data.datetime).getTime() + latency;
+          setTimeAnchor({ real: realTime, mono: end });
+          setIsTimeSynced(true);
+        }
+      } catch (err) {
+        console.error("Error syncing time:", err);
+      }
+    };
+    syncTime();
+    const interval = setInterval(syncTime, 300000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getISTNow = useCallback(() => {
+    if (timeAnchor.real === 0) return new Date();
+    const elapsed = performance.now() - timeAnchor.mono;
+    return new Date(timeAnchor.real + elapsed);
+  }, [timeAnchor]);
  
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -79,7 +112,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
  
   return (
-    <UserContext.Provider value={{ user, isLoading, login, updateUser, logout }}>
+    <UserContext.Provider value={{ user, isLoading, login, updateUser, logout, getISTNow, timeAnchor, isTimeSynced }}>
       {children}
     </UserContext.Provider>
   );

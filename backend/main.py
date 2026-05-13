@@ -58,6 +58,15 @@ async def login(login_data: schemas.LoginRequest, db=Depends(get_db)):
     return {"message": "Login successful", "user": user}
 
 # Employee Endpoints
+@app.get("/time")
+async def get_system_time():
+    now = crud.get_now()
+    return {
+        "datetime": now.isoformat(),
+        "timestamp": now.timestamp(),
+        "timezone": "Asia/Kolkata"
+    }
+
 @app.get("/employees", response_model=List[schemas.Employee])
 async def read_employees(skip: int = 0, limit: int = 100, db=Depends(get_db)):
     return await crud.get_employees(db, skip=skip, limit=limit)

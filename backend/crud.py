@@ -5,10 +5,36 @@ import schemas
 import calendar
 import pytz
 
+import time
+import urllib.request
+from datetime import datetime, timedelta, timezone
+
 IST = pytz.timezone('Asia/Kolkata')
+_real_time_anchor = None
+_mono_anchor = None
 
 def get_now():
-    return datetime.now(IST)
+    global _real_time_anchor, _mono_anchor
+    
+    # Refresh every 10 minutes to prevent drift, or if first time
+    if _real_time_anchor is None or (time.monotonic() - _mono_anchor) > 600:
+        try:
+            # Fetch real time from a reliable source (Google)
+            req = urllib.request.Request('http://www.google.com', method='HEAD')
+            with urllib.request.urlopen(req, timeout=2) as response:
+                date_str = response.headers.get('Date')
+                # Format: Wed, 13 May 2026 07:37:30 GMT
+                dt = datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %Z')
+                _real_time_anchor = dt.replace(tzinfo=timezone.utc).astimezone(IST)
+                _mono_anchor = time.monotonic()
+        except:
+            # Fallback to system time if internet is unavailable
+            if _real_time_anchor is None:
+                return datetime.now(IST)
+    
+    # Calculate current real time based on elapsed monotonic time
+    elapsed = time.monotonic() - _mono_anchor
+    return _real_time_anchor + timedelta(seconds=elapsed)
 
 def parse_datetime(date_str, time_str):
     if not time_str:
