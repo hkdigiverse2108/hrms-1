@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Calendar, Clock, Video, MapPin, User, Plus, CheckCircle, XCircle, Download } from 'lucide-react'
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 
 
 interface Interview {

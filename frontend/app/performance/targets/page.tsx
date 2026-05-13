@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Plus, Target, CheckCircle, Clock, Loader2, Download } from 'lucide-react'
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 
 import { useApi } from '@/hooks/useApi'
 import { useUser } from '@/hooks/useUser'

@@ -26,7 +26,7 @@ import { TablePagination } from "@/components/common/TablePagination";
 import { PageHeader } from "@/components/common/PageHeader";
 import dayjs from "dayjs";
 import { API_URL } from "@/lib/config";
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 
 export default function EmployeeAttendanceListPage() {
   const [view, setView] = useState<"list" | "calendar">("list");

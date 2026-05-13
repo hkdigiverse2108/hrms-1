@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Target, TrendingUp, Award, Download, Loader2, Users } from 'lucide-react'
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 
 import { useApi } from '@/hooks/useApi'
 import type { KPI } from '@/lib/types'

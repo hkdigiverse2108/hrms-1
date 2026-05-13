@@ -19,7 +19,7 @@ import {
 } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Download } from 'lucide-react'
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 
 
 const departmentData = [

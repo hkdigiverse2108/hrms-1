@@ -11,7 +11,7 @@ import {
   Download,
   Loader2
 } from "lucide-react";
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

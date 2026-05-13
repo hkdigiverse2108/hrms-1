@@ -25,7 +25,7 @@ import { MoreHorizontal, Eye, Calendar, Mail, FileText, CheckCircle, XCircle, Do
 import { useApi } from '@/hooks/useApi'
 import { Application } from '@/lib/types'
 import { API_URL } from '@/lib/config';
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 import { toast } from "sonner"
 
 

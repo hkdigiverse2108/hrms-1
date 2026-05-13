@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Plus, GraduationCap, Users, CheckCircle, MoreHorizontal, Eye, Pencil, Award, Loader2 } from 'lucide-react'
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 import { useApi } from '@/hooks/useApi'
 
 import type { Intern } from '@/lib/types'

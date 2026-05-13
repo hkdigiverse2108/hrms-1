@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 import { toast } from 'sonner'
  
 export default function AttendancePage() {

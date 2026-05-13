@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
 import { AlertTriangle, Clock, DollarSign, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { exportToCSV } from "@/lib/export";
+import { exportToCSV } from "@/lib/export-utils";
 
 
 const lateEmployees = [
