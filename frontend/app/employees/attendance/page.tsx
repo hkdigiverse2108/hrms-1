@@ -35,6 +35,7 @@ export default function EmployeeAttendanceListPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDept, setSelectedDept] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [dateFilter, setDateFilter] = useState("today");
   const [currentMonth, setCurrentMonth] = useState(dayjs());
 
   // Modals
@@ -43,6 +44,8 @@ export default function EmployeeAttendanceListPage() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [sysSettings, setSysSettings] = useState<any>(null);
+  const [recoveryRequests, setRecoveryRequests] = useState<any[]>([]);
 
   useEffect(() => {
     fetchData();
@@ -51,15 +54,19 @@ export default function EmployeeAttendanceListPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [attRes, empRes, deptRes] = await Promise.all([
+      const [attRes, empRes, deptRes, sysRes, recRes] = await Promise.all([
         fetch(`${API_URL}/attendance`),
         fetch(`${API_URL}/employees`),
-        fetch(`${API_URL}/departments`)
+        fetch(`${API_URL}/departments`),
+        fetch(`${API_URL}/system-settings`),
+        fetch(`${API_URL}/time-recovery`)
       ]);
       
       if (attRes.ok) setAttendance(await attRes.json());
       if (empRes.ok) setEmployees(await empRes.json());
       if (deptRes.ok) setDepartments(await deptRes.json());
+      if (sysRes.ok) setSysSettings(await sysRes.json());
+      if (recRes.ok) setRecoveryRequests(await recRes.json());
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -86,12 +93,35 @@ export default function EmployeeAttendanceListPage() {
     }
   };
 
+  const getCalculatedStatus = (record: any) => {
+    return record.status === "Leave" ? "Leave" : (record.checkIn && record.checkIn !== "--" ? "Present" : "Absent");
+  };
+
   const filteredAttendance = attendance.filter(a => {
     const emp = employees.find(e => e.id === a.employeeId || e.employeeId === a.employeeId);
     const matchesSearch = a.employeeName?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = selectedStatus === "all" || a.status?.toLowerCase() === selectedStatus.toLowerCase();
+    
+    const calcStatus = getCalculatedStatus(a);
+    const matchesStatus = selectedStatus === "all" || calcStatus.toLowerCase() === selectedStatus.toLowerCase();
+    
     const matchesDept = selectedDept === "all" || emp?.department?.toLowerCase() === selectedDept.toLowerCase();
-    return matchesSearch && matchesStatus && matchesDept;
+    
+    let matchesDate = true;
+    const recordDate = dayjs(a.date);
+    const todayStr = dayjs().format('YYYY-MM-DD');
+    const yesterdayStr = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
+    
+    if (dateFilter === "today") {
+      matchesDate = a.date === todayStr;
+    } else if (dateFilter === "yesterday") {
+      matchesDate = a.date === yesterdayStr;
+    } else if (dateFilter === "last_7_days") {
+      matchesDate = recordDate.valueOf() >= dayjs().subtract(7, 'day').startOf('day').valueOf();
+    } else if (dateFilter === "this_month") {
+      matchesDate = recordDate.month() === dayjs().month() && recordDate.year() === dayjs().year();
+    }
+
+    return matchesSearch && matchesStatus && matchesDept && matchesDate;
   });
 
   const CalendarView = () => {
@@ -212,6 +242,19 @@ export default function EmployeeAttendanceListPage() {
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
+          <Select value={dateFilter} onValueChange={setDateFilter}>
+            <SelectTrigger className="w-[150px] h-9">
+              <SelectValue placeholder="Time Period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="yesterday">Yesterday</SelectItem>
+              <SelectItem value="last_7_days">Last 7 Days</SelectItem>
+              <SelectItem value="this_month">This Month</SelectItem>
+              <SelectItem value="all">All Time</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={selectedDept} onValueChange={setSelectedDept}>
             <SelectTrigger className="w-[180px] h-9">
               <SelectValue placeholder="All Departments" />
@@ -230,10 +273,9 @@ export default function EmployeeAttendanceListPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="late entry">Late Entry</SelectItem>
+              <SelectItem value="present">Present</SelectItem>
               <SelectItem value="absent">Absent</SelectItem>
-              <SelectItem value="logged">Logged</SelectItem>
+              <SelectItem value="leave">Leave</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -273,56 +315,146 @@ export default function EmployeeAttendanceListPage() {
             <table className="w-full text-sm text-left whitespace-nowrap">
               <thead className="bg-slate-50/50 border-b border-border">
                 <tr>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Employee</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Punch In</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Punch Out</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Break</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Total Hours</th>
-                  <th className="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Employee</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Day</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Check In</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Check Out</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Break</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Late</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Overtime</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Prod. Hrs</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Hrs</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Remarks</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-20 text-center text-slate-400 italic">Loading attendance records...</td>
+                    <td colSpan={13} className="px-6 py-20 text-center text-slate-400 italic">Loading attendance records...</td>
                   </tr>
                 ) : filteredAttendance.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-20 text-center text-slate-400 italic">No attendance records found.</td>
+                    <td colSpan={13} className="px-6 py-20 text-center text-slate-400 italic">No attendance records found.</td>
                   </tr>
                 ) : (
-                  filteredAttendance.map((record, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors group cursor-pointer" onClick={() => { setSelectedRecord(record); setIsDetailModalOpen(true); }}>
-                      <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <Avatar className="w-9 h-9 border border-border shadow-sm">
-                                <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs uppercase">
-                                  {record.employeeName?.split(' ').map((n:any) => n[0]).join('')}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <div className="font-bold text-slate-800 leading-tight">{record.employeeName}</div>
-                                <div className="text-[11px] text-slate-400">
-                                  {employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId)?.department || 'Staff'}
-                                </div>
+                  filteredAttendance.map((record, idx) => {
+                    const totalBreakMinutes = (record.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
+                    const breakStr = totalBreakMinutes > 0 ? (totalBreakMinutes >= 60 ? `${Math.floor(totalBreakMinutes/60)}H ${totalBreakMinutes%60}Min` : `${totalBreakMinutes}Min`) : "-";
+                    
+                    const isToday = dayjs(record.date).isSame(dayjs(), 'day');
+                    const checkIn = dayjs(`${record.date} ${record.checkIn}`);
+                    const checkOut = record.checkOut 
+                      ? dayjs(`${record.date} ${record.checkOut}`) 
+                      : (isToday && record.checkIn && record.checkIn !== "--" ? dayjs() : null);
+                    
+                    let totalWorkingMinutes = 0;
+                    if (checkIn.isValid() && checkOut && checkOut.isValid()) {
+                      totalWorkingMinutes = checkOut.diff(checkIn, 'minute');
+                    }
+                    const totalWorkingStr = totalWorkingMinutes > 0 ? (totalWorkingMinutes >= 60 ? `${Math.floor(totalWorkingMinutes/60)}H ${totalWorkingMinutes%60}Min` : `${totalWorkingMinutes}Min`) : "-";
+                    
+                    const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
+                    const productionStr = productionMinutes > 0 ? (productionMinutes >= 60 ? `${Math.floor(productionMinutes/60)}H ${productionMinutes%60}Min` : `${productionMinutes}Min`) : "-";
+                    
+                    const recoveryReq = recoveryRequests.find(req => 
+                      req.date === record.date && 
+                      (req.employee_id === record.employeeId || req.employee_id === record.employeeId) && 
+                      req.status === 'approved'
+                    );
+
+                    const isLate = (() => {
+                      if (recoveryReq) return false;
+                      if (!record.checkIn || record.checkIn === "--") return false;
+                      const officeStartTime = sysSettings?.officeStartTime || "09:30";
+                      const bufferMins = sysSettings?.lateBufferMins || 10;
+                      
+                      const [h, m] = record.checkIn.split(':').map(Number);
+                      const [sh, sm] = officeStartTime.split(':').map(Number);
+                      
+                      const punchMins = h * 60 + m;
+                      const limitMins = sh * 60 + sm + bufferMins;
+                      
+                      return punchMins > limitMins;
+                    })();
+                    
+                    const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${record.date} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
+                    const lateStr = isLate || recoveryReq ? `${lateMinutes}Min` : "-";
+                    
+                    const shiftDurationMinutes = (() => {
+                      const officeStartTime = sysSettings?.officeStartTime || "09:30";
+                      const officeEndTime = sysSettings?.officeEndTime || "18:30";
+                      const [sh, sm] = officeStartTime.split(':').map(Number);
+                      const [eh, em] = officeEndTime.split(':').map(Number);
+                      return (eh * 60 + em) - (sh * 60 + sm);
+                    })();
+                    
+                    const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
+                    const overtimeStr = overtimeMinutes > 0 ? (overtimeMinutes >= 60 ? `${Math.floor(overtimeMinutes/60)}H ${overtimeMinutes%60}Min` : `${overtimeMinutes}Min`) : "-";
+
+                    const day = dayjs(record.date).format("dddd");
+                    const statusLabel = getCalculatedStatus(record);
+                    const statusClass = statusLabel === "Present" 
+                      ? "bg-emerald-50 text-emerald-600 border-emerald-100" 
+                      : (statusLabel === "Leave" ? "bg-sky-50 text-sky-600 border-sky-100" : "bg-rose-50 text-rose-600 border-rose-100");
+
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50 transition-colors group">
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="w-9 h-9 border border-border shadow-sm">
+                              <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs uppercase">
+                                {record.employeeName?.split(' ').map((n:any) => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-bold text-slate-800 leading-tight">{record.employeeName}</div>
+                              <div className="text-[11px] text-slate-400">
+                                {employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId)?.department || 'Staff'}
                               </div>
                             </div>
-                          </td>
-                      <td className="px-6 py-4 text-slate-600 font-medium">
-                        {dayjs(record.date).isSame(dayjs(), 'day') ? `Today, ${dayjs(record.date).format("MMM D")}` : dayjs(record.date).format("MMM D, YYYY")}
-                      </td>
-                      <td className="px-6 py-4 text-slate-700 font-mono text-[13px]">{record.checkIn || '--:--'}</td>
-                      <td className="px-6 py-4 text-slate-700 font-mono text-[13px]">{record.checkOut || '--:--'}</td>
-                      <td className="px-6 py-4 text-slate-500 text-center">15m</td>
-                      <td className="px-6 py-4 text-slate-700 font-medium text-center">{record.workHours || '--'}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${getStatusStyle(record.status)}`}>
-                          {record.status || 'Active'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-slate-600 font-medium whitespace-nowrap">
+                          {isToday ? `Today, ${dayjs(record.date).format("MMM D")}` : dayjs(record.date).format("MMM D, YYYY")}
+                        </td>
+                        <td className="px-4 py-4 text-slate-600 font-medium">{day}</td>
+                        <td className="px-4 py-4">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${statusClass} whitespace-nowrap uppercase tracking-wider`}>
+                            {statusLabel}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-slate-700 font-mono text-[13px]">{record.checkIn || '--:--'}</td>
+                        <td className="px-4 py-4 text-slate-700 font-mono text-[13px]">{record.checkOut || '--:--'}</td>
+                        <td className="px-4 py-4 text-slate-500 text-center font-medium whitespace-nowrap">{breakStr}</td>
+                        <td className="px-4 py-4 text-slate-700 font-medium whitespace-nowrap">{lateStr}</td>
+                        <td className="px-4 py-4 text-slate-700 font-medium whitespace-nowrap">{overtimeStr}</td>
+                        <td className="px-4 py-4">
+                            {productionMinutes > 0 ? (
+                              <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
+                                productionMinutes >= 480 ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-green-50 text-green-600 border border-green-100'
+                              }`}>
+                                {productionStr}
+                              </span>
+                            ) : "-"}
+                        </td>
+                        <td className="px-4 py-4 text-slate-700 font-medium whitespace-nowrap">{totalWorkingStr}</td>
+                        <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate">
+                          {isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-"}
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setSelectedRecord(record); setIsDetailModalOpen(true); }}
+                            className="inline-flex items-center justify-center h-8 w-8 text-brand-teal bg-brand-light/20 hover:bg-brand-light/40 rounded-full transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -414,115 +546,134 @@ export default function EmployeeAttendanceListPage() {
 
       {/* Individual Detail Modal */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-        <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden">
-          <div className="p-6 border-b border-border bg-slate-50/50 relative">
-            <div className="flex items-center gap-4">
-              <Avatar className="w-14 h-14 border-2 border-white shadow-md">
-                <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-lg">AC</AvatarFallback>
-              </Avatar>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader className="pb-4 border-b border-border">
+            <DialogTitle className="text-xl font-bold">Attendance Details</DialogTitle>
+            {selectedRecord && (
+              <div className="flex items-center gap-3 mt-2">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <CalendarIcon className="w-4 h-4" />
+                  {dayjs(selectedRecord.date).format("MMMM D, YYYY")}
+                </div>
+              </div>
+            )}
+          </DialogHeader>
+          {selectedRecord && (
+            <div className="py-4 space-y-6">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="border border-border rounded-lg p-3 text-center">
+                  <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">In</div>
+                  <div className="font-bold text-xl">{selectedRecord.checkIn}</div>
+                </div>
+                <div className="border border-border rounded-lg p-3 text-center">
+                  <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Out</div>
+                  <div className="font-bold text-xl">{selectedRecord.checkOut || '--:--'}</div>
+                </div>
+                <div className="border border-brand-teal/30 bg-brand-light/20 rounded-lg p-3 text-center">
+                  <div className="text-[10px] uppercase font-bold text-brand-teal mb-1">Work</div>
+                  <div className="font-bold text-xl text-brand-teal">{selectedRecord.workHours || '--'}</div>
+                </div>
+              </div>
+ 
               <div>
-                <DialogHeader className="p-0 space-y-0 text-left">
-                  <DialogTitle className="font-bold text-slate-800 text-lg leading-tight">
-                    {selectedRecord?.employeeName || 'Employee Details'}
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="text-xs text-slate-400 font-medium flex items-center gap-2 mt-0.5">
-                  Software Engineer <span className="w-1 h-1 rounded-full bg-slate-300"></span> 
-                  <span className="flex items-center gap-1"><CalendarIcon className="w-3 h-3" /> {dayjs(selectedRecord?.date).format("MMMM D, YYYY")}</span>
+                <h4 className="font-bold text-foreground text-sm mb-4 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-brand-teal" /> Activity Timeline
+                </h4>
+                <div className="max-h-[300px] overflow-y-auto pr-4 custom-scrollbar">
+                  <div className="space-y-6 border-l-2 border-brand-light ml-2 pl-6 relative">
+                    {(() => {
+                      const events = [
+                        ...(selectedRecord.punches || []).flatMap((p: any, i: number) => {
+                          const items = [{
+                            time: p.punchIn,
+                            label: `Punched In (Session ${i+1})`,
+                            color: 'bg-brand-teal',
+                            iconColor: 'bg-brand-teal'
+                          }];
+                          if (p.punchOut) {
+                            items.push({
+                              time: p.punchOut,
+                              label: `Punched Out (Session ${i+1})`,
+                              color: 'bg-gray-400',
+                              iconColor: 'bg-gray-400'
+                            });
+                          }
+                          return items;
+                        }),
+                        ...(selectedRecord.breaks || []).flatMap((b: any, i: number) => {
+                          const items = [{
+                            time: b.startTime,
+                            label: 'Break Start',
+                            color: 'bg-amber-400',
+                            iconColor: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]'
+                          }];
+                          if (b.endTime) {
+                            items.push({
+                              time: b.endTime,
+                              label: `Break End (${b.duration?.replace('m', '') || '0'}m)`,
+                              color: 'bg-amber-400/60',
+                              iconColor: 'bg-amber-400/60'
+                            });
+                          }
+                          return items;
+                        })
+                      ].sort((a, b) => a.time.localeCompare(b.time));
+
+                      if (events.length === 0) {
+                         const statusLabel = getCalculatedStatus(selectedRecord);
+                         
+                         if (statusLabel === "Leave") {
+                           return (
+                              <div className="relative group">
+                                <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-sky-400"></div>
+                                <div className="font-semibold text-sm">On Leave</div>
+                                <div className="text-xs text-muted-foreground">Approved Leave Request</div>
+                              </div>
+                           );
+                         } else if (statusLabel === "Absent") {
+                           return (
+                              <div className="relative group">
+                                <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-rose-400"></div>
+                                <div className="font-semibold text-sm">Absent</div>
+                                <div className="text-xs text-muted-foreground">No attendance logged</div>
+                              </div>
+                           );
+                         } else if (selectedRecord?.checkIn && selectedRecord.checkIn !== "--") {
+                           return (
+                              <>
+                                <div className="relative">
+                                  <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-brand-teal"></div>
+                                  <div className="font-semibold text-sm">Punched In</div>
+                                  <div className="text-xs text-muted-foreground">{selectedRecord.checkIn}</div>
+                                </div>
+                                {selectedRecord?.checkOut && (
+                                  <div className="relative mt-6">
+                                    <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-gray-400"></div>
+                                    <div className="font-semibold text-sm">Punched Out</div>
+                                    <div className="text-xs text-muted-foreground">{selectedRecord.checkOut}</div>
+                                  </div>
+                                )}
+                              </>
+                           );
+                         }
+                      }
+
+                      return events.map((event, idx) => (
+                        <div key={idx} className="relative">
+                          <div className={`absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full ${event.iconColor}`}></div>
+                          <div className="font-semibold text-sm">{event.label}</div>
+                          <div className="text-xs text-muted-foreground">{event.time}</div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-
-          <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex items-center justify-between shadow-sm">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Status</span>
-                <span className="font-bold text-slate-800 text-sm">Punch-out</span>
-              </div>
-              <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-widest rounded-full border border-emerald-200 flex items-center gap-1.5 shadow-sm">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Present
-              </span>
-            </div>
-
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { label: 'Check In', value: selectedRecord?.checkIn || '--:--' },
-                { label: 'Check Out', value: selectedRecord?.checkOut || '--:--' },
-                { label: 'Break', value: `${(selectedRecord?.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0)} Min` },
-                { label: 'Prod. Hrs', value: selectedRecord?.workHours || '--', highlight: true }
-              ].map((item, i) => (
-                <div key={i} className={`border rounded-xl p-3 text-center shadow-sm ${item.highlight ? 'bg-brand-light/30 border-brand-teal/20 ring-1 ring-brand-teal/10' : 'bg-white border-slate-100'}`}>
-                  <div className={`text-[9px] uppercase font-bold mb-1 ${item.highlight ? 'text-brand-teal' : 'text-slate-400'} tracking-tighter`}>{item.label}</div>
-                  <div className={`font-bold text-[12px] whitespace-nowrap ${item.highlight ? 'text-brand-teal' : 'text-slate-800'}`}>{item.value}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2 px-1">
-                <Clock className="w-4 h-4 text-brand-teal" /> Activity Timeline
-              </h4>
-              <div className="space-y-6 border-l-2 border-slate-100 ml-3 pl-8 relative">
-                {selectedRecord?.checkIn && (
-                  <div className="relative group">
-                    <div className="absolute -left-[41px] top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ring-2 ring-slate-50 transition-transform group-hover:scale-125 bg-emerald-400"></div>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-bold text-slate-800 text-[13px] leading-tight">Punched In</div>
-                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Web Portal</div>
-                      </div>
-                      <div className="text-[12px] font-mono font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">{selectedRecord.checkIn}</div>
-                    </div>
-                  </div>
-                )}
-                
-                {(selectedRecord?.breaks || []).map((b: any, i: number) => (
-                  <React.Fragment key={i}>
-                    <div className="relative group">
-                      <div className="absolute -left-[41px] top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ring-2 ring-slate-50 transition-transform group-hover:scale-125 bg-orange-400"></div>
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-black text-slate-800 text-[13px] leading-tight">Break Start</div>
-                          <div className="text-[11px] text-slate-400 font-medium mt-0.5">{b.reason || 'Rest Break'}</div>
-                        </div>
-                        <div className="text-[12px] font-mono font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">{b.startTime}</div>
-                      </div>
-                    </div>
-                    {b.endTime && (
-                      <div className="relative group">
-                        <div className="absolute -left-[41px] top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ring-2 ring-slate-50 transition-transform group-hover:scale-125 bg-orange-400"></div>
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <div className="font-black text-slate-800 text-[13px] leading-tight">Break End</div>
-                            <div className="text-[11px] text-slate-400 font-medium mt-0.5">Duration: {b.duration}m</div>
-                          </div>
-                          <div className="text-[12px] font-mono font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">{b.endTime}</div>
-                        </div>
-                      </div>
-                    )}
-                  </React.Fragment>
-                ))}
-
-                {selectedRecord?.checkOut && (
-                  <div className="relative group">
-                    <div className="absolute -left-[41px] top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ring-2 ring-slate-50 transition-transform group-hover:scale-125 bg-rose-400"></div>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-black text-slate-800 text-[13px] leading-tight">Punched Out</div>
-                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Web Portal</div>
-                      </div>
-                      <div className="text-[12px] font-mono font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">{selectedRecord.checkOut}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 bg-slate-50 border-t border-border flex justify-end gap-3">
-             <Button variant="outline" className="font-bold text-xs h-10 px-6 rounded-xl border-slate-200" onClick={() => setIsDetailModalOpen(false)}>Close</Button>
-          </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDetailModalOpen(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -38,6 +38,16 @@ import {
   History as HistoryIcon
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts';
 import { useUserContext } from "@/context/UserContext";
 import { API_URL } from "@/lib/config";
 import dayjs from "dayjs";
@@ -56,6 +66,9 @@ export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(getISTNow());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [interns, setInterns] = useState<any[]>([]);
+  const [allAttendance, setAllAttendance] = useState<any[]>([]);
 
   
   const punchCardRef = useRef<HTMLDivElement>(null);
@@ -66,6 +79,9 @@ export default function DashboardPage() {
       fetchHistory();
       if (user.role === "Admin" || user.role === "HR") {
         fetchLeaveRequests();
+        fetchEmployees();
+        fetchInterns();
+        fetchAllAttendance();
       }
     }
   }, [user?.id]);
@@ -79,6 +95,42 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error("Error fetching leaves:", err);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch(`${API_URL}/employees`);
+      if (res.ok) {
+        const data = await res.json();
+        setEmployees(data);
+      }
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+    }
+  };
+
+  const fetchInterns = async () => {
+    try {
+      const res = await fetch(`${API_URL}/interns`);
+      if (res.ok) {
+        const data = await res.json();
+        setInterns(data);
+      }
+    } catch (err) {
+      console.error("Error fetching interns:", err);
+    }
+  };
+
+  const fetchAllAttendance = async () => {
+    try {
+      const res = await fetch(`${API_URL}/attendance`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllAttendance(data);
+      }
+    } catch (err) {
+      console.error("Error fetching attendance:", err);
     }
   };
 
@@ -259,7 +311,7 @@ export default function DashboardPage() {
         )}
       </PageHeader>
  
-      {isAdmin && <AdminView user={user} leaves={leaveRequests} />}
+      {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} />}
       {isHR && (
         <div className="mb-8">
           <HRView user={user} leaves={leaveRequests} />
@@ -300,16 +352,33 @@ export default function DashboardPage() {
   );
 }
  
-function AdminView({ user, leaves }: { user: any, leaves: any[] }) {
+function AdminView({ user, leaves, employees, interns, allAttendance }: { user: any, leaves: any[], employees: any[], interns: any[], allAttendance: any[] }) {
+
+  const todayStr = dayjs().format('YYYY-MM-DD');
+  const todayAttendance = allAttendance?.filter(a => a.date === todayStr) || [];
+  
+  const last7Days = Array.from({length: 7}).map((_, i) => dayjs().subtract(6 - i, 'day').format('YYYY-MM-DD'));
+  const chartData = last7Days.map(date => {
+    const dayAttendance = allAttendance?.filter(a => a.date === date) || [];
+    const present = dayAttendance.length;
+    // Approximating absent as total employees minus present
+    const totalEmps = employees?.length || 0;
+    const absent = Math.max(0, totalEmps - present);
+    return {
+      date: dayjs(date).format('MMM DD'),
+      Present: present,
+      Absent: absent,
+    };
+  });
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Employees" value="48" trend="+12" trendLabel="from last month" icon={<Users className="w-5 h-5 text-muted-foreground" />} />
-        <StatCard title="On Time Today" value="16" trend="87%" trendLabel="arrived on schedule" icon={<Clock className="w-5 h-5 text-muted-foreground" />} trendUp/>
-        <StatCard title="Absent Today" value={leaves.filter(l => l.status === 'Approved').length.toString()} trend="6%" trendLabel="on approved leave" icon={<UserX className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
+        <StatCard title="Total Employees" value={(employees?.length || 0).toString()} trend="+12" trendLabel="from last month" icon={<Users className="w-5 h-5 text-muted-foreground" />} />
+        <StatCard title="On Time Today" value={(todayAttendance?.filter(a => !a.isLate)?.length || 0).toString()} trend="87%" trendLabel="arrived on schedule" icon={<Clock className="w-5 h-5 text-muted-foreground" />} trendUp/>
+        <StatCard title="Absent Today" value={(leaves?.filter(l => l.status === 'Approved')?.length || 0).toString()} trend="6%" trendLabel="on approved leave" icon={<UserX className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
 
-        <StatCard title="Total Interns" value="18" trend="+3" trendLabel="joined this month" icon={<GraduationCap className="w-5 h-5 text-muted-foreground" />} />
+        <StatCard title="Total Interns" value={(interns?.length || 0).toString()} trend="+3" trendLabel="joined this month" icon={<GraduationCap className="w-5 h-5 text-muted-foreground" />} />
       </div>
  
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -317,10 +386,25 @@ function AdminView({ user, leaves }: { user: any, leaves: any[] }) {
           <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
             <div className="p-5 flex justify-between items-center border-b border-border">
               <h3 className="font-bold text-lg">Organization Attendance</h3>
-              <Button variant="outline" size="sm">View All</Button>
+              <Link href="/attendance">
+                <Button variant="outline" size="sm">View All</Button>
+              </Link>
             </div>
-            <div className="p-6 h-[300px] flex items-center justify-center text-muted-foreground">
-              [Attendance Analytics Chart Placeholder]
+            <div className="p-6 h-[300px] flex items-center justify-center text-muted-foreground w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} dy={10} />
+                  <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} dx={-10} />
+                  <RechartsTooltip 
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                    cursor={{ fill: '#f3f4f6' }} 
+                  />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Bar dataKey="Present" fill="#0d9488" radius={[4, 4, 0, 0]} barSize={32} />
+                  <Bar dataKey="Absent" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={32} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
           <DepartmentDistribution />
