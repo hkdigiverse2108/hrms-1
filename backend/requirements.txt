@@ -5,3 +5,5 @@ pymongo
 pydantic
 pydantic-settings
 python-multipart
+pytz
+python-dotenv
