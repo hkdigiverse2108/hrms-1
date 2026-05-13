@@ -3,6 +3,23 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 import schemas
 import calendar
+import pytz
+
+IST = pytz.timezone('Asia/Kolkata')
+
+def get_now():
+    return datetime.now(IST)
+
+def parse_datetime(date_str, time_str):
+    if not time_str:
+        return get_now()
+    try:
+        # Standard format
+        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        # Fallback for formats without seconds
+        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+    return IST.localize(dt)
 
 def fix_id(doc):
     if doc and "_id" in doc:
@@ -619,7 +636,7 @@ async def update_application(db, app_id: str, update: schemas.ApplicationUpdate)
                 title="New Interview Assigned",
                 message=f"You have been assigned an interview for {update_dict.get('candidateName') or existing.get('candidateName')} on {update_dict.get('interviewDate') or existing.get('interviewDate')} at {update_dict.get('interviewTime') or existing.get('interviewTime')}.",
                 type="recruitment",
-                created_at=datetime.now().strftime("%d-%m-%Y %H:%M")
+                created_at=get_now().strftime("%d-%m-%Y %H:%M")
             ))
             
     updated_doc = await db.applications.find_one({"_id": ObjectId(app_id)})
@@ -667,7 +684,7 @@ async def get_reviews(db, skip: int = 0, limit: int = 100): return await get_ite
 async def create_review(db, review: schemas.ReviewCreate): 
     review_dict = review.dict()
     if not review_dict.get("date"):
-        review_dict["date"] = datetime.now().strftime("%Y-%m-%d")
+        review_dict["date"] = get_now().strftime("%Y-%m-%d")
     return await create_item(db, "reviews", review_dict)
 async def update_review(db, review_id: str, update: schemas.ReviewUpdate): return await update_item(db, "reviews", review_id, update.dict(exclude_unset=True))
 async def delete_review(db, review_id: str): return await delete_item(db, "reviews", review_id)
@@ -715,7 +732,7 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
 async def create_remark(db, remark: schemas.RemarkCreate): 
     remark_dict = remark.dict()
     if not remark_dict.get("date"):
-        remark_dict["date"] = datetime.now().strftime("%d-%m-%Y")
+        remark_dict["date"] = get_now().strftime("%d-%m-%Y")
     return await create_item(db, "remarks", remark_dict)
 async def update_remark(db, remark_id: str, update: schemas.RemarkUpdate): return await update_item(db, "remarks", remark_id, update.dict(exclude_unset=True))
 async def delete_remark(db, remark_id: str): return await delete_item(db, "remarks", remark_id)
@@ -850,10 +867,13 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
             "employeeName": employee["name"],
             "date": date_str,
             "checkIn": check_in,
+            "lastPunchIn": check_in,
             "checkOut": check_out,
             "status": "Logged",
             "workHours": work_hours,
-            "breaks": []
+            "accumulatedWorkSeconds": total_min * 60,
+            "breaks": [],
+            "punches": [{"punchIn": check_in, "punchOut": check_out}]
         }
         
         result = await db.attendance.insert_one(record)
@@ -863,7 +883,7 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
     return attendance_records
 
 async def get_attendance_status(db, employee_id: str):
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = get_now().strftime("%Y-%m-%d")
     # Find active punch for today (checkIn present, checkOut missing)
     record = await db.attendance.find_one({
         "employeeId": employee_id,
@@ -877,18 +897,52 @@ async def punch_in(db, employee_id: str):
     if not employee:
         return None
     
-    today = datetime.now()
+    today = get_now()
+    today_str = today.strftime("%Y-%m-%d")
+    now_time_str = today.strftime("%H:%M:%S")
+
+    # Check for existing record for today to consolidate
+    existing_record = await db.attendance.find_one({
+        "employeeId": employee_id,
+        "date": today_str
+    })
+
+    if existing_record:
+        # If already active or on break, just return the record
+        if existing_record.get("status") in ["Active", "On Break"] and existing_record.get("checkOut") is None:
+            return fix_id(existing_record)
+        
+        # If logged out, resume this record instead of creating a new one
+        new_punch = {"punchIn": now_time_str, "punchOut": None}
+        await db.attendance.update_one(
+            {"_id": existing_record["_id"]},
+            {
+                "$set": {
+                    "status": "Active",
+                    "checkOut": None,
+                    "lastPunchIn": now_time_str
+                },
+                "$push": {"punches": new_punch}
+            }
+        )
+        updated_doc = await db.attendance.find_one({"_id": existing_record["_id"]})
+        return fix_id(updated_doc)
+    
+    # First punch of the day: create new record
     attendance_data = {
         "employeeId": employee_id,
         "employeeName": employee["name"],
-        "date": today.strftime("%Y-%m-%d"),
-        "checkIn": today.strftime("%H:%M:%S"),
+        "date": today_str,
+        "checkIn": now_time_str,
+        "lastPunchIn": now_time_str,
         "checkOut": None,
         "status": "Active",
-        "workHours": None
+        "workHours": None,
+        "accumulatedWorkSeconds": 0,
+        "punches": [{"punchIn": now_time_str, "punchOut": None}]
     }
     
-    # Check for late punch-in (using system settings)
+    # Check for late punch-in (using system settings) - only for first punch of the day
     try:
         sys_settings = await get_system_settings(db)
         start_time_str = employee.get("startTime") or sys_settings.get("officeStartTime", "09:30")
@@ -930,19 +984,36 @@ async def punch_out(db, employee_id: str):
     if not status:
         return None
     
-    now = datetime.now()
-    check_in_time = datetime.strptime(f"{status['date']} {status['checkIn']}", "%Y-%m-%d %H:%M:%S")
+    now = get_now()
+    # Use lastPunchIn if available to calculate session duration, otherwise fallback to checkIn
+    start_time_str = status.get("lastPunchIn") or status["checkIn"]
+    check_in_time = parse_datetime(status['date'], start_time_str)
     
-    duration = now - check_in_time
-    hours, remainder = divmod(duration.seconds, 3600)
+    session_duration = now - check_in_time
+    accumulated_seconds = status.get("accumulatedWorkSeconds") or 0
+    total_seconds = accumulated_seconds + session_duration.total_seconds()
+    
+    hours, remainder = divmod(int(total_seconds), 3600)
     minutes, seconds = divmod(remainder, 60)
     work_hours = f"{hours}h {minutes}m"
     
+    # Update the last punch log entry
+    punches = status.get("punches", [])
+    now_time_str = now.strftime("%H:%M:%S")
+    
     update_data = {
-        "checkOut": now.strftime("%H:%M:%S"),
+        "checkOut": now_time_str,
         "workHours": work_hours,
-        "status": "Logged"
+        "status": "Logged",
+        "accumulatedWorkSeconds": total_seconds
     }
+
+    if punches:
+        last_idx = len(punches) - 1
+        update_data[f"punches.{last_idx}.punchOut"] = now_time_str
+    else:
+        # Fallback if punches list missing (for older records)
+        update_data["punches"] = [{"punchIn": status["checkIn"], "punchOut": now_time_str}]
     
     await db.attendance.update_one(
         {"_id": ObjectId(status["id"])},
@@ -954,6 +1025,26 @@ async def punch_out(db, employee_id: str):
 
 async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
     attendance_dict = attendance.dict()
+    
+    # Ensure workHours and accumulatedWorkSeconds are calculated if times are provided
+    if attendance_dict.get("checkIn") and attendance_dict.get("checkOut"):
+        try:
+            date_val = attendance_dict.get("date")
+            start = datetime.strptime(f"{date_val} {attendance_dict['checkIn']}", "%Y-%m-%d %H:%M:%S")
+            end = datetime.strptime(f"{date_val} {attendance_dict['checkOut']}", "%Y-%m-%d %H:%M:%S")
+            duration = end - start
+            total_seconds = duration.total_seconds()
+            
+            hours, remainder = divmod(int(total_seconds), 3600)
+            minutes, _ = divmod(remainder, 60)
+            
+            attendance_dict["workHours"] = f"{hours}h {minutes}m"
+            attendance_dict["accumulatedWorkSeconds"] = total_seconds
+            attendance_dict["lastPunchIn"] = attendance_dict["checkIn"]
+            attendance_dict["punches"] = [{"punchIn": attendance_dict["checkIn"], "punchOut": attendance_dict["checkOut"]}]
+        except:
+            pass
+
     result = await db.attendance.insert_one(attendance_dict)
     attendance_dict["id"] = str(result.inserted_id)
     if "_id" in attendance_dict:
@@ -962,6 +1053,30 @@ async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
 
 async def update_attendance(db, attendance_id: str, attendance_update: schemas.AttendanceUpdate):
     update_data = attendance_update.dict(exclude_unset=True)
+    
+    # Recalculate workHours if checkIn or checkOut are updated
+    if "checkIn" in update_data or "checkOut" in update_data or "date" in update_data:
+        existing = await db.attendance.find_one({"_id": ObjectId(attendance_id)})
+        if existing:
+            date_val = update_data.get("date") or existing.get("date")
+            ci_val = update_data.get("checkIn") or existing.get("checkIn")
+            co_val = update_data.get("checkOut") or existing.get("checkOut")
+            
+            if ci_val and co_val:
+                try:
+                    start = datetime.strptime(f"{date_val} {ci_val}", "%Y-%m-%d %H:%M:%S")
+                    end = datetime.strptime(f"{date_val} {co_val}", "%Y-%m-%d %H:%M:%S")
+                    duration = end - start
+                    total_seconds = duration.total_seconds()
+                    
+                    hours, remainder = divmod(int(total_seconds), 3600)
+                    minutes, _ = divmod(remainder, 60)
+                    
+                    update_data["workHours"] = f"{hours}h {minutes}m"
+                    update_data["accumulatedWorkSeconds"] = total_seconds
+                except:
+                    pass
+
     await db.attendance.update_one(
         {"_id": ObjectId(attendance_id)},
         {"$set": update_data}
@@ -999,7 +1114,7 @@ async def break_in(db, employee_id: str):
         return None
     
     new_break = {
-        "startTime": datetime.now().strftime("%H:%M:%S"),
+        "startTime": get_now().strftime("%H:%M:%S"),
         "endTime": None,
         "duration": None
     }
@@ -1016,7 +1131,7 @@ async def break_in(db, employee_id: str):
 
 async def break_out(db, employee_id: str):
     # Find record where status is 'On Break'
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = get_now().strftime("%Y-%m-%d")
     record = await db.attendance.find_one({
         "employeeId": employee_id,
         "date": today,
@@ -1030,8 +1145,8 @@ async def break_out(db, employee_id: str):
     last_break_idx = len(record["breaks"]) - 1
     last_break = record["breaks"][last_break_idx]
     
-    now = datetime.now()
-    start_time = datetime.strptime(f"{record['date']} {last_break['startTime']}", "%Y-%m-%d %H:%M:%S")
+    now = get_now()
+    start_time = parse_datetime(record['date'], last_break['startTime'])
     
     duration_delta = now - start_time
     minutes = duration_delta.seconds // 60
@@ -1054,7 +1169,7 @@ async def break_out(db, employee_id: str):
 async def create_leave_request(db, leave: schemas.LeaveRequestCreate):
     leave_dict = leave.dict()
     leave_dict["status"] = "Pending"
-    leave_dict["requested_on"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+    leave_dict["requested_on"] = get_now().strftime("%d-%m-%Y %H:%M")
     result = await db.leave_requests.insert_one(leave_dict)
     leave_dict["id"] = str(result.inserted_id)
     if "_id" in leave_dict:
@@ -1080,7 +1195,7 @@ async def create_leave_request(db, leave: schemas.LeaveRequestCreate):
                 "type": "leave",
                 "reference_id": leave_dict["id"],
                 "is_read": False,
-                "created_at": datetime.now().strftime("%d-%m-%Y %H:%M")
+                "created_at": get_now().strftime("%d-%m-%Y %H:%M")
             }
             await db.notifications.insert_one(notification)
     except Exception as e:
@@ -1119,7 +1234,7 @@ async def update_leave_request(db, leave_id: str, update_data: dict):
             title=f"Leave Request {update_data['status']}",
             message=f"Your {leave['type']} request from {leave['start_date']} to {leave['end_date']} has been {update_data['status'].lower()}.",
             type="leave",
-            created_at=datetime.now().strftime("%d-%m-%Y %H:%M")
+            created_at=get_now().strftime("%d-%m-%Y %H:%M")
         ))
         
     result = await db.leave_requests.find_one({"_id": ObjectId(leave_id)})
@@ -1142,7 +1257,7 @@ async def update_leave_request_status(db, leave_id: str, status: str, approved_b
 async def create_notification(db, notification: schemas.NotificationCreate):
     notification_dict = notification.dict()
     if not notification_dict.get("created_at"):
-        notification_dict["created_at"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+        notification_dict["created_at"] = get_now().strftime("%d-%m-%Y %H:%M")
     result = await db.notifications.insert_one(notification_dict)
     notification_dict["id"] = str(result.inserted_id)
     if "_id" in notification_dict:
@@ -1178,7 +1293,7 @@ async def create_client(db, client: schemas.ClientCreate):
     userName = client_dict.pop("userName", "Unknown User")
     
     if not client_dict.get("createdDate"):
-        client_dict["createdDate"] = datetime.now().strftime("%Y-%m-%d")
+        client_dict["createdDate"] = get_now().strftime("%Y-%m-%d")
     result = await db.clients.insert_one(client_dict)
     clientId = str(result.inserted_id)
     
@@ -1357,7 +1472,7 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
             task_dict["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
 
     if not task_dict.get("createdDate"):
-        task_dict["createdDate"] = datetime.now().strftime("%Y-%m-%d")
+        task_dict["createdDate"] = get_now().strftime("%Y-%m-%d")
         
     result = await db.wm_tasks.insert_one(task_dict)
     taskId = str(result.inserted_id)
@@ -1434,7 +1549,7 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
         "performedBy": performedBy,
         "userName": userName,
         "details": details,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": get_now().strftime("%Y-%m-%d %H:%M:%S")
     }
     if taskId: log_entry["taskId"] = taskId
     if projectId: log_entry["projectId"] = projectId
@@ -1489,7 +1604,7 @@ async def create_lead(db, lead: schemas.LeadCreate):
     userName = lead_dict.pop("userName", "Unknown User")
     
     if not lead_dict.get("date"):
-        lead_dict["date"] = datetime.now().strftime("%Y-%m-%d")
+        lead_dict["date"] = get_now().strftime("%Y-%m-%d")
         
     result = await db.leads.insert_one(lead_dict)
     lead_id = str(result.inserted_id)
@@ -1514,7 +1629,7 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
         # If status changed to 'Client Won', set closedDate if not provided
         old_lead = await db.leads.find_one({"_id": oid})
         if update_data.get("status") == "Client Won" and not update_data.get("closedDate"):
-            update_data["closedDate"] = datetime.now().strftime("%Y-%m-%d")
+            update_data["closedDate"] = get_now().strftime("%Y-%m-%d")
             
         await db.leads.update_one({"_id": oid}, {"$set": update_data})
         
@@ -1563,7 +1678,7 @@ async def delete_lead(db, lead_id: str):
 async def add_lead_follow_up(db, lead_id: str, follow_up: schemas.FollowUp, performedBy: str = "Unknown", userName: str = "Unknown User"):
     follow_up_dict = follow_up.dict()
     if not follow_up_dict.get("date"):
-        follow_up_dict["date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        follow_up_dict["date"] = get_now().strftime("%Y-%m-%d %H:%M")
         
     await db.leads.update_one(
         {"_id": ObjectId(lead_id)},
@@ -1739,7 +1854,7 @@ async def delete_penalty_type(db, penalty_id: str):
 # Chat CRUD
 async def create_message(db, message: schemas.ChatMessageCreate):
     message_dict = message.dict()
-    message_dict["timestamp"] = datetime.now().isoformat()
+    message_dict["timestamp"] = get_now().isoformat()
     result = await db.messages.insert_one(message_dict)
     message_dict["id"] = str(result.inserted_id)
     if "_id" in message_dict:
@@ -1748,7 +1863,7 @@ async def create_message(db, message: schemas.ChatMessageCreate):
 
 async def create_chat_group(db, group: schemas.ChatGroupCreate):
     group_dict = group.dict()
-    group_dict["timestamp"] = datetime.now().isoformat()
+    group_dict["timestamp"] = get_now().isoformat()
     result = await db.chat_groups.insert_one(group_dict)
     group_dict["id"] = str(result.inserted_id)
     return group_dict
@@ -2007,7 +2122,7 @@ async def set_typing_status(db, chat_id: str, user_id: str, is_typing: bool):
     if is_typing:
         await db.typing.update_one(
             {"chatId": chat_id, "userId": user_id},
-            {"$set": {"timestamp": datetime.now()}},
+            {"$set": {"timestamp": get_now()}},
             upsert=True
         )
     else:
@@ -2016,7 +2131,7 @@ async def set_typing_status(db, chat_id: str, user_id: str, is_typing: bool):
 
 async def get_typing_users(db, chat_id: str, current_user_id: str):
     # Get users typing in this chat in the last 10 seconds
-    threshold = datetime.now() - timedelta(seconds=10)
+    threshold = get_now() - timedelta(seconds=10)
     cursor = db.typing.find({
         "chatId": chat_id, 
         "userId": {"$ne": current_user_id},
@@ -2377,7 +2492,7 @@ async def save_user_permissions(db, employee_id: str, permissions_data: schemas.
 
 async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
     doc = recovery.dict()
-    doc['created_at'] = datetime.now().isoformat()
+    doc['created_at'] = get_now().isoformat()
     result = await db.time_recovery.insert_one(doc)
     doc['_id'] = result.inserted_id
     return fix_id(doc)

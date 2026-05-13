@@ -53,8 +53,8 @@ export default function AttendancePage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState({
     employeeId: "",
-    month: dayjs().format("MMMM"),
-    year: dayjs().format("YYYY")
+    month: dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"})).format("MMMM"),
+    year: dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"})).format("YYYY")
   });
   const [editForm, setEditForm] = useState<any>({
     id: "",
@@ -66,13 +66,13 @@ export default function AttendancePage() {
   const [createForm, setCreateForm] = useState<any>({
     employeeId: "",
     employeeName: "",
-    date: dayjs().format("YYYY-MM-DD"),
+    date: dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"})).format("YYYY-MM-DD"),
     checkIn: "09:30:00",
     checkOut: "18:30:00",
     status: "Logged"
   });
   const [recoveryForm, setRecoveryForm] = useState({
-    date: dayjs().format("YYYY-MM-DD"),
+    date: dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"})).format("YYYY-MM-DD"),
     type: "break", // "break" or "punch-out"
     recordedBreakIn: "13:00:00",
     actualBreakOut: "14:00:00",
@@ -1061,36 +1061,73 @@ export default function AttendancePage() {
                 </h4>
                 <div className="max-h-[300px] overflow-y-auto pr-4 custom-scrollbar">
                   <div className="space-y-6 border-l-2 border-brand-light ml-2 pl-6 relative">
-                    <div className="relative">
-                      <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-brand-teal"></div>
-                      <div className="font-semibold text-sm">Punched In</div>
-                      <div className="text-xs text-muted-foreground">{selectedRecord.checkIn}</div>
-                    </div>
-                    
-                    {(selectedRecord.breaks || []).map((b: any, i: number) => (
-                      <React.Fragment key={i}>
-                        <div className="relative">
-                          <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-amber-400"></div>
-                          <div className="font-semibold text-sm">Break Start</div>
-                          <div className="text-xs text-muted-foreground">{b.startTime}</div>
+                    {/* Combine and Sort All Events Chronologically */}
+                    {(() => {
+                      const events = [
+                        ...(selectedRecord.punches || []).flatMap((p: any, i: number) => {
+                          const items = [{
+                            time: p.punchIn,
+                            label: `Punched In (Session ${i+1})`,
+                            color: 'bg-brand-teal',
+                            iconColor: 'bg-brand-teal'
+                          }];
+                          if (p.punchOut) {
+                            items.push({
+                              time: p.punchOut,
+                              label: `Punched Out (Session ${i+1})`,
+                              color: 'bg-gray-400',
+                              iconColor: 'bg-gray-400'
+                            });
+                          }
+                          return items;
+                        }),
+                        ...(selectedRecord.breaks || []).flatMap((b: any, i: number) => {
+                          const items = [{
+                            time: b.startTime,
+                            label: 'Break Start',
+                            color: 'bg-amber-400',
+                            iconColor: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]'
+                          }];
+                          if (b.endTime) {
+                            items.push({
+                              time: b.endTime,
+                              label: `Break End (${b.duration.replace('m', '')}m)`,
+                              color: 'bg-amber-400/60',
+                              iconColor: 'bg-amber-400/60'
+                            });
+                          }
+                          return items;
+                        })
+                      ].sort((a, b) => a.time.localeCompare(b.time));
+
+                      if (events.length === 0 && selectedRecord.checkIn) {
+                         // Fallback for very old records
+                         return (
+                            <>
+                              <div className="relative">
+                                <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-brand-teal"></div>
+                                <div className="font-semibold text-sm">Punched In</div>
+                                <div className="text-xs text-muted-foreground">{selectedRecord.checkIn}</div>
+                              </div>
+                              {selectedRecord.checkOut && (
+                                <div className="relative">
+                                  <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-gray-400"></div>
+                                  <div className="font-semibold text-sm">Punched Out</div>
+                                  <div className="text-xs text-muted-foreground">{selectedRecord.checkOut}</div>
+                                </div>
+                              )}
+                            </>
+                         )
+                      }
+
+                      return events.map((event, idx) => (
+                        <div key={idx} className="relative">
+                          <div className={`absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full ${event.iconColor}`}></div>
+                          <div className="font-semibold text-sm">{event.label}</div>
+                          <div className="text-xs text-muted-foreground">{event.time}</div>
                         </div>
-                        {b.endTime && (
-                          <div className="relative">
-                            <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-amber-400"></div>
-                            <div className="font-semibold text-sm">Break End</div>
-                            <div className="text-xs text-muted-foreground">{b.endTime} ({b.duration}m)</div>
-                          </div>
-                        )}
-                      </React.Fragment>
-                    ))}
- 
-                    {selectedRecord.checkOut && (
-                      <div className="relative">
-                        <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-gray-400"></div>
-                        <div className="font-semibold text-sm">Punched Out</div>
-                        <div className="text-xs text-muted-foreground">{selectedRecord.checkOut}</div>
-                      </div>
-                    )}
+                      ));
+                    })()}
                   </div>
                 </div>
               </div>

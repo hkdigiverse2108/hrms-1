@@ -79,6 +79,10 @@ class Break(BaseModel):
     startTime: str
     endTime: Optional[str] = None
     duration: Optional[str] = None
+
+class PunchLog(BaseModel):
+    punchIn: str
+    punchOut: Optional[str] = None
  
 class AttendanceBase(BaseModel):
     employeeId: str
@@ -89,6 +93,7 @@ class AttendanceBase(BaseModel):
     status: str
     workHours: Optional[str] = None
     breaks: List[Break] = []
+    punches: List[PunchLog] = []
  
 class Attendance(AttendanceBase):
     id: str
@@ -104,6 +109,7 @@ class AttendanceUpdate(BaseModel):
     checkOut: Optional[str] = None
     status: Optional[str] = None
     workHours: Optional[str] = None
+    punches: Optional[List[PunchLog]] = None
  
 class PunchRequest(BaseModel):
     employeeId: str

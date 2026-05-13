@@ -84,7 +84,11 @@ export default function DashboardPage() {
 
  
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    const timer = setInterval(() => {
+      // Show time in IST regardless of device time
+      const istTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+      setCurrentTime(istTime);
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
  
@@ -92,47 +96,44 @@ export default function DashboardPage() {
     let interval: any;
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.checkIn) {
       interval = setInterval(() => {
-        const now = dayjs();
-        const dateStr = dayjs().format('YYYY-MM-DD');
+        // Use IST for current time in calculations
+        const istNow = dayjs(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+        const dateStr = istNow.format('YYYY-MM-DD');
         // Support both 12h and 24h formats
         const checkIn = dayjs(`${dateStr} ${attendanceStatus.record.checkIn}`, ['YYYY-MM-DD hh:mm A', 'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD HH:mm']);
         
         if (!checkIn.isValid()) {
-          setWorkTime("00:00:00");
+          console.error("Invalid check-in time:", attendanceStatus.record.checkIn);
           return;
         }
 
-        const diff = now.diff(checkIn, 'second');
+        const diffSeconds = istNow.diff(checkIn, 'second');
+        // If the record was resumed, we should only count diff from lastPunchIn
+        const lastPunchInStr = attendanceStatus.record.lastPunchIn || attendanceStatus.record.checkIn;
+        const lastPunchIn = dayjs(`${dateStr} ${lastPunchInStr}`, ['YYYY-MM-DD hh:mm A', 'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD HH:mm']);
         
-        const breakSeconds = (attendanceStatus.record.breaks || []).reduce((acc: number, b: any) => {
-          if (b.duration) return acc + (parseInt(b.duration) * 60);
-          if (b.startTime && !b.endTime) {
-            const bStart = dayjs(`${dateStr} ${b.startTime}`, ['YYYY-MM-DD hh:mm A', 'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD HH:mm']);
-            return acc + (bStart.isValid() ? now.diff(bStart, 'second') : 0);
-          }
-          return acc;
-        }, 0);
+        const currentSessionSeconds = istNow.diff(lastPunchIn, 'second');
+        const accumulated = (attendanceStatus.record.accumulatedWorkSeconds || 0);
+        const total = accumulated + currentSessionSeconds;
 
-        const totalSeconds = Math.max(0, diff - breakSeconds);
-        const h = Math.floor(totalSeconds / 3600);
-        const m = Math.floor((totalSeconds % 3600) / 60);
-        const s = totalSeconds % 60;
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = Math.floor(total % 60);
         setWorkTime(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
       }, 1000);
     } else {
       setWorkTime("00:00:00");
     }
- 
-    if (attendanceStatus?.record?.breaks) {
-      const totalMinutes = attendanceStatus.record.breaks.reduce((acc: number, b: any) => {
-        if (b.duration) return acc + parseInt(b.duration);
-        return acc;
-      }, 0);
-      setTotalBreakTime(`${totalMinutes}m`);
-    }
- 
-    return () => clearInterval(interval);
-  }, [attendanceStatus]);
+      if (attendanceStatus?.record?.breaks) {
+        const totalMinutes = attendanceStatus.record.breaks.reduce((acc: number, b: any) => {
+          if (b.duration) return acc + parseInt(b.duration);
+          return acc;
+        }, 0);
+        setTotalBreakTime(`${totalMinutes}m`);
+      }
+
+      return () => clearInterval(interval);
+    }, [attendanceStatus]);
 
   const [allTimeHours, setAllTimeHours] = useState("0h 0m");
 
