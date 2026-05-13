@@ -181,39 +181,6 @@ export default function EmployeeDocumentsPage() {
         </Button>
       </PageHeader>
 
-      {/* Filters Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="space-y-2">
-          <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter by Employee</Label>
-          <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-            <SelectTrigger className="h-10 border-slate-200 bg-slate-50/30">
-              <SelectValue placeholder="All Employees" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Employees</SelectItem>
-              {employees.map((emp: any) => (
-                <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter by Type</Label>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="h-10 border-slate-200 bg-slate-50/30">
-              <SelectValue placeholder="All Document Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {documentTypes.map(type => (
-                <SelectItem key={type} value={type}>{type}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <DataTable
           data={filteredDocuments}
@@ -221,6 +188,37 @@ export default function EmployeeDocumentsPage() {
           actions={actions}
           searchKey="employeeName"
           searchPlaceholder="Search by employee name..."
+          extraFilters={
+            <>
+              <div className="w-48">
+                <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                  <SelectTrigger className="h-9 border-slate-200 bg-slate-50/30 text-xs font-semibold">
+                    <SelectValue placeholder="All Employees" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Employees</SelectItem>
+                    {employees.map((emp: any) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="w-48">
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="h-9 border-slate-200 bg-slate-50/30 text-xs font-semibold">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    {documentTypes.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          }
         />
       </div>
 
