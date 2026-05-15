@@ -1,202 +1,99 @@
 import subprocess
-import os
-import signal
 import sys
 import time
-import shutil
-from pathlib import Path
+import os
+import socket
 
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+def get_local_ip():
+    try:
+        # Create a temporary socket to find the primary interface IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 def load_env():
-    """Load variables from .env into os.environ (no external deps)."""
-    env_path = Path(__file__).parent / ".env"
-    if not env_path.exists():
-        return
-    with open(env_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            # Don't overwrite values already set in the real environment
-            if key and key not in os.environ:
+    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                key, value = line.split('=', 1)
                 os.environ[key] = value
+        print(f"Loaded environment variables from {env_path}")
 
-
-def get_venv_python() -> str:
-    """Return the Python executable from the project's venv or .venv, if it exists."""
-    root = Path(__file__).parent
-    # Check both common virtualenv names
-    for venv_name in ("venv", ".venv"):
-        venv_dir = root / venv_name
-        candidates = (
-            venv_dir / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python3"),
-            venv_dir / "bin" / "python",
-        )
-        for p in candidates:
-            if p.exists():
-                return str(p)
-    return sys.executable
-
-
-def find_frontend_runner() -> str:
-    """Prefer bun over npm."""
-    return "bun" if shutil.which("bun") else "npm"
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def run_app():
+def main():
     load_env()
+    
+    frontend_port = os.getenv("PORT", "3000")
+    backend_port = os.getenv("BACKEND_PORT", "8000")
+    
+    print(f"Starting Backend and Frontend servers concurrently...")
 
-    # ── Ports & host ─────────────────────────────────────────────────────────
-    backend_port  = os.environ.get("BACKEND_PORT", "8000")
-    frontend_port = os.environ.get("PORT", "3535")          # Next.js uses PORT
+    # For the backend, we run the uvicorn server via python module
+    backend_cmd = [sys.executable, "-m", "uvicorn", "main:app", "--reload", "--host", "127.0.0.1", "--port", backend_port]
 
-    # APP_HOST controls binding:
-    #   0.0.0.0   → all interfaces (standard for servers and network access)
-    #   127.0.0.1 → local-only
-    app_host = os.environ.get("APP_HOST", "0.0.0.0")
+    
+    # For the frontend, we use npm to start Next.js
+    # We use -H 0.0.0.0 to make it accessible on the local network
+    frontend_cmd = f"npm run dev -- -H 0.0.0.0"
+    frontend_env = os.environ.copy()
+    frontend_env["PORT"] = frontend_port
 
-    # Propagate so uvicorn and Next.js both pick up the same host
-    os.environ["APP_HOST"]     = app_host
-    os.environ["HOST"]         = app_host   # used by some Next.js internals
-    os.environ["BACKEND_PORT"] = backend_port
-    os.environ["PORT"]         = frontend_port
+    local_ip = get_local_ip()
+    print(f"\n" + "="*50)
+    print(f"ACCESS URLS:")
+    print(f"  Local:   http://localhost:{frontend_port}")
+    print(f"  Network: http://{local_ip}:{frontend_port}")
+    print(f"="*50 + "\n")
 
-    # ── Info ─────────────────────────────────────────────────────────────────
-    display_host = app_host if app_host != "0.0.0.0" else "<your-server-ip>"
-    print("=" * 60)
-    print("  HRMS Application Launcher")
-    print("=" * 60)
-    print(f"  Binding host : {app_host}")
-    print(f"  Backend      : http://{display_host}:{backend_port}")
-    print(f"  Frontend     : http://{display_host}:{frontend_port}")
-    print("=" * 60)
-
-    is_windows      = os.name == "nt"
-    creation_flags  = subprocess.CREATE_NEW_PROCESS_GROUP if is_windows else 0
-    frontend_runner = find_frontend_runner()
-    python_exe      = get_venv_python()
-
-    print(f"  Python       : {python_exe}")
-    print(f"  JS runner    : {frontend_runner}")
-    print("=" * 60)
-
-    root = Path(__file__).parent
-    backend_dir  = root / "backend"
-    frontend_dir = root / "frontend"
-
-    # ── Backend ──────────────────────────────────────────────────────────────
-    # Run uvicorn from inside backend/ so that bare imports like
-    # `import crud, schemas, database` resolve as sibling modules.
-    backend_env = os.environ.copy()
-    backend_env["PYTHONPATH"] = str(backend_dir)  # ensures siblings are importable
-
-    backend_cmd = [
-        python_exe, "-m", "uvicorn",
-        "main:app",           # relative to backend/ cwd
-        "--host", app_host,
-        "--port", backend_port,
-    ]
-    if os.environ.get("DEBUG", "false").lower() == "true":
-        backend_cmd.append("--reload")
-
-    print(f"\n[backend] Starting: {' '.join(backend_cmd)}")
-    backend_process = subprocess.Popen(
-        backend_cmd,
-        cwd=str(backend_dir),   # <── key fix: run from within backend/
-        env=backend_env,
-        creationflags=creation_flags,
-    )
-
-    # ── Frontend (Next.js) ───────────────────────────────────────────────────
-    # Decide: dev mode vs production build+start
-    next_mode = os.environ.get("NEXT_MODE", "dev").lower()  # "dev" or "prod"
-
-    if next_mode == "prod":
-        # Build first
-        print(f"\n[frontend] Building with {frontend_runner}…")
-        build_result = subprocess.run(
-            [frontend_runner, "run", "build"],
-            cwd=str(frontend_dir),
-            env=os.environ.copy(),
-            shell=is_windows,
-        )
-        if build_result.returncode != 0:
-            print("[frontend] Build FAILED — aborting.")
-            backend_process.terminate()
+    # Check and install frontend dependencies if node_modules is missing
+    frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
+    node_modules_path = os.path.join(frontend_dir, "node_modules")
+    
+    if not os.path.exists(node_modules_path):
+        print("-> node_modules not found in frontend. Running 'npm install'...")
+        try:
+            subprocess.run("npm install", cwd=frontend_dir, shell=True, check=True)
+            print("-> frontend dependencies installed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"-> Error installing frontend dependencies: {e}")
             sys.exit(1)
 
-        frontend_cmd = [frontend_runner, "run", "start"]
-    else:
-        # Development — hot reload
-        frontend_cmd = [frontend_runner, "run", "dev"]
-
-    # Pass --hostname so Next.js binds to the correct interface
-    # `next dev/start` accept: --hostname <host> --port <port>
-    frontend_cmd += ["--", "--port", frontend_port]
-    if app_host != "127.0.0.1":
-        frontend_cmd += ["--hostname", app_host]
-
-    print(f"[frontend] Starting ({next_mode} mode): {' '.join(frontend_cmd)}")
-    frontend_process = subprocess.Popen(
-        frontend_cmd,
-        cwd=str(frontend_dir),
-        env=os.environ.copy(),
-        shell=is_windows,
-        creationflags=creation_flags,
-    )
-
-    # ── Signal handling ───────────────────────────────────────────────────────
-    def shutdown(sig=None, frame=None):
-        print("\n[launcher] Shutting down…")
-        if is_windows:
-            for proc in (backend_process, frontend_process):
-                subprocess.call(["taskkill", "/F", "/T", "/PID", str(proc.pid)])
-        else:
-            for proc in (backend_process, frontend_process):
-                try:
-                    proc.terminate()
-                except ProcessLookupError:
-                    pass
-            backend_process.wait()
-            frontend_process.wait()
-        print("[launcher] Done.")
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, shutdown)
-    if not is_windows:
-        signal.signal(signal.SIGTERM, shutdown)
-        # Ignore SIGHUP so SSH disconnects don't kill the launcher
-        signal.signal(signal.SIGHUP, signal.SIG_IGN)
-
-    # ── Monitor loop ──────────────────────────────────────────────────────────
     try:
-        while True:
-            time.sleep(1)
-
-            if backend_process.poll() is not None:
-                print("[backend] Process terminated unexpectedly.")
-                break
-            if frontend_process.poll() is not None:
-                print("[frontend] Process terminated unexpectedly.")
-                break
+        # Start backend
+        print(f"-> Starting Backend (FastAPI on Port {backend_port})")
+        backend_process = subprocess.Popen(
+            backend_cmd,
+            cwd="backend",
+            env=os.environ.copy()
+        )
+        
+        # Start frontend
+        print(f"-> Starting Frontend (Next.js on Port {frontend_port})")
+        frontend_process = subprocess.Popen(
+            frontend_cmd,
+            cwd="frontend",
+            shell=True,
+            env=frontend_env
+        )
+        
+        # Wait until processes complete or are interrupted
+        backend_process.wait()
+        frontend_process.wait()
 
     except KeyboardInterrupt:
-        pass
-    finally:
-        shutdown()
-
+        print("\nTermination signal received. Stopping both servers...")
+        backend_process.terminate()
+        frontend_process.terminate()
+        backend_process.wait()
+        frontend_process.wait()
+        print("All servers stopped cleanly.")
 
 if __name__ == "__main__":
-    run_app()
+    main()
