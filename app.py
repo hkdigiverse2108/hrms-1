@@ -31,15 +31,18 @@ def load_env():
 
 
 def get_venv_python() -> str:
-    """Return the Python executable from the project's .venv, if it exists."""
-    venv_dir = Path(__file__).parent / ".venv"
-    candidates = (
-        venv_dir / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python3"),
-        venv_dir / "bin" / "python",
-    )
-    for p in candidates:
-        if p.exists():
-            return str(p)
+    """Return the Python executable from the project's venv or .venv, if it exists."""
+    root = Path(__file__).parent
+    # Check both common virtualenv names
+    for venv_name in ("venv", ".venv"):
+        venv_dir = root / venv_name
+        candidates = (
+            venv_dir / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python3"),
+            venv_dir / "bin" / "python",
+        )
+        for p in candidates:
+            if p.exists():
+                return str(p)
     return sys.executable
 
 
