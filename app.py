@@ -89,7 +89,7 @@ def main():
     backend_dir = Path(__file__).parent / "backend"
     backend_cmd = [
         python_exe, "-m", "uvicorn", "main:app",
-        "--host", "0.0.0.0",          # bind all interfaces so both localhost & IP work
+        "--host", "0.0.0.0",   # bind all interfaces → reachable on localhost & server IP
         "--port", backend_port,
         "--reload",
     ]
@@ -113,7 +113,7 @@ def main():
     frontend_env = os.environ.copy()
     frontend_env["PORT"] = frontend_port
 
-    # --hostname 0.0.0.0  → Next.js listens on all interfaces (localhost + IP)
+    # --hostname 0.0.0.0 → Next.js listens on all interfaces (localhost + IP)
     frontend_cmd = f"npm run dev -- --hostname 0.0.0.0 --port {frontend_port}"
     print(f"\n→ Starting Frontend (Next.js on port {frontend_port})")
     print(f"  {frontend_cmd}")
