@@ -63,13 +63,17 @@ def main():
     frontend_port = os.getenv("PORT", "3535")
     backend_port  = os.getenv("BACKEND_PORT", "8000")
 
-    # Auto-detect host — works on both localhost and a remote server with no
-    # changes to .env.  On a server this resolves to the server's LAN IP;
-    # on a developer machine it resolves to the local Wi-Fi / loopback IP.
+    # get_local_ip() returns the machine's primary IP.
+    # If it's a real server IP (non-loopback), we bind to 0.0.0.0 so both
+    # localhost AND the server IP work.
+    # If we're on a local dev machine with no network, it returns 127.0.0.1
+    # and we keep 127.0.0.1 to avoid macOS EPERM on 0.0.0.0.
     host = get_local_ip()
+    is_server = host != "127.0.0.1"
+    bind_host = "0.0.0.0" if is_server else "127.0.0.1"
 
-    # Expose the detected host to child processes (Next.js proxy reads this)
-    os.environ["BACKEND_HOST"] = host
+    # Expose the detected host so the Next.js proxy can reach the backend
+    os.environ["BACKEND_HOST"] = "127.0.0.1"  # proxy is always same-machine
     os.environ["NEXT_PUBLIC_HOST"] = host
 
     is_windows = os.name == "nt"
@@ -78,7 +82,9 @@ def main():
     print("=" * 55)
     print("  HRMS Application Launcher")
     print("=" * 55)
-    print(f"  Detected host : {host}")
+    print(f"  Mode          : {'SERVER' if is_server else 'LOCAL DEV'}")
+    print(f"  Detected IP   : {host}")
+    print(f"  Binding to    : {bind_host}")
     print(f"  Backend       : http://{host}:{backend_port}")
     print(f"  Frontend      : http://{host}:{frontend_port}")
     print(f"  Also on       : http://localhost:{frontend_port}")
@@ -89,7 +95,7 @@ def main():
     backend_dir = Path(__file__).parent / "backend"
     backend_cmd = [
         python_exe, "-m", "uvicorn", "main:app",
-        "--host", "0.0.0.0",   # bind all interfaces → reachable on localhost & server IP
+        "--host", bind_host,
         "--port", backend_port,
         "--reload",
     ]
@@ -111,10 +117,11 @@ def main():
         subprocess.run("npm install", cwd=str(frontend_dir), shell=True, check=True)
 
     frontend_env = os.environ.copy()
-    frontend_env["PORT"] = frontend_port
 
-    # --hostname 0.0.0.0 → Next.js listens on all interfaces (localhost + IP)
-    frontend_cmd = f"npm run dev -- --hostname 0.0.0.0 --port {frontend_port}"
+    # Next.js 16 defaults to 0.0.0.0 which causes EPERM on macOS.
+    # Pass -H explicitly: 127.0.0.1 locally, 0.0.0.0 on server.
+    # -p port and -H hostname are proper Next.js 16 CLI flags.
+    frontend_cmd = f"npm run dev -- -H {bind_host} -p {frontend_port}"
     print(f"\n→ Starting Frontend (Next.js on port {frontend_port})")
     print(f"  {frontend_cmd}")
     frontend_process = subprocess.Popen(
