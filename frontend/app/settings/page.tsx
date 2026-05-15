@@ -152,8 +152,7 @@ export default function SettingsPage() {
         description="Manage your account preferences, system security, and module access."
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
           {/* Access Control Card */}
           {isAdmin && (
             <Card className="p-6 border-border shadow-sm">
@@ -265,43 +264,7 @@ export default function SettingsPage() {
           </Card>
 
 
-        </div>
 
-        <div className="space-y-6">
-          <Card className="p-6 border-border shadow-sm">
-            <h3 className="font-bold text-lg mb-4">Quick Stats</h3>
-            <div className="space-y-4">
-               <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                 <span className="text-sm text-muted-foreground">Current Role</span>
-                 <span className="text-sm font-bold text-brand-teal uppercase">{user?.role}</span>
-               </div>
-                <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                  <span className="text-sm text-muted-foreground">Late Punch Cut</span>
-                  <span className="text-sm font-bold text-foreground">
-                    {settings?.latePunchDeductionEnabled ? "Enabled" : "Disabled"}
-                  </span>
-                </div>
-               <div className="flex justify-between items-center py-2">
-                 <span className="text-sm text-muted-foreground">Last Settings Sync</span>
-                 <span className="text-sm font-bold text-foreground">Success</span>
-               </div>
-            </div>
-            <Button className="w-full mt-6 bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-11 rounded-xl" onClick={fetchSettings}>
-               Sync Settings
-            </Button>
-          </Card>
-
-          <Card className="p-6 border-border shadow-sm overflow-hidden relative">
-             <ShieldAlert className="absolute -right-4 -bottom-4 w-24 h-24 text-amber-50 -rotate-12" />
-             <h4 className="font-bold text-[15px] mb-2 relative z-10">Access Notice</h4>
-             <p className="text-xs text-muted-foreground mb-4 relative z-10 leading-relaxed">
-               Module restriction toggles allow administrators to control which departments or roles can see sensitive business data.
-             </p>
-             <Button variant="outline" className="w-full relative z-10 h-10 font-bold border-border text-xs rounded-lg" disabled>
-                View Audit Logs
-             </Button>
-          </Card>
-        </div>
       </div>
     </div>
   );
