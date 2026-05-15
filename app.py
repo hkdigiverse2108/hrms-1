@@ -41,7 +41,7 @@ def main():
     
     # For the frontend, we use npm to start Next.js
     # We use -H 0.0.0.0 to make it accessible on the local network
-    frontend_cmd = f"npm run preview -- -H 0.0.0.0"
+    frontend_cmd = f"npm run dev -- -H 0.0.0.0"
     frontend_env = os.environ.copy()
     frontend_env["PORT"] = frontend_port
 
