@@ -47,3 +47,15 @@ Thumbs.db
 # IDEs
 .vscode/
 .idea/
+
+# Virtual Environment
+.venv/
+
+# Logs and runtime
+*.log
+app.pid
+scratch/
+uploads/
+backend_out.log
+backend_err.log
+frontend_err.log
