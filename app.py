@@ -2,6 +2,18 @@ import subprocess
 import sys
 import time
 import os
+import socket
+
+def get_local_ip():
+    try:
+        # Create a temporary socket to find the primary interface IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 def load_env():
     env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -28,10 +40,17 @@ def main():
 
     
     # For the frontend, we use npm to start Next.js
-    # We pass the PORT as an environment variable to Next.js
-    frontend_cmd = "npm run dev"
+    # We use -H 0.0.0.0 to make it accessible on the local network
+    frontend_cmd = f"npm run preview -- -H 0.0.0.0"
     frontend_env = os.environ.copy()
     frontend_env["PORT"] = frontend_port
+
+    local_ip = get_local_ip()
+    print(f"\n" + "="*50)
+    print(f"ACCESS URLS:")
+    print(f"  Local:   http://localhost:{frontend_port}")
+    print(f"  Network: http://{local_ip}:{frontend_port}")
+    print(f"="*50 + "\n")
 
     # Check and install frontend dependencies if node_modules is missing
     frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
