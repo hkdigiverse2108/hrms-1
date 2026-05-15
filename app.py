@@ -57,26 +57,20 @@ def get_venv_python() -> str:
 # ──────────────────────────────────────────────
 
 def main():
-    start_time = time.time()
     load_env()
 
     frontend_port = os.getenv("PORT", "3535")
     backend_port  = os.getenv("BACKEND_PORT", "8000")
 
-    # get_local_ip() returns the machine's primary IP.
-    # If it's a real server IP (non-loopback), we bind to 0.0.0.0 so both
-    # localhost AND the server IP work.
-    # If we're on a local dev machine with no network, it returns 127.0.0.1
-    # and we keep 127.0.0.1 to avoid macOS EPERM on 0.0.0.0.
-    host = get_local_ip()
+    host      = get_local_ip()
     is_server = host != "127.0.0.1"
     bind_host = "0.0.0.0" if is_server else "127.0.0.1"
 
-    # Expose the detected host so the Next.js proxy can reach the backend
-    os.environ["BACKEND_HOST"] = "127.0.0.1"  # proxy is always same-machine
+    # Expose detected host so the Next.js proxy (next.config.mjs) can reach backend
+    os.environ["BACKEND_HOST"]     = "127.0.0.1"   # proxy is always same-machine
     os.environ["NEXT_PUBLIC_HOST"] = host
 
-    is_windows = os.name == "nt"
+    is_windows    = os.name == "nt"
     creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if is_windows else 0
 
     print("=" * 55)
@@ -90,89 +84,127 @@ def main():
     print(f"  Also on       : http://localhost:{frontend_port}")
     print("=" * 55)
 
-    # ── Backend ──────────────────────────────────────────────
+    # ── Ignore SIGHUP so SSH disconnect does NOT kill the app ─
+    # This is the #1 reason apps shut down on the server when
+    # the SSH session closes.
+    if not is_windows:
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+
+    # ── Backend ───────────────────────────────────────────────
     python_exe  = get_venv_python()
     backend_dir = Path(__file__).parent / "backend"
+
+    # On server: no --reload (reload spawns short-lived child processes
+    # which confuse the monitor loop into thinking the backend died).
+    # On local dev: keep --reload for hot-reloading convenience.
     backend_cmd = [
         python_exe, "-m", "uvicorn", "main:app",
         "--host", bind_host,
         "--port", backend_port,
-        "--reload",
     ]
+    if not is_server:
+        backend_cmd.append("--reload")
+
     print(f"\n→ Starting Backend  (FastAPI on port {backend_port})")
     print(f"  {' '.join(backend_cmd)}")
-    backend_process = subprocess.Popen(
-        backend_cmd,
-        cwd=str(backend_dir),
-        env=os.environ.copy(),
-        creationflags=creation_flags,
-    )
 
-    # ── Frontend ─────────────────────────────────────────────
+    # ── Frontend ──────────────────────────────────────────────
     frontend_dir = Path(__file__).parent / "frontend"
 
-    # Install deps if missing
     if not (frontend_dir / "node_modules").exists():
         print("\n→ node_modules missing — running npm install …")
         subprocess.run("npm install", cwd=str(frontend_dir), shell=True, check=True)
 
     frontend_env = os.environ.copy()
-
-    # Next.js 16 defaults to 0.0.0.0 which causes EPERM on macOS.
-    # Pass -H explicitly: 127.0.0.1 locally, 0.0.0.0 on server.
-    # -p port and -H hostname are proper Next.js 16 CLI flags.
     frontend_cmd = f"npm run dev -- -H {bind_host} -p {frontend_port}"
+
     print(f"\n→ Starting Frontend (Next.js on port {frontend_port})")
     print(f"  {frontend_cmd}")
-    frontend_process = subprocess.Popen(
-        frontend_cmd,
-        cwd=str(frontend_dir),
-        shell=True,
-        env=frontend_env,
-        creationflags=creation_flags,
-    )
+
+    # ── Process management ────────────────────────────────────
+    processes = {}   # {"backend": Popen, "frontend": Popen}
+
+    def start_backend():
+        return subprocess.Popen(
+            backend_cmd,
+            cwd=str(backend_dir),
+            env=os.environ.copy(),
+            creationflags=creation_flags,
+        )
+
+    def start_frontend():
+        return subprocess.Popen(
+            frontend_cmd,
+            cwd=str(frontend_dir),
+            shell=True,
+            env=frontend_env,
+            creationflags=creation_flags,
+        )
+
+    processes["backend"]  = start_backend()
+    processes["frontend"] = start_frontend()
 
     # ── Signal handling ───────────────────────────────────────
+    shutting_down = [False]
+
     def shutdown(sig=None, frame=None):
+        if shutting_down[0]:
+            return
+        shutting_down[0] = True
         print("\n\nShutting down …")
-        if is_windows:
-            subprocess.call(["taskkill", "/F", "/T", "/PID", str(backend_process.pid)])
-            subprocess.call(["taskkill", "/F", "/T", "/PID", str(frontend_process.pid)])
-        else:
-            backend_process.terminate()
-            frontend_process.terminate()
-            backend_process.wait()
-            frontend_process.wait()
+        for name, proc in processes.items():
+            try:
+                if is_windows:
+                    subprocess.call(["taskkill", "/F", "/T", "/PID", str(proc.pid)])
+                else:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+            except Exception:
+                pass
         print("All servers stopped cleanly.")
         sys.exit(0)
 
-    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGINT,  shutdown)
     if not is_windows:
         signal.signal(signal.SIGTERM, shutdown)
 
-    # ── Health check + monitor loop ───────────────────────────
-    backend_ok = False
+    # ── Monitor loop with auto-restart ────────────────────────
+    # On the server, transient crashes (OOM, bad import, etc.) shouldn't
+    # bring down the whole app.  We restart the dead process up to 5 times.
+    restart_counts = {"backend": 0, "frontend": 0}
+    MAX_RESTARTS = 5
+    RESTART_DELAY = 3   # seconds before restarting a crashed process
+
+    print("\n✓  Both services started. Monitoring …\n")
+
     try:
-        while True:
-            time.sleep(1)
+        while not shutting_down[0]:
+            time.sleep(2)
 
-            if backend_process.poll() is not None:
-                print("⚠  Backend terminated unexpectedly — restarting not supported. Exiting.")
-                break
-            if frontend_process.poll() is not None:
-                print("⚠  Frontend terminated unexpectedly — restarting not supported. Exiting.")
-                break
+            for name in ("backend", "frontend"):
+                proc = processes[name]
+                if proc.poll() is not None:
+                    if restart_counts[name] >= MAX_RESTARTS:
+                        print(f"✗  {name} crashed {MAX_RESTARTS} times. Giving up.")
+                        shutdown()
+                        return
 
-            # One-time health check after 5 seconds
-            if not backend_ok and (time.time() - start_time) > 5:
-                import urllib.request
-                try:
-                    with urllib.request.urlopen(f"http://127.0.0.1:{backend_port}/health", timeout=2) as r:
-                        if r.getcode() == 200:
-                            print("✓  Backend health check: OK")
-                            backend_ok = True
-                except Exception:
-                    pass  # still starting up
+                    restart_counts[name] += 1
+                    exit_code = proc.returncode
+                    print(f"⚠  {name} exited (code {exit_code}). "
+                          f"Restarting in {RESTART_DELAY}s "
+                          f"[attempt {restart_counts[name]}/{MAX_RESTARTS}] …")
+                    time.sleep(RESTART_DELAY)
+
+                    if name == "backend":
+                        processes["backend"]  = start_backend()
+                    else:
+                        processes["frontend"] = start_frontend()
+
+                    print(f"✓  {name} restarted.")
+                else:
+                    # Process is alive — reset its restart counter
+                    restart_counts[name] = 0
 
     except KeyboardInterrupt:
         pass
