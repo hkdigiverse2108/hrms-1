@@ -4,7 +4,6 @@ import signal
 import sys
 import time
 import shutil
-import urllib.request
 from pathlib import Path
 
 
@@ -175,10 +174,7 @@ def run_app():
     if not is_windows:
         signal.signal(signal.SIGTERM, shutdown)
 
-    # ── Health-check loop ────────────────────────────────────────────────────
-    start_time = time.time()
-    backend_ok = False
-
+    # ── Monitor loop ──────────────────────────────────────────────────────────
     try:
         while True:
             time.sleep(1)
@@ -189,17 +185,6 @@ def run_app():
             if frontend_process.poll() is not None:
                 print("[frontend] Process terminated unexpectedly.")
                 break
-
-            # One-time backend health check after 5 s
-            if not backend_ok and time.time() - start_time > 5:
-                try:
-                    url = f"http://127.0.0.1:{backend_port}/health"
-                    with urllib.request.urlopen(url, timeout=2) as resp:
-                        if resp.getcode() == 200:
-                            print(f"[backend] Health check OK ✓")
-                            backend_ok = True
-                except Exception:
-                    pass  # Still starting up
 
     except KeyboardInterrupt:
         pass
