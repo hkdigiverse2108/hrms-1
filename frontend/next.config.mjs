@@ -10,7 +10,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: `http://127.0.0.1:${process.env.BACKEND_PORT || 8000}/:path*`,
+        destination: `http://${process.env.BACKEND_HOST || '127.0.0.1'}:${process.env.BACKEND_PORT || 8000}/:path*`,
       },
     ]
   },
