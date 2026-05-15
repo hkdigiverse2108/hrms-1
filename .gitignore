@@ -25,6 +25,7 @@ wheels/
 *.egg
 backend/uploads/*
 !backend/uploads/.gitkeep
+venv
 
 # Node
 node_modules/
