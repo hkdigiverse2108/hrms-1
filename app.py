@@ -63,9 +63,9 @@ def run_app():
     frontend_port = os.environ.get("PORT", "3535")          # Next.js uses PORT
 
     # APP_HOST controls binding:
-    #   127.0.0.1 → local-only (default, safe on macOS)
-    #   0.0.0.0   → all interfaces (set this on a server)
-    app_host = os.environ.get("APP_HOST", "127.0.0.1")
+    #   0.0.0.0   → all interfaces (standard for servers and network access)
+    #   127.0.0.1 → local-only
+    app_host = os.environ.get("APP_HOST", "0.0.0.0")
 
     # Propagate so uvicorn and Next.js both pick up the same host
     os.environ["APP_HOST"]     = app_host
