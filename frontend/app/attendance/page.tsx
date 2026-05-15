@@ -472,14 +472,6 @@ export default function AttendancePage() {
               </Button>
             </DialogTrigger>
             
-            {canManageAttendance && (
-              <Link href="/attendance/recovery-requests">
-                <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium border-brand-teal text-brand-teal hover:bg-brand-light/20">
-                  <Eye className="w-4 h-4 mr-2" />
-                  View Requests
-                </Button>
-              </Link>
-            )}
 
             <DialogContent className="sm:max-w-[450px]">
               <DialogHeader>

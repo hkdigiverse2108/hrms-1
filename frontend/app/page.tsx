@@ -69,6 +69,8 @@ export default function DashboardPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [interns, setInterns] = useState<any[]>([]);
   const [allAttendance, setAllAttendance] = useState<any[]>([]);
+  const [applications, setApplications] = useState<any[]>([]);
+  const [assets, setAssets] = useState<any[]>([]);
 
   
   const punchCardRef = useRef<HTMLDivElement>(null);
@@ -82,6 +84,8 @@ export default function DashboardPage() {
         fetchEmployees();
         fetchInterns();
         fetchAllAttendance();
+        fetchApplications();
+        fetchAssets();
       }
     }
   }, [user?.id]);
@@ -131,6 +135,24 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error("Error fetching attendance:", err);
+    }
+  };
+
+  const fetchApplications = async () => {
+    try {
+      const res = await fetch(`${API_URL}/applications`);
+      if (res.ok) setApplications(await res.json());
+    } catch (err) {
+      console.error("Error fetching applications:", err);
+    }
+  };
+
+  const fetchAssets = async () => {
+    try {
+      const res = await fetch(`${API_URL}/assets`);
+      if (res.ok) setAssets(await res.json());
+    } catch (err) {
+      console.error("Error fetching assets:", err);
     }
   };
 
@@ -294,12 +316,6 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Here's what's happening in your organization today."
       >
-        {isAdmin && (
-          <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium">
-            <Plus className="w-4 h-4 mr-2" />
-            New Report
-          </Button>
-        )}
         {(isEmployee || isHR || userRole === "team leader") && (
           <Button 
             onClick={() => setIsRequestDialogOpen(true)}
@@ -314,7 +330,7 @@ export default function DashboardPage() {
       {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} />}
       {isHR && (
         <div className="mb-8">
-          <HRView user={user} leaves={leaveRequests} />
+          <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />
           <div className="my-8 border-t border-gray-100" />
         </div>
       )}
@@ -371,14 +387,57 @@ function AdminView({ user, leaves, employees, interns, allAttendance }: { user: 
     };
   });
 
+  const totalEmployeesCount = employees?.length || 0;
+  const todayAttendanceCount = todayAttendance?.length || 0;
+  const onTimeCount = todayAttendance?.filter(a => !a.isLate)?.length || 0;
+  const lateCount = todayAttendance?.filter(a => a.isLate)?.length || 0;
+  const absentTodayCount = Math.max(0, totalEmployeesCount - todayAttendanceCount);
+  
+  const onTimeRate = todayAttendanceCount > 0 ? Math.round((onTimeCount / todayAttendanceCount) * 100) : 0;
+  const absenceRate = totalEmployeesCount > 0 ? Math.round((absentTodayCount / totalEmployeesCount) * 100) : 0;
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Employees" value={(employees?.length || 0).toString()} trend="+12" trendLabel="from last month" icon={<Users className="w-5 h-5 text-muted-foreground" />} />
-        <StatCard title="On Time Today" value={(todayAttendance?.filter(a => !a.isLate)?.length || 0).toString()} trend="87%" trendLabel="arrived on schedule" icon={<Clock className="w-5 h-5 text-muted-foreground" />} trendUp/>
-        <StatCard title="Absent Today" value={(leaves?.filter(l => l.status === 'Approved')?.length || 0).toString()} trend="6%" trendLabel="on approved leave" icon={<UserX className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
-
-        <StatCard title="Total Interns" value={(interns?.length || 0).toString()} trend="+3" trendLabel="joined this month" icon={<GraduationCap className="w-5 h-5 text-muted-foreground" />} />
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <StatCard 
+          title="Total Employees" 
+          value={totalEmployeesCount.toString()} 
+          trend={`+${employees?.filter(e => dayjs(e.joinDate).isAfter(dayjs().subtract(1, 'month'))).length || 0}`} 
+          trendLabel="new this month" 
+          icon={<Users className="w-5 h-5 text-muted-foreground" />} 
+        />
+        <StatCard 
+          title="On Time Today" 
+          value={onTimeCount.toString()} 
+          trend={`${onTimeRate}%`} 
+          trendLabel="punctuality rate" 
+          icon={<Clock className="w-5 h-5 text-muted-foreground" />} 
+          trendUp={onTimeRate >= 80}
+        />
+        <StatCard 
+          title="Late Today" 
+          value={lateCount.toString().padStart(2, '0')} 
+          trend="Punctuality" 
+          trendLabel="late arrivals" 
+          icon={<AlertCircle className="w-5 h-5 text-amber-500" />} 
+          trendUp={lateCount === 0} 
+          color="orange" 
+        />
+        <StatCard 
+          title="Absent Today" 
+          value={absentTodayCount.toString()} 
+          trend={`${absenceRate}%`} 
+          trendLabel="absence rate" 
+          icon={<UserX className="w-5 h-5 text-muted-foreground" />} 
+          trendUp={absenceRate < 15} 
+        />
+        <StatCard 
+          title="Total Interns" 
+          value={(interns?.length || 0).toString()} 
+          trend={`+${interns?.filter(i => dayjs(i.joinDate).isAfter(dayjs().subtract(1, 'month'))).length || 0}`} 
+          trendLabel="new this month" 
+          icon={<GraduationCap className="w-5 h-5 text-muted-foreground" />} 
+        />
       </div>
  
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -417,7 +476,7 @@ function AdminView({ user, leaves, employees, interns, allAttendance }: { user: 
   );
 }
  
-function HRView({ user, leaves }: { user: any, leaves: any[] }) {
+function HRView({ user, leaves, applications, assets }: { user: any, leaves: any[], applications: any[], assets: any[] }) {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
   const filteredLeaves = activeFilter 
@@ -439,7 +498,7 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
         </div>
 
         <Link href="/recruitment/hiring-board">
-          <StatCard title="New Applications" value="24" trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
+          <StatCard title="New Applications" value={(applications?.length || 0).toString().padStart(2, '0')} trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
         </Link>
         <div onClick={() => setActiveFilter(activeFilter === 'Approved' ? null : 'Approved')} className="cursor-pointer">
           <StatCard 
@@ -451,7 +510,7 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
             color={activeFilter === 'Approved' ? 'brand' : undefined}
           />
         </div>
-        <StatCard title="Asset Requests" value="03" trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
+        <StatCard title="Asset Requests" value={(assets?.filter(a => a.status === 'Requested' || a.status === 'Pending')?.length || 0).toString().padStart(2, '0')} trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
       </div>
  
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -504,22 +563,22 @@ function HRView({ user, leaves }: { user: any, leaves: any[] }) {
               </Link>
             </div>
             <div className="space-y-4">
-              {[
-                { candidate: 'John Robert', role: 'Senior React Dev', time: 'Today, 2:00 PM' },
-                { candidate: 'Elena Torres', role: 'UI Designer', time: 'Tomorrow, 10:30 AM' },
-                { candidate: 'Jason Reed', role: 'QA Engineer', time: '28 Oct, 4:00 PM' },
-              ].map((interview, i) => (
-                <div key={i} className="flex gap-4 p-3 rounded-lg border border-border hover:border-brand-teal/30 transition-colors">
-                  <div className="bg-brand-light p-2 rounded-md h-fit"><Clock className="w-4 h-4 text-brand-teal" /></div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-sm">{interview.candidate}</h4>
-                    <p className="text-xs text-muted-foreground">{interview.role}</p>
+              {applications && applications.length > 0 ? (
+                applications.slice(0, 3).map((app, i) => (
+                  <div key={i} className="flex gap-4 p-3 rounded-lg border border-border hover:border-brand-teal/30 transition-colors">
+                    <div className="bg-brand-light p-2 rounded-md h-fit"><Clock className="w-4 h-4 text-brand-teal" /></div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-sm">{app.candidate_name || app.name}</h4>
+                      <p className="text-xs text-muted-foreground">{app.applied_for || app.role}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-brand-teal">{app.status || 'Applied'}</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-xs font-bold text-brand-teal">{interview.time}</div>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="p-8 text-center text-sm text-muted-foreground">No upcoming interviews or recent applications</div>
+              )}
             </div>
           </div>
         </div>

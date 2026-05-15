@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { 
   Download, 
   Clock, 
@@ -361,10 +362,18 @@ export default function EmployeeAttendanceListPage() {
         title="Employee Attendance List" 
         description="Manage your team members and their account permissions here."
       >
-        <Button variant="outline" className="h-9 shadow-sm" onClick={() => exportToCSV(filteredAttendance, 'employee_attendance')}>
-          <Download className="w-4 h-4 mr-2" />
-          Export
-        </Button>
+        <div className="flex items-center gap-3">
+          <Link href="/attendance/recovery-requests">
+            <Button variant="outline" className="h-9 shadow-sm font-medium border-brand-teal text-brand-teal hover:bg-brand-light/20">
+              <Eye className="w-4 h-4 mr-2" />
+              View Requests
+            </Button>
+          </Link>
+          <Button variant="outline" className="h-9 shadow-sm" onClick={() => exportToCSV(filteredAttendance, 'employee_attendance')}>
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+        </div>
       </PageHeader>
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">

@@ -37,12 +37,13 @@ const getStatusBadge = (status: string) => {
 
 export default function ResourceManagementPage() {
   const { user, isLoading: userLoading } = useUser();
-  const { data, isLoading } = useApi();
+  const { data, isLoading, refresh: apiRefresh } = useApi();
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
   
   const initialFormState = {
     name: "",
@@ -85,7 +86,7 @@ export default function ResourceManagementPage() {
 
       if (response.ok) {
         toast.success("Resource deleted successfully");
-        window.location.reload();
+        apiRefresh();
       } else {
         toast.error("Failed to delete resource");
       }
@@ -134,7 +135,10 @@ export default function ResourceManagementPage() {
   const filteredResources = allResources.filter((res: any) => {
     const matchStatus = statusFilter === "all" || res.status.toLowerCase() === statusFilter.toLowerCase();
     const matchType = typeFilter === "all" || res.category === typeFilter;
-    return matchStatus && matchType;
+    const matchSearch = searchTerm === "" || 
+                        res.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                        res.assetId?.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchStatus && matchType && matchSearch;
   });
 
   const resources = filteredResources;
@@ -170,8 +174,7 @@ export default function ResourceManagementPage() {
       if (response.ok) {
         toast.success(editingId ? "Resource updated successfully" : "Resource added successfully");
         handleCancel();
-        // Refresh page to show new data
-        window.location.reload();
+        apiRefresh();
       } else {
         toast.error(editingId ? "Failed to update resource" : "Failed to add resource");
       }
@@ -390,34 +393,45 @@ export default function ResourceManagementPage() {
       <div className="bg-white border border-border rounded-xl shadow-sm flex flex-col">
         <div className="p-6 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h2 className="text-lg font-bold text-foreground">All Resources</h2>
-          <div className="flex items-center gap-3">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px] bg-gray-50">
-                <span className="text-muted-foreground mr-1">Status:</span> <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="allocated">Allocated</SelectItem>
-                <SelectItem value="available">Available</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[150px] bg-gray-50">
-                <span className="text-muted-foreground mr-1">Type:</span> <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="PC">PC / Laptop</SelectItem>
-                <SelectItem value="CPU">CPU</SelectItem>
-                <SelectItem value="Monitor">Monitor</SelectItem>
-                <SelectItem value="Keyboard">Keyboard</SelectItem>
-                <SelectItem value="Mouse">Mouse</SelectItem>
-                <SelectItem value="Mousepad">Mousepad</SelectItem>
-                <SelectItem value="Parking Card">Parking Card</SelectItem>
-                <SelectItem value="Other">Other</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="relative w-full sm:w-64">
+              <RefreshCw className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground ${isLoading ? 'animate-spin text-brand-teal' : ''}`} />
+              <Input 
+                placeholder="Search name or ID..." 
+                className="pl-9 bg-gray-50 border-border" 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-[140px] bg-gray-50">
+                  <span className="text-muted-foreground mr-1">Status:</span> <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="allocated">Allocated</SelectItem>
+                  <SelectItem value="available">Available</SelectItem>
+                  <SelectItem value="maintenance">Maintenance</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-full sm:w-[150px] bg-gray-50">
+                  <span className="text-muted-foreground mr-1">Type:</span> <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="PC">PC / Laptop</SelectItem>
+                  <SelectItem value="CPU">CPU</SelectItem>
+                  <SelectItem value="Monitor">Monitor</SelectItem>
+                  <SelectItem value="Keyboard">Keyboard</SelectItem>
+                  <SelectItem value="Mouse">Mouse</SelectItem>
+                  <SelectItem value="Mousepad">Mousepad</SelectItem>
+                  <SelectItem value="Parking Card">Parking Card</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
