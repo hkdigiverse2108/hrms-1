@@ -322,7 +322,7 @@ export default function EmployeeListPage() {
                               <Trash2 className="w-4 h-4 mr-2" />
                               Delete
                             </DropdownMenuItem>
-                            {(isAdmin || checkPermission('access-control', 'canView')) && (
+                            {(isAdmin || checkPermission('access-control', 'canView')) && emp.role?.toLowerCase() !== 'admin' && (
                               <DropdownMenuItem 
                                 onClick={() => router.push(`/employees/permissions/${emp.id}`)}
                                 className="cursor-pointer text-brand-teal focus:text-brand-teal"

@@ -165,7 +165,7 @@ import { useUserContext } from '@/context/UserContext'
      title: 'Settings',
      href: '/settings',
      icon: Settings,
-     roles: ['admin', 'hr'],
+     roles: ['admin'],
      moduleName: 'settings',
      children: [
        { title: 'Company Settings', href: '/settings' },
@@ -273,7 +273,12 @@ import { useUserContext } from '@/context/UserContext'
 
                 {item.children && isExpanded && (
                   <ul className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-4">
-                    {item.children.map((child) => (
+                    {item.children
+                      .filter(child => {
+                        if (child.title === 'Roles & Permissions' && userRole !== 'admin') return false
+                        return true
+                      })
+                      .map((child) => (
                       <li key={child.href}>
                         <Link
                           href={child.href}

@@ -155,7 +155,7 @@ export default function SettingsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Access Control Card */}
-          {(isAdmin || checkPermission('access-control', 'canView')) && (
+          {isAdmin && (
             <Card className="p-6 border-border shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-brand-light rounded-lg">
@@ -264,56 +264,6 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* Role Simulator Card */}
-          <Card className="p-0 overflow-hidden border-border shadow-sm">
-            <div className="p-6 border-b border-border bg-gray-50/50">
-              <h3 className="font-bold text-lg text-foreground">Role Simulator</h3>
-              <p className="text-sm text-muted-foreground">Switch your role to preview different dashboard views.</p>
-            </div>
-            <div className="p-6 space-y-4">
-              {roles.map((role) => (
-                <div 
-                  key={role.id}
-                  onClick={() => handleRoleSwitch(role.id)}
-                  className={`group relative flex items-start gap-4 p-5 rounded-xl border transition-all cursor-pointer ${
-                    user?.role === role.id 
-                    ? 'border-brand-teal bg-brand-light/30 ring-1 ring-brand-teal' 
-                    : 'border-border hover:border-brand-teal/50 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className={`p-3 rounded-xl border ${
-                    user?.role === role.id ? 'bg-white border-brand-teal/20' : 'bg-gray-50 border-border'
-                  }`}>
-                    {role.icon}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-bold text-[15px] text-foreground">{role.name}</h4>
-                      {user?.role === role.id && (
-                        <span className="bg-brand-teal text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" /> Active
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[13px] text-muted-foreground leading-relaxed pr-8">{role.description}</p>
-                    
-                    <div className="mt-4 flex flex-wrap gap-2">
-                       {role.capabilities.map((cap, i) => (
-                         <span key={i} className="text-[10px] font-bold text-muted-foreground bg-gray-100 px-2 py-1 rounded-md">
-                           {cap}
-                         </span>
-                       ))}
-                    </div>
-                  </div>
-                  <div className={`absolute right-5 top-1/2 -translate-y-1/2 transition-all ${
-                    user?.role === role.id ? 'text-brand-teal translate-x-0' : 'text-gray-300 translate-x-2 opacity-0 group-hover:opacity-100'
-                  }`}>
-                    <ArrowRight className="w-5 h-5" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
 
         </div>
 

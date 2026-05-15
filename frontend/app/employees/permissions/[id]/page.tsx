@@ -133,7 +133,13 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
       // Fetch Current Employee Details
       const empRes = await fetch(`${API_URL}/employees/${employeeId}`)
       if (empRes.ok) {
-        setEmployee(await empRes.json())
+        const empData = await empRes.json()
+        if (empData.role?.toLowerCase() === 'admin') {
+          toast.info("Admin users already have all permissions.")
+          router.push('/employees')
+          return
+        }
+        setEmployee(empData)
       }
 
       // Fetch Permissions
@@ -224,8 +230,9 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   }
 
   const filteredEmployees = employees.filter(emp => 
-    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.employeeId?.toLowerCase().includes(searchTerm.toLowerCase())
+    (emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.employeeId?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    emp.role?.toLowerCase() !== 'admin'
   )
 
   return (
