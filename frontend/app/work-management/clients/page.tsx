@@ -312,14 +312,14 @@ export default function ClientsPage() {
                           { key: 'name', type: 'text', align: 'left' },
                           { key: 'email', type: 'text', align: 'left' },
                           { key: 'phone', type: 'text', align: 'left' },
-                          { key: 'status', type: 'select', options: ['active', 'inactive'], align: 'center' },
+                          { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
                         ] : activeTab === "marketing" ? [
                           { key: 'name', type: 'text', font: 'bold', align: 'left' },
                           { key: 'services', type: 'text', align: 'left' },
                           { key: 'salesFocused', type: 'text', align: 'left' },
                           { key: 'dailyBudget', type: 'number', align: 'center' },
                           { key: 'remarks', type: 'text', align: 'left' },
-                          { key: 'status', type: 'select', options: ['active', 'inactive'], align: 'center' },
+                          { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
                           { key: 'responsibility', type: 'text', align: 'left' },
                           { key: 'dailyFollowup', type: 'select', options: ['Yes', 'No'], align: 'center' },
                         ] : [
@@ -335,7 +335,7 @@ export default function ClientsPage() {
                           { key: 'post', type: 'number', align: 'center' },
                           { key: 'reelRequired', type: 'select', options: ['Yes', 'No'], align: 'center' },
                           { key: 'reel', type: 'number', align: 'center' },
-                          { key: 'status', type: 'select', options: ['active', 'inactive'], align: 'center' },
+                          { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
                         ]).map(col => (
                           <TableCell 
                             key={col.key} 
@@ -368,12 +368,14 @@ export default function ClientsPage() {
                             ) : (
                               <div className={`text-[12px] ${col.font === 'bold' ? 'font-bold' : ''} ${col.align === 'center' ? 'text-center' : 'text-left'}`}>
                                 {col.type === 'select' ? (
-                                  <Badge className={
+                                  <Badge variant={
                                     client[col.key] === "Yes" || client[col.key] === "active" 
-                                      ? "bg-green-100 text-green-700" 
-                                      : "bg-slate-100 text-slate-500"
+                                      ? "success" 
+                                      : client[col.key] === "on-hold"
+                                        ? "warning"
+                                        : "secondary"
                                   }>
-                                    {client[col.key] || (col.key === 'status' ? 'active' : 'No')}
+                                    {client[col.key] === "on-hold" ? "On Hold" : client[col.key] || (col.key === 'status' ? 'active' : 'No')}
                                   </Badge>
                                 ) : (
                                   client[col.key] || (col.type === 'number' ? '0' : "-")
@@ -449,8 +451,8 @@ export default function ClientsPage() {
                       </div>
 
                       <div className="flex items-center justify-between pt-2">
-                        <Badge variant={client.status === "active" ? "success" : "secondary"} className="capitalize">
-                          {client.status}
+                        <Badge variant={client.status === "active" ? "success" : client.status === "on-hold" ? "warning" : "secondary"} className="capitalize">
+                          {client.status?.replace('-', ' ')}
                         </Badge>
                         <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
                           Joined {client.createdDate}
