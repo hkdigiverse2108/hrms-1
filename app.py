@@ -36,7 +36,7 @@ def main():
     print(f"Starting Backend and Frontend servers concurrently...")
 
     # For the backend, we run the uvicorn server via python module
-    backend_cmd = [sys.executable, "-m", "uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", backend_port]
+    backend_cmd = [sys.executable, "-m", "uvicorn", "main:app", "--reload", "--host", "127.0.0.1", "--port", backend_port]
 
     
     # For the frontend, we use npm to start Next.js
