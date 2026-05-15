@@ -6,9 +6,6 @@ import time
 import shutil
 from pathlib import Path
 
-MAX_RESTARTS = 10        # max consecutive restarts before giving up
-RESTART_DELAY = 3        # seconds between restart attempts
-LOG_DIR = Path(__file__).parent  # write logs next to app.py
 
 
 # ---------------------------------------------------------------------------
@@ -180,86 +177,21 @@ def run_app():
         # Ignore SIGHUP so SSH disconnects don't kill the launcher
         signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
-    # ── Monitor + auto-restart loop ───────────────────────────────────────────
-    backend_restarts  = 0
-    frontend_restarts = 0
-
-    # Open log files for subprocess stderr (append mode so history is kept)
-    backend_log  = open(LOG_DIR / "backend_err.log",  "a", buffering=1)
-    frontend_log = open(LOG_DIR / "frontend_err.log", "a", buffering=1)
-
-    def start_backend():
-        log_ts = time.strftime("%Y-%m-%d %H:%M:%S")
-        backend_log.write(f"\n--- [backend]  started at {log_ts} ---\n")
-        backend_log.flush()
-        return subprocess.Popen(
-            backend_cmd,
-            cwd=str(backend_dir),
-            env=backend_env,
-            creationflags=creation_flags,
-            stderr=backend_log,
-        )
-
-    def start_frontend():
-        log_ts = time.strftime("%Y-%m-%d %H:%M:%S")
-        frontend_log.write(f"\n--- [frontend] started at {log_ts} ---\n")
-        frontend_log.flush()
-        return subprocess.Popen(
-            frontend_cmd,
-            cwd=str(frontend_dir),
-            env=os.environ.copy(),
-            shell=is_windows,
-            creationflags=creation_flags,
-            stderr=frontend_log,
-        )
-
-    # Replace the bare Popen calls above with log-aware ones
-    backend_process.stderr  # already started without log — restart cleanly
-    backend_process.terminate()
-    try:
-        backend_process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        backend_process.kill()
-    frontend_process.terminate()
-    try:
-        frontend_process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        frontend_process.kill()
-
-    backend_process  = start_backend()
-    frontend_process = start_frontend()
-
+    # ── Monitor loop ──────────────────────────────────────────────────────────
     try:
         while True:
             time.sleep(1)
 
             if backend_process.poll() is not None:
-                rc = backend_process.returncode
-                backend_restarts += 1
-                print(f"[backend] Exited (rc={rc}). Restart {backend_restarts}/{MAX_RESTARTS}…")
-                backend_log.write(f"[backend] Exited rc={rc}, restart {backend_restarts}\n")
-                if backend_restarts >= MAX_RESTARTS:
-                    print("[backend] Too many restarts — giving up.")
-                    break
-                time.sleep(RESTART_DELAY * min(backend_restarts, 5))
-                backend_process = start_backend()
-
+                print("[backend] Process terminated unexpectedly.")
+                break
             if frontend_process.poll() is not None:
-                rc = frontend_process.returncode
-                frontend_restarts += 1
-                print(f"[frontend] Exited (rc={rc}). Restart {frontend_restarts}/{MAX_RESTARTS}…")
-                frontend_log.write(f"[frontend] Exited rc={rc}, restart {frontend_restarts}\n")
-                if frontend_restarts >= MAX_RESTARTS:
-                    print("[frontend] Too many restarts — giving up.")
-                    break
-                time.sleep(RESTART_DELAY * min(frontend_restarts, 5))
-                frontend_process = start_frontend()
+                print("[frontend] Process terminated unexpectedly.")
+                break
 
     except KeyboardInterrupt:
         pass
     finally:
-        backend_log.close()
-        frontend_log.close()
         shutdown()
 
 
