@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Users, Plus, Pencil, Trash2, Mail, Phone, Building2, Loader2, Search, History, ClipboardList, Briefcase } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Mail, Phone, Building2, Loader2, Search, History, ClipboardList, Briefcase, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
 import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,6 +41,7 @@ export default function ClientsPage() {
   const [editingClient, setEditingClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [inlineEditing, setInlineEditing] = useState<{id: string, field: string} | null>(null);
   
   // Logs state
@@ -161,8 +163,11 @@ export default function ClientsPage() {
                           c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           c.industry?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    if (activeTab === "all") return matchesSearch;
-    return matchesSearch && c.department?.toLowerCase() === activeTab.toLowerCase();
+    const matchesStatus = statusFilter === "all" || c.status === statusFilter;
+    
+    const matchesDept = activeTab === "all" || c.department?.toLowerCase() === activeTab.toLowerCase();
+
+    return matchesSearch && matchesStatus && matchesDept;
   });
 
   const handleInlineUpdate = async (clientId: string, field: string, value: any) => {
@@ -236,8 +241,8 @@ export default function ClientsPage() {
           ))}
         </TabsList>
 
-        <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm mb-6">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm mb-6">
+          <div className="relative flex-1 w-full md:max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
               placeholder={`Search ${activeTab === 'all' ? '' : activeTab} clients...`} 
@@ -245,6 +250,21 @@ export default function ClientsPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <Filter className="w-4 h-4 text-muted-foreground hidden md:block" />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full md:w-[150px] bg-slate-50 border-slate-200">
+                <SelectValue placeholder="Status Filter" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="on-hold">On Hold</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
