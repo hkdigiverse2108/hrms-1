@@ -118,10 +118,11 @@ def main():
 
     frontend_env = os.environ.copy()
 
-    # Next.js 16 defaults to 0.0.0.0 which causes EPERM on macOS.
-    # Pass -H explicitly: 127.0.0.1 locally, 0.0.0.0 on server.
-    # -p port and -H hostname are proper Next.js 16 CLI flags.
-    frontend_cmd = f"npm run dev -- -H {bind_host} -p {frontend_port}"
+    # Next.js must always bind to 127.0.0.1 to avoid EPERM on Linux servers.
+    # Binding to 0.0.0.0 is not permitted for unprivileged processes on many
+    # Linux distributions. Nginx (or another reverse proxy) should handle
+    # exposing the frontend externally by proxying to localhost.
+    frontend_cmd = f"npm run dev -- -H 127.0.0.1 -p {frontend_port}"
     print(f"\n→ Starting Frontend (Next.js on port {frontend_port})")
     print(f"  {frontend_cmd}")
     frontend_process = subprocess.Popen(
