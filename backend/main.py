@@ -5,6 +5,7 @@ from typing import List, Optional
 import crud, schemas, database
 import uvicorn
 import os
+import uuid
 from bson import ObjectId
 from database import get_db
 
@@ -35,19 +36,19 @@ async def root():
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    # Note: API_URL might not be available here directly, using relative path or placeholder
-    return {"url": f"/uploads/{file.filename}"}
+    return {"url": f"/uploads/{filename}"}
 
 @app.post("/chat/upload")
 async def upload_chat_file(file: UploadFile = File(...)):
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    # Use relative path or dynamic host in production
-    return {"url": f"/uploads/{file.filename}", "filename": file.filename}
+    return {"url": f"/uploads/{filename}", "filename": filename}
 
 # Auth
 @app.post("/login", response_model=schemas.LoginResponse)

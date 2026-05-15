@@ -66,17 +66,19 @@ def main():
     is_server = host != "127.0.0.1"
     bind_host = "0.0.0.0" if is_server else "127.0.0.1"
 
-    # Expose detected host so the Next.js proxy (next.config.mjs) can reach backend
-    os.environ["BACKEND_HOST"]     = "127.0.0.1"   # proxy is always same-machine
-    os.environ["NEXT_PUBLIC_HOST"] = host
-
+    is_prod = "--prod" in sys.argv or is_server
+    
     is_windows    = os.name == "nt"
     creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if is_windows else 0
 
+    # Expose detected host so the Next.js proxy (next.config.mjs) can reach backend
+    os.environ["BACKEND_HOST"]     = "127.0.0.1"   # proxy is always same-machine
+    os.environ["NEXT_PUBLIC_HOST"] = host
+    
     print("=" * 55)
     print("  HRMS Application Launcher")
     print("=" * 55)
-    print(f"  Mode          : {'SERVER' if is_server else 'LOCAL DEV'}")
+    print(f"  Mode          : {'PRODUCTION' if is_prod else 'LOCAL DEV'}")
     print(f"  Detected IP   : {host}")
     print(f"  Binding to    : {bind_host}")
     print(f"  Backend       : http://{host}:{backend_port}")
@@ -85,8 +87,6 @@ def main():
     print("=" * 55)
 
     # ── Ignore SIGHUP so SSH disconnect does NOT kill the app ─
-    # This is the #1 reason apps shut down on the server when
-    # the SSH session closes.
     if not is_windows:
         signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
@@ -94,15 +94,13 @@ def main():
     python_exe  = get_venv_python()
     backend_dir = Path(__file__).parent / "backend"
 
-    # On server: no --reload (reload spawns short-lived child processes
-    # which confuse the monitor loop into thinking the backend died).
-    # On local dev: keep --reload for hot-reloading convenience.
+    # On server/prod: no --reload
     backend_cmd = [
         python_exe, "-m", "uvicorn", "main:app",
         "--host", bind_host,
         "--port", backend_port,
     ]
-    if not is_server:
+    if not is_prod:
         backend_cmd.append("--reload")
 
     print(f"\n→ Starting Backend  (FastAPI on port {backend_port})")
@@ -115,8 +113,16 @@ def main():
         print("\n→ node_modules missing — running npm install …")
         subprocess.run("npm install", cwd=str(frontend_dir), shell=True, check=True)
 
+    if is_prod and not (frontend_dir / ".next").exists():
+        print("\n→ Production build missing — running npm run build …")
+        subprocess.run("npm run build", cwd=str(frontend_dir), shell=True, check=True)
+
     frontend_env = os.environ.copy()
-    frontend_cmd = f"npm run dev -- -H {bind_host} -p {frontend_port}"
+    if is_prod:
+        frontend_env["NODE_ENV"] = "production"
+        frontend_cmd = f"npm run start -- -H {bind_host} -p {frontend_port}"
+    else:
+        frontend_cmd = f"npm run dev -- -H {bind_host} -p {frontend_port}"
 
     print(f"\n→ Starting Frontend (Next.js on port {frontend_port})")
     print(f"  {frontend_cmd}")
