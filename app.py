@@ -119,11 +119,16 @@ def run_app():
     if os.environ.get("DEBUG", "False").lower() == "true":
         backend_cmd.append("--reload")
 
+    # Redirect backend output to a log file for debugging
+    backend_log_file = open("backend_logs.txt", "w")
+    
     print(f"Launching Backend: {' '.join(backend_cmd)}")
     backend_process = subprocess.Popen(
         backend_cmd,
         cwd=str(backend_dir),
         env=backend_env,
+        stdout=backend_log_file,
+        stderr=backend_log_file,
         creationflags=creation_flags
     )
 
