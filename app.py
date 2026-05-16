@@ -48,18 +48,29 @@ def find_frontend_runner() -> str:
 
 
 def kill_port_owner(port: str):
-    """Find and kill the process listening on a specific port."""
+    """Find and kill the process listening on a specific port (Cross-platform)."""
     try:
-        # Use netstat to find the PID
         import subprocess
-        cmd = f"netstat -ano | findstr :{port} | findstr LISTENING"
-        output = subprocess.check_output(cmd, shell=True).decode()
-        for line in output.strip().split("\n"):
-            parts = line.split()
-            if len(parts) > 4:
-                pid = parts[-1]
-                print(f"Found process {pid} on port {port}. Cleaning it up...")
-                subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+        if os.name == "nt":
+            # Windows
+            cmd = f"netstat -ano | findstr :{port} | findstr LISTENING"
+            output = subprocess.check_output(cmd, shell=True).decode()
+            for line in output.strip().split("\n"):
+                parts = line.split()
+                if len(parts) > 4:
+                    pid = parts[-1]
+                    print(f"Found process {pid} on port {port}. Cleaning it up...")
+                    subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+        else:
+            # Linux / macOS
+            cmd = f"lsof -t -i:{port}"
+            try:
+                pid = subprocess.check_output(cmd, shell=True).decode().strip()
+                if pid:
+                    print(f"Found process {pid} on port {port}. Cleaning it up...")
+                    subprocess.run(f"kill -9 {pid}", shell=True)
+            except subprocess.CalledProcessError:
+                pass # No process found
     except Exception:
         pass
 
