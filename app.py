@@ -127,36 +127,8 @@ def run_app():
         creationflags=creation_flags
     )
 
-    # 2. Build Frontend (Next.js)
-    # Check if we should skip build (e.g. for faster local dev)
-    skip_build = os.environ.get("SKIP_BUILD", "False").lower() == "true"
-    if not skip_build:
-        print(f"Building frontend...")
-        build_env = os.environ.copy()
-        # Optimization flags for faster build
-        build_env["NODE_OPTIONS"] = "--max-old-space-size=2048"
-        build_env["GENERATE_SOURCEMAP"] = "false"
-        build_env["NEXT_TELEMETRY_DISABLED"] = "1"
-        build_env["NEXT_LINT_IGNORE_DURING_BUILDS"] = "true"
-        
-        result = subprocess.run(
-            [frontend_runner, "run", "build"],
-            cwd=str(Path(__file__).parent / "frontend"),
-            env=build_env,
-            shell=is_windows
-        )
-        
-        if result.returncode != 0:
-            print("\n" + "!"*60)
-            print("  FRONTEND BUILD FAILED!")
-            print("  Likely due to low memory (Bus Error).")
-            print("  Try adding a swap file or increasing RAM.")
-            print("!"*60 + "\n")
-            sys.exit(1)
-
-    # 3. Start Frontend
-    # Use 'preview' script (maps to 'next start' in HRMS-1)
-    frontend_cmd = [frontend_runner, "run", "preview", "--", "--port", frontend_port]
+    # 2. Start Frontend (Development Mode)
+    frontend_cmd = [frontend_runner, "run", "dev", "--", "--port", frontend_port]
     if app_host != "127.0.0.1":
         # Next.js uses --hostname
         frontend_cmd.extend(["--hostname", app_host])
