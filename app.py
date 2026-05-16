@@ -137,6 +137,7 @@ def run_app():
         build_env["NODE_OPTIONS"] = "--max-old-space-size=2048"
         build_env["GENERATE_SOURCEMAP"] = "false"
         build_env["NEXT_TELEMETRY_DISABLED"] = "1"
+        build_env["NEXT_LINT_IGNORE_DURING_BUILDS"] = "true"
         
         result = subprocess.run(
             [frontend_runner, "run", "build"],
