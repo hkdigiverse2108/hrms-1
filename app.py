@@ -132,12 +132,24 @@ def run_app():
     skip_build = os.environ.get("SKIP_BUILD", "False").lower() == "true"
     if not skip_build:
         print(f"Building frontend...")
-        subprocess.run(
+        build_env = os.environ.copy()
+        # Set memory limit for Node.js to 2GB to prevent Bus Error/OOM
+        build_env["NODE_OPTIONS"] = "--max-old-space-size=2048"
+        
+        result = subprocess.run(
             [frontend_runner, "run", "build"],
             cwd=str(Path(__file__).parent / "frontend"),
-            env=os.environ.copy(),
+            env=build_env,
             shell=is_windows
         )
+        
+        if result.returncode != 0:
+            print("\n" + "!"*60)
+            print("  FRONTEND BUILD FAILED!")
+            print("  Likely due to low memory (Bus Error).")
+            print("  Try adding a swap file or increasing RAM.")
+            print("!"*60 + "\n")
+            sys.exit(1)
 
     # 3. Start Frontend
     # Use 'preview' script (maps to 'next start' in HRMS-1)
