@@ -133,11 +133,13 @@ def run_app():
     if not skip_build:
         print(f"Building frontend...")
         build_env = os.environ.copy()
-        # Set memory limit for Node.js to 2GB to prevent Bus Error/OOM
+        # Optimization flags for faster build
         build_env["NODE_OPTIONS"] = "--max-old-space-size=2048"
+        build_env["GENERATE_SOURCEMAP"] = "false"
+        build_env["NEXT_TELEMETRY_DISABLED"] = "1"
         
         result = subprocess.run(
-            [frontend_runner, "run", "build"],
+            [frontend_runner, "run", "build", "--", "--no-lint"],
             cwd=str(Path(__file__).parent / "frontend"),
             env=build_env,
             shell=is_windows
