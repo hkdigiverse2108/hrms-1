@@ -52,15 +52,36 @@ def get_venv_python() -> str:
     return str(candidate) if candidate.exists() else sys.executable
 
 
+def kill_port_owner(port: str):
+    """Find and kill the process listening on a specific port."""
+    try:
+        # Use netstat to find the PID
+        cmd = f"netstat -ano | findstr :{port} | findstr LISTENING"
+        output = subprocess.check_output(cmd, shell=True).decode()
+        for line in output.strip().split("\n"):
+            parts = line.split()
+            if len(parts) > 4:
+                pid = parts[-1]
+                print(f"Found process {pid} on port {port}. Killing it...")
+                subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+    except Exception:
+        # No process found or error, just continue
+        pass
+
+
 # ──────────────────────────────────────────────
 # Main launcher
 # ──────────────────────────────────────────────
 
 def main():
     load_env()
-
+    
+    # Kill any existing processes on the target ports
     frontend_port = os.getenv("PORT", "3535")
     backend_port  = os.getenv("BACKEND_PORT", "8000")
+    print(f"Cleaning ports {backend_port} and {frontend_port}...")
+    kill_port_owner(backend_port)
+    kill_port_owner(frontend_port)
 
     host      = get_local_ip()
     is_server = host != "127.0.0.1"

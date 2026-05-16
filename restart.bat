@@ -8,5 +8,11 @@ echo Killing processes on port 3535 (Frontend)...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3535 ^| findstr LISTENING') do taskkill /F /PID %%a 2>nul
 
 echo.
+echo Building Frontend (Production)...
+cd frontend
+call npm run build
+cd ..
+
+echo.
 echo Ports cleaned. Starting application...
 python app.py
