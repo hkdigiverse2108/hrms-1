@@ -139,7 +139,7 @@ def run_app():
         build_env["NEXT_TELEMETRY_DISABLED"] = "1"
         
         result = subprocess.run(
-            [frontend_runner, "run", "build", "--", "--no-lint"],
+            [frontend_runner, "run", "build"],
             cwd=str(Path(__file__).parent / "frontend"),
             env=build_env,
             shell=is_windows
