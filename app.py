@@ -47,6 +47,23 @@ def find_frontend_runner() -> str:
     return "bun" if shutil.which("bun") else "npm"
 
 
+def kill_port_owner(port: str):
+    """Find and kill the process listening on a specific port."""
+    try:
+        # Use netstat to find the PID
+        import subprocess
+        cmd = f"netstat -ano | findstr :{port} | findstr LISTENING"
+        output = subprocess.check_output(cmd, shell=True).decode()
+        for line in output.strip().split("\n"):
+            parts = line.split()
+            if len(parts) > 4:
+                pid = parts[-1]
+                print(f"Found process {pid} on port {port}. Cleaning it up...")
+                subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -56,7 +73,11 @@ def run_app():
 
     # ── Ports & host ─────────────────────────────────────────────────────────
     backend_port  = os.environ.get("BACKEND_PORT", "8000")
-    frontend_port = os.environ.get("PORT", "3535")          # Next.js uses PORT
+    frontend_port = os.environ.get("PORT", "3535")
+
+    print(f"\n[launcher] Cleaning ports {backend_port} and {frontend_port}...")
+    kill_port_owner(backend_port)
+    kill_port_owner(frontend_port)
 
     # APP_HOST controls binding:
     #   127.0.0.1 → local-only (default, safe on macOS)
