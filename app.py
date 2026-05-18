@@ -4,12 +4,19 @@ import signal
 import sys
 import time
 import shutil
+import platform
 from pathlib import Path
 
 # Load .env file manually to avoid dependencies
 def load_env():
     # Priority: .env.server (if on server) or .env
-    env_files = [".env.server", ".env"]
+    is_prod_flag = "--prod" in sys.argv
+    # On macOS, default to .env for local development unless --prod is specified
+    if platform.system() == "Darwin" and not is_prod_flag:
+        env_files = [".env", ".env.server"]
+    else:
+        env_files = [".env.server", ".env"]
+
     for env_file in env_files:
         env_path = Path(__file__).parent / env_file
         if env_path.exists():
@@ -25,7 +32,8 @@ def load_env():
                             # Don't overwrite if already set in environment
                             if key not in os.environ:
                                 os.environ[key] = value
-            break # Only load the first one found
+            return env_file == ".env.server"
+    return False
 
 def get_venv_python():
     """Find the Python executable inside the project's venv or .venv."""
@@ -67,7 +75,8 @@ def kill_port_owner(port):
 
 def run_app():
     start_time = time.time()
-    load_env()
+    is_server = load_env()
+    is_prod = "--prod" in sys.argv or is_server
     
     # Next.js uses PORT, Backend uses BACKEND_PORT
     backend_port = os.environ.get("BACKEND_PORT", "8000")
@@ -75,6 +84,7 @@ def run_app():
     
     # Default to 127.0.0.1 for local dev. Set APP_HOST=0.0.0.0 in .env.server for production
     app_host = os.environ.get("APP_HOST", "127.0.0.1")
+    bind_host = app_host
     
     # Ensure standard env vars are set
     os.environ["HOST"] = app_host
@@ -141,7 +151,6 @@ def run_app():
             # In standalone mode, Next.js expects 'public' and '.next/static' to be copied manually
             # into the standalone directory for the standalone server to serve them.
             try:
-                import shutil
                 standalone_dir = frontend_dir / ".next" / "standalone"
                 
                 # Sync public
@@ -202,7 +211,7 @@ def run_app():
     # ── Signal handling ───────────────────────────────────────
     shutting_down = [False]
 
-    def shutdown(sig=None, frame=None):
+    def signal_handler(sig=None, frame=None):
         if shutting_down[0]:
             return
         shutting_down[0] = True
@@ -219,26 +228,57 @@ def run_app():
         print("All servers stopped cleanly.")
         sys.exit(0)
 
+    # Ignore SIGHUP so SSH disconnect does NOT kill the app
+    if not is_windows:
+        try:
+            signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        except Exception:
+            pass
+
     # Handle Ctrl+C and other termination signals
     signal.signal(signal.SIGINT, signal_handler)
     if not is_windows:
         signal.signal(signal.SIGTERM, signal_handler)
 
-    # Monitor processes and check backend health
+    # ── Monitor loop with auto-restart & health check ─────────
+    restart_counts = {"backend": 0, "frontend": 0}
+    MAX_RESTARTS = 5
+    RESTART_DELAY = 3   # seconds before restarting a crashed process
     backend_checked = False
-    
+
+    print("\n✓  Both services started. Monitoring …\n")
+
     try:
-        while True:
+        while not shutting_down[0]:
             time.sleep(1)
-            # Check if processes are still alive
-            if backend_process.poll() is not None:
-                print("Backend process terminated unexpectedly.")
-                break
-            if frontend_process.poll() is not None:
-                print("Frontend process terminated unexpectedly.")
-                break
-                
-            # Perform health check once after 10 seconds
+
+            # 1. Process health & auto-restart
+            for name in ("backend", "frontend"):
+                proc = processes[name]
+                if proc.poll() is not None:
+                    if restart_counts[name] >= MAX_RESTARTS:
+                        print(f"✗  {name} crashed {MAX_RESTARTS} times. Giving up.")
+                        signal_handler()
+                        return
+
+                    restart_counts[name] += 1
+                    exit_code = proc.returncode
+                    print(f"⚠  {name} exited (code {exit_code}). "
+                          f"Restarting in {RESTART_DELAY}s "
+                          f"[attempt {restart_counts[name]}/{MAX_RESTARTS}] …")
+                    time.sleep(RESTART_DELAY)
+
+                    if name == "backend":
+                        processes["backend"]  = start_backend()
+                    else:
+                        processes["frontend"] = start_frontend()
+
+                    print(f"✓  {name} restarted.")
+                else:
+                    # Process is alive — reset its restart counter
+                    restart_counts[name] = 0
+
+            # 2. Perform backend health check once after 10 seconds
             if not backend_checked and time.time() - start_time > 10:
                 import urllib.request
                 # Use 127.0.0.1 for local health check even if bound to 0.0.0.0
