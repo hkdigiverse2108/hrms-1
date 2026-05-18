@@ -37,7 +37,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           setIsTimeSynced(true);
         }
       } catch (err) {
-        console.error("Error syncing time:", err);
+        console.warn("Error syncing time:", err);
       }
     };
     syncTime();
@@ -83,10 +83,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                   });
               }
             })
-            .catch(err => console.error("Failed to sync user data:", err));
+            .catch(err => console.warn("Failed to sync user data:", err));
         }
       } catch (err) {
-        console.error("Failed to parse user", err);
+        console.warn("Failed to parse user", err);
         localStorage.removeItem('user');
       }
     }
