@@ -240,59 +240,19 @@ def run_app():
     if not is_windows:
         signal.signal(signal.SIGTERM, signal_handler)
 
-    # ── Monitor loop with auto-restart & health check ─────────
-    restart_counts = {"backend": 0, "frontend": 0}
-    MAX_RESTARTS = 5
-    RESTART_DELAY = 3   # seconds before restarting a crashed process
-    backend_checked = False
-
+    # ── Monitor loop ──────────────────────────────────────────
     print("\n✓  Both services started. Monitoring …\n")
 
     try:
         while not shutting_down[0]:
             time.sleep(1)
-
-            # 1. Process health & auto-restart
-            for name in ("backend", "frontend"):
-                proc = processes[name]
-                if proc.poll() is not None:
-                    if restart_counts[name] >= MAX_RESTARTS:
-                        print(f"✗  {name} crashed {MAX_RESTARTS} times. Giving up.")
-                        signal_handler()
-                        return
-
-                    restart_counts[name] += 1
-                    exit_code = proc.returncode
-                    print(f"⚠  {name} exited (code {exit_code}). "
-                          f"Restarting in {RESTART_DELAY}s "
-                          f"[attempt {restart_counts[name]}/{MAX_RESTARTS}] …")
-                    time.sleep(RESTART_DELAY)
-
-                    if name == "backend":
-                        processes["backend"]  = start_backend()
-                    else:
-                        processes["frontend"] = start_frontend()
-
-                    print(f"✓  {name} restarted.")
-                else:
-                    # Process is alive — reset its restart counter
-                    restart_counts[name] = 0
-
-            # 2. Perform backend health check once after 10 seconds
-            if not backend_checked and time.time() - start_time > 10:
-                import urllib.request
-                # Use 127.0.0.1 for local health check even if bound to 0.0.0.0
-                check_host = "127.0.0.1" if app_host == "0.0.0.0" else app_host
-                try:
-                    # HRMS-1 backend has a root route "/"
-                    with urllib.request.urlopen(f"http://{check_host}:{backend_port}/", timeout=2) as response:
-                        if response.getcode() == 200:
-                            print("Backend self-test: SUCCESS (Backend is responding)")
-                            backend_checked = True
-                except Exception as e:
-                    print(f"Backend self-test: PENDING... ({e})")
-                    # Try again in next iteration
-                    pass
+            # Check if processes are still alive
+            if processes["backend"].poll() is not None:
+                print("Backend process terminated unexpectedly.")
+                break
+            if processes["frontend"].poll() is not None:
+                print("Frontend process terminated unexpectedly.")
+                break
     except KeyboardInterrupt:
         pass
     finally:
