@@ -1,106 +1,122 @@
 import subprocess
-import sys
-import time
 import os
 import signal
-import socket
+import sys
+import time
+import shutil
 from pathlib import Path
 
-
-# ──────────────────────────────────────────────
-# Environment helpers
-# ──────────────────────────────────────────────
-
+# Load .env file manually to avoid dependencies
 def load_env():
-    """Load .env from the project root without external dependencies."""
-    env_path = Path(__file__).parent / ".env"
-    if env_path.exists():
-        with open(env_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, value = line.split("=", 1)
-                key = key.strip()
-                value = value.strip().strip('"').strip("'")
-                os.environ[key] = value
-        print(f"Loaded environment variables from {env_path}")
+    # Priority: .env.server (if on server) or .env
+    env_files = [".env.server", ".env"]
+    for env_file in env_files:
+        env_path = Path(__file__).parent / env_file
+        if env_path.exists():
+            print(f"Loading environment from {env_file}")
+            with open(env_path, encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        parts = line.split("=", 1)
+                        if len(parts) == 2:
+                            key = parts[0].strip()
+                            value = parts[1].strip().strip('"').strip("'")
+                            # Don't overwrite if already set in environment
+                            if key not in os.environ:
+                                os.environ[key] = value
+            break # Only load the first one found
 
+def get_venv_python():
+    """Find the Python executable inside the project's venv or .venv."""
+    for venv_name in ["venv", ".venv"]:
+        venv_dir = Path(__file__).parent / venv_name
+        if os.name == 'nt':
+            venv_python = venv_dir / "Scripts" / "python.exe"
+        else:
+            venv_python = venv_dir / "bin" / "python3"
+        if venv_python.exists():
+            return str(venv_python)
+    # Fallback to the current interpreter
+    return sys.executable
 
-def get_local_ip() -> str:
-    """
-    Detect the machine's primary LAN / server IP.
-    Falls back to 127.0.0.1 if no network is available.
-    """
+def kill_port_owner(port):
+    """Clean up any process using the port before starting (cross-platform)."""
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+        if os.name == 'nt':
+            cmd = f"netstat -ano | findstr :{port} | findstr LISTENING"
+            output = subprocess.check_output(cmd, shell=True).decode()
+            for line in output.strip().split('\n'):
+                parts = line.split()
+                if len(parts) > 4:
+                    pid = parts[-1]
+                    print(f"Cleaning up port {port} (PID: {pid})...")
+                    subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+        else:
+            # Linux/macOS
+            cmd = f"lsof -t -i:{port}"
+            try:
+                pid = subprocess.check_output(cmd, shell=True).decode().strip()
+                if pid:
+                    print(f"Cleaning up port {port} (PID: {pid})...")
+                    subprocess.run(f"kill -9 {pid}", shell=True)
+            except subprocess.CalledProcessError:
+                pass
     except Exception:
-        return "127.0.0.1"
+        pass
 
-
-def get_venv_python() -> str:
-    """Return the Python executable inside .venv (or fall back to current)."""
-    venv_dir = Path(__file__).parent / ".venv"
-    if os.name == "nt":
-        candidate = venv_dir / "Scripts" / "python.exe"
-    else:
-        candidate = venv_dir / "bin" / "python3"
-    return str(candidate) if candidate.exists() else sys.executable
-
-
-# ──────────────────────────────────────────────
-# Main launcher
-# ──────────────────────────────────────────────
-
-def main():
+def run_app():
+    start_time = time.time()
     load_env()
-
-    frontend_port = os.getenv("PORT", "3535")
-    backend_port  = os.getenv("BACKEND_PORT", "8000")
-
-    host      = get_local_ip()
-    is_server = host != "127.0.0.1"
-    bind_host = "0.0.0.0" if is_server else "127.0.0.1"
-
-    is_prod = "--prod" in sys.argv or is_server
     
-    is_windows    = os.name == "nt"
+    # Next.js uses PORT, Backend uses BACKEND_PORT
+    backend_port = os.environ.get("BACKEND_PORT", "8000")
+    frontend_port = os.environ.get("PORT", "3535")
+    
+    # Default to 127.0.0.1 for local dev. Set APP_HOST=0.0.0.0 in .env.server for production
+    app_host = os.environ.get("APP_HOST", "127.0.0.1")
+    
+    # Ensure standard env vars are set
+    os.environ["HOST"] = app_host
+    os.environ["UVICORN_HOST"] = app_host
+
+    print("=" * 60)
+    print(f"  HRMS Application Launcher (Like Sahjanand)")
+    print("=" * 60)
+    print(f"  Binding host : {app_host}")
+    print(f"  Backend URL  : http://{app_host}:{backend_port}")
+    print(f"  Frontend URL : http://{app_host}:{frontend_port}")
+    print("=" * 60)
+
+    # Clean up ports first to prevent "Address already in use" errors
+    print(f"Cleaning ports {backend_port} and {frontend_port}...")
+    kill_port_owner(backend_port)
+    kill_port_owner(frontend_port)
+
+    # Determine command for frontend (prefer bun if available)
+    frontend_runner = "npm"
+    if shutil.which("bun"):
+        frontend_runner = "bun"
+    
+    print(f"Using {frontend_runner} for frontend")
+
+    # Platform specific flags
+    is_windows = os.name == 'nt'
     creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if is_windows else 0
 
-    # Expose detected host so the Next.js proxy (next.config.mjs) can reach backend
-    os.environ["BACKEND_HOST"]     = "127.0.0.1"   # proxy is always same-machine
-    os.environ["NEXT_PUBLIC_HOST"] = host
+    # 1. Start Backend
+    python_exe = get_venv_python()
+    print(f"Using Python: {python_exe}")
     
-    print("=" * 55)
-    print("  HRMS Application Launcher")
-    print("=" * 55)
-    print(f"  Mode          : {'PRODUCTION' if is_prod else 'LOCAL DEV'}")
-    print(f"  Detected IP   : {host}")
-    print(f"  Binding to    : {bind_host}")
-    print(f"  Backend       : http://{host}:{backend_port}")
-    print(f"  Frontend      : http://{host}:{frontend_port}")
-    print(f"  Also on       : http://localhost:{frontend_port}")
-    print("=" * 55)
-
-    # ── Ignore SIGHUP so SSH disconnect does NOT kill the app ─
-    if not is_windows:
-        signal.signal(signal.SIGHUP, signal.SIG_IGN)
-
-    # ── Backend ───────────────────────────────────────────────
-    python_exe  = get_venv_python()
+    # HRMS-1 backend is in 'backend' folder, entry is main.py
     backend_dir = Path(__file__).parent / "backend"
+    backend_cmd = [python_exe, "-m", "uvicorn", "main:app", "--host", app_host, "--port", backend_port]
+    
+    # Add PYTHONPATH so backend modules can be imported correctly
+    backend_env = os.environ.copy()
+    backend_env["PYTHONPATH"] = str(backend_dir)
 
-    # On server/prod: no --reload
-    backend_cmd = [
-        python_exe, "-m", "uvicorn", "main:app",
-        "--host", bind_host,
-        "--port", backend_port,
-    ]
-    if not is_prod:
+    if os.environ.get("DEBUG", "False").lower() == "true":
         backend_cmd.append("--reload")
 
     print(f"\n→ Starting Backend  (FastAPI on port {backend_port})")
@@ -203,53 +219,44 @@ def main():
         print("All servers stopped cleanly.")
         sys.exit(0)
 
-    signal.signal(signal.SIGINT,  shutdown)
+    # Handle Ctrl+C and other termination signals
+    signal.signal(signal.SIGINT, signal_handler)
     if not is_windows:
-        signal.signal(signal.SIGTERM, shutdown)
+        signal.signal(signal.SIGTERM, signal_handler)
 
-    # ── Monitor loop with auto-restart ────────────────────────
-    # On the server, transient crashes (OOM, bad import, etc.) shouldn't
-    # bring down the whole app.  We restart the dead process up to 5 times.
-    restart_counts = {"backend": 0, "frontend": 0}
-    MAX_RESTARTS = 5
-    RESTART_DELAY = 3   # seconds before restarting a crashed process
-
-    print("\n✓  Both services started. Monitoring …\n")
-
+    # Monitor processes and check backend health
+    backend_checked = False
+    
     try:
-        while not shutting_down[0]:
-            time.sleep(2)
-
-            for name in ("backend", "frontend"):
-                proc = processes[name]
-                if proc.poll() is not None:
-                    if restart_counts[name] >= MAX_RESTARTS:
-                        print(f"✗  {name} crashed {MAX_RESTARTS} times. Giving up.")
-                        shutdown()
-                        return
-
-                    restart_counts[name] += 1
-                    exit_code = proc.returncode
-                    print(f"⚠  {name} exited (code {exit_code}). "
-                          f"Restarting in {RESTART_DELAY}s "
-                          f"[attempt {restart_counts[name]}/{MAX_RESTARTS}] …")
-                    time.sleep(RESTART_DELAY)
-
-                    if name == "backend":
-                        processes["backend"]  = start_backend()
-                    else:
-                        processes["frontend"] = start_frontend()
-
-                    print(f"✓  {name} restarted.")
-                else:
-                    # Process is alive — reset its restart counter
-                    restart_counts[name] = 0
-
+        while True:
+            time.sleep(1)
+            # Check if processes are still alive
+            if backend_process.poll() is not None:
+                print("Backend process terminated unexpectedly.")
+                break
+            if frontend_process.poll() is not None:
+                print("Frontend process terminated unexpectedly.")
+                break
+                
+            # Perform health check once after 10 seconds
+            if not backend_checked and time.time() - start_time > 10:
+                import urllib.request
+                # Use 127.0.0.1 for local health check even if bound to 0.0.0.0
+                check_host = "127.0.0.1" if app_host == "0.0.0.0" else app_host
+                try:
+                    # HRMS-1 backend has a root route "/"
+                    with urllib.request.urlopen(f"http://{check_host}:{backend_port}/", timeout=2) as response:
+                        if response.getcode() == 200:
+                            print("Backend self-test: SUCCESS (Backend is responding)")
+                            backend_checked = True
+                except Exception as e:
+                    print(f"Backend self-test: PENDING... ({e})")
+                    # Try again in next iteration
+                    pass
     except KeyboardInterrupt:
         pass
     finally:
-        shutdown()
-
+        signal_handler(None, None)
 
 if __name__ == "__main__":
-    main()
+    run_app()
