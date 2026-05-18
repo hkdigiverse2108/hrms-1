@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Users, Plus, Pencil, Trash2, Mail, Phone, Building2, Loader2, Search, History, ClipboardList, Briefcase } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Mail, Phone, Building2, Loader2, Search, History, ClipboardList, Briefcase, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
 import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,6 +41,7 @@ export default function ClientsPage() {
   const [editingClient, setEditingClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [inlineEditing, setInlineEditing] = useState<{id: string, field: string} | null>(null);
   
   // Logs state
@@ -161,8 +163,11 @@ export default function ClientsPage() {
                           c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           c.industry?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    if (activeTab === "all") return matchesSearch;
-    return matchesSearch && c.department?.toLowerCase() === activeTab.toLowerCase();
+    const matchesStatus = statusFilter === "all" || c.status === statusFilter;
+    
+    const matchesDept = activeTab === "all" || c.department?.toLowerCase() === activeTab.toLowerCase();
+
+    return matchesSearch && matchesStatus && matchesDept;
   });
 
   const handleInlineUpdate = async (clientId: string, field: string, value: any) => {
@@ -236,8 +241,8 @@ export default function ClientsPage() {
           ))}
         </TabsList>
 
-        <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm mb-6">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm mb-6">
+          <div className="relative flex-1 w-full md:max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
               placeholder={`Search ${activeTab === 'all' ? '' : activeTab} clients...`} 
@@ -245,6 +250,21 @@ export default function ClientsPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <Filter className="w-4 h-4 text-muted-foreground hidden md:block" />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full md:w-[150px] bg-slate-50 border-slate-200">
+                <SelectValue placeholder="Status Filter" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="on-hold">On Hold</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -312,14 +332,14 @@ export default function ClientsPage() {
                           { key: 'name', type: 'text', align: 'left' },
                           { key: 'email', type: 'text', align: 'left' },
                           { key: 'phone', type: 'text', align: 'left' },
-                          { key: 'status', type: 'select', options: ['active', 'inactive'], align: 'center' },
+                          { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
                         ] : activeTab === "marketing" ? [
                           { key: 'name', type: 'text', font: 'bold', align: 'left' },
                           { key: 'services', type: 'text', align: 'left' },
                           { key: 'salesFocused', type: 'text', align: 'left' },
                           { key: 'dailyBudget', type: 'number', align: 'center' },
                           { key: 'remarks', type: 'text', align: 'left' },
-                          { key: 'status', type: 'select', options: ['active', 'inactive'], align: 'center' },
+                          { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
                           { key: 'responsibility', type: 'text', align: 'left' },
                           { key: 'dailyFollowup', type: 'select', options: ['Yes', 'No'], align: 'center' },
                         ] : [
@@ -335,7 +355,7 @@ export default function ClientsPage() {
                           { key: 'post', type: 'number', align: 'center' },
                           { key: 'reelRequired', type: 'select', options: ['Yes', 'No'], align: 'center' },
                           { key: 'reel', type: 'number', align: 'center' },
-                          { key: 'status', type: 'select', options: ['active', 'inactive'], align: 'center' },
+                          { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
                         ]).map(col => (
                           <TableCell 
                             key={col.key} 
@@ -368,12 +388,14 @@ export default function ClientsPage() {
                             ) : (
                               <div className={`text-[12px] ${col.font === 'bold' ? 'font-bold' : ''} ${col.align === 'center' ? 'text-center' : 'text-left'}`}>
                                 {col.type === 'select' ? (
-                                  <Badge className={
+                                  <Badge variant={
                                     client[col.key] === "Yes" || client[col.key] === "active" 
-                                      ? "bg-green-100 text-green-700" 
-                                      : "bg-slate-100 text-slate-500"
+                                      ? "success" 
+                                      : client[col.key] === "on-hold"
+                                        ? "warning"
+                                        : "secondary"
                                   }>
-                                    {client[col.key] || (col.key === 'status' ? 'active' : 'No')}
+                                    {client[col.key] === "on-hold" ? "On Hold" : client[col.key] || (col.key === 'status' ? 'active' : 'No')}
                                   </Badge>
                                 ) : (
                                   client[col.key] || (col.type === 'number' ? '0' : "-")
@@ -449,8 +471,8 @@ export default function ClientsPage() {
                       </div>
 
                       <div className="flex items-center justify-between pt-2">
-                        <Badge variant={client.status === "active" ? "success" : "secondary"} className="capitalize">
-                          {client.status}
+                        <Badge variant={client.status === "active" ? "success" : client.status === "on-hold" ? "warning" : "secondary"} className="capitalize">
+                          {client.status?.replace('-', ' ')}
                         </Badge>
                         <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
                           Joined {client.createdDate}

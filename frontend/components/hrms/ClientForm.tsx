@@ -159,6 +159,7 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
                 <SelectContent>
                   <SelectItem value="active">Active</SelectItem>
                   <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -39,6 +39,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-background" suppressHydrationWarning>
       <body className="font-sans antialiased bg-background flex min-h-screen text-foreground" suppressHydrationWarning>
+        {/* Temporary Debug Indicator */}
+        <div style={{ position: 'fixed', top: 0, left: 0, zIndex: 9999, fontSize: '10px', background: 'red', color: 'white', padding: '2px' }}>
+          System Active
+        </div>
         <UserProvider>
           <AntdRegistry>
             <ConfigProvider
