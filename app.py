@@ -108,6 +108,7 @@ def main():
 
     # ── Frontend ──────────────────────────────────────────────
     frontend_dir = Path(__file__).parent / "frontend"
+    standalone_server = frontend_dir / ".next" / "standalone" / "server.js"
 
     if not (frontend_dir / "node_modules").exists():
         print("\n→ node_modules missing — running npm install …")
@@ -120,7 +121,39 @@ def main():
     frontend_env = os.environ.copy()
     if is_prod:
         frontend_env["NODE_ENV"] = "production"
-        frontend_cmd = f"npm run start -- -H {bind_host} -p {frontend_port}"
+        if standalone_server.exists():
+            # In standalone mode, Next.js expects 'public' and '.next/static' to be copied manually
+            # into the standalone directory for the standalone server to serve them.
+            try:
+                import shutil
+                standalone_dir = frontend_dir / ".next" / "standalone"
+                
+                # Sync public
+                src_public = frontend_dir / "public"
+                dest_public = standalone_dir / "public"
+                if src_public.exists():
+                    if dest_public.exists():
+                        shutil.rmtree(dest_public)
+                    shutil.copytree(src_public, dest_public)
+                    print("✓ Copied frontend/public to standalone/public")
+                
+                # Sync static
+                src_static = frontend_dir / ".next" / "static"
+                dest_static = standalone_dir / ".next" / "static"
+                if src_static.exists():
+                    if dest_static.exists():
+                        shutil.rmtree(dest_static)
+                    shutil.copytree(src_static, dest_static)
+                    print("✓ Copied frontend/.next/static to standalone/.next/static")
+            except Exception as e:
+                print(f"⚠ Failed to copy static assets to standalone folder: {e}")
+
+            # Standalone mode: node runs server.js directly (much lighter)
+            frontend_env["HOSTNAME"] = bind_host
+            frontend_env["PORT"] = frontend_port
+            frontend_cmd = f"node {standalone_server}"
+        else:
+            frontend_cmd = f"npm run start -- -H {bind_host} -p {frontend_port}"
     else:
         frontend_cmd = f"npm run dev -- -H {bind_host} -p {frontend_port}"
 

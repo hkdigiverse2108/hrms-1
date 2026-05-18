@@ -12,9 +12,17 @@ from database import get_db
 
 app = FastAPI(title="HRMS API")
 
+# CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
+_default_origins = "http://localhost:3535,http://127.0.0.1:3535"
+_allowed_origins = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="https?://.*",
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
