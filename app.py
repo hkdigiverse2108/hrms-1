@@ -140,9 +140,25 @@ def run_app():
         print("\n→ node_modules missing — running npm install …")
         subprocess.run("npm install", cwd=str(frontend_dir), shell=True, check=True)
 
-    if is_prod and not (frontend_dir / ".next").exists():
-        print("\n→ Production build missing — running npm run build …")
-        subprocess.run("npm run build", cwd=str(frontend_dir), shell=True, check=True)
+    if is_prod:
+        needs_build = False
+        if not (frontend_dir / ".next").exists():
+            needs_build = True
+        else:
+            # If standalone mode is configured but server.js is missing, rebuild
+            config_path = frontend_dir / "next.config.mjs"
+            if not config_path.exists():
+                config_path = frontend_dir / "next.config.js"
+            
+            try:
+                if config_path.exists() and "standalone" in config_path.read_text() and not standalone_server.exists():
+                    needs_build = True
+            except Exception:
+                pass
+                
+        if needs_build:
+            print("\n→ Production build missing or incomplete — running npm run build …")
+            subprocess.run("npm run build", cwd=str(frontend_dir), shell=True, check=True)
 
     frontend_env = os.environ.copy()
     if is_prod:
