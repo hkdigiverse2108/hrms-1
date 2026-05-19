@@ -1,0 +1,30 @@
+name: Deploy HRMS (Python)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-to-main:
+    runs-on: ubuntu-latest
+    name: Deploy HRMS Python
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H 31.97.206.171 >> ~/.ssh/known_hosts
+
+    - name: Test SSH Connection
+      run: ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@31.97.206.171 "echo 'SSH connection successful!'"
+
+    - name: Deploy HRMS Python via SSH
+      run: |
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@31.97.206.171 \
+        "cd /root/hrms/live && rm -f frontend/.wrangler/deploy/config.json && git pull origin main && cd frontend && npm install && npm run build && cd .. && pm2 restart 29"
