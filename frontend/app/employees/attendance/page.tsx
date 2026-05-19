@@ -153,7 +153,7 @@ export default function EmployeeAttendanceListPage() {
 
     return baseRecords.filter(a => {
       const emp = employees.find(e => e.id === a.employeeId || e.employeeId === a.employeeId);
-      const matchesSearch = a.employeeName?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = !searchQuery || a.employeeId === searchQuery || (emp && emp.id === searchQuery) || a.employeeName?.toLowerCase().includes(searchQuery.toLowerCase());
       
       const calcStatus = getCalculatedStatus(a);
       const matchesStatus = selectedStatus === "all" || calcStatus.toLowerCase() === selectedStatus.toLowerCase();
@@ -448,16 +448,19 @@ export default function EmployeeAttendanceListPage() {
             </button>
           </div>
 
-          <div className="relative flex-1 md:w-[240px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search employees..." 
-              className="w-full pl-9 pr-4 py-2 h-9 text-sm rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal transition-all"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+          <Select value={searchQuery || "all"} onValueChange={(v) => setSearchQuery(v === "all" ? "" : v)}>
+            <SelectTrigger className="w-full md:w-[240px] h-9 bg-white border-border shadow-sm text-xs">
+              <SelectValue placeholder="All Employees" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Employees</SelectItem>
+              {employees.map(emp => (
+                <SelectItem key={emp.id} value={emp.id}>
+                  {emp.name} {emp.employeeId ? `(${emp.employeeId})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
