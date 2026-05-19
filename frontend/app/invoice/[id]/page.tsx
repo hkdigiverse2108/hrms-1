@@ -1,17 +1,113 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { 
   Download,
   Edit2,
   ChevronLeft,
   CheckCircle2,
-  ShieldHalf
+  ShieldHalf,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export default function ViewInvoicePage() {
   const router = useRouter();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  useEffect(() => {
+    const scripts = [
+      'https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+    ]
+    scripts.forEach(src => {
+      if (!document.querySelector(`script[src="${src}"]`)) {
+        const script = document.createElement('script')
+        script.src = src
+        script.async = true
+        document.body.appendChild(script)
+      }
+    })
+  }, [])
+
+  const handleDownloadPDF = async () => {
+    setIsDownloading(true)
+    try {
+      const node = document.querySelector('.invoice-card-container') as HTMLElement
+      if (!node) {
+        toast.error('Invoice element not found')
+        setIsDownloading(false)
+        return
+      }
+
+      const domtoimage = (window as any).domtoimage
+      const { jsPDF } = (window as any).jspdf
+
+      if (!domtoimage || !jsPDF) {
+        toast.error('Libraries not loaded yet. Please wait a second.')
+        setIsDownloading(false)
+        return
+      }
+
+      const rect = node.getBoundingClientRect()
+      const nodeWidth = rect.width || 800
+      const nodeHeight = rect.height || 1131
+      
+      const clone = node.cloneNode(true) as HTMLElement
+      
+      const container = document.createElement('div')
+      container.style.position = 'fixed'
+      container.style.left = '-10000px'
+      container.style.top = '0'
+      container.style.width = `${nodeWidth}px`
+      container.style.height = `${nodeHeight}px`
+      container.style.overflow = 'hidden'
+      container.style.background = 'white'
+      container.appendChild(clone)
+      document.body.appendChild(container)
+
+      clone.style.width = `${nodeWidth}px`
+      clone.style.height = `${nodeHeight}px`
+      clone.style.margin = '0'
+      clone.style.padding = '40px'
+      clone.style.position = 'relative'
+      clone.style.transform = 'none'
+      clone.style.border = 'none'
+      clone.style.boxShadow = 'none'
+
+      const scale = 2
+      const dataUrl = await domtoimage.toPng(clone, {
+        bgcolor: '#ffffff',
+        width: nodeWidth * scale,
+        height: nodeHeight * scale,
+        cacheBust: true,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          width: `${nodeWidth}px`,
+          height: `${nodeHeight}px`,
+        }
+      })
+
+      document.body.removeChild(container)
+
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = (nodeHeight * pdfWidth) / nodeWidth
+      
+      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight)
+      
+      pdf.save("Invoice_INV-2026-001.pdf")
+      toast.success('Downloaded successfully!')
+    } catch (error) {
+      console.error('PDF Error:', error)
+      toast.error('Download failed')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   return (
     <div className="space-y-6 pb-20">
@@ -38,16 +134,25 @@ export default function ViewInvoicePage() {
             <Edit2 className="w-3.5 h-3.5 mr-2" />
             Edit
           </Button>
-          <Button variant="outline" size="sm" className="h-10 px-4 font-medium">
-            <Download className="w-3.5 h-3.5 mr-2" />
-            Download PDF
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-10 px-4 font-medium"
+            onClick={handleDownloadPDF}
+            disabled={isDownloading}
+          >
+            {isDownloading ? (
+              <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Downloading...</>
+            ) : (
+              <><Download className="w-3.5 h-3.5 mr-2" />Download PDF</>
+            )}
           </Button>
         </div>
       </div>
 
       {/* Invoice Document Layout */}
       <div className="max-w-5xl mx-auto">
-        <div className="bg-white border border-border rounded-xl shadow-lg p-10 md:p-16 min-h-[1000px] relative overflow-hidden">
+        <div className="invoice-card-container bg-white border border-border rounded-xl shadow-lg p-10 md:p-16 min-h-[1000px] relative overflow-hidden">
           {/* Header */}
           <div className="flex justify-between items-start mb-16">
             <div className="flex items-center gap-3">

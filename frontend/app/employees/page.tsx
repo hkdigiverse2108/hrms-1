@@ -35,6 +35,136 @@ export default function EmployeeListPage() {
   const [filterStatus, setFilterStatus] = useState("Status");
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    const loadScript = (src: string) => {
+      return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+          resolve(true)
+          return
+        }
+        const script = document.createElement('script')
+        script.src = src
+        script.async = true
+        script.onload = () => resolve(true)
+        script.onerror = reject
+        document.body.appendChild(script)
+      })
+    }
+
+    const loadPdfLibraries = async () => {
+      try {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js')
+      } catch (err) {
+        console.error("Failed to load PDF libraries:", err)
+      }
+    }
+
+    loadPdfLibraries()
+  }, [])
+
+  const handleExportPDF = async () => {
+    setIsExporting(true)
+    try {
+      const { jsPDF } = (window as any).jspdf
+      if (!jsPDF) {
+        alert('PDF libraries are still loading. Please wait a second and try again.')
+        setIsExporting(false)
+        return
+      }
+
+      const doc = new jsPDF('l', 'mm', 'a4')
+
+      // Header styling
+      doc.setFont("Helvetica", "bold")
+      doc.setFontSize(22)
+      doc.setTextColor(9, 160, 138) // Brand Teal: #09A08A
+      doc.text("HK DIGIVERSE LLP", 14, 16)
+
+      doc.setFont("Helvetica", "normal")
+      doc.setFontSize(10)
+      doc.setTextColor(110, 110, 110)
+      doc.text("Complete Employee Directory & Account Registry", 14, 22)
+      
+      const formattedDate = new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+      doc.text(`Generated: ${formattedDate}`, 220, 22)
+
+      // Separator
+      doc.setDrawColor(9, 160, 138)
+      doc.setLineWidth(0.8)
+      doc.line(14, 26, 283, 26)
+
+      // Prepare Table Data
+      const headers = [["Employee Name", "Email ID", "Employee ID", "Gender", "Department", "Designation", "Status", "Join Date"]]
+      const rows = filteredEmployees.map(emp => [
+        emp.name || "",
+        emp.email || "",
+        emp.employeeId || "",
+        emp.gender || "Male",
+        emp.department || "",
+        emp.designation || "",
+        emp.status || "",
+        emp.joinDate || ""
+      ])
+
+      if (typeof (doc as any).autoTable === 'function') {
+        (doc as any).autoTable({
+          head: headers,
+          body: rows,
+          startY: 32,
+          theme: 'striped',
+          styles: {
+            fontSize: 9,
+            cellPadding: 3.5,
+            textColor: [51, 65, 85], // slate-700
+            lineColor: [241, 245, 249],
+            lineWidth: 0.1,
+          },
+          headStyles: {
+            fillColor: [9, 160, 138], // brand-teal
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 9.5,
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252], // slate-50
+          },
+          columnStyles: {
+            0: { fontStyle: 'bold', textColor: [15, 23, 42] }, // Slate-900 for name
+          },
+          margin: { left: 14, right: 14 }
+        })
+      } else {
+        // Fallback drawing if plugin failed to hook
+        let y = 38
+        doc.setFontSize(9)
+        doc.setFont("Helvetica", "bold")
+        doc.text(headers[0].join("   |   "), 14, y)
+        doc.line(14, y + 2, 283, y + 2)
+        y += 8
+        doc.setFont("Helvetica", "normal")
+        rows.forEach(row => {
+          doc.text(row.join("   |   "), 14, y)
+          y += 6
+        })
+      }
+
+      doc.save(`Employee_Directory_${new Date().toISOString().slice(0,10)}.pdf`)
+    } catch (err) {
+      console.error("PDF Export error:", err)
+      alert("Failed to export PDF file.")
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   const togglePasswordVisibility = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -139,9 +269,18 @@ export default function EmployeeListPage() {
         description="Manage your team members and their account permissions here."
       >
         <div className="flex items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
-          <Button variant="outline" className="shadow-sm flex-1 sm:flex-none" onClick={() => exportToCSV(employees, 'employees')}>
-            <Download className="w-4 h-4 mr-2" />
-            Export
+          <Button 
+            variant="outline" 
+            className="shadow-sm flex-1 sm:flex-none font-medium h-10 px-4" 
+            onClick={handleExportPDF}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Export PDF
           </Button>
           {(isAdmin || checkPermission('add-employee', 'canAdd') || checkPermission('add-employee', 'canView')) && (
             <Link href="/employees/add" className="flex-1 sm:flex-none">
@@ -182,7 +321,7 @@ export default function EmployeeListPage() {
                 ))}
               </select>
               <select 
-                className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer border-brand-teal ring-1 ring-brand-teal"
+                className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
               >

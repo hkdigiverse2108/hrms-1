@@ -216,10 +216,6 @@ export default function RecruitmentPage() {
     <>
       <PageHeader title="Hirings" description="Manage hirings and recruitment.">
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => window.location.href='/recruitment/hiring-board'}>
-            <Users className="mr-2 h-4 w-4" />
-            Interviews
-          </Button>
           <Button onClick={() => handleOpenModal()}>
             <Plus className="mr-2 h-4 w-4" />
             Post New Hiring

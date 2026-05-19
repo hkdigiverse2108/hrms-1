@@ -1,5 +1,5 @@
 from bson import ObjectId
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import List, Optional, Dict
 import schemas
 import calendar
@@ -48,8 +48,27 @@ def parse_datetime(date_str, time_str):
     return IST.localize(dt)
 
 def fix_id(doc):
-    if doc and "_id" in doc:
-        doc["id"] = str(doc.pop("_id"))
+    if doc is None:
+        return None
+    if isinstance(doc, list):
+        return [fix_id(x) for x in doc]
+    if isinstance(doc, dict):
+        new_doc = {}
+        for k, v in doc.items():
+            if k == "_id":
+                new_doc["id"] = str(v)
+            elif isinstance(v, ObjectId):
+                new_doc[k] = str(v)
+            elif isinstance(v, (datetime, date)):
+                if hasattr(v, "hour") and (v.hour != 0 or v.minute != 0 or v.second != 0):
+                    new_doc[k] = v.isoformat()
+                else:
+                    new_doc[k] = v.strftime("%Y-%m-%d")
+            elif isinstance(v, (dict, list)):
+                new_doc[k] = fix_id(v)
+            else:
+                new_doc[k] = v
+        return new_doc
     return doc
 
 async def delete_employee(db, employee_id: str):
@@ -70,6 +89,18 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
         return None
     
     update_data = employee_update.dict(exclude_unset=True)
+    
+    # If a new profile photo is uploaded/edited, delete the old one from the uploads folder
+    if "profilePhoto" in update_data and update_data["profilePhoto"] != existing.get("profilePhoto"):
+        import os
+        old_photo = existing.get("profilePhoto")
+        if old_photo:
+            old_photo_path = os.path.join("uploads", old_photo)
+            if os.path.exists(old_photo_path) and os.path.isfile(old_photo_path):
+                try:
+                    os.remove(old_photo_path)
+                except Exception as e:
+                    print(f"Error removing old photo: {e}")
     
     # Recalculate name if name components are updated
     if any(field in update_data for field in ["firstName", "middleName", "lastName"]):

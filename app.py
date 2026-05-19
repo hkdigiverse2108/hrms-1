@@ -129,7 +129,7 @@ def run_app():
     if os.environ.get("DEBUG", "False").lower() == "true":
         backend_cmd.append("--reload")
 
-    print(f"\n→ Starting Backend  (FastAPI on port {backend_port})")
+    print(f"\n-> Starting Backend  (FastAPI on port {backend_port})")
     print(f"  {' '.join(backend_cmd)}")
 
     # ── Frontend ──────────────────────────────────────────────
@@ -137,7 +137,7 @@ def run_app():
     standalone_server = frontend_dir / ".next" / "standalone" / "server.js"
 
     if not (frontend_dir / "node_modules").exists():
-        print("\n→ node_modules missing — running npm install …")
+        print("\n-> node_modules missing — running npm install ...")
         subprocess.run("npm install", cwd=str(frontend_dir), shell=True, check=True)
 
     if is_prod:
@@ -157,7 +157,7 @@ def run_app():
                 pass
                 
         if needs_build:
-            print("\n→ Production build missing or incomplete — running npm run build …")
+            print("\n-> Production build missing or incomplete — running npm run build ...")
             subprocess.run("npm run build", cwd=str(frontend_dir), shell=True, check=True)
 
     frontend_env = os.environ.copy()
@@ -176,7 +176,7 @@ def run_app():
                     if dest_public.exists():
                         shutil.rmtree(dest_public)
                     shutil.copytree(src_public, dest_public)
-                    print("✓ Copied frontend/public to standalone/public")
+                    print("[OK] Copied frontend/public to standalone/public")
                 
                 # Sync static
                 src_static = frontend_dir / ".next" / "static"
@@ -185,9 +185,9 @@ def run_app():
                     if dest_static.exists():
                         shutil.rmtree(dest_static)
                     shutil.copytree(src_static, dest_static)
-                    print("✓ Copied frontend/.next/static to standalone/.next/static")
+                    print("[OK] Copied frontend/.next/static to standalone/.next/static")
             except Exception as e:
-                print(f"⚠ Failed to copy static assets to standalone folder: {e}")
+                print(f"[WARN] Failed to copy static assets to standalone folder: {e}")
 
             # Standalone mode: node runs server.js directly (much lighter)
             frontend_env["HOSTNAME"] = bind_host
@@ -198,7 +198,7 @@ def run_app():
     else:
         frontend_cmd = f"npm run dev -- -H {bind_host} -p {frontend_port}"
 
-    print(f"\n→ Starting Frontend (Next.js on port {frontend_port})")
+    print(f"\n-> Starting Frontend (Next.js on port {frontend_port})")
     print(f"  {frontend_cmd}")
 
     # ── Process management ────────────────────────────────────
@@ -257,7 +257,7 @@ def run_app():
         signal.signal(signal.SIGTERM, signal_handler)
 
     # ── Monitor loop ──────────────────────────────────────────
-    print("\n✓  Both services started. Monitoring …\n")
+    print("\n[OK] Both services started. Monitoring ...\n")
 
     try:
         while not shutting_down[0]:
