@@ -28,6 +28,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import dayjs from "dayjs";
 import { API_URL } from "@/lib/config";
 import { exportToCSV } from "@/lib/export-utils";
+import { formatTime12h } from "@/lib/utils";
 
 export default function EmployeeAttendanceListPage() {
   const [view, setView] = useState<"list" | "calendar">("list");
@@ -577,8 +578,8 @@ export default function EmployeeAttendanceListPage() {
                             {statusLabel}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-slate-700 font-mono text-[13px]">{record.checkIn || '--:--'}</td>
-                        <td className="px-4 py-4 text-slate-700 font-mono text-[13px]">{record.checkOut || '--:--'}</td>
+                        <td className="px-4 py-4 text-slate-700 font-mono text-[13px]">{formatTime12h(record.checkIn) || '--:--'}</td>
+                        <td className="px-4 py-4 text-slate-700 font-mono text-[13px]">{formatTime12h(record.checkOut) || '--:--'}</td>
                         <td className="px-4 py-4 text-slate-500 text-center font-medium whitespace-nowrap">{breakStr}</td>
                         <td className="px-4 py-4 text-slate-700 font-medium whitespace-nowrap">{lateStr}</td>
                         <td className="px-4 py-4 text-slate-700 font-medium whitespace-nowrap">{overtimeStr}</td>
@@ -685,7 +686,7 @@ export default function EmployeeAttendanceListPage() {
                       <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest ${getStatusStyle(record.status)}`}>
                         {record.status || 'Present'}
                       </span>
-                      <span className="text-[11px] font-mono text-slate-400 font-bold">{record.checkIn || '--'}</span>
+                      <span className="text-[11px] font-mono text-slate-400 font-bold">{formatTime12h(record.checkIn) || '--'}</span>
                     </div>
                   </div>
                 );
@@ -726,11 +727,11 @@ export default function EmployeeAttendanceListPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="border border-border rounded-lg p-3 text-center">
                   <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">In</div>
-                  <div className="font-bold text-xl">{selectedRecord.checkIn}</div>
+                  <div className="font-bold text-xl">{formatTime12h(selectedRecord.checkIn)}</div>
                 </div>
                 <div className="border border-border rounded-lg p-3 text-center">
                   <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Out</div>
-                  <div className="font-bold text-xl">{selectedRecord.checkOut || '--:--'}</div>
+                  <div className="font-bold text-xl">{formatTime12h(selectedRecord.checkOut) || '--:--'}</div>
                 </div>
                 <div className="border border-brand-teal/30 bg-brand-light/20 rounded-lg p-3 text-center">
                   <div className="text-[10px] uppercase font-bold text-brand-teal mb-1">Work</div>
@@ -807,13 +808,13 @@ export default function EmployeeAttendanceListPage() {
                                 <div className="relative">
                                   <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-brand-teal"></div>
                                   <div className="font-semibold text-sm">Punched In</div>
-                                  <div className="text-xs text-muted-foreground">{selectedRecord.checkIn}</div>
+                                  <div className="text-xs text-muted-foreground">{formatTime12h(selectedRecord.checkIn)}</div>
                                 </div>
                                 {selectedRecord?.checkOut && (
                                   <div className="relative mt-6">
                                     <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-gray-400"></div>
                                     <div className="font-semibold text-sm">Punched Out</div>
-                                    <div className="text-xs text-muted-foreground">{selectedRecord.checkOut}</div>
+                                    <div className="text-xs text-muted-foreground">{formatTime12h(selectedRecord.checkOut)}</div>
                                   </div>
                                 )}
                               </>
@@ -825,7 +826,7 @@ export default function EmployeeAttendanceListPage() {
                         <div key={idx} className="relative">
                           <div className={`absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full ${event.iconColor}`}></div>
                           <div className="font-semibold text-sm">{event.label}</div>
-                          <div className="text-xs text-muted-foreground">{event.time}</div>
+                          <div className="text-xs text-muted-foreground">{formatTime12h(event.time)}</div>
                         </div>
                       ));
                     })()}

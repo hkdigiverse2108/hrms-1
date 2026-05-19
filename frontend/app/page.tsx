@@ -52,6 +52,7 @@ import { useUserContext } from "@/context/UserContext";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import dayjs from "dayjs";
 import { TablePagination } from "@/components/common/TablePagination";
+import { formatTime12h } from "@/lib/utils";
 import { RequestPunchOutDialog } from "@/components/dashboard/RequestPunchOutDialog";
 import { AddEventDialog } from "@/components/dashboard/AddEventDialog";
 import { ViewAllEventsDialog } from "@/components/dashboard/ViewAllEventsDialog";
@@ -356,7 +357,7 @@ export default function DashboardPage() {
         open={isRequestDialogOpen}
         onOpenChange={setIsRequestDialogOpen}
         isPunchedIn={attendanceStatus?.isPunchedIn || false}
-        punchInTime={attendanceStatus?.record?.checkIn || "Not Started"}
+        punchInTime={formatTime12h(attendanceStatus?.record?.checkIn) || "Not Started"}
         employeeId={user?.id || ""}
         employeeName={user?.name || ""}
         onGoToPunchOut={() => {
@@ -622,8 +623,10 @@ function EmployeeView({
   const initials = userName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
   const isPunchedIn = attendanceStatus?.isPunchedIn;
   const isOnBreak = attendanceStatus?.record?.status === "On Break";
-  const punchInTime = attendanceStatus?.record?.checkIn || (recentAttendance[0]?.checkIn || "Not Started");
-  const punchOutTime = attendanceStatus?.record?.checkOut || (recentAttendance[0]?.checkOut || "Active");
+  const punchInTimeRaw = attendanceStatus?.record?.checkIn || (recentAttendance[0]?.checkIn || "Not Started");
+  const punchOutTimeRaw = attendanceStatus?.record?.checkOut || (recentAttendance[0]?.checkOut || "Active");
+  const punchInTime = formatTime12h(punchInTimeRaw);
+  const punchOutTime = formatTime12h(punchOutTimeRaw);
  
   return (
     <div className="space-y-6">
@@ -691,7 +694,7 @@ function EmployeeView({
  
             <div className={`px-4 py-3 rounded-full text-sm font-bold flex items-center justify-center gap-2 mb-8 border ${isPunchedIn ? 'border-brand-teal/10 bg-[#EAF7F6] text-brand-teal' : 'border-red-100 bg-red-50 text-red-600'}`}>
                {isPunchedIn ? <CheckCircle2 className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}
-               {isPunchedIn ? `Punched in at ${punchInTime}` : `Punched out at ${recentAttendance[0]?.checkOut || 'Not Punched In'}`}
+               {isPunchedIn ? `Punched in at ${punchInTime}` : `Punched out at ${formatTime12h(recentAttendance[0]?.checkOut) || 'Not Punched In'}`}
             </div>
  
             <div className="flex items-center gap-4 mb-8">
@@ -796,8 +799,8 @@ function EmployeeView({
                 return (
                   <tr key={i} className="hover:bg-muted/50 transition-colors">
                     <td className="px-6 py-4 font-semibold text-foreground">{dateDisplay}</td>
-                    <td className="px-6 py-4 text-foreground font-medium">{record.checkIn}</td>
-                    <td className="px-6 py-4 text-muted-foreground font-medium">{record.checkOut || '--'}</td>
+                    <td className="px-6 py-4 text-foreground font-medium">{formatTime12h(record.checkIn)}</td>
+                    <td className="px-6 py-4 text-muted-foreground font-medium">{formatTime12h(record.checkOut) || '--'}</td>
                     <td className="px-6 py-4 text-muted-foreground font-medium">{breakStr}</td>
                     <td className="px-6 py-4 font-semibold text-foreground">{record.workHours || '--'}</td>
                     <td className="px-6 py-4 text-right">
