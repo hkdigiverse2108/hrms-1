@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { PlusCircle } from 'lucide-react'
+import { useUser } from '@/hooks/useUser'
 import type { Payroll } from '@/lib/types'
 
 function SinglePayslip({ record, employee, numberToWords }: { record: any, employee: any, numberToWords: (n: number) => string }) {
@@ -172,9 +173,42 @@ function PayslipContent() {
   const [loading, setLoading] = useState(true)
   const [isDownloading, setIsDownloading] = useState(false)
 
-  const [selectedEmpId, setSelectedEmpId] = useState<string>('all')
+  // Auth roles logic - fallback to localStorage synchronously to prevent flicker/race condition
+  const { user } = useUser()
+  const isAdminOrHR = (() => {
+    if (user) {
+      return user.role?.toLowerCase() === 'admin' || user.role?.toLowerCase() === 'hr' || user.name === 'Admin Admin'
+    }
+    if (typeof window !== 'undefined') {
+      const uStr = localStorage.getItem('user')
+      if (uStr) {
+        const u = JSON.parse(uStr)
+        return u.role?.toLowerCase() === 'admin' || u.role?.toLowerCase() === 'hr' || u.name === 'Admin Admin'
+      }
+    }
+    return false
+  })()
+
+  const [selectedEmpId, setSelectedEmpId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const uStr = localStorage.getItem('user')
+      if (uStr) {
+        const u = JSON.parse(uStr)
+        const isAdm = u.role?.toLowerCase() === 'admin' || u.role?.toLowerCase() === 'hr' || u.name === 'Admin Admin'
+        if (!isAdm) return u.id || u._id || 'all'
+      }
+    }
+    return 'all'
+  })
   const [selectedMonth, setSelectedMonth] = useState<string>('May')
   const [selectedYear, setSelectedYear] = useState<string>('2026')
+
+  // Keep selectedEmpId synchronized with logged-in user if role is employee
+  useEffect(() => {
+    if (user && !isAdminOrHR) {
+      setSelectedEmpId(user.id || user._id || '')
+    }
+  }, [user, isAdminOrHR])
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [formData, setFormData] = useState<Partial<Payroll>>({
@@ -397,14 +431,18 @@ function PayslipContent() {
           <Eye className="mr-2 h-4 w-4" />
           View Detailed
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleUpdate(record)}>
-          <Edit className="mr-2 h-4 w-4 text-blue-500" />
-          Update
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleDelete(record.id)} className="text-red-600">
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete
-        </DropdownMenuItem>
+        {isAdminOrHR && (
+          <>
+            <DropdownMenuItem onClick={() => handleUpdate(record)}>
+              <Edit className="mr-2 h-4 w-4 text-blue-500" />
+              Update
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleDelete(record.id)} className="text-red-600">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -431,13 +469,27 @@ function PayslipContent() {
         setAllPayrolls(payrollData)
         setEmployees(empData)
 
+        // Read user details for initial authentication check
+        const currentUser = user || (typeof window !== 'undefined' && localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!) : null)
+        const isUserAdminOrHR = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.role?.toLowerCase() === 'hr' || currentUser?.name === 'Admin Admin'
+        const currentUserId = currentUser?.id || currentUser?._id
+
         if (payrollId) {
           const payrollRecord = payrollData.find((p: any) => p.id === payrollId)
           if (payrollRecord) {
-            setSelectedEmpId(payrollRecord.employeeId)
-            setSelectedMonth(payrollRecord.month)
-            setSelectedYear(String(payrollRecord.year))
+            if (isUserAdminOrHR || payrollRecord.employeeId === currentUserId) {
+              setSelectedEmpId(payrollRecord.employeeId)
+              setSelectedMonth(payrollRecord.month)
+              setSelectedYear(String(payrollRecord.year))
+            } else {
+              toast.error('You are not authorized to view this payslip.')
+              if (currentUserId) {
+                setSelectedEmpId(currentUserId)
+              }
+            }
           }
+        } else if (!isUserAdminOrHR && currentUserId) {
+          setSelectedEmpId(currentUserId)
         }
       }
     } catch (error) {
@@ -450,15 +502,17 @@ function PayslipContent() {
   const updateSelectedRecord = async () => {
     if (!selectedMonth || !selectedYear) return
 
-    if (selectedEmpId === 'all') {
+    const finalEmpId = isAdminOrHR ? selectedEmpId : (user?.id || user?._id)
+
+    if (finalEmpId === 'all') {
       const matches = allPayrolls.filter(p => 
         p.month === selectedMonth && 
         String(p.year) === selectedYear
       )
       setRecords(matches)
-    } else if (selectedEmpId) {
+    } else if (finalEmpId) {
       const match = allPayrolls.find(p => 
-        p.employeeId === selectedEmpId && 
+        p.employeeId === finalEmpId && 
         p.month === selectedMonth && 
         String(p.year) === selectedYear
       )
@@ -480,15 +534,18 @@ function PayslipContent() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
         <div className="flex flex-wrap gap-3 flex-1 w-full md:w-auto">
           <div className="min-w-[200px] flex-1">
-            <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
+            <Select value={selectedEmpId} onValueChange={setSelectedEmpId} disabled={!isAdminOrHR}>
               <SelectTrigger className="bg-slate-50 border-slate-200">
                 <SelectValue placeholder="Select Employee" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Employees</SelectItem>
-                {employees.map(emp => (
-                  <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                ))}
+                {isAdminOrHR && <SelectItem value="all">All Employees</SelectItem>}
+                {employees
+                  .filter(emp => isAdminOrHR || emp.id === (user?.id || user?._id))
+                  .map(emp => (
+                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                  ))
+                }
               </SelectContent>
             </Select>
           </div>
@@ -519,10 +576,12 @@ function PayslipContent() {
         </div>
 
         <div className="flex gap-2 w-full md:w-auto">
-          <Button variant="outline" onClick={handleManualGenerate} className="flex-1 md:flex-none border-slate-300">
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Manual Generate
-          </Button>
+          {isAdminOrHR && (
+            <Button variant="outline" onClick={handleManualGenerate} className="flex-1 md:flex-none border-slate-300">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Manual Generate
+            </Button>
+          )}
           <Button variant="outline" onClick={() => window.print()} className="flex-1 md:flex-none border-slate-300">
             <Printer className="mr-2 h-4 w-4" />
             Print
