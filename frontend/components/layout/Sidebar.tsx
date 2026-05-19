@@ -10,9 +10,10 @@ export function Sidebar() {
     <Sider
       breakpoint="lg"
       collapsedWidth="0"
+      trigger={null}
       theme="light"
       width={260}
-      className="border-r border-sidebar-border h-screen"
+      className="hidden lg:block border-r border-sidebar-border h-screen"
       style={{ background: '#EAF7F6' }}
     >
       <SidebarNav />
