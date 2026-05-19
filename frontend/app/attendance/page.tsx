@@ -28,7 +28,8 @@ import {
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { exportToCSV } from "@/lib/export-utils";
-import { toast } from 'sonner'
+import { toast } from 'sonner';
+import { formatTime12h } from "@/lib/utils";
  
 export default function AttendancePage() {
   const { user, getISTNow } = useUserContext();
@@ -756,7 +757,7 @@ export default function AttendancePage() {
                 </div>
                 <div className="flex-1 md:flex-none md:min-w-[100px] bg-gray-50 border border-border rounded-lg p-2 sm:p-3 flex flex-col justify-center">
                   <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Check-in</span>
-                  <span className="text-sm sm:text-lg font-bold text-foreground">{currentRecord?.checkIn || '--'}</span>
+                  <span className="text-sm sm:text-lg font-bold text-foreground">{formatTime12h(currentRecord?.checkIn) || '--'}</span>
                 </div>
                 <div className={`flex-1 md:flex-none md:min-w-[100px] border rounded-lg p-2 sm:p-3 flex flex-col justify-center ${
                   currentRecord?.status === "On Break" ? 'bg-amber-50 border-amber-100' : 'bg-brand-light/30 border-brand-teal/10'
@@ -955,8 +956,8 @@ export default function AttendancePage() {
                               {isLate ? <AlertCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />} {statusLabel}
                             </span>
                           </td>
-                          <td className="px-4 py-4 font-medium text-foreground">{row.checkIn || "-"}</td>
-                          <td className="px-4 py-4 font-medium text-foreground">{row.checkOut || "-"}</td>
+                          <td className="px-4 py-4 font-medium text-foreground">{formatTime12h(row.checkIn) || "-"}</td>
+                          <td className="px-4 py-4 font-medium text-foreground">{formatTime12h(row.checkOut) || "-"}</td>
                           <td className="px-4 py-4 text-muted-foreground">{breakStr}</td>
                           <td className="px-4 py-4 text-muted-foreground">{lateStr}</td>
                           <td className="px-4 py-4 text-muted-foreground">{overtimeStr}</td>
@@ -1056,11 +1057,11 @@ export default function AttendancePage() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="border border-border rounded-lg p-3 text-center">
                   <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">In</div>
-                  <div className="font-bold text-sm">{selectedRecord.checkIn}</div>
+                  <div className="font-bold text-sm">{formatTime12h(selectedRecord.checkIn)}</div>
                 </div>
                 <div className="border border-border rounded-lg p-3 text-center">
                   <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Out</div>
-                  <div className="font-bold text-sm">{selectedRecord.checkOut || '--:--'}</div>
+                  <div className="font-bold text-sm">{formatTime12h(selectedRecord.checkOut) || '--:--'}</div>
                 </div>
                 <div className="border border-brand-teal/30 bg-brand-light/20 rounded-lg p-3 text-center">
                   <div className="text-[10px] uppercase font-bold text-brand-teal mb-1">Work</div>
@@ -1120,13 +1121,13 @@ export default function AttendancePage() {
                               <div className="relative">
                                 <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-brand-teal"></div>
                                 <div className="font-semibold text-sm">Punched In</div>
-                                <div className="text-xs text-muted-foreground">{selectedRecord.checkIn}</div>
+                                <div className="text-xs text-muted-foreground">{formatTime12h(selectedRecord.checkIn)}</div>
                               </div>
                               {selectedRecord.checkOut && (
                                 <div className="relative">
                                   <div className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-gray-400"></div>
                                   <div className="font-semibold text-sm">Punched Out</div>
-                                  <div className="text-xs text-muted-foreground">{selectedRecord.checkOut}</div>
+                                  <div className="text-xs text-muted-foreground">{formatTime12h(selectedRecord.checkOut)}</div>
                                 </div>
                               )}
                             </>
@@ -1137,7 +1138,7 @@ export default function AttendancePage() {
                         <div key={idx} className="relative">
                           <div className={`absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full ${event.iconColor}`}></div>
                           <div className="font-semibold text-sm">{event.label}</div>
-                          <div className="text-xs text-muted-foreground">{event.time}</div>
+                          <div className="text-xs text-muted-foreground">{formatTime12h(event.time)}</div>
                         </div>
                       ));
                     })()}

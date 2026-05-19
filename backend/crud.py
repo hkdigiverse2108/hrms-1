@@ -1,5 +1,5 @@
 from bson import ObjectId
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, timezone, date
 from typing import List, Optional, Dict
 import schemas
 import calendar
@@ -7,7 +7,6 @@ import pytz
 
 import time
 import urllib.request
-from datetime import datetime, timedelta, timezone
 
 IST = pytz.timezone('Asia/Kolkata')
 _real_time_anchor = None
@@ -36,9 +35,13 @@ def get_now():
     elapsed = time.monotonic() - _mono_anchor
     return _real_time_anchor + timedelta(seconds=elapsed)
 
-def parse_datetime(date_str, time_str):
+def parse_datetime(date_val, time_str):
     if not time_str:
         return get_now()
+    if isinstance(date_val, (date, datetime)):
+        date_str = date_val.strftime("%Y-%m-%d")
+    else:
+        date_str = str(date_val)
     try:
         # Standard format
         dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
@@ -201,8 +204,16 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
     # 3. Get remarks
     remark_query = {}
     if month and year:
-        month_short = month[:3]
-        remark_query["date"] = {"$regex": f"{month_short}.* {year}"}
+        try:
+            month_num = list(calendar.month_name).index(month)
+        except ValueError:
+            month_map = {m: i for i, m in enumerate(calendar.month_name)}
+            month_num = month_map.get(month.capitalize(), 1)
+        
+        _, num_days = calendar.monthrange(year, month_num)
+        start_dt = datetime(year, month_num, 1, tzinfo=IST)
+        end_dt = datetime(year, month_num, num_days, 23, 59, 59, tzinfo=IST)
+        remark_query["date"] = {"$gte": start_dt, "$lte": end_dt}
     
     cursor = db.remarks.find(remark_query)
     remarks = await cursor.to_list(length=1000)
@@ -311,8 +322,10 @@ async def run_payroll_processing(db, month: str, year: int):
         
         # Count Holidays for this employee's company
         emp_company = emp.get("company")
+        holiday_start_dt = datetime(year, month_num, 1, tzinfo=IST)
+        holiday_end_dt = datetime(year, month_num, num_days, 23, 59, 59, tzinfo=IST)
         holiday_query = {
-            "date": {"$regex": f"^{year}-{str(month_num).zfill(2)}"}
+            "date": {"$gte": holiday_start_dt, "$lte": holiday_end_dt}
         }
         if emp_company:
             # Match specific company holidays OR global holidays (where company is null/empty)
@@ -328,7 +341,8 @@ async def run_payroll_processing(db, month: str, year: int):
         unique_holidays = 0
         for h in month_holidays:
             # Only count holiday if it doesn't fall on a Sunday
-            if h["date"] not in sunday_dates:
+            h_date_str = h["date"].strftime("%Y-%m-%d") if isinstance(h["date"], (date, datetime)) else h["date"]
+            if h_date_str not in sunday_dates:
                 unique_holidays += 1
 
         # 1. Map out approved leaves for this month with deduction factors
@@ -387,16 +401,24 @@ async def run_payroll_processing(db, month: str, year: int):
                 pass
 
         # 2. Map out actual presence
+        att_start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=IST)
+        att_end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(tzinfo=IST)
         attendance_cursor = db.attendance.find({
             "employeeId": emp_id,
-            "date": {"$gte": start_date_str, "$lte": end_date_str}
+            "date": {"$gte": att_start_dt, "$lte": att_end_dt}
         })
         attendance_records = await attendance_cursor.to_list(length=100)
-        attendance_dates = {att["date"] for att in attendance_records}
+        attendance_dates = {
+            att["date"].strftime("%Y-%m-%d") if isinstance(att["date"], (date, datetime)) else att["date"]
+            for att in attendance_records
+        }
         
         # 3. Calculate worked/absent based on priority: Leave > Attendance
         sunday_dates_set = set(sunday_dates)
-        holiday_dates_set = {h["date"] for h in month_holidays if "date" in h}
+        holiday_dates_set = {
+            h["date"].strftime("%Y-%m-%d") if isinstance(h["date"], (date, datetime)) else h["date"]
+            for h in month_holidays if "date" in h
+        }
         
         actual_worked_days = 0.0
         lop_days = 0.0
@@ -464,10 +486,19 @@ async def run_payroll_processing(db, month: str, year: int):
             deduction_details.append(f"Sales Incentive: ₹{incentive_amount}")
         
         # Fetch Penalties from Remarks
-        month_short = month[:3]
+        try:
+            rem_month_num = list(calendar.month_name).index(month)
+        except ValueError:
+            rem_month_map = {m: i for i, m in enumerate(calendar.month_name)}
+            rem_month_num = rem_month_map.get(month.capitalize(), 1)
+        
+        _, rem_num_days = calendar.monthrange(year, rem_month_num)
+        rem_start_dt = datetime(year, rem_month_num, 1, tzinfo=IST)
+        rem_end_dt = datetime(year, rem_month_num, rem_num_days, 23, 59, 59, tzinfo=IST)
+        
         remark_query = {
             "employeeId": emp_id,
-            "date": {"$regex": f"{month_short}.* {year}"}
+            "date": {"$gte": rem_start_dt, "$lte": rem_end_dt}
         }
         remarks_cursor = db.remarks.find(remark_query)
         emp_remarks = await remarks_cursor.to_list(length=100)
@@ -476,16 +507,19 @@ async def run_payroll_processing(db, month: str, year: int):
             
         for r in emp_remarks:
             remark_type = r.get("type")
+            r_date_val = r.get("date")
+            r_date_str = r_date_val.strftime("%d-%m-%Y") if isinstance(r_date_val, (date, datetime)) else str(r_date_val)
+            
             if remark_type == "Late Punch-in":
                 if late_punch_deduction_enabled:
                     penalty_total += per_day_gross
-                    deduction_details.append(f"Late Punch-in ({r.get('date')}): ₹{round(per_day_gross, 2)}")
+                    deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{round(per_day_gross, 2)}")
                 continue
 
             p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
             if p_amount > 0:
                 penalty_total += p_amount
-                deduction_details.append(f"{r['type']} ({r['date']}): ₹{p_amount}")
+                deduction_details.append(f"{r['type']} ({r_date_str}): ₹{p_amount}")
         
         net_salary = (salary["monthlyGross"] - lop_amount + total_bonus + incentive_amount - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"])
         
@@ -829,37 +863,66 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
     _, num_days = calendar.monthrange(year, month_num)
     
     # Get holidays to skip
+    bulk_start_dt = datetime(year, month_num, 1, tzinfo=IST)
+    bulk_end_dt = datetime(year, month_num, num_days, 23, 59, 59, tzinfo=IST)
     holiday_query = {
-        "date": {"$regex": f"^{year}-{str(month_num).zfill(2)}"}
+        "date": {"$gte": bulk_start_dt, "$lte": bulk_end_dt}
     }
     emp_company = employee.get("company")
     if emp_company:
         holiday_query["$or"] = [{"company": emp_company}, {"company": None}, {"company": ""}]
     
     holidays = await db.holidays.find(holiday_query).to_list(length=31)
-    holiday_dates = [h["date"] for h in holidays]
+    holiday_dates = [
+        h["date"].strftime("%Y-%m-%d") if isinstance(h["date"], (date, datetime)) else h["date"]
+        for h in holidays
+    ]
 
     # Get approved leaves to skip
     start_date_str = f"{year}-{str(month_num).zfill(2)}-01"
     end_date_str = f"{year}-{str(month_num).zfill(2)}-{num_days}"
     leave_cursor = db.leave_requests.find({
-        "employeeId": employee_id,
+        "$or": [
+            {"employeeId": employee_id},
+            {"employee_id": employee_id}
+        ],
         "status": "Approved",
-        "startDate": {"$lte": end_date_str},
-        "endDate": {"$gte": start_date_str}
+        "$or": [
+            {
+                "start_date": {"$lte": bulk_end_dt},
+                "end_date": {"$gte": bulk_start_dt}
+            },
+            {
+                "startDate": {"$lte": bulk_end_dt},
+                "endDate": {"$gte": bulk_start_dt}
+            }
+        ]
     })
     leaves = await leave_cursor.to_list(length=100)
     leave_dates = set()
+    
+    def robust_parse(val):
+        if isinstance(val, datetime):
+            return val
+        if isinstance(val, date):
+            return datetime.combine(val, datetime.min.time()).replace(tzinfo=IST)
+        # Fallback to string parse
+        return datetime.strptime(val, "%Y-%m-%d")
+        
     for l in leaves:
         try:
-
-            s = datetime.strptime(l["startDate"], "%Y-%m-%d")
-            e = datetime.strptime(l["endDate"], "%Y-%m-%d")
+            raw_s = l.get("startDate") or l.get("start_date")
+            raw_e = l.get("endDate") or l.get("end_date")
+            if not raw_s or not raw_e:
+                continue
+            s = robust_parse(raw_s)
+            e = robust_parse(raw_e)
             curr = s
             while curr <= e:
                 leave_dates.add(curr.strftime("%Y-%m-%d"))
                 curr += timedelta(days=1)
-        except:
+        except Exception as e:
+            print(f"Error parsing leave: {e}")
             pass
     
     attendance_records = []
@@ -873,7 +936,9 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
         if calendar.weekday(year, month_num, d) == 6: continue
         if date_str in holiday_dates: continue
         if date_str in leave_dates: continue
-        existing = await db.attendance.find_one({"employeeId": employee_id, "date": date_str})
+        
+        date_dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=IST)
+        existing = await db.attendance.find_one({"employeeId": employee_id, "date": date_dt})
         if existing: continue
         available_working_days.append(d)
     
@@ -922,7 +987,7 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
         record = {
             "employeeId": employee_id,
             "employeeName": employee["name"],
-            "date": date_str,
+            "date": datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=IST),
             "checkIn": check_in,
             "lastPunchIn": check_in,
             "checkOut": check_out,
@@ -941,10 +1006,11 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
 
 async def get_attendance_status(db, employee_id: str):
     today = get_now().strftime("%Y-%m-%d")
+    today_dt = datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=IST)
     # Find active punch for today (checkIn present, checkOut missing)
     record = await db.attendance.find_one({
         "employeeId": employee_id,
-        "date": today,
+        "date": today_dt,
         "checkOut": None
     })
     return fix_id(record)
@@ -956,12 +1022,13 @@ async def punch_in(db, employee_id: str):
     
     today = get_now()
     today_str = today.strftime("%Y-%m-%d")
+    today_dt = datetime.strptime(today_str, "%Y-%m-%d").replace(tzinfo=IST)
     now_time_str = today.strftime("%H:%M:%S")
 
     # Check for existing record for today to consolidate
     existing_record = await db.attendance.find_one({
         "employeeId": employee_id,
-        "date": today_str
+        "date": today_dt
     })
 
     if existing_record:
@@ -989,7 +1056,7 @@ async def punch_in(db, employee_id: str):
     attendance_data = {
         "employeeId": employee_id,
         "employeeName": employee["name"],
-        "date": today_str,
+        "date": today_dt,
         "checkIn": now_time_str,
         "lastPunchIn": now_time_str,
         "checkOut": None,
@@ -1012,10 +1079,6 @@ async def punch_in(db, employee_id: str):
         current_time_obj = datetime.strptime(current_time_str, "%H:%M")
         
         if current_time_obj > limit_time_obj:
-            date_str = today.strftime("%b %d, %Y")
-            if ", " in date_str and date_str[4] == '0': # Handle "May 05, 2026" -> "May 5, 2026"
-                date_str = date_str[:4] + date_str[5:]
-
             remark_data = {
                 "employeeId": employee_id,
                 "employeeName": employee["name"],
@@ -1024,7 +1087,7 @@ async def punch_in(db, employee_id: str):
                 "type": "Late Punch-in",
                 "details": f"Late Punch-in detected at {current_time_str}. Shift starts at {start_time_str} with a {buffer_mins}-minute buffer (Limit: {limit_time_obj.strftime('%H:%M')}).",
                 "addedBy": "System",
-                "date": date_str
+                "date": today_dt
             }
             await db.remarks.insert_one(remark_data)
     except Exception as e:
@@ -1158,10 +1221,12 @@ async def delete_bulk_attendance(db, employee_id: str, month: str, year: int):
         month_map = {m: i for i, m in enumerate(calendar.month_name)}
         month_num = month_map.get(month.capitalize(), 1)
         
-    pattern = f"^{year}-{str(month_num).zfill(2)}"
+    _, num_days = calendar.monthrange(year, month_num)
+    start_dt = datetime(year, month_num, 1, tzinfo=IST)
+    end_dt = datetime(year, month_num, num_days, 23, 59, 59, tzinfo=IST)
     result = await db.attendance.delete_many({
         "employeeId": employee_id,
-        "date": {"$regex": pattern}
+        "date": {"$gte": start_dt, "$lte": end_dt}
     })
     return result.deleted_count
 
@@ -1189,9 +1254,10 @@ async def break_in(db, employee_id: str):
 async def break_out(db, employee_id: str):
     # Find record where status is 'On Break'
     today = get_now().strftime("%Y-%m-%d")
+    today_dt = datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=IST)
     record = await db.attendance.find_one({
         "employeeId": employee_id,
-        "date": today,
+        "date": today_dt,
         "status": "On Break"
     })
     
@@ -2262,7 +2328,9 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
         
         # Count Holidays for this employee's company
         emp_company = employee.get("company")
-        holiday_query = {"date": {"$regex": f"^{year}-{str(month_num).zfill(2)}"}}
+        start_dt = datetime(year, month_num, 1, tzinfo=IST)
+        end_dt = datetime(year, month_num, num_days, 23, 59, 59, tzinfo=IST)
+        holiday_query = {"date": {"$gte": start_dt, "$lte": end_dt}}
         if emp_company:
             holiday_query["$or"] = [{"company": emp_company}, {"company": None}, {"company": ""}]
         
@@ -2292,10 +2360,6 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
             await create_bonus_deduction(db, deduction)
             
             # Add Remark for visibility
-            date_str = dt.strftime("%b %d, %Y")
-            if ", " in date_str and date_str[4] == '0': # Handle "May 05" -> "May 5"
-                date_str = date_str[:4] + date_str[5:]
-                
             remark_data = {
                 "employeeId": employee_id,
                 "employeeName": employee["name"],
@@ -2304,7 +2368,7 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
                 "type": "Performance",
                 "details": f"Daily work report for {report_date} was rejected by Team Leader. Automatic full-day salary deduction applied.",
                 "addedBy": "System",
-                "date": date_str
+                "date": datetime.combine(dt.date(), datetime.min.time()).replace(tzinfo=IST)
             }
             await db.remarks.insert_one(remark_data)
             
