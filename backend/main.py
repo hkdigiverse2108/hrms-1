@@ -12,6 +12,16 @@ from database import get_db
 
 app = FastAPI(title="HRMS API")
 
+import asyncio
+
+@app.on_event("startup")
+async def startup_migration():
+    try:
+        from scratch.migrate_db_to_objectids import migrate_database
+        asyncio.create_task(migrate_database())
+    except Exception as e:
+        print(f"Error starting background migration: {e}")
+
 # CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
 _default_origins = "http://localhost:3535,http://127.0.0.1:3535"
 _allowed_origins = [
