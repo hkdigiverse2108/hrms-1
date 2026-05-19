@@ -1,5 +1,22 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel as PydanticBaseModel, model_serializer
+from typing import List, Optional, Any, Dict
+
+class BaseModel(PydanticBaseModel):
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    @model_serializer(mode='wrap')
+    def serialize_model(self, handler) -> Dict[str, Any]:
+        data = handler(self)
+        c_present = 'created_at' in data
+        u_present = 'updated_at' in data
+        c_val = data.pop('created_at', None)
+        u_val = data.pop('updated_at', None)
+        if c_present:
+            data['created_at'] = c_val
+        if u_present:
+            data['updated_at'] = u_val
+        return data
 
 class EmployeeBase(BaseModel):
     employeeId: Optional[str] = None
