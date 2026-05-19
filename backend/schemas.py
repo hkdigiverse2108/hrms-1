@@ -1,9 +1,88 @@
-from pydantic import BaseModel as PydanticBaseModel, model_serializer
-from typing import List, Optional, Any, Dict
+from pydantic import BaseModel as PydanticBaseModel, model_serializer, BeforeValidator, PlainSerializer, SerializationInfo
+from typing import List, Optional, Any, Dict, Annotated
+from datetime import datetime, date
+import pytz
+
+IST = pytz.timezone('Asia/Kolkata')
+
+def parse_robust_date(v: Any) -> date:
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    if not isinstance(v, str):
+        raise ValueError("Must be a string or date")
+    v_clean = v.strip()
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%b %d, %Y", "%B %d, %Y"):
+        try:
+            return datetime.strptime(v_clean, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date: {v}")
+
+def serialize_robust_date_standard(v: date, info: SerializationInfo) -> Any:
+    if info.mode == 'json':
+        return v.strftime("%Y-%m-%d")
+    return datetime.combine(v, datetime.min.time()).replace(tzinfo=IST)
+
+def serialize_robust_date_dmy(v: date, info: SerializationInfo) -> Any:
+    if info.mode == 'json':
+        return v.strftime("%d-%m-%Y")
+    return datetime.combine(v, datetime.min.time()).replace(tzinfo=IST)
+
+def parse_robust_datetime(v: Any) -> datetime:
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, date):
+        return datetime.combine(v, datetime.min.time()).replace(tzinfo=IST)
+    if not isinstance(v, str):
+        raise ValueError("Must be a string or datetime")
+    v_clean = v.strip()
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%d %H:%M",
+        "%d-%m-%Y %H:%M:%S",
+        "%d-%m-%Y %H:%M",
+        "%Y-%m-%d",
+        "%d-%m-%Y"
+    ):
+        try:
+            dt = datetime.strptime(v_clean, fmt)
+            if dt.tzinfo is None:
+                dt = IST.localize(dt)
+            return dt
+        except ValueError:
+            continue
+    try:
+        dt = datetime.fromisoformat(v_clean.replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            dt = IST.localize(dt)
+        return dt
+    except ValueError:
+        pass
+    raise ValueError(f"Cannot parse datetime: {v}")
+
+def serialize_robust_datetime_standard(v: datetime, info: SerializationInfo) -> Any:
+    if info.mode == 'json':
+        return v.isoformat()
+    return v
+
+def serialize_robust_datetime_dmy(v: datetime, info: SerializationInfo) -> Any:
+    if info.mode == 'json':
+        return v.strftime("%d-%m-%Y %H:%M")
+    return v
+
+RobustDate = Annotated[date, BeforeValidator(parse_robust_date), PlainSerializer(serialize_robust_date_standard, when_used='always')]
+RobustDateDMY = Annotated[date, BeforeValidator(parse_robust_date), PlainSerializer(serialize_robust_date_dmy, when_used='always')]
+RobustDatetime = Annotated[datetime, BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_standard, when_used='always')]
+RobustDatetimeDMY = Annotated[datetime, BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_dmy, when_used='always')]
 
 class BaseModel(PydanticBaseModel):
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_at: Optional[RobustDatetime] = None
+    updated_at: Optional[RobustDatetime] = None
 
     @model_serializer(mode='wrap')
     def serialize_model(self, handler) -> Dict[str, Any]:
@@ -27,10 +106,10 @@ class EmployeeBase(BaseModel):
     email: str
     phone: str
     password: Optional[str] = None
-    dob: Optional[str] = None
+    dob: Optional[RobustDate] = None
     department: str
     designation: str
-    joinDate: str
+    joinDate: RobustDate
     status: Optional[str] = "active"
     gender: Optional[str] = "Male"
     position: Optional[str] = "Intern"
@@ -63,11 +142,11 @@ class EmployeeUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     password: Optional[str] = None
-    dob: Optional[str] = None
+    dob: Optional[RobustDate] = None
     department: Optional[str] = None
     designation: Optional[str] = None
     position: Optional[str] = None
-    joinDate: Optional[str] = None
+    joinDate: Optional[RobustDate] = None
     status: Optional[str] = None
     gender: Optional[str] = None
     salary: Optional[float] = None
@@ -104,7 +183,7 @@ class PunchLog(BaseModel):
 class AttendanceBase(BaseModel):
     employeeId: str
     employeeName: str
-    date: str
+    date: RobustDate
     checkIn: str
     checkOut: Optional[str] = None
     status: str
@@ -121,7 +200,7 @@ class AttendanceCreate(AttendanceBase):
 class AttendanceUpdate(BaseModel):
     employeeId: Optional[str] = None
     employeeName: Optional[str] = None
-    date: Optional[str] = None
+    date: Optional[RobustDate] = None
     checkIn: Optional[str] = None
     checkOut: Optional[str] = None
     status: Optional[str] = None
@@ -135,12 +214,12 @@ class LeaveRequestBase(BaseModel):
     employee_id: str
     employee_name: str
     type: str  # annual, sick, unpaid, etc.
-    start_date: str
-    end_date: str
+    start_date: RobustDateDMY
+    end_date: RobustDateDMY
     duration: str
     reason: str
     status: str = "Pending"
-    requested_on: str = ""
+    requested_on: Optional[RobustDatetimeDMY] = None
     day_type: Optional[str] = "Full Day"
     half_day: bool = False
     approved_by: Optional[str] = None
@@ -153,8 +232,8 @@ class LeaveRequestCreate(LeaveRequestBase):
 
 class LeaveRequestUpdate(BaseModel):
     type: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+    start_date: Optional[RobustDateDMY] = None
+    end_date: Optional[RobustDateDMY] = None
     duration: Optional[str] = None
     reason: Optional[str] = None
     half_day: Optional[bool] = None
@@ -185,7 +264,7 @@ class AnnouncementBase(BaseModel):
     title: str
     content: str
     author: str
-    date: str
+    date: RobustDate
     priority: str
 
 class Announcement(AnnouncementBase):
@@ -319,7 +398,7 @@ class JobOpeningBase(BaseModel):
     type: str
     applications: int
     status: str
-    postedDate: str
+    postedDate: RobustDate
 
 class JobOpeningCreate(JobOpeningBase):
     pass
@@ -331,7 +410,7 @@ class JobOpeningUpdate(BaseModel):
     type: Optional[str] = None
     applications: Optional[int] = None
     status: Optional[str] = None
-    postedDate: Optional[str] = None
+    postedDate: Optional[RobustDate] = None
 
 class JobOpening(JobOpeningBase):
     id: str
@@ -341,12 +420,12 @@ class ApplicationBase(BaseModel):
     email: str
     phone: str
     status: str
-    appliedDate: str
+    appliedDate: RobustDate
     resume: Optional[str] = None
     jobTitle: Optional[str] = None
     skills: Optional[str] = None
     source: Optional[str] = None
-    interviewDate: Optional[str] = None
+    interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
     interviewLink: Optional[str] = None
@@ -364,7 +443,7 @@ class ApplicationUpdate(BaseModel):
     skills: Optional[str] = None
     source: Optional[str] = None
     resume: Optional[str] = None
-    interviewDate: Optional[str] = None
+    interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
     interviewLink: Optional[str] = None
@@ -381,8 +460,8 @@ class InternBase(BaseModel):
     email: str
     department: str
     mentor: str
-    startDate: str
-    endDate: str
+    startDate: RobustDate
+    endDate: RobustDate
     status: str
 
 class InternCreate(InternBase):
@@ -391,7 +470,7 @@ class InternCreate(InternBase):
 class InternUpdate(BaseModel):
     department: Optional[str] = None
     mentor: Optional[str] = None
-    endDate: Optional[str] = None
+    endDate: Optional[RobustDate] = None
     status: Optional[str] = None
 
 class Intern(InternBase):
@@ -406,7 +485,7 @@ class AssetBase(BaseModel):
     status: str # Allocated, Available, Maintenance
     condition: Optional[str] = "New"
     location: Optional[str] = None
-    purchaseDate: Optional[str] = None
+    purchaseDate: Optional[RobustDate] = None
     value: Optional[float] = 0
     description: Optional[str] = None
 
@@ -421,7 +500,7 @@ class AssetUpdate(BaseModel):
     status: Optional[str] = None
     condition: Optional[str] = None
     location: Optional[str] = None
-    purchaseDate: Optional[str] = None
+    purchaseDate: Optional[RobustDate] = None
     value: Optional[float] = None
     description: Optional[str] = None
 
@@ -435,7 +514,7 @@ class ExpenseClaimBase(BaseModel):
     amount: float
     description: str
     status: str
-    submittedDate: str
+    submittedDate: RobustDate
     receiptUrl: Optional[str] = None
 
 class ExpenseClaimCreate(ExpenseClaimBase):
@@ -449,7 +528,7 @@ class ExpenseClaim(ExpenseClaimBase):
 
 class HolidayBase(BaseModel):
     name: str
-    date: str
+    date: RobustDate
     type: str
     company: Optional[str] = None
 
@@ -458,7 +537,7 @@ class HolidayCreate(HolidayBase):
 
 class HolidayUpdate(BaseModel):
     name: Optional[str] = None
-    date: Optional[str] = None
+    date: Optional[RobustDate] = None
     type: Optional[str] = None
     company: Optional[str] = None
 
@@ -494,7 +573,7 @@ class ReviewBase(BaseModel):
     department: str
     summary: str
     rating: int
-    date: Optional[str] = None
+    date: Optional[RobustDate] = None
 
 class ReviewCreate(ReviewBase):
     pass
@@ -514,7 +593,7 @@ class RemarkBase(BaseModel):
     type: str  # Appreciation, Warning, Performance, General
     details: str
     addedBy: str
-    date: Optional[str] = None
+    date: Optional[RobustDateDMY] = None
 
 class RemarkCreate(RemarkBase):
     pass
@@ -551,7 +630,7 @@ class LoginResponse(BaseModel):
 class EventBase(BaseModel):
     title: str
     description: Optional[str] = None
-    date: str
+    date: RobustDate
     time: Optional[str] = None
     type: str
 
@@ -561,7 +640,7 @@ class EventCreate(EventBase):
 class EventUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    date: Optional[str] = None
+    date: Optional[RobustDate] = None
     time: Optional[str] = None
     type: Optional[str] = None
 
@@ -577,7 +656,7 @@ class NotificationBase(BaseModel):
     type: str  # leave, attendance, payroll, etc.
     reference_id: Optional[str] = None
     is_read: bool = False
-    created_at: str = ""
+    created_at: Optional[RobustDatetime] = None
 
 class NotificationCreate(NotificationBase):
     pass
@@ -611,11 +690,11 @@ class ClientBase(BaseModel):
     remarks: Optional[str] = None
     responsibility: Optional[str] = None
     dailyFollowup: Optional[str] = "No"
-    interviewDate: Optional[str] = None
+    interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
     interviewNotes: Optional[str] = None
-    createdDate: Optional[str] = None
+    createdDate: Optional[RobustDate] = None
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -643,7 +722,7 @@ class ClientUpdate(BaseModel):
     remarks: Optional[str] = None
     responsibility: Optional[str] = None
     dailyFollowup: Optional[str] = None
-    interviewDate: Optional[str] = None
+    interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
     interviewLink: Optional[str] = None
@@ -666,8 +745,8 @@ class ProjectBase(BaseModel):
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
-    startDate: str
-    endDate: Optional[str] = None
+    startDate: RobustDate
+    endDate: Optional[RobustDate] = None
     status: Optional[str] = "planning"
     priority: Optional[str] = "medium"
     budget: Optional[float] = 0
@@ -684,8 +763,8 @@ class ProjectUpdate(BaseModel):
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
-    startDate: Optional[str] = None
-    endDate: Optional[str] = None
+    startDate: Optional[RobustDate] = None
+    endDate: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None
     budget: Optional[float] = None
@@ -706,28 +785,28 @@ class WMTaskBase(BaseModel):
     projectName: Optional[str] = None
     assignedToId: str # Employee ID
     assignedToName: Optional[str] = None
-    dueDate: Optional[str] = None
+    dueDate: Optional[RobustDate] = None
     status: Optional[str] = "todo" # todo, in-progress, review, completed
     priority: Optional[str] = "medium" # low, medium, high, urgent
     remarks: Optional[str] = None
     
     # Graphics specific fields
-    postingDate: Optional[str] = None
+    postingDate: Optional[RobustDate] = None
     postingDay: Optional[str] = None
     reelPost: Optional[str] = None
     concept: Optional[str] = None
     reference: Optional[str] = None
     scriptLink: Optional[str] = None
-    scriptDate: Optional[str] = None
+    scriptDate: Optional[RobustDate] = None
     shootingLink: Optional[str] = None
-    shootDate: Optional[str] = None
+    shootDate: Optional[RobustDate] = None
     editingLink: Optional[str] = None
-    editingDate: Optional[str] = None
+    editingDate: Optional[RobustDate] = None
     reviewByTL: Optional[str] = None
     finalLink: Optional[str] = None
     postingStatus: Optional[str] = None
     
-    createdDate: Optional[str] = None
+    createdDate: Optional[RobustDate] = None
 
 class WMTaskCreate(WMTaskBase):
     performedBy: Optional[str] = None
@@ -740,23 +819,23 @@ class WMTaskUpdate(BaseModel):
     projectName: Optional[str] = None
     assignedToId: Optional[str] = None
     assignedToName: Optional[str] = None
-    dueDate: Optional[str] = None
+    dueDate: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None
     remarks: Optional[str] = None
     
     # Graphics specific fields
-    postingDate: Optional[str] = None
+    postingDate: Optional[RobustDate] = None
     postingDay: Optional[str] = None
     reelPost: Optional[str] = None
     concept: Optional[str] = None
     reference: Optional[str] = None
     scriptLink: Optional[str] = None
-    scriptDate: Optional[str] = None
+    scriptDate: Optional[RobustDate] = None
     shootingLink: Optional[str] = None
-    shootDate: Optional[str] = None
+    shootDate: Optional[RobustDate] = None
     editingLink: Optional[str] = None
-    editingDate: Optional[str] = None
+    editingDate: Optional[RobustDate] = None
     reviewByTL: Optional[str] = None
     finalLink: Optional[str] = None
     postingStatus: Optional[str] = None
@@ -782,7 +861,7 @@ class TaskLogBase(BaseModel):
     performedBy: str
     userName: str
     details: str
-    timestamp: Optional[str] = None
+    timestamp: Optional[RobustDatetime] = None
 
 class TaskLog(TaskLogBase):
     id: str
@@ -791,7 +870,7 @@ class TaskLog(TaskLogBase):
 
 # Sales Lead Schemas
 class FollowUp(BaseModel):
-    date: str
+    date: RobustDate
     note: str
     performedBy: Optional[str] = None
 
@@ -804,9 +883,9 @@ class LeadBase(BaseModel):
     status: Optional[str] = "Lead" # Lead, Contacted, Proposal Sent, Client Won, Client Loss
     priority: Optional[str] = "Medium" # Low, Medium, High
     source: Optional[str] = None
-    date: Optional[str] = None
+    date: Optional[RobustDate] = None
     remarks: Optional[str] = None
-    closedDate: Optional[str] = None
+    closedDate: Optional[RobustDate] = None
     assignedTo: Optional[str] = None
     followUps: Optional[List[FollowUp]] = []
 
@@ -823,9 +902,9 @@ class LeadUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     source: Optional[str] = None
-    date: Optional[str] = None
+    date: Optional[RobustDate] = None
     remarks: Optional[str] = None
-    closedDate: Optional[str] = None
+    closedDate: Optional[RobustDate] = None
     assignedTo: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
@@ -857,7 +936,7 @@ class SystemSettings(SystemSettingsBase):
 
 # Marketing Report Schemas
 class MarketingDailyReportBase(BaseModel):
-    date: str
+    date: RobustDate
     campaignName: str
     reach: int = 0
     impression: int = 0
@@ -873,7 +952,7 @@ class MarketingDailyReportCreate(MarketingDailyReportBase):
 class MarketingDailyReportUpdate(BaseModel):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
-    date: Optional[str] = None
+    date: Optional[RobustDate] = None
     campaignName: Optional[str] = None
     reach: Optional[int] = None
     impression: Optional[int] = None
@@ -1016,8 +1095,8 @@ class EmployeeDocumentBase(BaseModel):
     category: Optional[str] = "Other"
     fileName: str
     fileUrl: str
-    uploadDate: str
-    expiryDate: Optional[str] = None
+    uploadDate: RobustDate
+    expiryDate: Optional[RobustDate] = None
     status: str = "Active" # Active, Expired, Revoked
     remarks: Optional[str] = None
 
@@ -1027,7 +1106,7 @@ class EmployeeDocumentCreate(EmployeeDocumentBase):
 class EmployeeDocumentUpdate(BaseModel):
     documentName: Optional[str] = None
     category: Optional[str] = None
-    expiryDate: Optional[str] = None
+    expiryDate: Optional[RobustDate] = None
     status: Optional[str] = None
     remarks: Optional[str] = None
 
@@ -1039,7 +1118,7 @@ class EmployeeDailyReportBase(BaseModel):
     employeeId: str
     employeeName: str
     department: str
-    date: str
+    date: RobustDate
     tasksCompleted: List[str]
     tasksInProgress: List[str]
     challenges: Optional[str] = None
@@ -1134,12 +1213,12 @@ class UserPermission(UserPermissionBase):
 class TimeRecoveryBase(BaseModel):
     employee_id: str
     employee_name: str
-    date: str
+    date: RobustDate
     late_minutes: int
     recovery_minutes: int
     reason: str
     status: str = 'pending' # pending, approved, rejected
-    created_at: Optional[str] = None
+    created_at: Optional[RobustDatetime] = None
 
 class TimeRecoveryCreate(TimeRecoveryBase):
     pass

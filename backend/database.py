@@ -30,8 +30,8 @@ client = AsyncIOMotorClient(
 # --- Automatic Timestamp Handling Wrapper classes ---
 IST = pytz.timezone('Asia/Kolkata')
 
-def get_current_time_str():
-    return datetime.now(IST).isoformat()
+def get_current_time():
+    return datetime.now(IST)
 
 class TimestampedCollection:
     def __init__(self, collection: AsyncIOMotorCollection):
@@ -41,7 +41,7 @@ class TimestampedCollection:
         return getattr(self._collection, name)
 
     async def insert_one(self, document, *args, **kwargs):
-        now = get_current_time_str()
+        now = get_current_time()
         if document.get('created_at') is None:
             document['created_at'] = now
         if document.get('updated_at') is None:
@@ -49,7 +49,7 @@ class TimestampedCollection:
         return await self._collection.insert_one(document, *args, **kwargs)
 
     async def insert_many(self, documents, *args, **kwargs):
-        now = get_current_time_str()
+        now = get_current_time()
         for doc in documents:
             if doc.get('created_at') is None:
                 doc['created_at'] = now
@@ -58,7 +58,7 @@ class TimestampedCollection:
         return await self._collection.insert_many(documents, *args, **kwargs)
 
     async def update_one(self, filter, update, *args, **kwargs):
-        now = get_current_time_str()
+        now = get_current_time()
         if isinstance(update, dict):
             if '$set' in update:
                 # Remove client-sent timestamps to prevent null or client overrides
@@ -78,7 +78,7 @@ class TimestampedCollection:
         return await self._collection.update_one(filter, update, *args, **kwargs)
 
     async def update_many(self, filter, update, *args, **kwargs):
-        now = get_current_time_str()
+        now = get_current_time()
         if isinstance(update, dict):
             if '$set' in update:
                 update['$set'].pop('created_at', None)
@@ -97,7 +97,7 @@ class TimestampedCollection:
         return await self._collection.update_many(filter, update, *args, **kwargs)
 
     async def find_one_and_update(self, filter, update, *args, **kwargs):
-        now = get_current_time_str()
+        now = get_current_time()
         if isinstance(update, dict):
             if '$set' in update:
                 update['$set'].pop('created_at', None)
