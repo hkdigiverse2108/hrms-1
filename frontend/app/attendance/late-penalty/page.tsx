@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
-import { AlertTriangle, Clock, DollarSign, Download } from 'lucide-react'
+import { AlertTriangle, Clock, IndianRupee, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { exportToCSV } from "@/lib/export-utils";
 
@@ -19,9 +19,9 @@ const lateEmployees = [
 
 
 const penaltyRules = [
-  { lateCount: '1-2', deduction: '$0', action: 'Verbal warning' },
-  { lateCount: '3-4', deduction: '$10/late', action: 'Written warning' },
-  { lateCount: '5+', deduction: '$20/late', action: 'HR review' },
+  { lateCount: '1-2', deduction: '₹0', action: 'Verbal warning' },
+  { lateCount: '3-4', deduction: '₹10/late', action: 'Written warning' },
+  { lateCount: '5+', deduction: '₹20/late', action: 'HR review' },
 ]
 
 export default function LatePenaltyPage() {
@@ -83,8 +83,8 @@ export default function LatePenaltyPage() {
                 <p className="text-sm text-muted-foreground">Employees with Warnings</p>
               </div>
               <div className="rounded-lg border p-4 text-center">
-                <DollarSign className="mx-auto h-8 w-8 text-red-500" />
-                <p className="mt-2 text-3xl font-bold">$80</p>
+                <IndianRupee className="mx-auto h-8 w-8 text-red-500" />
+                <p className="mt-2 text-3xl font-bold">₹80</p>
                 <p className="text-sm text-muted-foreground">Total Penalties</p>
               </div>
             </div>
@@ -131,7 +131,7 @@ export default function LatePenaltyPage() {
                   <div className="text-right">
                     <p className="text-sm text-muted-foreground">Penalty</p>
                     <p className="font-medium">
-                      {employee.penaltyAmount > 0 ? `$${employee.penaltyAmount}` : '-'}
+                      {employee.penaltyAmount > 0 ? `₹${employee.penaltyAmount}` : '-'}
                     </p>
                   </div>
 

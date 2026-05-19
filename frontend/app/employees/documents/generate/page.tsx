@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { FileText, Download, Printer, Save, RefreshCw, ChevronLeft, Layout, FileType, User, Calendar, Briefcase, DollarSign, Edit3 } from 'lucide-react'
+import { FileText, Download, Printer, Save, RefreshCw, ChevronLeft, Layout, FileType, User, Calendar, Briefcase, IndianRupee, Edit3 } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -1058,7 +1058,7 @@ export default function DocumentGeneratorPage() {
                     .map(field => (
                     <div key={field} className="space-y-2">
                       <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                        {field === 'ctc' ? <DollarSign className="w-3 h-3" /> : 
+                        {field === 'ctc' ? <IndianRupee className="w-3 h-3" /> : 
                          field.toLowerCase().includes('date') ? <Calendar className="w-3 h-3" /> : 
                          <Briefcase className="w-3 h-3" />}
                         {field.replace(/([A-Z])/g, ' $1').trim()}

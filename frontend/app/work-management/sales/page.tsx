@@ -7,7 +7,7 @@ import {
   TrendingUp, 
   Users, 
   Target, 
-  DollarSign, 
+  IndianRupee, 
   Plus, 
   Search, 
   Filter, 
@@ -419,7 +419,7 @@ export default function SalesPage() {
   const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
 
   const stats = [
-    { title: "Monthly Revenue", value: `₹${monthlyAchievement.toLocaleString()}`, trend: "+12.5%", trendUp: true, icon: <DollarSign className="w-5 h-5" />, color: "text-emerald-600" },
+    { title: "Monthly Revenue", value: `₹${monthlyAchievement.toLocaleString()}`, trend: "+12.5%", trendUp: true, icon: <IndianRupee className="w-5 h-5" />, color: "text-emerald-600" },
     { title: "Monthly Progress", value: `${achievementRate.toFixed(1)}%`, trend: `₹${monthlyAchievement.toLocaleString()}`, trendUp: achievementRate >= 100, icon: <Target className="w-5 h-5" />, color: "text-indigo-600" },
     { title: "Active Leads", value: activeLeads.length.toString(), trend: "+5", trendUp: true, icon: <Users className="w-5 h-5" />, color: "text-blue-600" },
     { title: "Target (Monthly)", value: `₹${totalMonthlyTarget.toLocaleString()}`, trend: selectedMonth, trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },

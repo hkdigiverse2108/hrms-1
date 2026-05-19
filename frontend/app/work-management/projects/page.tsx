@@ -286,7 +286,7 @@ export default function ProjectsPage() {
                         {project.clientName || "Unknown Client"}
                       </div>
                       <div className="text-muted-foreground font-mono font-bold">
-                        ${project.budget?.toLocaleString() || '0'}
+                        ₹{project.budget?.toLocaleString() || '0'}
                       </div>
                     </div>
 
