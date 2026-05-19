@@ -51,6 +51,7 @@ def parse_datetime(date_val, time_str):
     return IST.localize(dt)
 
 def fix_id(doc):
+    from datetime import datetime, date
     if doc is None:
         return None
     if isinstance(doc, list):

@@ -18,6 +18,10 @@ def parse_robust_date(v: Any) -> date:
             return datetime.strptime(v_clean, fmt).date()
         except ValueError:
             continue
+    try:
+        return datetime.fromisoformat(v_clean.replace('Z', '+00:00')).date()
+    except ValueError:
+        pass
     raise ValueError(f"Cannot parse date: {v}")
 
 def serialize_robust_date_standard(v: date, info: SerializationInfo) -> Any:

@@ -25,7 +25,7 @@ import {
   Trash2,
   Plus
 } from "lucide-react";
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from 'sonner';
@@ -733,7 +733,7 @@ export default function AttendancePage() {
             <div className="bg-white border border-border rounded-xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-center gap-4">
                 <Avatar className="w-16 h-16 border border-border">
-                  <AvatarImage src={user?.profilePhoto} />
+                  <AvatarImage src={getAvatarUrl(user?.profilePhoto, user?.name)} />
                   <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xl">
                     {user?.name?.split(' ').map((n:any) => n[0]).join('')}
                   </AvatarFallback>
