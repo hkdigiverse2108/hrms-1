@@ -50,6 +50,25 @@ async def upload_file(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
     return {"url": f"/uploads/{filename}"}
 
+@app.post("/upload-profile-photo/{user_id}")
+async def upload_profile_photo(user_id: str, file: UploadFile = File(...), db=Depends(get_db)):
+    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    user = await crud.get_employee(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    update_data = schemas.EmployeeUpdate(profilePhoto=filename)
+    updated_user = await crud.update_employee(db, user_id, update_data)
+    
+    if not updated_user:
+        raise HTTPException(status_code=400, detail="Failed to update user profile photo")
+        
+    return updated_user
+
 @app.post("/chat/upload")
 async def upload_chat_file(file: UploadFile = File(...)):
     filename = f"{uuid.uuid4().hex}_{file.filename}"

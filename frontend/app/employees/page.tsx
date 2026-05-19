@@ -9,7 +9,7 @@ import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2, Eye, EyeOff } fr
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 import { exportToCSV } from "@/lib/export-utils";
 import { useApi } from "@/hooks/useApi";
 import {
@@ -245,7 +245,7 @@ export default function EmployeeListPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <Avatar className="w-9 h-9">
-                          <AvatarImage src={emp.profilePhoto} alt={emp.name} />
+                          <AvatarImage src={getAvatarUrl(emp.profilePhoto, emp.name)} alt={emp.name} />
                           <AvatarFallback>{emp.name?.charAt(0) || "U"}</AvatarFallback>
                         </Avatar>
                         <div>

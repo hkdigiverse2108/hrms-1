@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import { SidebarNav } from "./SidebarNav";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
@@ -181,7 +181,7 @@ export function Header() {
           <div className="flex items-center gap-3">
             <Avatar className="w-8 h-8">
               <AvatarImage 
-                src={user?.profilePhoto ? (user.profilePhoto.startsWith('http') ? user.profilePhoto : `${API_URL}/uploads/${user.profilePhoto}`) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}`} 
+                src={getAvatarUrl(user?.profilePhoto, userName)} 
                 alt={userName} 
               />
               <AvatarFallback>{showUserInfo ? initials : ""}</AvatarFallback>

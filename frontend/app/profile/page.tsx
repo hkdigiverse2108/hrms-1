@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useUser } from '@/hooks/useUser'
 import { Camera, Mail, Phone, MapPin, Briefcase, Building2, Calendar, Loader2 } from 'lucide-react'
-import { API_URL } from '@/lib/config'
+import { API_URL, getAvatarUrl } from '@/lib/config'
 
 export default function ProfilePage() {
   const { user, setUser, isLoading: userLoading } = useUser()
@@ -94,7 +94,7 @@ export default function ProfilePage() {
                 <div className="relative group cursor-pointer" onClick={handleAvatarClick}>
                   <Avatar className="h-32 w-32 border-4 border-background shadow-xl">
                     <AvatarImage 
-                      src={user.profilePhoto ? (user.profilePhoto.startsWith('http') ? user.profilePhoto : `${API_URL}/uploads/${user.profilePhoto}`) : `https://i.pravatar.cc/150?u=${userName}`} 
+                      src={getAvatarUrl(user.profilePhoto, userName)} 
                       alt={userName} 
                     />
                     <AvatarFallback className="text-2xl bg-primary text-primary-foreground">{initials}</AvatarFallback>

@@ -49,7 +49,7 @@ import {
   Legend
 } from 'recharts';
 import { useUserContext } from "@/context/UserContext";
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 import dayjs from "dayjs";
 import { TablePagination } from "@/components/common/TablePagination";
 import { RequestPunchOutDialog } from "@/components/dashboard/RequestPunchOutDialog";
@@ -647,7 +647,7 @@ function EmployeeView({
                 <div className="flex items-center gap-4">
                   <div className="relative">
                     <Avatar className="w-16 h-16 border-2 border-border shadow-sm">
-                      <AvatarImage src={user?.profilePhoto} />
+                      <AvatarImage src={getAvatarUrl(user?.profilePhoto, userName)} />
                       <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{initials}</AvatarFallback>
                     </Avatar>
                     <div className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full ${isPunchedIn ? 'bg-green-500' : 'bg-gray-300'}`}></div>

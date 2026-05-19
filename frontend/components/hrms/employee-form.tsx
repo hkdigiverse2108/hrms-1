@@ -23,7 +23,7 @@ import { useApi } from '@/hooks/useApi'
 import { Save, Plus, Loader2, Image as ImageIcon, X, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { API_URL } from '@/lib/config'
+import { API_URL, getAvatarUrl } from '@/lib/config'
 
 export interface EmployeeFormData {
   employeeId: string
@@ -178,10 +178,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
       if (response.ok) {
         const data = await response.json()
-        const absoluteUrl = data.url.startsWith('http') 
-          ? data.url 
-          : `${API_URL}${data.url}`
-        handleChange('profilePhoto', absoluteUrl)
+        const filename = data.url.split('/').pop()
+        handleChange('profilePhoto', filename)
       } else {
         alert('Failed to upload image')
       }
@@ -381,7 +379,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             ) : formData.profilePhoto ? (
               <div className="relative w-full h-full group">
                 <img 
-                  src={formData.profilePhoto.startsWith('http') ? formData.profilePhoto : `${API_URL}/uploads/${formData.profilePhoto}`} 
+                  src={getAvatarUrl(formData.profilePhoto)} 
                   alt="Profile" 
                   className="w-full h-full object-cover"
                 />

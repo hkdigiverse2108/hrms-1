@@ -17,6 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useUser } from '@/hooks/useUser'
+import { getAvatarUrl } from '@/lib/config'
  
 export function HRMSNavbar() {
   const router = useRouter();
@@ -171,7 +172,7 @@ export function HRMSNavbar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-3 px-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.profilePhoto || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}`} alt={userName} />
+                <AvatarImage src={getAvatarUrl(user?.profilePhoto, userName)} alt={userName} />
                 <AvatarFallback className="bg-primary text-primary-foreground">
                   {showUserInfo ? initials : ""}
                 </AvatarFallback>
