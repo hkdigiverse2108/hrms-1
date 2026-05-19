@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { TablePagination } from "@/components/common/TablePagination";
 import { PageHeader } from "@/components/common/PageHeader";
 import dayjs from "dayjs";
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 import { exportToCSV } from "@/lib/export-utils";
 import { formatTime12h } from "@/lib/utils";
 
@@ -677,7 +677,7 @@ export default function EmployeeAttendanceListPage() {
                   <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-white hover:border-brand-teal/30 transition-all cursor-pointer group shadow-sm" onClick={() => { setSelectedRecord(record); setIsDetailModalOpen(true); }}>
                     <div className="flex items-center gap-3">
                       <Avatar className="w-10 h-10 border border-border group-hover:scale-105 transition-transform">
-                        <AvatarImage src={emp?.profilePhoto} />
+                        <AvatarImage src={getAvatarUrl(emp?.profilePhoto, record.employeeName)} />
                         <AvatarFallback className="bg-brand-light text-brand-teal font-bold uppercase">{record.employeeName?.split(' ').map((n:any) => n[0]).join('')}</AvatarFallback>
                       </Avatar>
                       <div>
