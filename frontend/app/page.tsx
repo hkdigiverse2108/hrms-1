@@ -172,32 +172,75 @@ export default function DashboardPage() {
   useEffect(() => {
     let interval: any;
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.checkIn) {
-      interval = setInterval(() => {
-        // Use IST for current time in calculations using synchronized offset
-        const istNow = dayjs(getISTNow());
-        const dateStr = istNow.format('YYYY-MM-DD');
-        // Support both 12h and 24h formats
-        const checkIn = dayjs(`${dateStr} ${attendanceStatus.record.checkIn}`, ['YYYY-MM-DD hh:mm A', 'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD HH:mm']);
-        
-        if (!checkIn.isValid()) {
-          console.error("Invalid check-in time:", attendanceStatus.record.checkIn);
-          return;
+      const parseTimeToDate = (timeStr: string, baseDate: Date) => {
+        const d = new Date(baseDate.getTime());
+        const cleaned = timeStr.trim();
+        let hours = 0, minutes = 0, seconds = 0;
+        const ampmMatch = cleaned.match(/(\d+):(\d+):?(\d+)?\s*(AM|PM)/i);
+        if (ampmMatch) {
+          hours = parseInt(ampmMatch[1]);
+          minutes = parseInt(ampmMatch[2]);
+          seconds = ampmMatch[3] ? parseInt(ampmMatch[3]) : 0;
+          const ampm = ampmMatch[4].toUpperCase();
+          if (ampm === "PM" && hours < 12) hours += 12;
+          if (ampm === "AM" && hours === 12) hours = 0;
+        } else {
+          const parts = cleaned.split(':');
+          hours = parts[0] ? parseInt(parts[0]) : 0;
+          minutes = parts[1] ? parseInt(parts[1]) : 0;
+          seconds = parts[2] ? parseInt(parts[2]) : 0;
         }
+        d.setHours(hours, minutes, seconds, 0);
+        return d;
+      };
 
-        const diffSeconds = istNow.diff(checkIn, 'second');
-        // If the record was resumed, we should only count diff from lastPunchIn
+      const runTimer = () => {
+        const istNow = getISTNow();
         const lastPunchInStr = attendanceStatus.record.lastPunchIn || attendanceStatus.record.checkIn;
-        const lastPunchIn = dayjs(`${dateStr} ${lastPunchInStr}`, ['YYYY-MM-DD hh:mm A', 'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD HH:mm']);
-        
-        const currentSessionSeconds = istNow.diff(lastPunchIn, 'second');
+        if (!lastPunchInStr) return;
+
+        const lastPunchInDate = parseTimeToDate(lastPunchInStr, istNow);
         const accumulated = (attendanceStatus.record.accumulatedWorkSeconds || 0);
-        const total = accumulated + currentSessionSeconds;
+        let total = accumulated;
+
+        if (attendanceStatus.record.status === "On Break") {
+          // If on break, freeze the timer at the start time of the active break
+          const activeBreak = (attendanceStatus.record.breaks || []).find((b: any) => !b.endTime);
+          if (activeBreak && activeBreak.startTime) {
+            const breakStartDate = parseTimeToDate(activeBreak.startTime, istNow);
+            if (breakStartDate.getTime() > lastPunchInDate.getTime()) {
+              total = accumulated + Math.floor((breakStartDate.getTime() - lastPunchInDate.getTime()) / 1000);
+            } else {
+              total = accumulated;
+            }
+          } else {
+            total = accumulated;
+          }
+        } else {
+          // If active (not on break), calculate elapsed time since lastPunchIn, subtracting any completed breaks in this session
+          const currentSessionSeconds = Math.floor((istNow.getTime() - lastPunchInDate.getTime()) / 1000);
+          let breakSeconds = 0;
+          (attendanceStatus.record.breaks || []).forEach((b: any) => {
+            if (b.startTime && b.endTime) {
+              const bStartDate = parseTimeToDate(b.startTime, istNow);
+              const bEndDate = parseTimeToDate(b.endTime, istNow);
+              if (bStartDate.getTime() > lastPunchInDate.getTime() && bEndDate.getTime() > bStartDate.getTime()) {
+                breakSeconds += Math.floor((bEndDate.getTime() - bStartDate.getTime()) / 1000);
+              }
+            }
+          });
+          total = accumulated + Math.max(0, currentSessionSeconds - breakSeconds);
+        }
 
         const h = Math.floor(total / 3600);
         const m = Math.floor((total % 3600) / 60);
         const s = Math.floor(total % 60);
         setWorkTime(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
-      }, 1000);
+      };
+
+      // Run once immediately so there is no 1-second delay
+      runTimer();
+      interval = setInterval(runTimer, 1000);
     } else {
       setWorkTime("00:00:00");
     }
@@ -209,7 +252,9 @@ export default function DashboardPage() {
         setTotalBreakTime(`${totalMinutes}m`);
       }
 
-      return () => clearInterval(interval);
+      return () => {
+        if (interval) clearInterval(interval);
+      };
     }, [attendanceStatus, getISTNow]);
 
   const [allTimeHours, setAllTimeHours] = useState("0h 0m");

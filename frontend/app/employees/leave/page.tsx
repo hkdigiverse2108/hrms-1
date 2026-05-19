@@ -12,7 +12,9 @@ import {
   Users,
   History,
   ChevronLeft,
-  Loader2
+  Loader2,
+  Eye,
+  ImageIcon
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
@@ -295,6 +297,14 @@ export default function LeaveRequestsPage() {
                   <span className={`w-1.5 h-1.5 rounded-full ${getStatusInfo(req.status).color}`}></span>
                   <span className="text-sm font-medium text-foreground capitalize">{req.type}</span>
                   <span className="text-sm text-muted-foreground">({req.duration})</span>
+                  {req.proof_image && (
+                    <span 
+                      className="inline-flex items-center justify-center p-0.5 bg-brand-light border border-brand-teal/20 text-brand-teal rounded"
+                      title="Proof Image Attached"
+                    >
+                      <ImageIcon className="w-3 h-3" />
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground">{req.start_date} - {req.end_date}</div>
               </div>
@@ -487,6 +497,30 @@ export default function LeaveRequestsPage() {
                     {selectedReq.reason}
                   </div>
                 </div>
+
+                {selectedReq.proof_image && (
+                  <div className="mt-6">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Proof of Leave</div>
+                    <div className="group relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50 transition-all hover:shadow-md duration-300 max-w-md">
+                      <img 
+                        src={selectedReq.proof_image.startsWith('http') ? selectedReq.proof_image : `${API_URL}${selectedReq.proof_image}`} 
+                        alt="Leave Proof" 
+                        className="w-full max-h-[220px] object-cover"
+                      />
+                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <a 
+                          href={selectedReq.proof_image.startsWith('http') ? selectedReq.proof_image : `${API_URL}${selectedReq.proof_image}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="bg-white hover:bg-slate-100 text-slate-800 px-3.5 py-1.5 rounded-lg text-xs font-bold shadow transition-all flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          View Full Image
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

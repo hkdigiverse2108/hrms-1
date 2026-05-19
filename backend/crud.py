@@ -41,7 +41,8 @@ def parse_datetime(date_val, time_str):
     if isinstance(date_val, (date, datetime)):
         date_str = date_val.strftime("%Y-%m-%d")
     else:
-        date_str = str(date_val)
+        # Extract only the date part in case date_val is an ISO timestamp string or full datetime string
+        date_str = str(date_val).split('T')[0].split(' ')[0]
     try:
         # Standard format
         dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
@@ -76,6 +77,18 @@ def fix_id(doc):
     return doc
 
 async def delete_employee(db, employee_id: str):
+    existing = await db.employees.find_one({"_id": ObjectId(employee_id)})
+    if existing:
+        old_photo = existing.get("profilePhoto")
+        if old_photo and not old_photo.startswith("http"):
+            import os
+            filename = old_photo.split('/')[-1]
+            old_photo_path = os.path.join("uploads", filename)
+            if os.path.exists(old_photo_path) and os.path.isfile(old_photo_path):
+                try:
+                    os.remove(old_photo_path)
+                except Exception as e:
+                    print(f"Error removing deleted employee's photo: {e}")
     await db.employees.delete_one({"_id": ObjectId(employee_id)})
     return True
 
@@ -98,8 +111,9 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
     if "profilePhoto" in update_data and update_data["profilePhoto"] != existing.get("profilePhoto"):
         import os
         old_photo = existing.get("profilePhoto")
-        if old_photo:
-            old_photo_path = os.path.join("uploads", old_photo)
+        if old_photo and not old_photo.startswith("http"):
+            filename = old_photo.split('/')[-1]
+            old_photo_path = os.path.join("uploads", filename)
             if os.path.exists(old_photo_path) and os.path.isfile(old_photo_path):
                 try:
                     os.remove(old_photo_path)
@@ -1007,11 +1021,12 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
 
 async def get_attendance_status(db, employee_id: str):
     today = get_now().strftime("%Y-%m-%d")
-    today_dt = datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=IST)
-    # Find active punch for today (checkIn present, checkOut missing)
+    today_dt_naive = datetime.strptime(today, "%Y-%m-%d")
+    today_dt_aware = today_dt_naive.replace(tzinfo=IST)
+    # Find active punch for today (checkIn present, checkOut missing) - supports naive and aware dates
     record = await db.attendance.find_one({
         "employeeId": employee_id,
-        "date": today_dt,
+        "date": {"$in": [today_dt_naive, today_dt_aware]},
         "checkOut": None
     })
     return fix_id(record)
@@ -1023,13 +1038,14 @@ async def punch_in(db, employee_id: str):
     
     today = get_now()
     today_str = today.strftime("%Y-%m-%d")
-    today_dt = datetime.strptime(today_str, "%Y-%m-%d").replace(tzinfo=IST)
+    today_dt_naive = datetime.strptime(today_str, "%Y-%m-%d")
+    today_dt_aware = today_dt_naive.replace(tzinfo=IST)
     now_time_str = today.strftime("%H:%M:%S")
 
-    # Check for existing record for today to consolidate
+    # Check for existing record for today to consolidate - supports naive and aware dates
     existing_record = await db.attendance.find_one({
         "employeeId": employee_id,
-        "date": today_dt
+        "date": {"$in": [today_dt_naive, today_dt_aware]}
     })
 
     if existing_record:
@@ -1053,11 +1069,11 @@ async def punch_in(db, employee_id: str):
         updated_doc = await db.attendance.find_one({"_id": existing_record["_id"]})
         return fix_id(updated_doc)
     
-    # First punch of the day: create new record
+    # First punch of the day: create new record (use naive date so MongoDB stores it as exactly today's midnight UTC date)
     attendance_data = {
         "employeeId": employee_id,
         "employeeName": employee["name"],
-        "date": today_dt,
+        "date": today_dt_naive,
         "checkIn": now_time_str,
         "lastPunchIn": now_time_str,
         "checkOut": None,
@@ -1088,7 +1104,7 @@ async def punch_in(db, employee_id: str):
                 "type": "Late Punch-in",
                 "details": f"Late Punch-in detected at {current_time_str}. Shift starts at {start_time_str} with a {buffer_mins}-minute buffer (Limit: {limit_time_obj.strftime('%H:%M')}).",
                 "addedBy": "System",
-                "date": today_dt
+                "date": today_dt_naive
             }
             await db.remarks.insert_one(remark_data)
     except Exception as e:
@@ -1110,12 +1126,38 @@ async def punch_out(db, employee_id: str):
     start_time_str = status.get("lastPunchIn") or status["checkIn"]
     check_in_time = parse_datetime(status['date'], start_time_str)
     
-    session_duration = now - check_in_time
+    # Calculate break seconds that occurred during this session (since check_in_time)
+    breaks = status.get("breaks", [])
+    total_break_seconds = 0
+    updated_breaks = []
+    
+    for b in breaks:
+        b_copy = dict(b)
+        b_start_str = b_copy.get("startTime")
+        if b_start_str:
+            b_start = parse_datetime(status['date'], b_start_str)
+            if b_start >= check_in_time:
+                b_end_str = b_copy.get("endTime")
+                if b_end_str:
+                    b_end = parse_datetime(status['date'], b_end_str)
+                    break_dur = (b_end - b_start).total_seconds()
+                else:
+                    # User punched out while on active break: close the break at now
+                    b_end = now
+                    break_dur = (b_end - b_start).total_seconds()
+                    b_copy["endTime"] = now.strftime("%H:%M:%S")
+                    b_copy["duration"] = f"{int(break_dur // 60)}m"
+                total_break_seconds += break_dur
+        updated_breaks.append(b_copy)
+        
+    raw_session_seconds = (now - check_in_time).total_seconds()
+    session_work_seconds = max(0.0, raw_session_seconds - total_break_seconds)
+    
     accumulated_seconds = status.get("accumulatedWorkSeconds") or 0
-    total_seconds = accumulated_seconds + session_duration.total_seconds()
+    total_seconds = accumulated_seconds + session_work_seconds
     
     hours, remainder = divmod(int(total_seconds), 3600)
-    minutes, seconds = divmod(remainder, 60)
+    minutes, _ = divmod(remainder, 60)
     work_hours = f"{hours}h {minutes}m"
     
     # Update the last punch log entry
@@ -1126,15 +1168,16 @@ async def punch_out(db, employee_id: str):
         "checkOut": now_time_str,
         "workHours": work_hours,
         "status": "Logged",
-        "accumulatedWorkSeconds": total_seconds
+        "accumulatedWorkSeconds": total_seconds,
+        "breaks": updated_breaks
     }
 
     if punches:
-        last_idx = len(punches) - 1
-        update_data[f"punches.{last_idx}.punchOut"] = now_time_str
+        punches_copy = [dict(p) for p in punches]
+        punches_copy[-1]["punchOut"] = now_time_str
+        update_data["punches"] = punches_copy
     else:
-        # Fallback if punches list missing (for older records)
-        update_data["punches"] = [{"punchIn": status["checkIn"], "punchOut": now_time_str}]
+        update_data["punches"] = [{"punchIn": start_time_str, "punchOut": now_time_str}]
     
     await db.attendance.update_one(
         {"_id": ObjectId(status["id"])},
@@ -1151,10 +1194,22 @@ async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
     if attendance_dict.get("checkIn") and attendance_dict.get("checkOut"):
         try:
             date_val = attendance_dict.get("date")
-            start = datetime.strptime(f"{date_val} {attendance_dict['checkIn']}", "%Y-%m-%d %H:%M:%S")
-            end = datetime.strptime(f"{date_val} {attendance_dict['checkOut']}", "%Y-%m-%d %H:%M:%S")
+            if isinstance(date_val, (datetime, date)):
+                date_str = date_val.strftime("%Y-%m-%d")
+            else:
+                date_str = str(date_val)
+                
+            ci = attendance_dict['checkIn']
+            co = attendance_dict['checkOut']
+            
+            # Pad seconds if not present
+            if len(ci.split(':')) == 2: ci = f"{ci}:00"
+            if len(co.split(':')) == 2: co = f"{co}:00"
+            
+            start = datetime.strptime(f"{date_str} {ci}", "%Y-%m-%d %H:%M:%S")
+            end = datetime.strptime(f"{date_str} {co}", "%Y-%m-%d %H:%M:%S")
             duration = end - start
-            total_seconds = duration.total_seconds()
+            total_seconds = max(0.0, duration.total_seconds())
             
             hours, remainder = divmod(int(total_seconds), 3600)
             minutes, _ = divmod(remainder, 60)
@@ -1163,8 +1218,8 @@ async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
             attendance_dict["accumulatedWorkSeconds"] = total_seconds
             attendance_dict["lastPunchIn"] = attendance_dict["checkIn"]
             attendance_dict["punches"] = [{"punchIn": attendance_dict["checkIn"], "punchOut": attendance_dict["checkOut"]}]
-        except:
-            pass
+        except Exception as e:
+            print(f"Error creating manual attendance calculation: {e}")
 
     result = await db.attendance.insert_one(attendance_dict)
     attendance_dict["id"] = str(result.inserted_id)
@@ -1185,18 +1240,28 @@ async def update_attendance(db, attendance_id: str, attendance_update: schemas.A
             
             if ci_val and co_val:
                 try:
-                    start = datetime.strptime(f"{date_val} {ci_val}", "%Y-%m-%d %H:%M:%S")
-                    end = datetime.strptime(f"{date_val} {co_val}", "%Y-%m-%d %H:%M:%S")
+                    if isinstance(date_val, (datetime, date)):
+                        date_str = date_val.strftime("%Y-%m-%d")
+                    else:
+                        date_str = str(date_val)
+                    
+                    # Pad seconds if not present
+                    if len(ci_val.split(':')) == 2: ci_val = f"{ci_val}:00"
+                    if len(co_val.split(':')) == 2: co_val = f"{co_val}:00"
+                    
+                    start = datetime.strptime(f"{date_str} {ci_val}", "%Y-%m-%d %H:%M:%S")
+                    end = datetime.strptime(f"{date_str} {co_val}", "%Y-%m-%d %H:%M:%S")
                     duration = end - start
-                    total_seconds = duration.total_seconds()
+                    total_seconds = max(0.0, duration.total_seconds())
                     
                     hours, remainder = divmod(int(total_seconds), 3600)
                     minutes, _ = divmod(remainder, 60)
                     
                     update_data["workHours"] = f"{hours}h {minutes}m"
                     update_data["accumulatedWorkSeconds"] = total_seconds
-                except:
-                    pass
+                    update_data["punches"] = [{"punchIn": ci_val, "punchOut": co_val}]
+                except Exception as e:
+                    print(f"Error updating work hours calculation: {e}")
 
     await db.attendance.update_one(
         {"_id": ObjectId(attendance_id)},
@@ -1255,10 +1320,11 @@ async def break_in(db, employee_id: str):
 async def break_out(db, employee_id: str):
     # Find record where status is 'On Break'
     today = get_now().strftime("%Y-%m-%d")
-    today_dt = datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=IST)
+    today_dt_naive = datetime.strptime(today, "%Y-%m-%d")
+    today_dt_aware = today_dt_naive.replace(tzinfo=IST)
     record = await db.attendance.find_one({
         "employeeId": employee_id,
-        "date": today_dt,
+        "date": {"$in": [today_dt_naive, today_dt_aware]},
         "status": "On Break"
     })
     

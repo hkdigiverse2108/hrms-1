@@ -230,6 +230,7 @@ class LeaveRequestBase(BaseModel):
     approved_by_role: Optional[str] = None
     approved_by_id: Optional[str] = None
     approved_by_photo: Optional[str] = None
+    proof_image: Optional[str] = None
 
 class LeaveRequestCreate(LeaveRequestBase):
     pass
@@ -247,6 +248,7 @@ class LeaveRequestUpdate(BaseModel):
     approved_by_role: Optional[str] = None
     approved_by_id: Optional[str] = None
     approved_by_photo: Optional[str] = None
+    proof_image: Optional[str] = None
 
 class LeaveRequest(LeaveRequestBase):
     id: str

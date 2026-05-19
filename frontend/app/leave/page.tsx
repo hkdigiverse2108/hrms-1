@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, Plus, Sun, Thermometer, Clock, MoreHorizontal, PartyPopper, Church, Briefcase, Flag, Gift, ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, Eye, Download, Search, RotateCcw } from "lucide-react";
+import { CalendarIcon, Plus, Sun, Thermometer, Clock, MoreHorizontal, PartyPopper, Church, Briefcase, Flag, Gift, ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, Eye, Download, Search, RotateCcw, UploadCloud, ImageIcon, X, Paperclip } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
 
 import { TablePagination } from "@/components/common/TablePagination";
@@ -61,6 +61,15 @@ export default function LeavePage() {
   const [endDate, setEndDate] = useState<any>(dayjs());
   const [reason, setReason] = useState("");
   const [dayType, setDayType] = useState("Full Day");
+  const [proofImage, setProofImage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Pagination states
+  const [historyPage, setHistoryPage] = useState(1);
+  const [upcomingPage, setUpcomingPage] = useState(1);
+  const [balancePage, setBalancePage] = useState(1);
+  const [holidaysPage, setHolidaysPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Holiday Form State
   const [holidays, setHolidays] = useState<any[]>([]);
@@ -146,6 +155,45 @@ export default function LeavePage() {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image file size should not exceed 5MB.");
+      return;
+    }
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch(`${API_URL}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setProofImage(data.url);
+        toast.success("Proof image uploaded successfully!");
+      } else {
+        toast.error("Failed to upload proof image.");
+      }
+    } catch (err) {
+      console.error("Error uploading image:", err);
+      toast.error("Error connecting to upload server.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleRequestSubmit = async () => {
     if (!reason.trim()) {
       toast.error("Please provide a reason for your leave.");
@@ -176,7 +224,8 @@ export default function LeavePage() {
       end_date: endDate.format("DD-MM-YYYY"),
       duration: `${duration} Day${duration > 1 ? 's' : ''}`,
       reason: reason,
-      day_type: dayType
+      day_type: dayType,
+      proof_image: proofImage
     };
 
     try {
@@ -199,6 +248,7 @@ export default function LeavePage() {
         toast.success(editingId ? "Leave request updated successfully!" : "Leave request submitted successfully!");
         setIsDialogOpen(false);
         setEditingId(null);
+        setProofImage(null);
         fetchLeaves();
         // Reset form
         setReason("");
@@ -224,6 +274,7 @@ export default function LeavePage() {
     setEndDate(dayjs(item.end_date, "DD-MM-YYYY"));
     setReason(item.reason);
     setDayType(item.day_type || "Full Day");
+    setProofImage(item.proof_image || null);
     setIsDialogOpen(true);
   };
 
@@ -234,6 +285,7 @@ export default function LeavePage() {
     setEndDate(dayjs(item.end_date, "DD-MM-YYYY"));
     setReason(item.reason);
     setDayType(item.day_type || "Full Day");
+    setProofImage(item.proof_image || null);
     setIsViewOnly(true);
     setIsDialogOpen(true);
   };
@@ -336,7 +388,7 @@ export default function LeavePage() {
         toast.success(editingHolidayId ? "Holiday updated successfully" : "Holiday added successfully");
         setIsHolidayDialogOpen(false);
         setEditingHolidayId(null);
-        setHolidayForm({ name: "", date: dayjs(), type: "National", company: "All Companies" });
+        setHolidayForm({ name: "", date: dayjs().format("YYYY-MM-DD"), type: "National", company: "" });
         fetchHolidays();
       }
     } catch (err) {
@@ -405,6 +457,7 @@ export default function LeavePage() {
             if (!open) {
               setEditingId(null);
               setIsViewOnly(false);
+              setProofImage(null);
             }
           }}>
 
@@ -415,8 +468,8 @@ export default function LeavePage() {
                 Request Time Off
               </Button>
             </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col p-6">
+            <DialogHeader className="shrink-0 pb-2">
               <DialogTitle className="text-xl font-bold">
                 {isViewOnly ? 'View Leave Request' : editingId ? 'Edit Leave Request' : 'Request Time Off'}
               </DialogTitle>
@@ -424,7 +477,7 @@ export default function LeavePage() {
                 {isViewOnly ? 'Review leave request details' : editingId ? 'Update your leave request details' : 'Submit a new request for time off'}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-2 md:pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300">
               <div className="space-y-2">
                 <Label htmlFor="leave-type">Leave Type</Label>
                 <Select value={leaveType} onValueChange={setLeaveType} disabled={isViewOnly}>
@@ -504,14 +557,92 @@ export default function LeavePage() {
                 />
               </div>
 
+              <div className="space-y-2 pt-2">
+                <Label className="text-sm font-semibold text-slate-700">Proof of Leave (Optional)</Label>
+                {isViewOnly ? (
+                  proofImage ? (
+                    <div className="group relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50 transition-all hover:shadow-md duration-300">
+                      <img 
+                        src={proofImage.startsWith('http') ? proofImage : `${API_URL}${proofImage}`} 
+                        alt="Leave Proof" 
+                        className="w-full max-h-[180px] object-cover"
+                      />
+                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <a 
+                          href={proofImage.startsWith('http') ? proofImage : `${API_URL}${proofImage}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="bg-white hover:bg-slate-100 text-slate-800 px-3.5 py-1.5 rounded-lg text-xs font-bold shadow transition-all flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          View Full Image
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-200 p-4 bg-slate-50/50 text-center">
+                      <p className="text-xs text-slate-400 font-medium italic">No proof image uploaded.</p>
+                    </div>
+                  )
+                ) : (
+                  proofImage ? (
+                    <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50 group">
+                      <img 
+                        src={proofImage.startsWith('http') ? proofImage : `${API_URL}${proofImage}`} 
+                        alt="Leave Proof" 
+                        className="w-full max-h-[150px] object-cover animate-in fade-in duration-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setProofImage(null)}
+                        className="absolute top-2 right-2 p-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full shadow transition-colors duration-200 active:scale-95"
+                        title="Remove Proof"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <label 
+                        htmlFor="proof-upload" 
+                        className="flex flex-col items-center justify-center w-full h-[100px] border-2 border-dashed border-slate-200 hover:border-brand-teal/50 rounded-xl bg-slate-50 hover:bg-brand-light/10 cursor-pointer transition-all duration-300 group"
+                      >
+                        <div className="flex flex-col items-center justify-center pt-3 pb-3">
+                          {isUploading ? (
+                            <>
+                              <Loader2 className="w-6 h-6 text-brand-teal animate-spin mb-1" />
+                              <p className="text-xs text-brand-teal font-semibold">Uploading proof image...</p>
+                            </>
+                          ) : (
+                            <>
+                              <UploadCloud className="w-6 h-6 text-slate-400 group-hover:text-brand-teal group-hover:scale-110 transition-all duration-300 mb-1" />
+                              <p className="text-xs text-slate-500 group-hover:text-slate-700 font-medium transition-colors duration-200">Click to upload leave proof image</p>
+                              <p className="text-[10px] text-slate-400 font-normal">PNG, JPG, JPEG, WEBP up to 5MB</p>
+                            </>
+                          )}
+                        </div>
+                        <input 
+                          id="proof-upload" 
+                          type="file" 
+                          accept="image/*"
+                          className="hidden" 
+                          onChange={handleImageUpload}
+                          disabled={isUploading}
+                        />
+                      </label>
+                    </div>
+                  )
+                )}
+              </div>
+
             </div>
-            <DialogFooter>
+            <DialogFooter className="shrink-0 pt-4 border-t border-slate-100 mt-2">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>{isViewOnly ? 'Close' : 'Cancel'}</Button>
               {!isViewOnly && (
                 <Button 
                   onClick={handleRequestSubmit} 
                   disabled={isSubmitting}
-                  className="bg-brand-teal hover:bg-brand-teal-light text-white"
+                  className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium"
                 >
                   {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   {editingId ? 'Update Request' : 'Submit Request'}
@@ -710,17 +841,26 @@ export default function LeavePage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {historyLeaves.length > 0 ? (
-                    historyLeaves.map((item, index) => {
+                    historyLeaves.slice((historyPage - 1) * itemsPerPage, historyPage * itemsPerPage).map((item, index) => {
                       const Icon = getTypeIcon(item.type);
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/80 transition-colors group">
                           <td className="px-6 py-4 font-medium text-slate-500">
-                            {String(index + 1).padStart(2, '0')}
+                            {String((historyPage - 1) * itemsPerPage + index + 1).padStart(2, '0')}
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-slate-700">{item.type}</span>
                               <Eye className="w-3.5 h-3.5 text-slate-400 cursor-help" title={item.reason} />
+                              {item.proof_image && (
+                                <span 
+                                  className="inline-flex items-center justify-center p-1 bg-brand-light border border-brand-teal/20 text-brand-teal rounded cursor-pointer hover:bg-brand-teal hover:text-white transition-colors"
+                                  onClick={() => handleView(item)}
+                                  title="View Leave Proof Image"
+                                >
+                                  <ImageIcon className="w-3 h-3" />
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -824,7 +964,13 @@ export default function LeavePage() {
                 </tbody>
               </table>
             </div>
-            <TablePagination />
+            <TablePagination 
+              totalItems={historyLeaves.length}
+              itemsPerPage={itemsPerPage}
+              currentPage={historyPage}
+              onPageChange={setHistoryPage}
+              itemName="requests"
+            />
           </TabsContent>
 
           <TabsContent value="upcoming" className="mt-6 bg-white border border-border rounded-xl shadow-sm overflow-hidden">
@@ -850,12 +996,12 @@ export default function LeavePage() {
                 </thead>
                 <tbody className="divide-y divide-border text-center">
                   {upcomingLeaves.length > 0 ? (
-                    upcomingLeaves.map((item, index) => {
+                    upcomingLeaves.slice((upcomingPage - 1) * itemsPerPage, upcomingPage * itemsPerPage).map((item, index) => {
                       const Icon = getTypeIcon(item.type);
                       return (
                         <tr key={item.id} className="hover:bg-muted/50 transition-colors">
                           <td className="px-6 py-4 font-medium text-slate-500">
-                            {(index + 1).toString().padStart(2, '0')}
+                            {String((upcomingPage - 1) * itemsPerPage + index + 1).padStart(2, '0')}
                           </td>
                           <td className="px-6 py-4 text-left">
                             <div className="flex items-center gap-3">
@@ -863,6 +1009,15 @@ export default function LeavePage() {
                                 <Icon className="w-4 h-4 text-brand-teal" />
                               </div>
                               <span className="font-bold text-slate-700">{item.type}</span>
+                              {item.proof_image && (
+                                <span 
+                                  className="inline-flex items-center justify-center p-1 bg-brand-light border border-brand-teal/20 text-brand-teal rounded cursor-pointer hover:bg-brand-teal hover:text-white transition-colors"
+                                  onClick={() => handleView(item)}
+                                  title="View Leave Proof Image"
+                                >
+                                  <ImageIcon className="w-3 h-3" />
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -934,7 +1089,13 @@ export default function LeavePage() {
                 </tbody>
               </table>
             </div>
-            <TablePagination />
+            <TablePagination 
+              totalItems={upcomingLeaves.length}
+              itemsPerPage={itemsPerPage}
+              currentPage={upcomingPage}
+              onPageChange={setUpcomingPage}
+              itemName="requests"
+            />
           </TabsContent>
 
           <TabsContent value="public" className="mt-6 bg-white border border-border rounded-xl shadow-sm overflow-hidden">
@@ -1040,55 +1201,69 @@ export default function LeavePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {holidays.filter(h => 
-                    user?.role === 'Admin' || user?.role === 'HR' || 
-                    !h.company || h.company === "All Companies" || h.company === user?.company
-                  ).map((item) => {
-                    const Icon = getHolidayIcon(item.name);
-                    return (
-                      <tr key={item.id} className="hover:bg-muted/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-1.5 bg-brand-light rounded-md">
-                              <Icon className="w-4 h-4 text-brand-teal" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="font-medium text-foreground">{item.name}</span>
-                              {item.company && <span className="text-[10px] text-muted-foreground uppercase">{item.company}</span>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-foreground font-medium">
-                          {dayjs(item.date).format("MMMM DD, YYYY")}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className={`inline-flex px-2.5 py-1 text-[10px] font-bold rounded-md ${
-                            item.type === 'National' ? 'bg-indigo-50 text-indigo-700' :
-                            item.type === 'Regional' ? 'bg-amber-50 text-amber-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {item.type}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          {(user?.role === 'Admin' || user?.role === 'HR') && (
-                            <div className="flex gap-2 justify-end">
-                              <Button variant="ghost" size="icon" className="text-brand-teal h-8 w-8" onClick={() => handleHolidayEdit(item)}>
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="text-red-600 h-8 w-8" onClick={() => handleHolidayDelete(item.id)}>
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
+                  {(() => {
+                    const filteredHolidays = holidays.filter(h => 
+                      user?.role === 'Admin' || user?.role === 'HR' || 
+                      !h.company || h.company === "All Companies" || h.company === user?.company
                     );
-                  })}
+                    return filteredHolidays
+                      .slice((holidaysPage - 1) * itemsPerPage, holidaysPage * itemsPerPage)
+                      .map((item) => {
+                        const Icon = getHolidayIcon(item.name);
+                        return (
+                          <tr key={item.id} className="hover:bg-muted/50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="p-1.5 bg-brand-light rounded-md">
+                                  <Icon className="w-4 h-4 text-brand-teal" />
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-foreground">{item.name}</span>
+                                  {item.company && <span className="text-[10px] text-muted-foreground uppercase">{item.company}</span>}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-foreground font-medium">
+                              {dayjs(item.date).format("MMMM DD, YYYY")}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`inline-flex px-2.5 py-1 text-[10px] font-bold rounded-md ${
+                                item.type === 'National' ? 'bg-indigo-50 text-indigo-700' :
+                                item.type === 'Regional' ? 'bg-amber-50 text-amber-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {item.type}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              {(user?.role === 'Admin' || user?.role === 'HR') && (
+                                <div className="flex gap-2 justify-end">
+                                  <Button variant="ghost" size="icon" className="text-brand-teal h-8 w-8" onClick={() => handleHolidayEdit(item)}>
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="text-red-600 h-8 w-8" onClick={() => handleHolidayDelete(item.id)}>
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      });
+                  })()}
                 </tbody>
               </table>
             </div>
-            <TablePagination />
+            <TablePagination 
+              totalItems={holidays.filter(h => 
+                user?.role === 'Admin' || user?.role === 'HR' || 
+                !h.company || h.company === "All Companies" || h.company === user?.company
+              ).length}
+              itemsPerPage={itemsPerPage}
+              currentPage={holidaysPage}
+              onPageChange={setHolidaysPage}
+              itemName="holidays"
+            />
           </TabsContent>
         </Tabs>
       </div>
