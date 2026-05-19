@@ -8,7 +8,7 @@ import {
   LayoutDashboard,
   Users,
   Clock,
-  DollarSign,
+  IndianRupee,
   Briefcase,
   GraduationCap,
   Target,
@@ -74,7 +74,7 @@ import { useUserContext } from '@/context/UserContext'
    {
      title: 'Payroll',
      href: '/payroll',
-     icon: DollarSign,
+     icon: IndianRupee,
      roles: ['admin', 'hr'],
      moduleName: 'payroll',
      children: [

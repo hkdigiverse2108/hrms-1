@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { DollarSign, Users, CheckCircle, Clock, MoreHorizontal, Eye, FileText, Download, Play, Loader2 } from 'lucide-react'
+import { IndianRupee, Users, CheckCircle, Clock, MoreHorizontal, Eye, FileText, Download, Play, Loader2 } from 'lucide-react'
 import { API_URL } from '@/lib/config'
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from 'sonner'
@@ -221,7 +221,7 @@ export default function PayrollPage() {
         <StatsCard
           title="Total Payout"
           value={formatCurrency(totalPayroll)}
-          icon={<DollarSign className="h-6 w-6" />}
+          icon={<IndianRupee className="h-6 w-6" />}
         />
         <StatsCard
           title="Total Employees"

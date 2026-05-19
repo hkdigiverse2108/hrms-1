@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, Save, ShieldAlert, ArrowLeft, Search, User, ChevronRight, LayoutDashboard, Users, Clock, Calendar, Briefcase, DollarSign, MonitorPlay, MessagesSquare, Star, FileText, Settings, ShieldHalf } from 'lucide-react'
+import { Loader2, Save, ShieldAlert, ArrowLeft, Search, User, ChevronRight, LayoutDashboard, Users, Clock, Calendar, Briefcase, IndianRupee, MonitorPlay, MessagesSquare, Star, FileText, Settings, ShieldHalf } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
@@ -35,7 +35,7 @@ const PERMISSION_GROUPS = [
   },
   {
     name: 'Payroll',
-    icon: DollarSign,
+    icon: IndianRupee,
     modules: [
       { moduleName: 'salary-structure', displayName: 'Salary Structure', tabUrl: '/payroll/salary-structure' },
       { moduleName: 'payroll-processing', displayName: 'Payroll Processing', tabUrl: '/payroll' },

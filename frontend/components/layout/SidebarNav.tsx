@@ -18,7 +18,7 @@ import {
   Star,
   FileText,
   Briefcase,
-  DollarSign,
+  IndianRupee,
   GraduationCap,
   Landmark,
 } from "lucide-react";
@@ -147,7 +147,7 @@ export function SidebarNav() {
     }
 
     if (isAdmin || payrollChildren.length > 0) {
-      menuItems.push(getItem("Payroll", "payroll-sub", <DollarSign className="w-5 h-5" />, payrollChildren));
+      menuItems.push(getItem("Payroll", "payroll-sub", <IndianRupee className="w-5 h-5" />, payrollChildren));
     }
 
     if (isAdmin || recruitmentChildren.length > 0) {

@@ -159,7 +159,7 @@ export default function ProfilePage() {
                 <DetailItem label="Role" value={user.role || 'Standard Employee'} />
                 <DetailItem label="Joining Date" value={new Date(user.joinDate).toLocaleDateString()} />
                 <DetailItem label="Date of Birth" value={user.dob || 'Not set'} />
-                <DetailItem label="Salary" value={`$${user.salary.toLocaleString()}`} />
+                <DetailItem label="Salary" value={`₹${user.salary.toLocaleString()}`} />
               </div>
 
               <div className="mt-8">

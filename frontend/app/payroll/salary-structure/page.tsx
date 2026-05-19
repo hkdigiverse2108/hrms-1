@@ -137,10 +137,10 @@ export default function SalaryStructurePage() {
         const emp = (employees as any[])?.find(e => e.id === record.employeeId)
         return emp?.name || 'Unknown'
     }},
-    { key: 'monthlyGross' as const, header: 'Monthly Gross', render: (record: any) => `$${record.monthlyGross?.toLocaleString() || 0}` },
-    { key: 'basic' as const, header: 'Basic', render: (record: any) => `$${record.basic?.toLocaleString() || 0}` },
-    { key: 'pf' as const, header: 'PF', render: (record: any) => `$${record.pf?.toLocaleString() || 0}` },
-    { key: 'tds' as const, header: 'TDS', render: (record: any) => `$${record.tds?.toLocaleString() || 0}` },
+    { key: 'monthlyGross' as const, header: 'Monthly Gross', render: (record: any) => `₹${record.monthlyGross?.toLocaleString() || 0}` },
+    { key: 'basic' as const, header: 'Basic', render: (record: any) => `₹${record.basic?.toLocaleString() || 0}` },
+    { key: 'pf' as const, header: 'PF', render: (record: any) => `₹${record.pf?.toLocaleString() || 0}` },
+    { key: 'tds' as const, header: 'TDS', render: (record: any) => `₹${record.tds?.toLocaleString() || 0}` },
   ]
 
   const renderActions = (record: any) => (
@@ -222,7 +222,7 @@ export default function SalaryStructurePage() {
                 <Input type="number" value={formData.specialAllowance} onChange={(e) => setFormData({...formData, specialAllowance: Number(e.target.value)})} onBlur={handleCalculateGross} />
               </div>
               <div className="pt-2">
-                <Label className="font-bold">Total Monthly Gross: ${formData.monthlyGross}</Label>
+                <Label className="font-bold">Total Monthly Gross: ₹{formData.monthlyGross}</Label>
               </div>
             </div>
 
