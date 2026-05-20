@@ -46,6 +46,7 @@ export default function ResourceManagementPage() {
   const [searchTerm, setSearchTerm] = useState("");
   
   const initialFormState = {
+    assetId: "",
     name: "",
     category: "",
     status: "Available",
@@ -64,6 +65,7 @@ export default function ResourceManagementPage() {
   const handleEditClick = (resource: any) => {
     setEditingId(resource.id);
     setFormData({
+      assetId: resource.assetId || "",
       name: resource.name,
       category: resource.category,
       status: resource.status,
@@ -161,7 +163,9 @@ export default function ResourceManagementPage() {
 
       if (!editingId) {
         // Only for new assets
-        (payload as any).assetId = `HKSET${String(resources.length + 1).padStart(3, '0')}`;
+        if (!formData.assetId) {
+          (payload as any).assetId = `HKSET${String(resources.length + 1).padStart(3, '0')}`;
+        }
         (payload as any).serialNumber = `SN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
       }
 
@@ -215,23 +219,13 @@ export default function ResourceManagementPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Assign To</label>
-                <Select 
-                  value={formData.assignedTo}
-                  onValueChange={(val) => setFormData({...formData, assignedTo: val})}
-                  disabled={!isAssignedImmediately && formData.status !== "Allocated"}
-                >
-                  <SelectTrigger className="bg-white">
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {data?.employees?.map((emp: any) => (
-                      <SelectItem key={emp.id} value={emp.name || emp.firstName + ' ' + emp.lastName}>
-                        {emp.name || `${emp.firstName} ${emp.lastName}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label className="text-sm font-semibold text-foreground">Asset Code (Asset ID)</label>
+                <Input 
+                  placeholder="e.g. HK-LAP-001 (auto-generated if empty)" 
+                  className="bg-white" 
+                  value={formData.assetId}
+                  onChange={(e) => setFormData({...formData, assetId: e.target.value})}
+                />
               </div>
 
               <div className="space-y-2">
@@ -249,6 +243,25 @@ export default function ResourceManagementPage() {
                     <SelectItem value="Mousepad">Mousepad</SelectItem>
                     <SelectItem value="Parking Card">Parking Card</SelectItem>
                     <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground">Assign To</label>
+                <Select 
+                  value={formData.assignedTo}
+                  onValueChange={(val) => setFormData({...formData, assignedTo: val})}
+                  disabled={!isAssignedImmediately && formData.status !== "Allocated"}
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Select employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {data?.employees?.map((emp: any) => (
+                      <SelectItem key={emp.id} value={emp.name || emp.firstName + ' ' + emp.lastName}>
+                        {emp.name || `${emp.firstName} ${emp.lastName}`}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -278,7 +291,7 @@ export default function ResourceManagementPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Initial Status</label>
+                <label className="text-sm font-semibold text-foreground">{editingId ? "Status" : "Initial Status"}</label>
                 <Select value={formData.status} onValueChange={(val) => setFormData({...formData, status: val})}>
                   <SelectTrigger className="bg-white">
                     <SelectValue placeholder="Select status" />

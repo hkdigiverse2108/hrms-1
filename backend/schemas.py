@@ -499,6 +499,7 @@ class AssetCreate(AssetBase):
     pass
 
 class AssetUpdate(BaseModel):
+    assetId: Optional[str] = None
     name: Optional[str] = None
     category: Optional[str] = None
     serialNumber: Optional[str] = None
