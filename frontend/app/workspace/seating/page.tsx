@@ -7,6 +7,7 @@ import { useApi } from "@/hooks/useApi";
 import { useUser } from "@/hooks/useUser";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 
 const defaultDesks = [
   {
@@ -179,15 +180,40 @@ export default function SeatingArrangementPage() {
       setCustomImage(saved);
     }
 
-    const savedSeating = localStorage.getItem("workspace_seating_arrangement");
-    if (savedSeating) {
+    // Fetch seating arrangement from global database for all-employee sync
+    const fetchSeatingArrangement = async () => {
+      // Pause updating state if admin has selection/modal active
+      if (selectedSeat !== null) return;
+
       try {
-        setDesksState(JSON.parse(savedSeating));
-      } catch (e) {
-        console.error("Failed to parse seating layout", e);
+        const response = await fetch(`${API_URL}/seating-arrangement`);
+        if (response.ok) {
+          const resJson = await response.json();
+          if (resJson && resJson.desks && resJson.desks.length > 0) {
+            setDesksState(resJson.desks);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load seating arrangement from global database", error);
       }
-    }
-  }, []);
+
+      // LocalStorage fallback
+      const savedSeating = localStorage.getItem("workspace_seating_arrangement");
+      if (savedSeating) {
+        try {
+          setDesksState(JSON.parse(savedSeating));
+        } catch (e) {
+          console.error("Failed to parse seating layout from localStorage", e);
+        }
+      }
+    };
+
+    fetchSeatingArrangement();
+
+    const interval = setInterval(fetchSeatingArrangement, 4000);
+    return () => clearInterval(interval);
+  }, [selectedSeat]);
 
   const handleSeatClick = (deskId: number, seatId: string, isTop: boolean) => {
     if (!isAdminOrHR) {
@@ -258,6 +284,15 @@ export default function SeatingArrangementPage() {
     setDesksState(finalDesks);
     localStorage.setItem("workspace_seating_arrangement", JSON.stringify(finalDesks));
     setSelectedSeat(null);
+
+    // Save update to global database
+    fetch(`${API_URL}/seating-arrangement`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ desks: finalDesks }),
+    }).catch((err) => console.error("Failed to save seating arrangement to database", err));
 
     if (modalStatus === "allocated" && modalEmployeeId) {
       const selectedEmp = data?.employees?.find((emp: any) => emp.id === modalEmployeeId);
@@ -444,7 +479,7 @@ export default function SeatingArrangementPage() {
                               <div className="space-y-3">
                                 <div className="flex items-center gap-3">
                                   <Avatar className="w-9 h-9 border border-brand-teal/20 shadow-sm flex-shrink-0">
-                                    <AvatarImage src={employee.profilePhoto || ""} />
+                                    <AvatarImage src={getAvatarUrl(employee.profilePhoto, employee.name || `${employee.firstName} ${employee.lastName}`)} />
                                     <AvatarFallback className="bg-brand-light text-brand-teal text-xs font-bold">
                                       {(employee.name || `${employee.firstName} ${employee.lastName}`).split(' ').map((n: string) => n[0]).join('')}
                                     </AvatarFallback>
@@ -569,7 +604,7 @@ export default function SeatingArrangementPage() {
                               <div className="space-y-3">
                                 <div className="flex items-center gap-3">
                                   <Avatar className="w-9 h-9 border border-brand-teal/20 shadow-sm flex-shrink-0">
-                                    <AvatarImage src={employee.profilePhoto || ""} />
+                                    <AvatarImage src={getAvatarUrl(employee.profilePhoto, employee.name || `${employee.firstName} ${employee.lastName}`)} />
                                     <AvatarFallback className="bg-brand-light text-brand-teal text-xs font-bold">
                                       {(employee.name || `${employee.firstName} ${employee.lastName}`).split(' ').map((n: string) => n[0]).join('')}
                                     </AvatarFallback>

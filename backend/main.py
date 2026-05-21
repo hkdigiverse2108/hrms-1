@@ -808,6 +808,20 @@ async def get_system_settings(db=Depends(get_db)):
 async def update_system_settings(settings_update: schemas.SystemSettingsUpdate, db=Depends(get_db)):
     return await crud.update_system_settings(db, settings_update)
 
+# Seating Arrangement Endpoints
+@app.get("/seating-arrangement")
+async def get_seating_arrangement(db=Depends(get_db)):
+    arrangement = await db.seating_arrangement.find_one({})
+    if not arrangement:
+        return {"desks": []}
+    return {"desks": arrangement.get("desks", [])}
+
+@app.post("/seating-arrangement")
+async def save_seating_arrangement(payload: dict, db=Depends(get_db)):
+    desks = payload.get("desks", [])
+    await db.seating_arrangement.update_one({}, {"$set": {"desks": desks}}, upsert=True)
+    return {"status": "success", "desks": desks}
+
 # Sales Lead Endpoints
 @app.get("/leads", response_model=List[schemas.Lead])
 async def read_leads(skip: int = 0, limit: int = 100, db=Depends(get_db)):
