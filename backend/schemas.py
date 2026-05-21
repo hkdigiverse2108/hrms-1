@@ -1285,6 +1285,7 @@ class TimeRecoveryBase(BaseModel):
     recovery_minutes: int
     reason: str
     status: str = 'pending' # pending, approved, rejected
+    approved_work_hours: Optional[str] = None
     created_at: Optional[RobustDatetime] = None
 
 class TimeRecoveryCreate(TimeRecoveryBase):

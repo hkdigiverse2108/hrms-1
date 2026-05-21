@@ -110,6 +110,18 @@ export default function RecoveryRequestsPage() {
                     <h4 className="text-[9px] font-bold uppercase text-slate-400 mb-1 tracking-wider">Reason</h4>
                     <p className="text-xs text-slate-600 leading-snug">{req.reason}</p>
                   </div>
+
+                  {req.status === 'approved' && req.approved_work_hours && (
+                    <div className="bg-emerald-50/60 p-3 rounded-md border border-emerald-100/80 mt-2.5 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-[9px] font-bold uppercase text-emerald-600 mb-0.5 tracking-wider">Approved Working Hours</h4>
+                        <p className="text-xs font-bold text-emerald-800 tracking-tight">{req.approved_work_hours}</p>
+                      </div>
+                      <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white text-[9px] h-4.5 px-1.5 flex items-center gap-1 border-0">
+                        <CheckCircle2 className="w-2.5 h-2.5" /> Recalculated
+                      </Badge>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-row md:flex-col justify-end gap-2 md:min-w-[120px] self-center">

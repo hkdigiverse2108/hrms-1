@@ -2817,6 +2817,50 @@ async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
     doc['created_at'] = get_now().isoformat()
     result = await db.time_recovery.insert_one(doc)
     doc['_id'] = result.inserted_id
+
+    # Notify HR and Admin about the new request
+    try:
+        reason = doc.get("reason", "")
+        reason_lower = reason.lower()
+        is_break = "break" in reason_lower or "recovery" in reason_lower
+        is_punch_out = (
+            "punch-out" in reason_lower or 
+            "punch out" in reason_lower or 
+            "punchout" in reason_lower or 
+            "forgot to punch" in reason_lower
+        ) and not is_break
+        
+        if is_punch_out:
+            title = "Forgot Punch-Out Request"
+            message_desc = f"{doc['employee_name']} has requested a punch-out recovery for {doc['date']}."
+        else:
+            title = "Time Recovery Request"
+            message_desc = f"{doc['employee_name']} has requested a break/time recovery for {doc['date']}."
+
+        message = f"{message_desc} Reason: {reason}"
+
+        admins_and_hr = await db.employees.find({
+            "role": {"$regex": "^(Admin|HR)$", "$options": "i"}
+        }).to_list(length=100)
+
+        for staff in admins_and_hr:
+            staff_id = str(staff["_id"])
+            if staff_id == doc["employee_id"]:
+                continue
+                
+            notification = {
+                "employee_id": staff_id,
+                "title": title,
+                "message": message,
+                "type": "attendance",
+                "reference_id": str(doc["_id"]),
+                "is_read": False,
+                "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+            }
+            await db.notifications.insert_one(notification)
+    except Exception as e:
+        print(f"Error creating notifications for time recovery: {e}")
+
     return fix_id(doc)
 
 async def get_time_recoveries(db, skip: int = 0, limit: int = 100):
@@ -2835,6 +2879,39 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
         {'$set': {'status': status}}
     )
     doc = await db.time_recovery.find_one({'_id': ObjectId(recovery_id)})
+
+    if doc:
+        try:
+            status_title = status.capitalize()
+            reason = doc.get("reason", "")
+            reason_lower = reason.lower()
+            is_break = "break" in reason_lower or "recovery" in reason_lower
+            is_punch_out = (
+                "punch-out" in reason_lower or 
+                "punch out" in reason_lower or 
+                "punchout" in reason_lower or 
+                "forgot to punch" in reason_lower
+            ) and not is_break
+            
+            if is_punch_out:
+                title = f"Punch-Out Request {status_title}"
+                msg = f"Your forgot punch-out request for {doc['date']} has been {status}."
+            else:
+                title = f"Time Recovery Request {status_title}"
+                msg = f"Your break/time recovery request for {doc['date']} has been {status}."
+                
+            notification = {
+                "employee_id": doc["employee_id"],
+                "title": title,
+                "message": msg,
+                "type": "attendance",
+                "reference_id": str(doc["_id"]),
+                "is_read": False,
+                "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+            }
+            await db.notifications.insert_one(notification)
+        except Exception as e:
+            print(f"Error creating notification for time recovery status update: {e}")
 
     if status == 'approved' and doc:
         try:
@@ -2860,27 +2937,48 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                 print(f"ERROR: No attendance found for query.")
                 return fix_id(doc)
 
+            calculated_work_hours = None
+
             # Helper to recalculate and save
             async def apply_updates(attn_record, updated_breaks):
+                nonlocal calculated_work_hours
                 if attn_record.get('checkIn') and attn_record.get('checkOut'):
                     try:
                         ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
                         co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
+                        
+                        # Subtract break durations
+                        breaks = attn_record.get('breaks', [])
+                        total_break_seconds = 0
+                        for b in breaks:
+                            try:
+                                dur_val = b.get('duration', '0')
+                                if isinstance(dur_val, str):
+                                    dur_val = dur_val.replace('m', '').strip()
+                                total_break_seconds += float(dur_val) * 60
+                            except: pass
+                        
                         diff = co - ci
-                        h, r = divmod(diff.total_seconds(), 3600)
+                        work_sec = max(0.0, diff.total_seconds() - total_break_seconds)
+                        h, r = divmod(work_sec, 3600)
                         m, _ = divmod(r, 60)
                         attn_record['workHours'] = f"{int(h)}h {int(m)}m"
-                    except: pass
+                    except Exception as ex:
+                        print(f"DEBUG: apply_updates error: {ex}")
+                        pass
                 
                 await db.attendance.update_one(
                     {'_id': attn_record['_id']},
                     {'$set': {
                         'breaks': updated_breaks,
                         'checkIn': attn_record.get('checkIn'),
+                        'checkOut': attn_record.get('checkOut'),
                         'workHours': attn_record.get('workHours'),
-                        'status': 'Logged'
+                        'status': 'Logged',
+                        'punches': attn_record.get('punches')
                     }}
                 )
+                calculated_work_hours = attn_record.get('workHours')
 
             # Case 1: Break Timing Correction
             break_match = re.search(r'Break-In:\s*(\d{1,2}:\d{2}(?::\d{2})?),?\s*Actual Break-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
@@ -2944,9 +3042,20 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                 if time_match:
                     actual_time = time_match.group(1)
                     if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
-                    print(f"DEBUG: Processing Late Arrival correction: {actual_time}")
+                    formatted_time = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
+                    print(f"DEBUG: Processing Late Arrival correction: {formatted_time}")
                     earliest_attn = min(attn_list, key=lambda x: x.get('checkIn', '23:59:59'))
-                    earliest_attn['checkIn'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
+                    earliest_attn['checkIn'] = formatted_time
+                    
+                    # Update punches list as well
+                    punches = earliest_attn.get('punches', [])
+                    if punches:
+                        punches_copy = [dict(p) for p in punches]
+                        punches_copy[0]['punchIn'] = formatted_time
+                        earliest_attn['punches'] = punches_copy
+                    else:
+                        earliest_attn['punches'] = [{"punchIn": formatted_time, "punchOut": earliest_attn.get('checkOut')}]
+                        
                     await apply_updates(earliest_attn, earliest_attn.get('breaks', []))
 
             # Case 3: Punch-Out Correction
@@ -2955,12 +3064,30 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                 if time_match:
                     actual_time = time_match.group(1)
                     if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
-                    print(f"DEBUG: Processing Punch-Out correction: {actual_time}")
+                    formatted_time = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
+                    print(f"DEBUG: Processing Punch-Out correction: {formatted_time}")
                     
                     # Apply to the latest record of the day
                     latest_attn = max(attn_list, key=lambda x: x.get('checkIn', '00:00:00'))
-                    latest_attn['checkOut'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
+                    latest_attn['checkOut'] = formatted_time
+                    
+                    # Update punches list as well
+                    punches = latest_attn.get('punches', [])
+                    if punches:
+                        punches_copy = [dict(p) for p in punches]
+                        punches_copy[-1]['punchOut'] = formatted_time
+                        latest_attn['punches'] = punches_copy
+                    else:
+                        latest_attn['punches'] = [{"punchIn": latest_attn.get('checkIn'), "punchOut": formatted_time}]
+                        
                     await apply_updates(latest_attn, latest_attn.get('breaks', []))
+
+            if calculated_work_hours:
+                await db.time_recovery.update_one(
+                    {'_id': ObjectId(recovery_id)},
+                    {'$set': {'approved_work_hours': calculated_work_hours}}
+                )
+                doc['approved_work_hours'] = calculated_work_hours
 
         except Exception as e:
             print(f"Correction logic error: {e}")

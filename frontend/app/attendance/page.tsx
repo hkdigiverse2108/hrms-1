@@ -499,39 +499,51 @@ export default function AttendancePage() {
 
   const currentRecord = attendance.find(a => a.date === dayjs(getISTNow()).format("YYYY-MM-DD"));
  
-  const CalendarWidget = () => (
-    <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-foreground text-lg">{dayjs(getISTNow()).format("MMMM YYYY")}</h3>
-        <div className="bg-brand-light/50 text-brand-teal text-xs font-medium px-2 py-1 rounded-md">
-          {stats.presentDays} present
+  const CalendarWidget = () => {
+    const istNow = dayjs(getISTNow());
+    const startOfMonth = istNow.startOf('month');
+    const daysInMonth = istNow.daysInMonth();
+    const startDayOfWeek = startOfMonth.day(); // Sunday = 0, Monday = 1, etc.
+    
+    const prefixDays = Array.from({ length: startDayOfWeek });
+    const monthDays = Array.from({ length: daysInMonth });
+
+    return (
+      <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-foreground text-lg">{istNow.format("MMMM YYYY")}</h3>
+          <div className="bg-brand-light/50 text-brand-teal text-xs font-medium px-2 py-1 rounded-md">
+            {stats.presentDays} present
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-y-2 text-center text-sm mb-2">
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+            <div key={i} className="text-muted-foreground font-semibold text-xs py-2">{day}</div>
+          ))}
+          {prefixDays.map((_, i) => (
+            <div key={`empty-${i}`} className="py-2" />
+          ))}
+          {monthDays.map((_, i) => {
+            const dayNum = i + 1;
+            const isToday = dayNum === istNow.date();
+            const hasRecord = attendance.some(a => dayjs(a.date).date() === dayNum && dayjs(a.date).month() === istNow.month());
+            
+            return (
+              <div 
+                key={`day-${dayNum}`} 
+                className={`py-2 rounded-md m-0.5 text-xs ${
+                  isToday ? 'bg-brand-teal text-white font-bold shadow-sm' : 
+                  hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium' : 'text-foreground bg-gray-50'
+                }`}
+              >
+                {dayNum}
+              </div>
+            );
+          })}
         </div>
       </div>
-      <div className="grid grid-cols-7 gap-y-2 text-center text-sm mb-2">
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-          <div key={i} className="text-muted-foreground font-semibold text-xs py-2">{day}</div>
-        ))}
-        {Array.from({ length: 31 }).map((_, i) => {
-          const dayNum = i + 1;
-          const istNow = dayjs(getISTNow());
-          const isToday = dayNum === istNow.date();
-          const hasRecord = attendance.some(a => dayjs(a.date).date() === dayNum && dayjs(a.date).month() === istNow.month());
-          
-          return (
-            <div 
-              key={i} 
-              className={`py-2 rounded-md m-0.5 text-xs ${
-                isToday ? 'bg-brand-teal text-white font-bold shadow-sm' : 
-                hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium' : 'text-foreground bg-gray-50'
-              }`}
-            >
-              {dayNum}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+    );
+  };
  
   if (permissionsLoading) {
     return (
@@ -565,25 +577,6 @@ export default function AttendancePage() {
                 </p>
               </DialogHeader>
               <div className="space-y-4 py-2">
-                <div className="space-y-2 flex flex-col">
-                  <label className="text-sm font-medium text-foreground">Recovery Type</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button 
-                      variant={recoveryForm.type === 'break' ? 'default' : 'outline'}
-                      className={recoveryForm.type === 'break' ? 'bg-brand-teal text-white' : ''}
-                      onClick={() => setRecoveryForm({...recoveryForm, type: 'break'})}
-                    >
-                      Break Correction
-                    </Button>
-                    <Button 
-                      variant={recoveryForm.type === 'punch-out' ? 'default' : 'outline'}
-                      className={recoveryForm.type === 'punch-out' ? 'bg-brand-teal text-white' : ''}
-                      onClick={() => setRecoveryForm({...recoveryForm, type: 'punch-out'})}
-                    >
-                      Punch-Out Fix
-                    </Button>
-                  </div>
-                </div>
                 <div className="space-y-2 flex flex-col">
                   <label className="text-sm font-medium text-foreground">Date of Record</label>
                   <DatePicker 

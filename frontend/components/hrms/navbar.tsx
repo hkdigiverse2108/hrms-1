@@ -117,6 +117,13 @@ export function HRMSNavbar() {
                     onClick={() => {
                       if (n.type === 'leave' && n.reference_id) {
                         router.push(`/employees/leave?id=${n.reference_id}`);
+                      } else if (n.type === 'attendance') {
+                        const isAdminOrHR = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'hr';
+                        if (isAdminOrHR) {
+                          router.push(`/attendance/recovery-requests`);
+                        } else {
+                          router.push(`/attendance`);
+                        }
                       }
                       markAsRead(n.id);
                     }}
@@ -137,6 +144,13 @@ export function HRMSNavbar() {
                           onClick={() => {
                             if (n.type === 'leave' && n.reference_id) {
                               router.push(`/employees/leave?id=${n.reference_id}`);
+                            } else if (n.type === 'attendance') {
+                              const isAdminOrHR = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'hr';
+                              if (isAdminOrHR) {
+                                router.push(`/attendance/recovery-requests`);
+                              } else {
+                                router.push(`/attendance`);
+                              }
                             }
                             markAsRead(n.id);
                           }}
