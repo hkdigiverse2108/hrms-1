@@ -61,3 +61,4 @@ backend_err.log
 frontend_err.log
 package-lock.json
 .env.server
+frontend/next-env.d.ts
