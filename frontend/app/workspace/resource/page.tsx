@@ -62,6 +62,25 @@ export default function ResourceManagementPage() {
 
   const isAdminOrHR = user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "hr";
 
+  const handleAssignToChange = (val: string) => {
+    const isClear = val === "unassigned" || !val;
+    setFormData(prev => ({
+      ...prev,
+      assignedTo: isClear ? "" : val,
+      status: isClear ? "Available" : "Allocated"
+    }));
+    setIsAssignedImmediately(!isClear);
+  };
+
+  const handleStatusChange = (val: string) => {
+    setFormData(prev => ({
+      ...prev,
+      status: val,
+      assignedTo: val === "Allocated" ? prev.assignedTo : ""
+    }));
+    setIsAssignedImmediately(val === "Allocated");
+  };
+
   const handleEditClick = (resource: any) => {
     setEditingId(resource.id);
     setFormData({
@@ -74,7 +93,7 @@ export default function ResourceManagementPage() {
       description: resource.description || "",
       value: resource.value || 0
     });
-    setIsAssignedImmediately(!!resource.assignedTo);
+    setIsAssignedImmediately(!!resource.assignedTo || resource.status === "Allocated");
     setIsAddingMode(true);
   };
 
@@ -249,14 +268,14 @@ export default function ResourceManagementPage() {
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Assign To</label>
                 <Select 
-                  value={formData.assignedTo}
-                  onValueChange={(val) => setFormData({...formData, assignedTo: val})}
-                  disabled={!isAssignedImmediately && formData.status !== "Allocated"}
+                  value={formData.assignedTo || "unassigned"}
+                  onValueChange={handleAssignToChange}
                 >
                   <SelectTrigger className="bg-white">
                     <SelectValue placeholder="Select employee" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="unassigned">-- Unassigned / Clear --</SelectItem>
                     {data?.employees?.map((emp: any) => (
                       <SelectItem key={emp.id} value={emp.name || emp.firstName + ' ' + emp.lastName}>
                         {emp.name || `${emp.firstName} ${emp.lastName}`}
@@ -292,7 +311,7 @@ export default function ResourceManagementPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">{editingId ? "Status" : "Initial Status"}</label>
-                <Select value={formData.status} onValueChange={(val) => setFormData({...formData, status: val})}>
+                <Select value={formData.status} onValueChange={handleStatusChange}>
                   <SelectTrigger className="bg-white">
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
@@ -329,11 +348,11 @@ export default function ResourceManagementPage() {
                 checked={isAssignedImmediately}
                 onCheckedChange={(checked) => {
                   setIsAssignedImmediately(checked);
-                  if (checked) {
-                    setFormData({...formData, status: "Allocated"});
-                  } else {
-                    setFormData({...formData, status: "Available"});
-                  }
+                  setFormData(prev => ({
+                    ...prev,
+                    status: checked ? "Allocated" : "Available",
+                    assignedTo: checked ? prev.assignedTo : ""
+                  }));
                 }}
               />
             </div>
