@@ -499,39 +499,61 @@ export default function AttendancePage() {
 
   const currentRecord = attendance.find(a => a.date === dayjs(getISTNow()).format("YYYY-MM-DD"));
  
-  const CalendarWidget = () => (
-    <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-foreground text-lg">{dayjs(getISTNow()).format("MMMM YYYY")}</h3>
-        <div className="bg-brand-light/50 text-brand-teal text-xs font-medium px-2 py-1 rounded-md">
-          {stats.presentDays} present
+  const CalendarWidget = () => {
+    const istNow = dayjs(getISTNow());
+    const daysInMonth = istNow.daysInMonth();
+    const firstDayOfMonth = istNow.startOf('month').day();
+
+    return (
+      <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-foreground text-lg">{istNow.format("MMMM YYYY")}</h3>
+          <div className="bg-brand-light/50 text-brand-teal text-xs font-medium px-2 py-1 rounded-md">
+            {stats.presentDays} present
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-y-2 text-center text-sm mb-2">
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+            <div key={i} className="text-muted-foreground font-semibold text-xs py-2">{day}</div>
+          ))}
+          {(() => {
+            const days = [];
+            
+            // Prepend empty slots for weekday alignment
+            for (let i = 0; i < firstDayOfMonth; i++) {
+              days.push(
+                <div key={`empty-${i}`} className="py-2 rounded-md m-0.5 text-xs"></div>
+              );
+            }
+            
+            // Render days of the month
+            for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+              const isToday = dayNum === istNow.date();
+              const hasRecord = attendance.some(a => {
+                const recordDate = dayjs(a.date);
+                return recordDate.date() === dayNum && 
+                       recordDate.month() === istNow.month() && 
+                       recordDate.year() === istNow.year();
+              });
+              
+              days.push(
+                <div 
+                  key={dayNum} 
+                  className={`py-2 rounded-md m-0.5 text-xs ${
+                    isToday ? 'bg-brand-teal text-white font-bold shadow-sm' : 
+                    hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium' : 'text-foreground bg-gray-50'
+                  }`}
+                >
+                  {dayNum}
+                </div>
+              );
+            }
+            return days;
+          })()}
         </div>
       </div>
-      <div className="grid grid-cols-7 gap-y-2 text-center text-sm mb-2">
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-          <div key={i} className="text-muted-foreground font-semibold text-xs py-2">{day}</div>
-        ))}
-        {Array.from({ length: 31 }).map((_, i) => {
-          const dayNum = i + 1;
-          const istNow = dayjs(getISTNow());
-          const isToday = dayNum === istNow.date();
-          const hasRecord = attendance.some(a => dayjs(a.date).date() === dayNum && dayjs(a.date).month() === istNow.month());
-          
-          return (
-            <div 
-              key={i} 
-              className={`py-2 rounded-md m-0.5 text-xs ${
-                isToday ? 'bg-brand-teal text-white font-bold shadow-sm' : 
-                hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium' : 'text-foreground bg-gray-50'
-              }`}
-            >
-              {dayNum}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+    );
+  };
  
   if (permissionsLoading) {
     return (
