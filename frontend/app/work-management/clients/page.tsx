@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Check, X } from "lucide-react";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -33,6 +34,13 @@ const noScrollbarStyle = `
 export default function ClientsPage() {
   const { user } = useUser();
   const router = useRouter();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+
+  const canViewClients = isAdmin || checkPermission('clients', 'canView');
+  const canAddClients = isAdmin || checkPermission('clients', 'canAdd');
+  const canEditClients = isAdmin || checkPermission('clients', 'canEdit');
+  const canDeleteClients = isAdmin || checkPermission('clients', 'canDelete');
+
   const [clients, setClients] = useState<any[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,15 +59,15 @@ export default function ClientsPage() {
   const [activeClient, setActiveClient] = useState<any>(null);
 
   useEffect(() => {
-    // Check if user is admin
-    if (user && user.role?.toLowerCase() !== "admin" && user.name !== "Admin Admin") {
+    if (permissionsLoading) return;
+    if (!canViewClients) {
       router.push("/");
       return;
     }
     
     fetchClients();
     fetchDepartments();
-  }, [user, router]);
+  }, [user, router, permissionsLoading, canViewClients]);
 
   const fetchDepartments = async () => {
     try {
@@ -190,6 +198,14 @@ export default function ClientsPage() {
     setInlineEditing(null);
   };
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-140px)] pb-4">
       <PageHeader
@@ -200,12 +216,14 @@ export default function ClientsPage() {
           setModalOpen(open);
           if (!open) setEditingClient(null);
         }}>
-          <DialogTrigger asChild>
-            <Button className="bg-brand-teal hover:bg-brand-teal-light text-white">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Client
-            </Button>
-          </DialogTrigger>
+          {canAddClients && (
+            <DialogTrigger asChild>
+              <Button className="bg-brand-teal hover:bg-brand-teal-light text-white">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Client
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden flex flex-col max-h-[90vh]">
             <DialogHeader className="p-6 pb-0">
               <DialogTitle className="text-xl font-bold">
@@ -359,8 +377,8 @@ export default function ClientsPage() {
                         ]).map(col => (
                           <TableCell 
                             key={col.key} 
-                            className={`${col.type !== 'readonly' ? 'cursor-text hover:bg-slate-50' : ''}`}
-                            onClick={() => col.type !== 'readonly' && setInlineEditing({ id: client.id, field: col.key })}
+                            className={`${col.type !== 'readonly' && canEditClients ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => col.type !== 'readonly' && canEditClients && setInlineEditing({ id: client.id, field: col.key })}
                           >
                             {inlineEditing?.id === client.id && inlineEditing?.field === col.key ? (
                               col.type === 'select' ? (
@@ -408,8 +426,12 @@ export default function ClientsPage() {
                         <TableCell>
                           <div className="flex gap-1 justify-center">
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => fetchLogs(client)}><History className="w-3.5 h-3.5" /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingClient(client); setModalOpen(true); }}><Pencil className="w-3.5 h-3.5" /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(client.id)}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>
+                            {canEditClients && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingClient(client); setModalOpen(true); }}><Pencil className="w-3.5 h-3.5" /></Button>
+                            )}
+                            {canDeleteClients && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(client.id)}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -434,15 +456,19 @@ export default function ClientsPage() {
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fetchLogs(client)} title="View History">
                           <History className="w-4 h-4 text-brand-teal" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
-                          setEditingClient(client);
-                          setModalOpen(true);
-                        }}>
-                          <Pencil className="w-4 h-4 text-muted-foreground" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(client.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
+                        {canEditClients && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                            setEditingClient(client);
+                            setModalOpen(true);
+                          }}>
+                            <Pencil className="w-4 h-4 text-muted-foreground" />
+                          </Button>
+                        )}
+                        {canDeleteClients && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(client.id)}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </div>
 
@@ -494,7 +520,7 @@ export default function ClientsPage() {
                   {searchTerm ? `No clients matching "${searchTerm}"` : `You haven't added any ${activeTab === 'all' ? '' : activeTab} clients yet.`}
                 </p>
               </div>
-              {!searchTerm && (
+              {!searchTerm && canAddClients && (
                 <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={() => setModalOpen(true)}>
                   <Plus className="w-4 h-4 mr-2" />
                   Add New Client

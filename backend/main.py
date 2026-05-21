@@ -254,7 +254,9 @@ async def update_leave_status(leave_id: str, update_data: schemas.LeaveRequestUp
         update_data.approved_by, 
         update_data.approved_by_role,
         update_data.approved_by_id,
-        update_data.approved_by_photo
+        update_data.approved_by_photo,
+        update_data.reject_reason,
+        update_data.approve_reason
     )
 
 @app.delete("/leaves/{leave_id}")

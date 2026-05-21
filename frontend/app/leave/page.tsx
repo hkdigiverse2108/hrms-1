@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, Plus, Sun, Thermometer, Clock, MoreHorizontal, PartyPopper, Church, Briefcase, Flag, Gift, ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, Eye, Download, Search, RotateCcw, UploadCloud, ImageIcon, X, Paperclip } from "lucide-react";
+import { CalendarIcon, Plus, Sun, Thermometer, Clock, MoreHorizontal, PartyPopper, Church, Briefcase, Flag, Gift, ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, Eye, Download, Search, RotateCcw, UploadCloud, ImageIcon, X, Paperclip, Check } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
 
 import { TablePagination } from "@/components/common/TablePagination";
@@ -27,11 +27,29 @@ dayjs.extend(isSameOrBefore);
 
 import { useUserContext } from "@/context/UserContext";
 import { API_URL } from "@/lib/config";
+import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 
   // Holidays will be fetched from database
 
 export default function LeavePage() {
   const { user } = useUserContext();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+  const router = useRouter();
+
+  const canViewLeave = isAdmin || checkPermission('leave', 'canView');
+  const canAddLeave = isAdmin || checkPermission('leave', 'canAdd');
+  const canEditLeave = isAdmin || checkPermission('leave', 'canEdit');
+  const canDeleteLeave = isAdmin || checkPermission('leave', 'canDelete');
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('leave', 'canView')) {
+        router.push('/');
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission]);
+
   const [activeTab, setActiveTab] = useState("history");
   const [leaves, setLeaves] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,6 +81,10 @@ export default function LeavePage() {
   const [dayType, setDayType] = useState("Full Day");
   const [proofImage, setProofImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [viewStatus, setViewStatus] = useState<string | null>(null);
+  const [viewRejectReason, setViewRejectReason] = useState<string | null>(null);
+  const [viewApproveReason, setViewApproveReason] = useState<string | null>(null);
+  const [viewApprovedBy, setViewApprovedBy] = useState<string | null>(null);
 
   // Pagination states
   const [historyPage, setHistoryPage] = useState(1);
@@ -275,6 +297,10 @@ export default function LeavePage() {
     setReason(item.reason);
     setDayType(item.day_type || "Full Day");
     setProofImage(item.proof_image || null);
+    setViewStatus(item.status || null);
+    setViewRejectReason(item.reject_reason || null);
+    setViewApproveReason(item.approve_reason || null);
+    setViewApprovedBy(item.approved_by || null);
     setIsDialogOpen(true);
   };
 
@@ -286,6 +312,10 @@ export default function LeavePage() {
     setReason(item.reason);
     setDayType(item.day_type || "Full Day");
     setProofImage(item.proof_image || null);
+    setViewStatus(item.status || null);
+    setViewRejectReason(item.reject_reason || null);
+    setViewApproveReason(item.approve_reason || null);
+    setViewApprovedBy(item.approved_by || null);
     setIsViewOnly(true);
     setIsDialogOpen(true);
   };
@@ -388,7 +418,7 @@ export default function LeavePage() {
         toast.success(editingHolidayId ? "Holiday updated successfully" : "Holiday added successfully");
         setIsHolidayDialogOpen(false);
         setEditingHolidayId(null);
-        setHolidayForm({ name: "", date: dayjs().format("YYYY-MM-DD"), type: "National", company: "" });
+        setHolidayForm({ name: "", date: dayjs(), type: "National", company: "All Companies" });
         fetchHolidays();
       }
     } catch (err) {
@@ -436,6 +466,14 @@ export default function LeavePage() {
     return Clock;
   };
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -458,23 +496,29 @@ export default function LeavePage() {
               setEditingId(null);
               setIsViewOnly(false);
               setProofImage(null);
+              setViewStatus(null);
+              setViewRejectReason(null);
+              setViewApproveReason(null);
+              setViewApprovedBy(null);
             }
           }}>
 
 
-            <DialogTrigger asChild>
-              <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto">
-                <Plus className="w-4 h-4 mr-2" />
-                Request Time Off
-              </Button>
-            </DialogTrigger>
+            {canAddLeave && (
+              <DialogTrigger asChild>
+                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Request Leave
+                </Button>
+              </DialogTrigger>
+            )}
           <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col p-6">
             <DialogHeader className="shrink-0 pb-2">
               <DialogTitle className="text-xl font-bold">
-                {isViewOnly ? 'View Leave Request' : editingId ? 'Edit Leave Request' : 'Request Time Off'}
+                {isViewOnly ? 'View Leave Request' : editingId ? 'Edit Leave Request' : 'Request Leave'}
               </DialogTitle>
               <DialogDescription className="sr-only">
-                {isViewOnly ? 'Review leave request details' : editingId ? 'Update your leave request details' : 'Submit a new request for time off'}
+                {isViewOnly ? 'Review leave request details' : editingId ? 'Update your leave request details' : 'Submit a new request for leave'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-2 md:pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300">
@@ -556,6 +600,45 @@ export default function LeavePage() {
                   readOnly={isViewOnly}
                 />
               </div>
+
+              {isViewOnly && viewStatus === 'Rejected' && (
+                <div className="bg-rose-50 border border-rose-100 rounded-lg p-3.5 flex flex-col gap-1.5 mt-4">
+                  <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
+                    <X className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Request Rejected</span>
+                  </div>
+                  {viewRejectReason ? (
+                    <div className="text-xs text-rose-700 leading-relaxed pl-6">
+                      <span className="font-bold block mb-0.5">Reason:</span>
+                      <span>{viewRejectReason}</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-rose-700 italic pl-6">
+                      No rejection reason was provided.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {isViewOnly && viewStatus === 'Approved' && (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3.5 flex flex-col gap-1.5 mt-4">
+                  <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Request Approved</span>
+                  </div>
+                  {viewApprovedBy && (
+                    <p className="text-xs text-emerald-700 pl-6 leading-relaxed">
+                      Approved by <span className="font-bold">{viewApprovedBy}</span>.
+                    </p>
+                  )}
+                  {viewApproveReason && (
+                    <div className="text-xs text-emerald-700 leading-relaxed pl-6 animate-in fade-in duration-200">
+                      <span className="font-bold block mb-0.5">Note:</span>
+                      <span>{viewApproveReason}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2 pt-2">
                 <Label className="text-sm font-semibold text-slate-700">Proof of Leave (Optional)</Label>
@@ -832,7 +915,7 @@ export default function LeavePage() {
                     <th className="px-6 py-4 font-bold">Leave Type</th>
                     <th className="px-6 py-4 font-bold">Day Type</th>
                     <th className="px-6 py-4 font-bold">From</th>
-                    <th className="px-6 py-4 font-bold text-center">Approved By</th>
+                    <th className="px-6 py-4 font-bold text-center">Reviewed By</th>
                     <th className="px-6 py-4 font-bold">To</th>
                     <th className="px-6 py-4 font-bold">No of Days</th>
                     <th className="px-6 py-4 font-bold">Status</th>
@@ -851,7 +934,14 @@ export default function LeavePage() {
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-slate-700">{item.type}</span>
-                              <Eye className="w-3.5 h-3.5 text-slate-400 cursor-help" title={item.reason} />
+                              <button 
+                                type="button"
+                                onClick={() => handleView(item)}
+                                title={item.reason ? `Reason: ${item.reason} (Click to view full details)` : "Click to view full details"}
+                                className="text-slate-400 hover:text-brand-teal hover:bg-slate-100 p-1 rounded-full transition-all focus:outline-none cursor-pointer flex items-center justify-center shrink-0"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
                               {item.proof_image && (
                                 <span 
                                   className="inline-flex items-center justify-center p-1 bg-brand-light border border-brand-teal/20 text-brand-teal rounded cursor-pointer hover:bg-brand-teal hover:text-white transition-colors"
@@ -870,22 +960,30 @@ export default function LeavePage() {
                             {item.start_date}
                           </td>
                           <td className="px-6 py-4">
-                            {item.status === 'Approved' ? (
-                              <div className="flex items-center gap-3 w-fit mx-auto">
-                                <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0">
-                                  {item.approved_by_photo ? (
-                                    <img src={item.approved_by_photo} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-sm">
-                                      {(item.approved_by || "A")[0].toUpperCase()}
-                                    </div>
-                                  )}
+                            {item.status === 'Approved' || item.status === 'Rejected' ? (
+                              item.approved_by ? (
+                                <div className="flex items-center gap-3 w-fit mx-auto">
+                                  <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0">
+                                    {item.approved_by_photo ? (
+                                      <img src={item.approved_by_photo} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-sm">
+                                        {(item.approved_by || "A")[0].toUpperCase()}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col text-left">
+                                    <span className="text-[14px] font-bold text-[#111827] leading-tight">
+                                      {item.status === 'Approved' ? 'Approved by' : 'Rejected by'} {item.approved_by}
+                                    </span>
+                                    <span className="text-[13px] font-medium text-slate-500">{item.approved_by_role || "Hr"}</span>
+                                  </div>
                                 </div>
-                                <div className="flex flex-col">
-                                  <span className="text-[14px] font-bold text-[#111827] leading-tight">{item.approved_by || "Admin"}</span>
-                                  <span className="text-[13px] font-medium text-slate-500">{item.approved_by_role || "Hr"}</span>
+                              ) : (
+                                <div className="text-center">
+                                  <span className="text-slate-400 font-medium text-[13px]">Reviewed</span>
                                 </div>
-                              </div>
+                              )
                             ) : (
                               <div className="text-center">
                                 <span className="text-slate-300 font-medium italic text-[13px]">Pending Review</span>
@@ -899,43 +997,69 @@ export default function LeavePage() {
                             <span className="font-bold text-slate-900">{item.duration}</span>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${
-                                item.status === 'Approved' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 
-                                item.status === 'Rejected' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
-                                'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
-                              }`} />
-                              <span className={`text-[12px] font-bold ${
-                                item.status === 'Approved' ? 'text-emerald-600' : 
-                                item.status === 'Rejected' ? 'text-rose-600' : 
-                                'text-amber-600'
-                              }`}>
-                                {item.status}
-                              </span>
+                            <div className="flex flex-col gap-1 items-start justify-center">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${
+                                  item.status === 'Approved' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 
+                                  item.status === 'Rejected' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
+                                  'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                                }`} />
+                                <span className={`text-[12px] font-bold ${
+                                  item.status === 'Approved' ? 'text-emerald-600' : 
+                                  item.status === 'Rejected' ? 'text-rose-600' : 
+                                  'text-amber-600'
+                                }`}>
+                                  {item.status}
+                                </span>
+                              </div>
+                              {item.status === 'Rejected' && item.reject_reason && (
+                                <span className="text-[10px] text-rose-500/80 italic font-medium max-w-[150px] truncate block pl-4" title={item.reject_reason}>
+                                  Reason: {item.reject_reason}
+                                </span>
+                              )}
+                              {item.status === 'Approved' && item.approve_reason && (
+                                <span className="text-[10px] text-emerald-600/80 italic font-medium max-w-[150px] truncate block pl-4" title={item.approve_reason}>
+                                  Note: {item.approve_reason}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4 text-right">
                             { item.status === 'Pending' ? (
                                <div className="flex gap-2 justify-end">
-                                 <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="h-8 w-8 p-0 text-brand-teal hover:bg-brand-light"
-                                  onClick={() => handleEdit(item)}
-                                  title="Edit Request"
-                                 >
-                                   <Pencil className="w-4 h-4" />
-                                 </Button>
-                                 <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
-                                  onClick={() => handleDelete(item.id)}
-                                  title="Delete Request"
-                                 >
-                                   <Trash2 className="w-4 h-4" />
-                                 </Button>
-
+                                 {canEditLeave && (
+                                   <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0 text-brand-teal hover:bg-brand-light"
+                                    onClick={() => handleEdit(item)}
+                                    title="Edit Request"
+                                   >
+                                     <Pencil className="w-4 h-4" />
+                                   </Button>
+                                 )}
+                                 {canDeleteLeave && (
+                                   <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
+                                    onClick={() => handleDelete(item.id)}
+                                    title="Delete Request"
+                                   >
+                                     <Trash2 className="w-4 h-4" />
+                                   </Button>
+                                 )}
+                                 {!canEditLeave && !canDeleteLeave && (
+                                   <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0 text-brand-teal hover:bg-brand-light"
+                                    onClick={() => handleView(item)}
+                                    title="View Details"
+                                   >
+                                     <Eye className="w-4 h-4" />
+                                   </Button>
+                                 )}
                                </div>
                             ) : (
                                <div className="flex justify-end">
@@ -985,9 +1109,9 @@ export default function LeavePage() {
                   <tr>
                     <th className="px-6 py-4 font-bold text-center">Sr. No.</th>
                     <th className="px-6 py-4 font-bold">Leave Type</th>
-                    <th className="px-6 py-4 font-bold">Day Type</th>
+                    <th className="px-6 py-4 font-bold text-center">Day Type</th>
                     <th className="px-6 py-4 font-bold text-center">From</th>
-                    <th className="px-6 py-4 font-bold text-center">Approved By</th>
+                    <th className="px-6 py-4 font-bold text-center">Reviewed By</th>
                     <th className="px-6 py-4 font-bold text-center">To</th>
                     <th className="px-6 py-4 font-bold text-center">No of Days</th>
                     <th className="px-6 py-4 font-bold text-center">Status</th>
@@ -1027,22 +1151,30 @@ export default function LeavePage() {
                             {item.start_date}
                           </td>
                           <td className="px-6 py-4">
-                            {item.status === 'Approved' ? (
-                              <div className="flex items-center justify-center gap-3 w-fit mx-auto">
-                                <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0">
-                                  {item.approved_by_photo ? (
-                                    <img src={item.approved_by_photo} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-sm">
-                                      {(item.approved_by || "A")[0].toUpperCase()}
-                                    </div>
-                                  )}
+                            {item.status === 'Approved' || item.status === 'Rejected' ? (
+                              item.approved_by ? (
+                                <div className="flex items-center justify-center gap-3 w-fit mx-auto">
+                                  <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0">
+                                    {item.approved_by_photo ? (
+                                      <img src={item.approved_by_photo} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-sm">
+                                        {(item.approved_by || "A")[0].toUpperCase()}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col text-left">
+                                    <span className="text-[14px] font-bold text-[#111827] leading-tight">
+                                      {item.status === 'Approved' ? 'Approved by' : 'Rejected by'} {item.approved_by}
+                                    </span>
+                                    <span className="text-[13px] font-medium text-slate-500">{item.approved_by_role || "Hr"}</span>
+                                  </div>
                                 </div>
-                                <div className="flex flex-col text-left">
-                                  <span className="text-[14px] font-bold text-[#111827] leading-tight">{item.approved_by || "Admin"}</span>
-                                  <span className="text-[13px] font-medium text-slate-500">{item.approved_by_role || "Hr"}</span>
+                              ) : (
+                                <div className="text-center">
+                                  <span className="text-slate-400 font-medium text-[13px]">Reviewed</span>
                                 </div>
-                              </div>
+                              )
                             ) : (
                               <div className="text-center">
                                 <span className="text-slate-300 font-medium italic text-[13px]">Pending Review</span>
@@ -1056,19 +1188,31 @@ export default function LeavePage() {
                             {item.duration}
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex items-center justify-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${
-                                item.status === 'Approved' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 
-                                item.status === 'Rejected' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
-                                'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
-                              }`} />
-                              <span className={`text-[12px] font-bold ${
-                                item.status === 'Approved' ? 'text-emerald-600' : 
-                                item.status === 'Rejected' ? 'text-rose-600' : 
-                                'text-amber-600'
-                              }`}>
-                                {item.status}
-                              </span>
+                            <div className="flex flex-col gap-1 items-center justify-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${
+                                  item.status === 'Approved' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 
+                                  item.status === 'Rejected' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
+                                  'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                                }`} />
+                                <span className={`text-[12px] font-bold ${
+                                  item.status === 'Approved' ? 'text-emerald-600' : 
+                                  item.status === 'Rejected' ? 'text-rose-600' : 
+                                  'text-amber-600'
+                                }`}>
+                                  {item.status}
+                                </span>
+                              </div>
+                              {item.status === 'Rejected' && item.reject_reason && (
+                                <span className="text-[10px] text-rose-500/80 italic font-medium max-w-[150px] truncate block" title={item.reject_reason}>
+                                  Reason: {item.reject_reason}
+                                </span>
+                              )}
+                              {item.status === 'Approved' && item.approve_reason && (
+                                <span className="text-[10px] text-emerald-600/80 italic font-medium max-w-[150px] truncate block" title={item.approve_reason}>
+                                  Note: {item.approve_reason}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4 text-right">
@@ -1112,12 +1256,12 @@ export default function LeavePage() {
                   </SelectContent>
                 </Select>
 
-                {(user?.role === 'Admin' || user?.role === 'HR') && (
+                {canAddLeave && (
                   <Dialog open={isHolidayDialogOpen} onOpenChange={setIsHolidayDialogOpen}>
                     <DialogTrigger asChild>
                       <Button className="h-9 bg-brand-teal hover:bg-brand-teal-light text-white font-medium" onClick={() => {
                         setEditingHolidayId(null);
-                        setHolidayForm({ name: "", date: dayjs(), type: "National" });
+                        setHolidayForm({ name: "", date: dayjs(), type: "National", company: "All Companies" });
                       }}>
                         <Plus className="w-4 h-4 mr-2" />
                         Add Holiday
@@ -1235,18 +1379,22 @@ export default function LeavePage() {
                                 {item.type}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-right">
-                              {(user?.role === 'Admin' || user?.role === 'HR') && (
-                                <div className="flex gap-2 justify-end">
-                                  <Button variant="ghost" size="icon" className="text-brand-teal h-8 w-8" onClick={() => handleHolidayEdit(item)}>
-                                    <Pencil className="w-4 h-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="text-red-600 h-8 w-8" onClick={() => handleHolidayDelete(item.id)}>
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </td>
+                             <td className="px-6 py-4 text-right">
+                               {(canEditLeave || canDeleteLeave) && (
+                                 <div className="flex gap-2 justify-end">
+                                   {canEditLeave && (
+                                     <Button variant="ghost" size="icon" className="text-brand-teal h-8 w-8" onClick={() => handleHolidayEdit(item)}>
+                                       <Pencil className="w-4 h-4" />
+                                     </Button>
+                                   )}
+                                   {canDeleteLeave && (
+                                     <Button variant="ghost" size="icon" className="text-red-600 h-8 w-8" onClick={() => handleHolidayDelete(item.id)}>
+                                       <Trash2 className="w-4 h-4" />
+                                     </Button>
+                                   )}
+                                 </div>
+                               )}
+                             </td>
                           </tr>
                         );
                       });

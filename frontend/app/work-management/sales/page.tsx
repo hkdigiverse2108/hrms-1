@@ -30,6 +30,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/hooks/useUser";
+import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { API_URL } from "@/lib/config";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -53,6 +55,14 @@ import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 
 export default function SalesPage() {
   const { user } = useUser();
+  const router = useRouter();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+
+  const canViewSales = isAdmin || checkPermission('sales', 'canView');
+  const canAddSales = isAdmin || checkPermission('sales', 'canAdd');
+  const canEditSales = isAdmin || checkPermission('sales', 'canEdit');
+  const canDeleteSales = isAdmin || checkPermission('sales', 'canDelete');
+
   const [searchTerm, setSearchTerm] = useState("");
   const [leads, setLeads] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -111,6 +121,13 @@ export default function SalesPage() {
       console.error("Error fetching slabs:", err);
     }
   };
+
+  useEffect(() => {
+    if (permissionsLoading) return;
+    if (!canViewSales) {
+      router.push("/");
+    }
+  }, [router, permissionsLoading, canViewSales]);
 
   useEffect(() => {
     fetchLeads();
@@ -453,7 +470,7 @@ export default function SalesPage() {
                 key={lead.id} 
                 className={`hover:bg-slate-50/80 transition-colors group ${isEditing ? 'bg-slate-50' : ''}`}
                 onClick={() => {
-                  if (!isEditing) {
+                  if (canEditSales && !isEditing) {
                     setEditingRowId(lead.id);
                     setEditFormData(lead);
                   }
@@ -610,7 +627,7 @@ export default function SalesPage() {
                   )}
                 </td>
                 <td className="px-6 py-4">
-                  {!isEditing && (
+                  {canEditSales && !isEditing && (
                     <FollowUpDialog 
                       lead={lead} 
                       onUpdate={fetchLeads} 
@@ -656,11 +673,15 @@ export default function SalesPage() {
                               <HistoryIcon className="w-4 h-4 mr-2 text-brand-teal" />
                               View History
                             </DropdownMenuItem>
-                            <div className="h-px bg-slate-100 my-1" />
-                            <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete Lead
-                            </DropdownMenuItem>
+                            {canDeleteSales && (
+                              <>
+                                <div className="h-px bg-slate-100 my-1" />
+                                <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete Lead
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </>
@@ -674,6 +695,14 @@ export default function SalesPage() {
       </table>
     </div>
   );
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -726,20 +755,22 @@ export default function SalesPage() {
             </div>
           )}
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm transition-all active:scale-95">
-                <Plus className="w-4 h-4 mr-2" />
-                Add New Lead
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Add New Sales Lead</DialogTitle>
-              </DialogHeader>
-              <LeadForm onSubmit={handleAddLead} isSubmitting={isSubmitting} />
-            </DialogContent>
-          </Dialog>
+                  {canAddSales && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm transition-all active:scale-95">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add New Lead
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Add New Sales Lead</DialogTitle>
+                </DialogHeader>
+                <LeadForm onSubmit={handleAddLead} isSubmitting={isSubmitting} />
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </PageHeader>
 
@@ -778,7 +809,7 @@ export default function SalesPage() {
             <TabsTrigger value="targets" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
               Monthly Targets
             </TabsTrigger>
-            {user?.role === "Admin" && (
+            {canEditSales && (
               <>
                 <TabsTrigger value="reports" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
                   Performance Reports
@@ -839,7 +870,7 @@ export default function SalesPage() {
 
             <TabsContent value="targets">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {user?.role === "Admin" && (
+                {canEditSales && (
                   <div className="lg:col-span-1 space-y-6">
                     <Card className="border-none shadow-sm bg-white overflow-hidden">
                       <CardHeader className="border-b border-slate-100">
@@ -990,10 +1021,10 @@ export default function SalesPage() {
                   </div>
                 )}
 
-                <Card className={`border-none shadow-sm bg-white overflow-hidden ${user?.role === "Admin" ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                <Card className={`border-none shadow-sm bg-white overflow-hidden ${canEditSales ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
                   <CardHeader className="border-b border-slate-100">
                     <CardTitle className="text-sm font-bold text-slate-700">
-                      {user?.role === "Admin" ? "Sales Performance Targets" : "My Performance Targets"}
+                      {canEditSales ? "Sales Performance Targets" : "My Performance Targets"}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
@@ -1008,13 +1039,13 @@ export default function SalesPage() {
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Achieved</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-indigo-600">Earned</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-brand-teal">Progress</th>
-                            {user?.role === "Admin" && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
+                            {canEditSales && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {targets.filter(t => user?.role === "Admin" || t.employeeName === user?.name).length > 0 ? (
+                          {targets.filter(t => canEditSales || t.employeeName === user?.name).length > 0 ? (
                             targets
-                              .filter(t => user?.role === "Admin" || t.employeeName === user?.name)
+                              .filter(t => canEditSales || t.employeeName === user?.name)
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
                                 const achieved = leads.filter(l => {
@@ -1094,7 +1125,7 @@ export default function SalesPage() {
                                         </div>
                                       </div>
                                     </td>
-                                    {user?.role === "Admin" && (
+                                    {canEditSales && (
                                       <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-1">
                                           <Dialog>
@@ -1129,14 +1160,16 @@ export default function SalesPage() {
                                               </div>
                                             </DialogContent>
                                           </Dialog>
-                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-rose-500" onClick={async () => {
-                                            if (confirm("Delete target?")) {
-                                              await fetch(`${API_URL}/sales-targets/${t.id}`, { method: "DELETE" });
-                                              fetchTargets();
-                                            }
-                                          }}>
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                          </Button>
+                                          {canDeleteSales && (
+                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-rose-500" onClick={async () => {
+                                              if (confirm("Delete target?")) {
+                                                await fetch(`${API_URL}/sales-targets/${t.id}`, { method: "DELETE" });
+                                                fetchTargets();
+                                              }
+                                            }}>
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </Button>
+                                          )}
                                         </div>
                                       </td>
                                     )}

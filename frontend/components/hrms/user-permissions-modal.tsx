@@ -18,10 +18,10 @@ interface ModulePermission {
   moduleName: string
   displayName: string
   tabUrl: string
-  canAdd: bool
-  canEdit: bool
-  canDelete: bool
-  canView: bool
+  canAdd: boolean
+  canEdit: boolean
+  canDelete: boolean
+  canView: boolean
 }
 
 interface UserPermissionsModalProps {

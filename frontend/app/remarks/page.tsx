@@ -23,6 +23,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { PageHeader } from "@/components/common/PageHeader";
 import { TablePagination } from "@/components/common/TablePagination";
 import { exportToCSV } from "@/lib/export-utils";
+import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 
 
 const getTypeBadge = (type: string) => {
@@ -56,8 +58,24 @@ export default function RemarksPage() {
   const [dateFilter, setDateFilter] = useState("This Month");
   const [specificDate, setSpecificDate] = useState("");
   const { user } = useUser();
+  const router = useRouter();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
 
-  const canManageRemarks = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'hr';
+  const isHR = user?.role?.toLowerCase() === 'hr';
+  
+  const canViewRemarks = isAdmin || isHR || checkPermission('remarks', 'canView');
+  const canAddRemarks = isAdmin || isHR || checkPermission('remarks', 'canAdd');
+  const canEditRemarks = isAdmin || isHR || checkPermission('remarks', 'canEdit');
+  const canDeleteRemarks = isAdmin || isHR || checkPermission('remarks', 'canDelete');
+  const canManageRemarks = canViewRemarks;
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!canViewRemarks) {
+        router.push('/');
+      }
+    }
+  }, [permissionsLoading, canViewRemarks, router]);
   const [employeeFilter, setEmployeeFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -265,113 +283,125 @@ export default function RemarksPage() {
 
   const totalPenalty = filteredRemarks.reduce((sum, r) => sum + (r.amount || getPenaltyAmount(r.type)), 0);
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-10">
       <PageHeader 
         title="Remarks" 
         description="Manage employee feedback, warnings, and performance notes."
       >
-        {canManageRemarks && (
+        {(canAddRemarks || canEditRemarks) && (
           <div className="flex flex-col sm:flex-row gap-2 mt-4 sm:mt-0">
-            <Button 
-              variant="outline"
-              className="border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white font-medium shadow-sm w-full sm:w-auto"
-              onClick={() => setManageTypesOpen(true)}
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              Violation Types
-            </Button>
-            <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto">
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Remark
-                </Button>
-              </DialogTrigger>
-            <DialogContent className="sm:max-w-[550px]">
-              <DialogHeader>
-                <DialogTitle className="text-xl font-bold">Add New Remark</DialogTitle>
-                <p className="text-sm text-muted-foreground mt-1">Create a new feedback, warning, or performance note for an employee.</p>
-              </DialogHeader>
-              
-              <div className="space-y-5 py-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">Employee</label>
-                    <Select onValueChange={(val) => setNewRemark(prev => ({ ...prev, employeeId: val }))} value={newRemark.employeeId}>
-                      <SelectTrigger className="w-full bg-white shadow-sm border-border hover:bg-gray-50/50 transition-colors">
-                        <SelectValue placeholder="Select an employee" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {employees.map(emp => (
-                          <SelectItem key={emp.id} value={emp.id || emp.employeeId}>{emp.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+            {canEditRemarks && (
+              <Button 
+                variant="outline"
+                className="border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white font-medium shadow-sm w-full sm:w-auto"
+                onClick={() => setManageTypesOpen(true)}
+              >
+                <Filter className="w-4 h-4 mr-2" />
+                Violation Types
+              </Button>
+            )}
+            {canAddRemarks && (
+              <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto">
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Remark
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[550px]">
+                  <DialogHeader>
+                    <DialogTitle className="text-xl font-bold">Add New Remark</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-1">Create a new feedback, warning, or performance note for an employee.</p>
+                  </DialogHeader>
                   
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">Date</label>
-                    <div className="relative">
-                      <Input 
-                        type="date"
-                        value={newRemark.date}
-                        onChange={(e) => setNewRemark(prev => ({ ...prev, date: e.target.value }))}
-                        className="bg-white border-border hover:border-brand-teal/50 transition-all focus:ring-brand-teal" 
+                  <div className="space-y-5 py-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-foreground">Employee</label>
+                        <Select onValueChange={(val) => setNewRemark(prev => ({ ...prev, employeeId: val }))} value={newRemark.employeeId}>
+                          <SelectTrigger className="w-full bg-white shadow-sm border-border hover:bg-gray-50/50 transition-colors">
+                            <SelectValue placeholder="Select an employee" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {employees.map(emp => (
+                              <SelectItem key={emp.id} value={emp.id || emp.employeeId}>{emp.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-foreground">Date</label>
+                        <div className="relative">
+                          <Input 
+                            type="date"
+                            value={newRemark.date}
+                            onChange={(e) => setNewRemark(prev => ({ ...prev, date: e.target.value }))}
+                            className="bg-white border-border hover:border-brand-teal/50 transition-all focus:ring-brand-teal" 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Remark Type</label>
+                      <Select onValueChange={(val) => {
+                        const penalty = penaltyTypes.find(p => p.name === val);
+                        if (penalty) {
+                          setNewRemark(prev => ({ 
+                            ...prev, 
+                            type: val,
+                            details: `${penalty.name}. Penalty amount of ₹${penalty.amount} applied.` 
+                          }));
+                        } else {
+                          setNewRemark(prev => ({ ...prev, type: val }));
+                        }
+                      }} value={newRemark.type}>
+                        <SelectTrigger className="w-full bg-white shadow-sm border-border hover:bg-gray-50/50 transition-colors">
+                          <SelectValue placeholder="Select remark type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Violations & Penalties</div>
+                          {penaltyTypes.map((p, idx) => (
+                            <SelectItem key={idx} value={p.name}>{p.name} (₹{p.amount})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Remark Details</label>
+                      <Textarea 
+                        value={newRemark.details}
+                        onChange={(e) => setNewRemark(prev => ({ ...prev, details: e.target.value }))}
+                        placeholder="Enter detailed description of the remark..." 
+                        className="h-32 resize-none bg-white"
                       />
                     </div>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Remark Type</label>
-                  <Select onValueChange={(val) => {
-                    const penalty = penaltyTypes.find(p => p.name === val);
-                    if (penalty) {
-                      setNewRemark(prev => ({ 
-                        ...prev, 
-                        type: val,
-                        details: `${penalty.name}. Penalty amount of ₹${penalty.amount} applied.` 
-                      }));
-                    } else {
-                      setNewRemark(prev => ({ ...prev, type: val }));
-                    }
-                  }} value={newRemark.type}>
-                    <SelectTrigger className="w-full bg-white shadow-sm border-border hover:bg-gray-50/50 transition-colors">
-                      <SelectValue placeholder="Select remark type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Violations & Penalties</div>
-                      {penaltyTypes.map((p, idx) => (
-                        <SelectItem key={idx} value={p.name}>{p.name} (₹{p.amount})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Remark Details</label>
-                  <Textarea 
-                    value={newRemark.details}
-                    onChange={(e) => setNewRemark(prev => ({ ...prev, details: e.target.value }))}
-                    placeholder="Enter detailed description of the remark..." 
-                    className="h-32 resize-none bg-white"
-                  />
-                </div>
-              </div>
-
-              <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
-                <Button variant="outline" className="w-full sm:w-auto" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
-                <Button 
-                  disabled={isSubmitting || !newRemark.employeeId || !newRemark.details}
-                  className="w-full sm:w-auto bg-brand-teal hover:bg-brand-teal-light text-white font-semibold" 
-                  onClick={handleCreateRemark}
-                >
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Send Remark"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+                  <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
+                    <Button variant="outline" className="w-full sm:w-auto" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+                    <Button 
+                      disabled={isSubmitting || !newRemark.employeeId || !newRemark.details}
+                      className="w-full sm:w-auto bg-brand-teal hover:bg-brand-teal-light text-white font-semibold" 
+                      onClick={handleCreateRemark}
+                    >
+                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Send Remark"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         )}
       </PageHeader>
 
@@ -587,20 +617,20 @@ export default function RemarksPage() {
                 <th className="px-6 py-4">Remark Details</th>
                 <th className="px-6 py-4">Added By</th>
                 <th className="px-6 py-4 text-right">Penalty</th>
-                {canManageRemarks && <th className="px-6 py-4 text-right">Action</th>}
+                {(canEditRemarks || canDeleteRemarks) && <th className="px-6 py-4 text-right">Action</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={canManageRemarks ? 7 : 6} className="px-6 py-10 text-center">
+                  <td colSpan={(canEditRemarks || canDeleteRemarks) ? 7 : 6} className="px-6 py-10 text-center">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
                     <p className="text-sm text-muted-foreground mt-2">Loading remarks...</p>
                   </td>
                 </tr>
               ) : paginatedRemarks.length === 0 ? (
                 <tr>
-                  <td colSpan={canManageRemarks ? 7 : 6} className="px-6 py-10 text-center text-muted-foreground">
+                  <td colSpan={(canEditRemarks || canDeleteRemarks) ? 7 : 6} className="px-6 py-10 text-center text-muted-foreground">
                     No remarks found.
                   </td>
                 </tr>
@@ -640,15 +670,19 @@ export default function RemarksPage() {
                     <td className="px-6 py-4 text-right font-bold text-red-600">
                       ₹{remark.amount || getPenaltyAmount(remark.type)}
                     </td>
-                    {canManageRemarks && (
+                    {(canEditRemarks || canDeleteRemarks) && (
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(remark)}>
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" onClick={() => handleDeleteRemark(remark.id)}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          {canEditRemarks && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(remark)}>
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {canDeleteRemarks && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" onClick={() => handleDeleteRemark(remark.id)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     )}
@@ -661,7 +695,7 @@ export default function RemarksPage() {
                 <tr>
                   <td colSpan={5} className="px-6 py-4 text-right text-slate-500 uppercase tracking-wider text-[11px] font-bold">Total Penalty Amount:</td>
                   <td className="px-6 py-4 text-right text-slate-900 text-lg font-black">₹{totalPenalty}</td>
-                  {canManageRemarks && <td></td>}
+                  {(canEditRemarks || canDeleteRemarks) && <td></td>}
                 </tr>
               </tfoot>
             )}
@@ -732,25 +766,29 @@ export default function RemarksPage() {
                       <td className="px-4 py-3 text-right">
                         {type.id && (
                           <div className="flex items-center justify-end gap-1">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-7 w-7 text-muted-foreground hover:text-brand-teal"
-                              onClick={() => {
-                                setNewType({ name: type.name, amount: type.amount });
-                                setEditingTypeId(type.id);
-                              }}
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-7 w-7 text-muted-foreground hover:text-red-600"
-                              onClick={() => handleDeleteType(type.id)}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
+                            {canEditRemarks && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 text-muted-foreground hover:text-brand-teal"
+                                onClick={() => {
+                                  setNewType({ name: type.name, amount: type.amount });
+                                  setEditingTypeId(type.id);
+                                }}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                            {canDeleteRemarks && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 text-muted-foreground hover:text-red-600"
+                                onClick={() => handleDeleteType(type.id)}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
                           </div>
                         )}
                       </td>

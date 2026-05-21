@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
+import { useRouter } from 'next/navigation'
+import { usePermissions } from '@/hooks/usePermissions'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -87,6 +89,8 @@ const STAGES = [
 ]
 
 export default function HiringBoardPage() {
+  const router = useRouter()
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
   const [applications, setApplications] = useState<Application[]>([])
   const [jobs, setJobs] = useState<JobOpening[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -97,6 +101,14 @@ export default function HiringBoardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('interviews', 'canView')) {
+        router.push('/')
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission])
 
   const [formData, setFormData] = useState({
     candidateName: '',
@@ -310,6 +322,14 @@ export default function HiringBoardPage() {
     return `${API_URL}${url}`
   }
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-teal" />
+      </div>
+    )
+  }
+
   if (isLoading && applications.length === 0) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -334,29 +354,31 @@ export default function HiringBoardPage() {
               className="pl-9 h-10 ring-offset-brand-teal/20"
             />
           </div>
-          <Button 
-            className="bg-brand-teal hover:bg-brand-teal/90 shadow-md shadow-brand-teal/10"
-            onClick={() => {
-              setEditingAppId(null)
-              setIsSchedulingMode(false)
-              setFormData({
-                candidateName: '',
-                status: 'new',
-                appliedDate: new Date().toISOString().split('T')[0],
-                jobTitle: '',
-                interviewDate: '',
-                interviewTime: '',
-                interviewerName: '',
-                interviewNotes: '',
-                interviewLink: '',
-                resume: '',
-                interviewerId: '',
-              })
-              setIsAddModalOpen(true)
-            }}
-          >
-            <Plus className="w-4 h-4 mr-2" /> Add Candidate
-          </Button>
+          {(isAdmin || checkPermission('interviews', 'canAdd')) && (
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal/90 shadow-md shadow-brand-teal/10"
+              onClick={() => {
+                setEditingAppId(null)
+                setIsSchedulingMode(false)
+                setFormData({
+                  candidateName: '',
+                  status: 'new',
+                  appliedDate: new Date().toISOString().split('T')[0],
+                  jobTitle: '',
+                  interviewDate: '',
+                  interviewTime: '',
+                  interviewerName: '',
+                  interviewNotes: '',
+                  interviewLink: '',
+                  resume: '',
+                  interviewerId: '',
+                })
+                setIsAddModalOpen(true)
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" /> Add Candidate
+            </Button>
+          )}
         </div>
       </PageHeader>
 
@@ -375,18 +397,20 @@ export default function HiringBoardPage() {
                       {stageApps.length}
                     </Badge>
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 text-slate-400 hover:text-brand-teal hover:bg-brand-teal/5"
-                    onClick={() => {
-                      setEditingAppId(null)
-                      setFormData(prev => ({ ...prev, status: stage.id }))
-                      setIsAddModalOpen(true)
-                    }}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
+                  {(isAdmin || checkPermission('interviews', 'canAdd')) && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-slate-400 hover:text-brand-teal hover:bg-brand-teal/5"
+                      onClick={() => {
+                        setEditingAppId(null)
+                        setFormData(prev => ({ ...prev, status: stage.id }))
+                        setIsAddModalOpen(true)
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
 
                 <Droppable droppableId={stage.id}>
@@ -400,7 +424,12 @@ export default function HiringBoardPage() {
                       )}
                     >
                       {stageApps.map((app, index) => (
-                        <Draggable key={app.id} draggableId={app.id} index={index}>
+                        <Draggable 
+                          key={app.id} 
+                          draggableId={app.id} 
+                          index={index}
+                          isDragDisabled={!isAdmin && !checkPermission('interviews', 'canEdit')}
+                        >
                           {(provided, snapshot) => (
                             <Card
                               ref={provided.innerRef}
@@ -431,27 +460,33 @@ export default function HiringBoardPage() {
                                   </div>
                                   
                                   <div className="flex items-center gap-1">
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <MoreVertical className="w-3.5 h-3.5" />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end" className="w-36">
-                                        <DropdownMenuItem className="text-xs py-1.5" onClick={() => handleEditClick(app)}>
-                                          <Edit2 className="w-3.5 h-3.5 mr-2 text-brand-teal" /> Edit
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem className="text-xs py-1.5" onClick={() => window.open(getFullResumeUrl(app.resume), '_blank')}>
-                                          <FileText className="w-3.5 h-3.5 mr-2 text-slate-500" /> Resume
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem 
-                                          className="text-xs py-1.5 text-rose-600 focus:text-rose-600"
-                                          onClick={() => handleDeleteApplication(app.id)}
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-                                        </DropdownMenuItem>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    {(isAdmin || checkPermission('interviews', 'canEdit') || checkPermission('interviews', 'canDelete')) && (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <MoreVertical className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-36">
+                                          {(isAdmin || checkPermission('interviews', 'canEdit')) && (
+                                            <DropdownMenuItem className="text-xs py-1.5" onClick={() => handleEditClick(app)}>
+                                              <Edit2 className="w-3.5 h-3.5 mr-2 text-brand-teal" /> Edit
+                                            </DropdownMenuItem>
+                                          )}
+                                          <DropdownMenuItem className="text-xs py-1.5" onClick={() => window.open(getFullResumeUrl(app.resume), '_blank')}>
+                                            <FileText className="w-3.5 h-3.5 mr-2 text-slate-500" /> Resume
+                                          </DropdownMenuItem>
+                                          {(isAdmin || checkPermission('interviews', 'canDelete')) && (
+                                            <DropdownMenuItem 
+                                              className="text-xs py-1.5 text-rose-600 focus:text-rose-600"
+                                              onClick={() => handleDeleteApplication(app.id)}
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+                                            </DropdownMenuItem>
+                                          )}
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    )}
                                   </div>
                                 </div>
                               </CardHeader>
@@ -533,7 +568,7 @@ export default function HiringBoardPage() {
                                   </div>
                                 </div>
                                 
-                                {app.status === 'new' && (
+                                {app.status === 'new' && (isAdmin || checkPermission('interviews', 'canEdit')) && (
                                   <div className="pt-2">
                                     <Button 
                                       className="w-full h-8 text-[10px] font-bold uppercase bg-brand-teal hover:bg-brand-teal/90 text-white shadow-sm"
@@ -546,7 +581,7 @@ export default function HiringBoardPage() {
                                     </Button>
                                   </div>
                                 )}
-                                {app.status === 'tl_approved' && (
+                                {app.status === 'tl_approved' && (isAdmin || checkPermission('interviews', 'canEdit')) && (
                                   <div className="pt-2">
                                     <Button 
                                       className="w-full h-8 text-[10px] font-bold uppercase bg-brand-teal hover:bg-brand-teal/90 text-white shadow-sm"

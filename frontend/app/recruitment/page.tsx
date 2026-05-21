@@ -35,13 +35,23 @@ import type { JobOpening, Department } from '@/lib/types'
 import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
+import { usePermissions } from '@/hooks/usePermissions'
 
 export default function RecruitmentPage() {
   const router = useRouter()
   const { data, isLoading: apiLoading, refresh } = useApi()
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
   const [jobs, setJobs] = useState<JobOpening[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('hirings', 'canView')) {
+        router.push('/')
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission])
 
   useEffect(() => {
     if (data?.jobOpenings) setJobs(data.jobOpenings)
@@ -185,41 +195,65 @@ export default function RecruitmentPage() {
     },
   ]
 
-  const renderActions = (job: JobOpening) => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => router.push('/recruitment/hiring-board')}>
-          <Eye className="mr-2 h-4 w-4" />
-          View Applications
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleOpenModal(job)}>
-          <Pencil className="mr-2 h-4 w-4" />
-          Edit
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => handleDeleteClick(job)}
-          className="text-destructive"
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
+  const renderActions = (job: JobOpening) => {
+    const showView = isAdmin || checkPermission('interviews', 'canView')
+    const showEdit = isAdmin || checkPermission('hirings', 'canEdit')
+    const showDelete = isAdmin || checkPermission('hirings', 'canDelete')
+
+    if (!showView && !showEdit && !showDelete) return null
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {showView && (
+            <DropdownMenuItem onClick={() => router.push('/recruitment/hiring-board')}>
+              <Eye className="mr-2 h-4 w-4" />
+              View Applications
+            </DropdownMenuItem>
+          )}
+          {showEdit && (
+            <DropdownMenuItem onClick={() => handleOpenModal(job)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+          )}
+          {showDelete && (
+            <DropdownMenuItem
+              onClick={() => handleDeleteClick(job)}
+              className="text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   return (
     <>
       <PageHeader title="Hirings" description="Manage hirings and recruitment.">
         <div className="flex gap-3">
-          <Button onClick={() => handleOpenModal()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Post New Hiring
-          </Button>
+          {(isAdmin || checkPermission('hirings', 'canAdd')) && (
+            <Button onClick={() => handleOpenModal()}>
+              <Plus className="mr-2 h-4 w-4" />
+              Post New Hiring
+            </Button>
+          )}
         </div>
       </PageHeader>
 

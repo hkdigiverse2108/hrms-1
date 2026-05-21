@@ -7,8 +7,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { FileText, Download, Printer, Save, RefreshCw, ChevronLeft, Layout, FileType, User, Calendar, Briefcase, IndianRupee, Edit3 } from 'lucide-react'
+import { FileText, Download, Printer, Save, RefreshCw, ChevronLeft, Layout, FileType, User, Calendar, Briefcase, IndianRupee, Edit3, Loader2 } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
+import { usePermissions } from '@/hooks/usePermissions'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import dayjs from 'dayjs'
@@ -47,8 +49,20 @@ const DOCUMENT_TEMPLATES = [
 ]
 
 export default function DocumentGeneratorPage() {
+  const router = useRouter()
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
   const { data } = useApi()
   const employees = data?.employees || []
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('employee-documents', 'canAdd')) {
+        router.push('/')
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission])
+
+
   
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [selectedEmployee, setSelectedEmployee] = useState<string>('')
@@ -973,6 +987,14 @@ export default function DocumentGeneratorPage() {
       `)
       printWindow.document.close()
     }
+  }
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
+      </div>
+    )
   }
 
   return (

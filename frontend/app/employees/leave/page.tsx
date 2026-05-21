@@ -16,7 +16,8 @@ import {
   Eye,
   ImageIcon
 } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -40,11 +41,27 @@ dayjs.extend(isSameOrBefore);
 
 
 export default function LeaveRequestsPage() {
+  const router = useRouter();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const [requests, setRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('leave-requests', 'canView')) {
+        router.push('/');
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission]);
+
+
   const [isMobileDetailView, setIsMobileDetailView] = useState(false);
   const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [approveReason, setApproveReason] = useState("");
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [timeFilter, setTimeFilter] = useState("today"); // "today" | "custom"
   const [filterDate, setFilterDate] = useState(dayjs());
@@ -94,15 +111,21 @@ export default function LeaveRequestsPage() {
 
   const { user } = useUserContext();
 
-  const handleStatusUpdate = async (id: string, newStatus: string) => {
+  const handleStatusUpdate = async (id: string, newStatus: string, reasonText?: string) => {
     setIsUpdating(true);
     try {
       const body: any = { status: newStatus };
-      if (newStatus === 'Approved' && user) {
+      if ((newStatus === 'Approved' || newStatus === 'Rejected') && user) {
         body.approved_by = user.name;
         body.approved_by_role = user.role;
         body.approved_by_id = user.id;
         body.approved_by_photo = user.profilePhoto;
+      }
+      if (newStatus === 'Rejected' && reasonText) {
+        body.reject_reason = reasonText;
+      }
+      if (newStatus === 'Approved' && reasonText) {
+        body.approve_reason = reasonText;
       }
       
       const res = await fetch(`${API_URL}/leaves/${id}/status`, {
@@ -116,6 +139,7 @@ export default function LeaveRequestsPage() {
         toast.success(`Request ${newStatus.toLowerCase()} successfully`);
         fetchRequests();
         setApproveModalOpen(false);
+        setRejectModalOpen(false);
       } else {
         toast.error("Failed to update status");
       }
@@ -146,6 +170,14 @@ export default function LeaveRequestsPage() {
     setIsMobileDetailView(true);
   };
 
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-8rem)] overflow-hidden">
@@ -353,13 +385,17 @@ export default function LeaveRequestsPage() {
               </div>
               
               <div className="flex items-center gap-3 w-full sm:w-auto">
-                {(user?.role === 'Admin' || user?.role === 'HR') && (
+                {(isAdmin || checkPermission('leave-requests', 'canEdit')) && (
                   <>
                     {selectedReq.status === 'Pending' && (
                       <Button 
                         variant="outline" 
                         disabled={isUpdating}
-                        onClick={() => handleStatusUpdate(selectedReq.id, 'Rejected')}
+                        onClick={() => {
+                          setRejectingId(selectedReq.id);
+                          setRejectReason("");
+                          setRejectModalOpen(true);
+                        }}
                         className="flex-1 sm:flex-none text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 font-medium"
                       >
                         <X className="w-4 h-4 mr-2" />
@@ -380,80 +416,137 @@ export default function LeaveRequestsPage() {
                   </>
                 )}
 
-                <Button variant="outline" className="flex-1 sm:flex-none font-medium">
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Message
-                </Button>
-                
-                {(user?.role === 'Admin' || user?.role === 'HR') && selectedReq.status === 'Pending' && (
-                  <Dialog open={approveModalOpen} onOpenChange={setApproveModalOpen}>
-                    <DialogTrigger asChild>
-                      <Button 
-                        disabled={isUpdating}
-                        className="flex-1 sm:flex-none bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm"
-                      >
-                        <Check className="w-4 h-4 mr-2" />
-                        Approve
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[450px]">
-                      <DialogHeader>
-                        <DialogTitle className="text-xl font-bold">Approve Leave Request</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4 py-2">
-                        <p className="text-sm text-muted-foreground">
-                          Review the details below before confirming. The employee will be notified automatically.
-                        </p>
-                        
-                        <div className="bg-gray-50 border border-border rounded-lg p-4 mb-4">
-                          <div className="flex items-center gap-3 mb-4 pb-4 border-b border-border">
-                            <Avatar className="w-10 h-10">
-                              <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
-                                {selectedReq.employee_name.split(' ').map((n: string) => n[0]).join('')}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <div className="font-semibold text-foreground text-sm">{selectedReq.employee_name}</div>
-                              <div className="text-xs text-muted-foreground">Employee Request</div>
-                            </div>
-                          </div>
-                          <div className="flex justify-between items-center text-sm">
-                            <div className="flex items-center gap-2">
-                              <span className={`w-1.5 h-1.5 rounded-full ${getStatusInfo(selectedReq.status).color}`}></span>
-                              <span className="font-semibold text-foreground capitalize">{selectedReq.type} ({selectedReq.duration})</span>
-                            </div>
-                            <span className="text-muted-foreground">{selectedReq.start_date} - {selectedReq.end_date}</span>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-foreground">Add a note (Optional)</label>
-                          <Textarea 
-                            placeholder="Have a great vacation!" 
-                            className="resize-none h-24 text-sm bg-white"
-                          />
-                        </div>
-
-                        <div className="flex items-start gap-2 pt-2">
-                          <Checkbox id="notify" defaultChecked className="mt-0.5 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal" />
-                          <label htmlFor="notify" className="text-sm text-foreground font-medium cursor-pointer">
-                            Notify the employee about this decision
-                          </label>
-                        </div>
-                      </div>
-                      <DialogFooter className="gap-2 sm:gap-2 mt-4">
-                        <Button variant="outline" onClick={() => setApproveModalOpen(false)}>Cancel</Button>
+                {(isAdmin || checkPermission('leave-requests', 'canEdit')) && selectedReq.status === 'Pending' && (
+                  <>
+                    <Dialog open={approveModalOpen} onOpenChange={(open) => { setApproveModalOpen(open); if (open) setApproveReason(""); }}>
+                      <DialogTrigger asChild>
                         <Button 
                           disabled={isUpdating}
-                          className="bg-brand-teal hover:bg-brand-teal-light text-white" 
-                          onClick={() => handleStatusUpdate(selectedReq.id, 'Approved')}
+                          className="flex-1 sm:flex-none bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm"
                         >
-                          {isUpdating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
-                          Confirm Approval
+                          <Check className="w-4 h-4 mr-2" />
+                          Approve
                         </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[450px]">
+                        <DialogHeader>
+                          <DialogTitle className="text-xl font-bold">Approve Leave Request</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-2">
+                          <p className="text-sm text-muted-foreground">
+                            Review the details below before confirming. The employee will be notified automatically.
+                          </p>
+                          
+                          <div className="bg-gray-50 border border-border rounded-lg p-4 mb-4">
+                            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-border">
+                              <Avatar className="w-10 h-10">
+                                <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
+                                  {selectedReq.employee_name.split(' ').map((n: string) => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <div className="font-semibold text-foreground text-sm">{selectedReq.employee_name}</div>
+                                <div className="text-xs text-muted-foreground">Employee Request</div>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-1.5 h-1.5 rounded-full ${getStatusInfo(selectedReq.status).color}`}></span>
+                                <span className="font-semibold text-foreground capitalize">{selectedReq.type} ({selectedReq.duration})</span>
+                              </div>
+                              <span className="text-muted-foreground">{selectedReq.start_date} - {selectedReq.end_date}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-foreground">Add a note (Optional)</label>
+                            <Textarea 
+                              value={approveReason}
+                              onChange={(e) => setApproveReason(e.target.value)}
+                              placeholder="Have a great vacation!" 
+                              className="resize-none h-24 text-sm bg-white"
+                            />
+                          </div>
+
+                          <div className="flex items-start gap-2 pt-2">
+                            <Checkbox id="notify" defaultChecked className="mt-0.5 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal" />
+                            <label htmlFor="notify" className="text-sm text-foreground font-medium cursor-pointer">
+                              Notify the employee about this decision
+                            </label>
+                          </div>
+                        </div>
+                        <DialogFooter className="gap-2 sm:gap-2 mt-4">
+                          <Button variant="outline" onClick={() => setApproveModalOpen(false)}>Cancel</Button>
+                          <Button 
+                            disabled={isUpdating}
+                            className="bg-brand-teal hover:bg-brand-teal-light text-white" 
+                            onClick={() => handleStatusUpdate(selectedReq.id, 'Approved', approveReason)}
+                          >
+                            {isUpdating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                            Confirm Approval
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={rejectModalOpen} onOpenChange={(open) => { setRejectModalOpen(open); if (open) setRejectReason(""); }}>
+                      <DialogContent className="sm:max-w-[450px]">
+                        <DialogHeader>
+                          <DialogTitle className="text-xl font-bold text-red-600 flex items-center gap-2">
+                            <X className="w-5 h-5 text-red-600" />
+                            Reject Leave Request
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-2">
+                          <p className="text-sm text-muted-foreground">
+                            Please provide a reason (optional) for rejecting this leave request. The employee will be notified automatically.
+                          </p>
+                          
+                          <div className="bg-red-50/50 border border-red-100 rounded-lg p-4 mb-4">
+                            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-red-100">
+                              <Avatar className="w-10 h-10">
+                                <AvatarFallback className="bg-red-100 text-red-700 font-bold">
+                                  {selectedReq.employee_name.split(' ').map((n: string) => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <div className="font-semibold text-foreground text-sm">{selectedReq.employee_name}</div>
+                                <div className="text-xs text-muted-foreground">Employee Request</div>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                <span className="font-semibold text-foreground capitalize">{selectedReq.type} ({selectedReq.duration})</span>
+                              </div>
+                              <span className="text-muted-foreground">{selectedReq.start_date} - {selectedReq.end_date}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-foreground">Rejection Reason (Optional)</label>
+                            <Textarea 
+                              value={rejectReason}
+                              onChange={(e) => setRejectReason(e.target.value)}
+                              placeholder="Please write the reason for rejecting the leave request..." 
+                              className="resize-none h-24 text-sm bg-white"
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter className="gap-2 sm:gap-2 mt-4">
+                          <Button variant="outline" onClick={() => setRejectModalOpen(false)}>Cancel</Button>
+                          <Button 
+                            disabled={isUpdating}
+                            className="bg-red-600 hover:bg-red-700 text-white font-medium" 
+                            onClick={() => handleStatusUpdate(rejectingId || selectedReq.id, 'Rejected', rejectReason)}
+                          >
+                            {isUpdating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <X className="w-4 h-4 mr-2" />}
+                            Confirm Rejection
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </>
                 )}
 
               </div>
@@ -535,17 +628,48 @@ export default function LeaveRequestsPage() {
                     <div className="text-xl font-bold text-foreground mb-1">Status: {selectedReq.status}</div>
                     <div className="text-sm text-muted-foreground mt-2">
                       {selectedReq.status === 'Approved' && selectedReq.approved_by ? (
-                        <div className="flex items-center gap-3 mt-3 p-3 bg-gray-50 rounded-lg border border-border">
-                          <Avatar className="w-10 h-10 rounded-md">
-                            <AvatarImage src={selectedReq.approved_by_photo} className="object-cover" />
-                            <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
-                              {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-bold text-foreground">Approved by {selectedReq.approved_by}</span>
-                            <span className="text-xs text-muted-foreground">{selectedReq.approved_by_role || 'Admin'}</span>
+                        <div className="flex flex-col gap-3 mt-3">
+                          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-border">
+                            <Avatar className="w-10 h-10 rounded-md">
+                              <AvatarImage src={selectedReq.approved_by_photo} className="object-cover" />
+                              <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
+                                {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-foreground">Approved by {selectedReq.approved_by}</span>
+                              <span className="text-xs text-muted-foreground">{selectedReq.approved_by_role || 'Admin'}</span>
+                            </div>
                           </div>
+                          {selectedReq.approve_reason && (
+                            <div className="p-3 bg-green-50/50 rounded-lg border border-green-100 text-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                              <span className="font-bold text-green-800 block mb-1">Approval Note:</span>
+                              <span className="text-green-700 leading-relaxed">{selectedReq.approve_reason}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : selectedReq.status === 'Rejected' ? (
+                        <div className="flex flex-col gap-3 mt-3">
+                          {selectedReq.approved_by && (
+                            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-border">
+                              <Avatar className="w-10 h-10 rounded-md">
+                                <AvatarImage src={selectedReq.approved_by_photo} className="object-cover" />
+                                <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
+                                  {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold text-foreground">Rejected by {selectedReq.approved_by}</span>
+                                <span className="text-xs text-muted-foreground">{selectedReq.approved_by_role || 'Admin'}</span>
+                              </div>
+                            </div>
+                          )}
+                          {selectedReq.reject_reason && (
+                            <div className="p-3 bg-rose-50/50 rounded-lg border border-rose-100 text-sm">
+                              <span className="font-bold text-rose-800 block mb-1">Reason for Rejection:</span>
+                              <span className="text-rose-700 leading-relaxed">{selectedReq.reject_reason}</span>
+                            </div>
+                          )}
                         </div>
                       ) : selectedReq.status === 'Pending' ? (
                         `This request was submitted on ${selectedReq.requested_on}.`

@@ -50,9 +50,50 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
+
+const monthMap: { [key: string]: string } = {
+  "January": "01",
+  "February": "02",
+  "March": "03",
+  "April": "04",
+  "May": "05",
+  "June": "06",
+  "July": "07",
+  "August": "08",
+  "September": "09",
+  "October": "10",
+  "November": "11",
+  "December": "12"
+};
+
+const normalizeDate = (dateStr: string) => {
+  if (!dateStr) return "";
+  return dateStr.split(" ")[0].split("T")[0];
+};
 
 export default function MarketingReportsPage() {
   const { user } = useUser();
+  const router = useRouter();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+
+  const getLocalDateString = () => {
+    const d = new Date();
+    const offset = d.getTimezoneOffset();
+    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().split('T')[0];
+  };
+
+  const getLocalMonthString = () => {
+    return new Date().toLocaleString('default', { month: 'long' });
+  };
+
+  const canViewMarketing = isAdmin || checkPermission('marketing', 'canView');
+  const canAddMarketing = isAdmin || checkPermission('marketing', 'canAdd');
+  const canEditMarketing = isAdmin || checkPermission('marketing', 'canEdit');
+  const canDeleteMarketing = isAdmin || checkPermission('marketing', 'canDelete');
+
   const [activeTab, setActiveTab] = useState("daily");
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [monthlyReports, setMonthlyReports] = useState<any[]>([]);
@@ -80,12 +121,39 @@ export default function MarketingReportsPage() {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [monthlyItemsPerPage, setMonthlyItemsPerPage] = useState(10);
 
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
-  const [monthFilter, setMonthFilter] = useState(new Date().toLocaleString('default', { month: 'long' }));
+  const [dateFilter, setDateFilter] = useState(getLocalDateString());
+  const [monthFilter, setMonthFilter] = useState(getLocalMonthString());
+
+  const handleDateFilterChange = (val: string) => {
+    setDateFilter(val);
+    if (val) {
+      const parts = val.split("-");
+      if (parts.length === 3) {
+        const monthNum = parts[1];
+        const monthName = Object.keys(monthMap).find(key => monthMap[key] === monthNum);
+        if (monthName) {
+          setMonthFilter(monthName);
+        }
+      }
+    }
+  };
+
+  const handleMonthFilterChange = (val: string) => {
+    setMonthFilter(val);
+    if (val !== "all" && dateFilter) {
+      const parts = dateFilter.split("-");
+      if (parts.length === 3) {
+        const dateMonthNum = parts[1];
+        if (monthMap[val] !== dateMonthNum) {
+          setDateFilter("");
+        }
+      }
+    }
+  };
 
   // Form States
   const [dailyFormData, setDailyFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     campaignName: "",
     clientId: "",
     reach: 0,
@@ -93,13 +161,14 @@ export default function MarketingReportsPage() {
     leads: 0,
     followers: 0,
     spend: 0,
-    cpl: 0
+    cpl: 0,
+    remarks: ""
   });
 
   const [monthlyFormData, setMonthlyFormData] = useState({
     clientId: "",
     clientName: "",
-    month: new Date().toLocaleString('default', { month: 'long' }),
+    month: getLocalMonthString(),
     totalSpend: 0,
     totalLeads: 0,
     totalSales: 0,
@@ -111,9 +180,17 @@ export default function MarketingReportsPage() {
   });
 
   useEffect(() => {
+    if (permissionsLoading) return;
+    if (!canViewMarketing) {
+      router.push("/");
+    }
+  }, [router, permissionsLoading, canViewMarketing]);
+
+  useEffect(() => {
+    if (permissionsLoading || !canViewMarketing) return;
     fetchData();
     fetchClients();
-  }, [activeTab, selectedClientFilter, dateFilter, monthFilter]);
+  }, [activeTab, selectedClientFilter, dateFilter, monthFilter, permissionsLoading, canViewMarketing]);
 
   const fetchClients = async () => {
     try {
@@ -155,6 +232,18 @@ export default function MarketingReportsPage() {
 
   const handleDailySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingReport ? !canEditMarketing : !canAddMarketing) {
+      toast.error("You do not have permission to perform this action");
+      return;
+    }
+    if (!dailyFormData.clientId) {
+      toast.error("Please select a client before adding a daily report.");
+      return;
+    }
+    if (!dailyFormData.campaignName.trim()) {
+      toast.error("Please enter a campaign name.");
+      return;
+    }
     const client = clients.find(c => c.id === dailyFormData.clientId);
     try {
       const method = editingReport ? "PUT" : "POST";
@@ -175,7 +264,7 @@ export default function MarketingReportsPage() {
         setIsDailyModalOpen(false);
         setEditingReport(null);
         setDailyFormData({
-          date: new Date().toISOString().split('T')[0],
+          date: getLocalDateString(),
           campaignName: "",
           clientId: "",
           reach: 0,
@@ -183,9 +272,15 @@ export default function MarketingReportsPage() {
           leads: 0,
           followers: 0,
           spend: 0,
-          cpl: 0
+          cpl: 0,
+          remarks: ""
         });
+        toast.success(editingReport ? "Daily report updated successfully!" : "Daily report added successfully!");
         fetchData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.detail || errData.message || "Failed to save daily report";
+        toast.error(typeof errMsg === "object" ? JSON.stringify(errMsg) : errMsg);
       }
     } catch (err) {
       toast.error("Failed to save daily report");
@@ -194,6 +289,18 @@ export default function MarketingReportsPage() {
 
   const handleMonthlySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingReport ? !canEditMarketing : !canAddMarketing) {
+      toast.error("You do not have permission to perform this action");
+      return;
+    }
+    if (!monthlyFormData.clientId) {
+      toast.error("Please select a client before adding a monthly report.");
+      return;
+    }
+    if (!monthlyFormData.month) {
+      toast.error("Please select a month.");
+      return;
+    }
     try {
       const method = editingReport ? "PUT" : "POST";
       const url = editingReport 
@@ -209,7 +316,12 @@ export default function MarketingReportsPage() {
       if (res.ok) {
         setIsMonthlyModalOpen(false);
         setEditingReport(null);
+        toast.success(editingReport ? "Monthly report updated successfully!" : "Monthly report added successfully!");
         fetchData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.detail || errData.message || "Failed to save monthly report";
+        toast.error(typeof errMsg === "object" ? JSON.stringify(errMsg) : errMsg);
       }
     } catch (err) {
       toast.error("Failed to save monthly report");
@@ -217,6 +329,12 @@ export default function MarketingReportsPage() {
   };
 
   const handleDelete = async (id: string, type: "daily" | "monthly") => {
+    if (type === "daily" || type === "monthly") {
+      if (!canDeleteMarketing) {
+        toast.error("You do not have permission to delete reports");
+        return;
+      }
+    }
     if (!confirm("Are you sure you want to delete this report?")) return;
     try {
       const res = await fetch(`${API_URL}/marketing/reports/${type}/${id}`, {
@@ -232,6 +350,10 @@ export default function MarketingReportsPage() {
   };
 
   const handleInlineUpdate = async (id: string, field: string | object, value: any, type: "daily" | "monthly") => {
+    if (!canEditMarketing) {
+      toast.error("You do not have permission to edit reports");
+      return;
+    }
     try {
       const payload = typeof field === 'object' ? { ...field } : { [field as string]: value };
       
@@ -260,6 +382,14 @@ export default function MarketingReportsPage() {
     setMonthlyPage(1);
   }, [searchQuery, selectedClientFilter, dateFilter, monthFilter]);
 
+  if (permissionsLoading || !canViewMarketing) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   const fetchLogs = async (report: any, type: "daily" | "monthly") => {
     setIsLoadingLogs(true);
     setLogsOpen(true);
@@ -281,15 +411,16 @@ export default function MarketingReportsPage() {
     const matchesSearch = r.campaignName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (r.clientName && r.clientName.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesClient = selectedClientFilter === "all" || r.clientId === selectedClientFilter;
-    const matchesDate = !dateFilter || r.date === dateFilter;
-    return matchesSearch && matchesClient && matchesDate;
+    const matchesDate = !dateFilter || normalizeDate(r.date) === dateFilter;
+    const matchesMonth = monthFilter === "all" || (r.date && normalizeDate(r.date).split("-")[1] === monthMap[monthFilter]);
+    return matchesSearch && matchesClient && matchesDate && matchesMonth;
   });
 
   const filteredMonthly = monthlyReports.filter(r => {
     const matchesSearch = r.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          r.month.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClient = selectedClientFilter === "all" || r.clientId === selectedClientFilter;
-    const matchesMonth = !monthFilter || r.month === monthFilter;
+    const matchesMonth = monthFilter === "all" || !monthFilter || r.month === monthFilter;
     return matchesSearch && matchesClient && matchesMonth;
   });
 
@@ -331,20 +462,6 @@ export default function MarketingReportsPage() {
             Marketing Reports
           </h1>
           <p className="text-slate-500 text-sm mt-1">Track daily performance and monthly ROI metrics</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <Button 
-            onClick={() => {
-              setEditingReport(null);
-              if (activeTab === "daily") setIsDailyModalOpen(true);
-              else setIsMonthlyModalOpen(true);
-            }}
-            className="bg-brand-teal hover:bg-brand-teal-light text-white shadow-sm"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add {activeTab === "daily" ? "Daily" : "Monthly"} Report
-          </Button>
         </div>
       </div>
 
@@ -389,34 +506,32 @@ export default function MarketingReportsPage() {
             </div>
             <div className="flex-1 min-w-[150px] space-y-1.5">
               <Label className="text-xs text-slate-500">Filter by Date</Label>
-              <Input type="date" className="h-9" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+              <Input type="date" className="h-9" value={dateFilter} onChange={e => handleDateFilterChange(e.target.value)} />
             </div>
-            {activeTab === "monthly" && (
-              <div className="flex-1 min-w-[150px] space-y-1.5">
-                <Label className="text-xs text-slate-500">Filter by Month</Label>
-                <Select value={monthFilter} onValueChange={setMonthFilter}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Select Month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Months</SelectItem>
-                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                      <SelectItem key={m} value={m}>{m}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="flex-1 min-w-[150px] space-y-1.5">
+              <Label className="text-xs text-slate-500">Filter by Month</Label>
+              <Select value={monthFilter} onValueChange={handleMonthFilterChange}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Months</SelectItem>
+                  {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-end h-9 pt-6">
-              {(selectedClientFilter !== "all" || dateFilter || searchQuery || monthFilter !== "all") && (
+              {(selectedClientFilter !== "all" || dateFilter !== getLocalDateString() || searchQuery !== "" || monthFilter !== getLocalMonthString()) && (
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   className="text-xs text-slate-500 hover:text-rose-600"
                   onClick={() => {
                     setSelectedClientFilter("all");
-                    setDateFilter("");
-                    setMonthFilter("all");
+                    setDateFilter(getLocalDateString());
+                    setMonthFilter(getLocalMonthString());
                     setSearchQuery("");
                   }}
                 >
@@ -442,13 +557,14 @@ export default function MarketingReportsPage() {
                   <TableHead className="text-center font-bold text-slate-700">Followers</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Spend (₹)</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">CPL (₹)</TableHead>
+                  <TableHead className="text-center font-bold text-slate-700">Remarks</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-20">
+                    <TableCell colSpan={12} className="text-center py-20">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
                       <p className="mt-2 text-slate-500">Loading daily reports...</p>
                     </TableCell>
@@ -456,52 +572,57 @@ export default function MarketingReportsPage() {
                 ) : (
                   <>
                     {/* Integrated Quick Add Row */}
-                    <TableRow className="bg-brand-teal/5 border-b-2 border-brand-teal/10">
-                      <TableCell className="text-center font-bold text-brand-teal">+</TableCell>
-                      <TableCell className="p-1">
-                        <Input type="date" className="h-8 text-[10px] bg-white" value={dailyFormData.date} onChange={e => setDailyFormData({...dailyFormData, date: e.target.value})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Select value={dailyFormData.clientId} onValueChange={v => setDailyFormData({...dailyFormData, clientId: v})}>
-                          <SelectTrigger className="h-8 text-[10px] bg-white"><SelectValue placeholder="Client" /></SelectTrigger>
-                          <SelectContent>
-                            {clients.map(client => (
-                              <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input placeholder="Campaign..." className="h-8 text-[10px] bg-white" value={dailyFormData.campaignName} onChange={e => setDailyFormData({...dailyFormData, campaignName: e.target.value})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.reach || ""} onChange={e => setDailyFormData({...dailyFormData, reach: parseInt(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.impression || ""} onChange={e => setDailyFormData({...dailyFormData, impression: parseInt(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.leads || ""} onChange={e => setDailyFormData({...dailyFormData, leads: parseInt(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.followers || ""} onChange={e => setDailyFormData({...dailyFormData, followers: parseInt(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.spend || ""} onChange={e => setDailyFormData({...dailyFormData, spend: parseFloat(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" step="0.01" placeholder="0.00" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.cpl || ""} onChange={e => setDailyFormData({...dailyFormData, cpl: parseFloat(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Button onClick={handleDailySubmit} size="sm" className="h-8 w-full bg-brand-teal hover:bg-brand-teal-light text-white text-[10px]">
-                          <Plus className="w-3 h-3 mr-1" /> Add
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                    {canAddMarketing && (
+                      <TableRow className="bg-brand-teal/5 border-b-2 border-brand-teal/10">
+                        <TableCell className="text-center font-bold text-brand-teal">+</TableCell>
+                        <TableCell className="p-1">
+                          <Input type="date" className="h-8 text-[10px] bg-white" value={dailyFormData.date} onChange={e => setDailyFormData({...dailyFormData, date: e.target.value})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Select value={dailyFormData.clientId} onValueChange={v => setDailyFormData({...dailyFormData, clientId: v})}>
+                            <SelectTrigger className="h-8 text-[10px] bg-white"><SelectValue placeholder="Client" /></SelectTrigger>
+                            <SelectContent>
+                              {clients.map(client => (
+                                <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input placeholder="Campaign..." className="h-8 text-[10px] bg-white" value={dailyFormData.campaignName} onChange={e => setDailyFormData({...dailyFormData, campaignName: e.target.value})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.reach || ""} onChange={e => setDailyFormData({...dailyFormData, reach: parseInt(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.impression || ""} onChange={e => setDailyFormData({...dailyFormData, impression: parseInt(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.leads || ""} onChange={e => setDailyFormData({...dailyFormData, leads: parseInt(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.followers || ""} onChange={e => setDailyFormData({...dailyFormData, followers: parseInt(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.spend || ""} onChange={e => setDailyFormData({...dailyFormData, spend: parseFloat(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" step="0.01" placeholder="0.00" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.cpl || ""} onChange={e => setDailyFormData({...dailyFormData, cpl: parseFloat(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input placeholder="Remarks..." className="h-8 text-[10px] bg-white" value={dailyFormData.remarks || ""} onChange={e => setDailyFormData({...dailyFormData, remarks: e.target.value})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Button onClick={handleDailySubmit} size="sm" className="h-8 w-full bg-brand-teal hover:bg-brand-teal-light text-white text-[10px]">
+                            <Plus className="w-3 h-3 mr-1" /> Add
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )}
 
                     {filteredDaily.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center py-20 text-slate-400 italic">
+                        <TableCell colSpan={12} className="text-center py-20 text-slate-400 italic">
                           No daily reports found.
                         </TableCell>
                       </TableRow>
@@ -513,24 +634,32 @@ export default function MarketingReportsPage() {
                               <TableCell className="text-center text-slate-400">{globalIdx}</TableCell>
                           
                           <TableCell 
-                            className="font-medium cursor-text hover:bg-slate-50"
-                            onClick={() => setInlineEditing({ id: report.id, field: 'date' })}
+                            className={`font-medium ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'date' });
+                              }
+                            }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'date' ? (
                               <Input 
                                 autoFocus
                                 type="date" 
                                 className="h-8 text-xs outline-none" 
-                                defaultValue={report.date} 
+                                defaultValue={normalizeDate(report.date)} 
                                 onBlur={e => handleInlineUpdate(report.id, 'date', e.target.value, 'daily')}
                                 onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'date', e.currentTarget.value, 'daily')}
                               />
-                            ) : report.date}
+                            ) : normalizeDate(report.date)}
                           </TableCell>
 
                            <TableCell 
-                            className="font-semibold text-slate-600 cursor-text hover:bg-slate-50"
-                            onClick={() => setInlineEditing({ id: report.id, field: 'client' })}
+                            className={`font-semibold text-slate-600 ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'client' });
+                              }
+                            }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'client' ? (
                               <Select 
@@ -553,8 +682,12 @@ export default function MarketingReportsPage() {
                           </TableCell>
 
                           <TableCell 
-                            className="cursor-text hover:bg-slate-50"
-                            onClick={() => setInlineEditing({ id: report.id, field: 'campaignName' })}
+                            className={canEditMarketing ? "cursor-text hover:bg-slate-50" : ""}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'campaignName' });
+                              }
+                            }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'campaignName' ? (
                               <Input 
@@ -568,8 +701,12 @@ export default function MarketingReportsPage() {
                           </TableCell>
 
                           <TableCell 
-                            className="text-center cursor-text hover:bg-slate-50"
-                            onClick={() => setInlineEditing({ id: report.id, field: 'reach' })}
+                            className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'reach' });
+                              }
+                            }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'reach' ? (
                               <Input 
@@ -584,8 +721,12 @@ export default function MarketingReportsPage() {
                           </TableCell>
 
                           <TableCell 
-                            className="text-center cursor-text hover:bg-slate-50"
-                            onClick={() => setInlineEditing({ id: report.id, field: 'impression' })}
+                            className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'impression' });
+                              }
+                            }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'impression' ? (
                               <Input 
@@ -600,8 +741,12 @@ export default function MarketingReportsPage() {
                           </TableCell>
 
                           <TableCell 
-                            className="text-center cursor-text hover:bg-slate-50"
-                            onClick={() => setInlineEditing({ id: report.id, field: 'leads' })}
+                            className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'leads' });
+                              }
+                            }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'leads' ? (
                               <Input 
@@ -616,8 +761,12 @@ export default function MarketingReportsPage() {
                           </TableCell>
 
                           <TableCell 
-                            className="text-center cursor-text hover:bg-slate-50"
-                            onClick={() => setInlineEditing({ id: report.id, field: 'followers' })}
+                            className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'followers' });
+                              }
+                            }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'followers' ? (
                               <Input 
@@ -632,8 +781,12 @@ export default function MarketingReportsPage() {
                           </TableCell>
 
                           <TableCell 
-                            className="text-center font-semibold text-brand-teal cursor-text hover:bg-slate-50"
-                            onClick={() => setInlineEditing({ id: report.id, field: 'spend' })}
+                            className={`text-center font-semibold text-brand-teal ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'spend' });
+                              }
+                            }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'spend' ? (
                               <Input 
@@ -649,8 +802,12 @@ export default function MarketingReportsPage() {
                           </TableCell>
 
                           <TableCell 
-                            className="text-center cursor-text hover:bg-slate-50"
-                            onClick={() => setInlineEditing({ id: report.id, field: 'cpl' })}
+                            className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'cpl' });
+                              }
+                            }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'cpl' ? (
                               <Input 
@@ -665,6 +822,25 @@ export default function MarketingReportsPage() {
                             ) : `₹${report.cpl.toFixed(2)}`}
                           </TableCell>
 
+                          <TableCell 
+                            className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                            onClick={() => {
+                              if (canEditMarketing) {
+                                setInlineEditing({ id: report.id, field: 'remarks' });
+                              }
+                            }}
+                          >
+                            {inlineEditing?.id === report.id && inlineEditing?.field === 'remarks' ? (
+                              <Input 
+                                autoFocus
+                                className="h-8 text-xs text-center outline-none" 
+                                defaultValue={report.remarks || ""} 
+                                onBlur={e => handleInlineUpdate(report.id, 'remarks', e.target.value, 'daily')}
+                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'remarks', e.currentTarget.value, 'daily')}
+                              />
+                            ) : report.remarks || "-"}
+                          </TableCell>
+
                           <TableCell className="text-center">
                             <div className="flex justify-center gap-1">
                               <Button 
@@ -676,14 +852,16 @@ export default function MarketingReportsPage() {
                                 <History className="w-4 h-4" />
                               </Button>
 
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                                onClick={() => handleDelete(report.id, "daily")}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              {canDeleteMarketing && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                  onClick={() => handleDelete(report.id, "daily")}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                             </TableRow>
@@ -702,7 +880,7 @@ export default function MarketingReportsPage() {
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.leads.toLocaleString()}</TableCell>
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.followers.toLocaleString()}</TableCell>
                     <TableCell className="text-center font-bold text-brand-teal">₹{dailyTotals.spend.toLocaleString()}</TableCell>
-                    <TableCell colSpan={2}></TableCell>
+                    <TableCell colSpan={3}></TableCell>
                   </TableRow>
                 </tfoot>
               )}
@@ -750,61 +928,63 @@ export default function MarketingReportsPage() {
                 ) : (
                   <>
                     {/* Integrated Quick Add Row Monthly */}
-                    <TableRow className="bg-brand-teal/5 border-b-2 border-brand-teal/10">
-                      <TableCell className="text-center font-bold text-brand-teal">+</TableCell>
-                      <TableCell className="p-1">
-                        <Select value={monthlyFormData.clientId} onValueChange={v => {
-                          const client = clients.find(c => c.id === v);
-                          setMonthlyFormData({...monthlyFormData, clientId: v, clientName: client?.companyName || ""});
-                        }}>
-                          <SelectTrigger className="h-8 text-[10px] bg-white"><SelectValue placeholder="Client" /></SelectTrigger>
-                          <SelectContent>
-                            {clients.map(client => (
-                              <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Select value={monthlyFormData.month} onValueChange={v => setMonthlyFormData({...monthlyFormData, month: v})}>
-                          <SelectTrigger className="h-8 text-[10px] bg-white"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                              <SelectItem key={m} value={m}>{m}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.totalSpend || ""} onChange={e => setMonthlyFormData({...monthlyFormData, totalSpend: parseFloat(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.totalLeads || ""} onChange={e => setMonthlyFormData({...monthlyFormData, totalLeads: parseInt(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.totalSales || ""} onChange={e => setMonthlyFormData({...monthlyFormData, totalSales: parseInt(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.avgCPR || ""} onChange={e => setMonthlyFormData({...monthlyFormData, avgCPR: parseFloat(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.avgCPP || ""} onChange={e => setMonthlyFormData({...monthlyFormData, avgCPP: parseFloat(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.totalRevenue || ""} onChange={e => setMonthlyFormData({...monthlyFormData, totalRevenue: parseFloat(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.overallROAS || ""} onChange={e => setMonthlyFormData({...monthlyFormData, overallROAS: parseFloat(e.target.value) || 0})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Input placeholder="Conclusion..." className="h-8 text-[10px] bg-white" value={monthlyFormData.conclusion || ""} onChange={e => setMonthlyFormData({...monthlyFormData, conclusion: e.target.value})} />
-                      </TableCell>
-                      <TableCell className="p-1">
-                        <Button onClick={handleMonthlySubmit} size="sm" className="h-8 w-full bg-brand-teal hover:bg-brand-teal-light text-white text-[10px]">
-                          <Plus className="w-3 h-3 mr-1" /> Add
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                    {canAddMarketing && (
+                      <TableRow className="bg-brand-teal/5 border-b-2 border-brand-teal/10">
+                        <TableCell className="text-center font-bold text-brand-teal">+</TableCell>
+                        <TableCell className="p-1">
+                          <Select value={monthlyFormData.clientId} onValueChange={v => {
+                            const client = clients.find(c => c.id === v);
+                            setMonthlyFormData({...monthlyFormData, clientId: v, clientName: client?.companyName || ""});
+                          }}>
+                            <SelectTrigger className="h-8 text-[10px] bg-white"><SelectValue placeholder="Client" /></SelectTrigger>
+                            <SelectContent>
+                              {clients.map(client => (
+                                <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Select value={monthlyFormData.month} onValueChange={v => setMonthlyFormData({...monthlyFormData, month: v})}>
+                            <SelectTrigger className="h-8 text-[10px] bg-white"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                <SelectItem key={m} value={m}>{m}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.totalSpend || ""} onChange={e => setMonthlyFormData({...monthlyFormData, totalSpend: parseFloat(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.totalLeads || ""} onChange={e => setMonthlyFormData({...monthlyFormData, totalLeads: parseInt(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.totalSales || ""} onChange={e => setMonthlyFormData({...monthlyFormData, totalSales: parseInt(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.avgCPR || ""} onChange={e => setMonthlyFormData({...monthlyFormData, avgCPR: parseFloat(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.avgCPP || ""} onChange={e => setMonthlyFormData({...monthlyFormData, avgCPP: parseFloat(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.totalRevenue || ""} onChange={e => setMonthlyFormData({...monthlyFormData, totalRevenue: parseFloat(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={monthlyFormData.overallROAS || ""} onChange={e => setMonthlyFormData({...monthlyFormData, overallROAS: parseFloat(e.target.value) || 0})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Input placeholder="Conclusion..." className="h-8 text-[10px] bg-white" value={monthlyFormData.conclusion || ""} onChange={e => setMonthlyFormData({...monthlyFormData, conclusion: e.target.value})} />
+                        </TableCell>
+                        <TableCell className="p-1">
+                          <Button onClick={handleMonthlySubmit} size="sm" className="h-8 w-full bg-brand-teal hover:bg-brand-teal-light text-white text-[10px]">
+                            <Plus className="w-3 h-3 mr-1" /> Add
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )}
 
                     {filteredMonthly.length === 0 ? (
                       <TableRow>
@@ -819,8 +999,12 @@ export default function MarketingReportsPage() {
 
                       {/* Client Name Field */}
                       <TableCell 
-                        className="font-bold text-slate-700 cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'clientName' })}
+                        className={`font-bold text-slate-700 ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'clientName' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'clientName' ? (
                           <Select 
@@ -844,8 +1028,12 @@ export default function MarketingReportsPage() {
 
                       {/* Month Field */}
                       <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'month' })}
+                        className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'month' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'month' ? (
                           <div className="flex justify-center">
@@ -866,8 +1054,12 @@ export default function MarketingReportsPage() {
 
                       {/* Total Spend Field */}
                       <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'totalSpend' })}
+                        className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'totalSpend' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'totalSpend' ? (
                           <Input 
@@ -883,8 +1075,12 @@ export default function MarketingReportsPage() {
 
                       {/* Total Leads Field */}
                       <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'totalLeads' })}
+                        className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'totalLeads' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'totalLeads' ? (
                           <Input 
@@ -900,8 +1096,12 @@ export default function MarketingReportsPage() {
 
                       {/* Total Sales Field */}
                       <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'totalSales' })}
+                        className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'totalSales' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'totalSales' ? (
                           <Input 
@@ -917,8 +1117,12 @@ export default function MarketingReportsPage() {
 
                       {/* Avg CPR Field */}
                       <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'avgCPR' })}
+                        className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'avgCPR' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'avgCPR' ? (
                           <Input 
@@ -934,8 +1138,12 @@ export default function MarketingReportsPage() {
 
                       {/* Avg CPP Field */}
                       <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'avgCPP' })}
+                        className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'avgCPP' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'avgCPP' ? (
                           <Input 
@@ -951,8 +1159,12 @@ export default function MarketingReportsPage() {
 
                       {/* Total Revenue Field */}
                       <TableCell 
-                        className="text-center font-bold text-brand-teal cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'totalRevenue' })}
+                        className={`text-center font-bold text-brand-teal ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'totalRevenue' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'totalRevenue' ? (
                           <Input 
@@ -968,8 +1180,12 @@ export default function MarketingReportsPage() {
 
                       {/* ROAS Field */}
                       <TableCell 
-                        className="text-center cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'overallROAS' })}
+                        className={`text-center ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'overallROAS' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'overallROAS' ? (
                           <Input 
@@ -989,8 +1205,12 @@ export default function MarketingReportsPage() {
 
                       {/* Conclusion Field */}
                       <TableCell 
-                        className="text-sm text-slate-500 italic max-w-[200px] truncate cursor-text hover:bg-slate-50"
-                        onClick={() => setInlineEditing({ id: report.id, field: 'conclusion' })}
+                        className={`text-sm text-slate-500 italic max-w-[200px] truncate ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
+                        onClick={() => {
+                          if (canEditMarketing) {
+                            setInlineEditing({ id: report.id, field: 'conclusion' });
+                          }
+                        }}
                       >
                         {inlineEditing?.id === report.id && inlineEditing?.field === 'conclusion' ? (
                           <Input 
@@ -1014,21 +1234,23 @@ export default function MarketingReportsPage() {
                             <History className="w-4 h-4" />
                           </Button>
 
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                            onClick={() => handleDelete(report.id, "monthly")}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {canDeleteMarketing && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                              onClick={() => handleDelete(report.id, "monthly")}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
                     )))}
                 </>
-              )}
-            </TableBody>
+                )}
+              </TableBody>
             {filteredMonthly.length > 0 && (
               <tfoot className="bg-slate-50 border-t-2">
                 <TableRow>
@@ -1063,10 +1285,24 @@ export default function MarketingReportsPage() {
             <DialogTitle>{editingReport ? "Edit" : "Add"} Daily Marketing Report</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleDailySubmit} className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Date</Label>
                 <Input type="date" value={dailyFormData.date} onChange={e => setDailyFormData({...dailyFormData, date: e.target.value})} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Client Name</Label>
+                <Select 
+                  value={dailyFormData.clientId} 
+                  onValueChange={v => setDailyFormData({...dailyFormData, clientId: v})}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select Client" /></SelectTrigger>
+                  <SelectContent>
+                    {clients.map(client => (
+                      <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Campaign Name</Label>
@@ -1095,6 +1331,16 @@ export default function MarketingReportsPage() {
               <div className="space-y-2">
                 <Label>CPL (₹)</Label>
                 <Input type="number" step="0.01" value={dailyFormData.cpl} onChange={e => setDailyFormData({...dailyFormData, cpl: parseFloat(e.target.value) || 0})} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Followers</Label>
+                <Input type="number" value={dailyFormData.followers} onChange={e => setDailyFormData({...dailyFormData, followers: parseInt(e.target.value) || 0})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Remarks</Label>
+                <Input placeholder="e.g. High impression campaign" value={dailyFormData.remarks || ""} onChange={e => setDailyFormData({...dailyFormData, remarks: e.target.value})} />
               </div>
             </div>
             <DialogFooter>

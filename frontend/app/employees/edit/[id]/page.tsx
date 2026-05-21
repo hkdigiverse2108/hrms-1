@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { EmployeeForm, EmployeeFormData } from '@/components/hrms/employee-form'
 import { API_URL } from '@/lib/config'
 
+import { usePermissions } from '@/hooks/usePermissions'
+
 export default function EditEmployeePage() {
   const router = useRouter()
   const params = useParams()
@@ -16,6 +18,15 @@ export default function EditEmployeePage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [employeeData, setEmployeeData] = useState<Partial<EmployeeFormData> | null>(null)
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('employee-list', 'canEdit')) {
+        router.push('/employees')
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission])
 
   useEffect(() => {
     const fetchEmployee = async () => {
@@ -69,6 +80,14 @@ export default function EditEmployeePage() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
+      </div>
+    )
   }
 
   return (

@@ -25,9 +25,17 @@ import { EmployeeModal } from "@/components/hrms/employee-modal";
 export default function EmployeeListPage() {
   const router = useRouter();
   const { data: apiData } = useApi();
-  const { checkPermission, isAdmin } = usePermissions();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('employee-list', 'canView')) {
+        router.push('/');
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission]);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDept, setFilterDept] = useState("All Departments");
@@ -262,6 +270,14 @@ export default function EmployeeListPage() {
 
 
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -282,7 +298,7 @@ export default function EmployeeListPage() {
             )}
             Export PDF
           </Button>
-          {(isAdmin || checkPermission('add-employee', 'canAdd') || checkPermission('add-employee', 'canView')) && (
+          {(isAdmin || checkPermission('employee-list', 'canAdd')) && (
             <Link href="/employees/add" className="flex-1 sm:flex-none">
               <Button 
                 className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm"
@@ -447,20 +463,24 @@ export default function EmployeeListPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-32">
-                            <DropdownMenuItem 
-                              onClick={() => router.push(`/employees/edit/${emp.id}`)}
-                              className="cursor-pointer"
-                            >
-                              <Pencil className="w-4 h-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => handleDelete(emp.id, emp.name)}
-                              className="cursor-pointer text-brand-danger focus:text-brand-danger"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
+                            {(isAdmin || checkPermission('employee-list', 'canEdit')) && (
+                              <DropdownMenuItem 
+                                onClick={() => router.push(`/employees/edit/${emp.id}`)}
+                                className="cursor-pointer"
+                              >
+                                <Pencil className="w-4 h-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {(isAdmin || checkPermission('employee-list', 'canDelete')) && (
+                              <DropdownMenuItem 
+                                onClick={() => handleDelete(emp.id, emp.name)}
+                                className="cursor-pointer text-brand-danger focus:text-brand-danger"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
                             {(isAdmin || checkPermission('access-control', 'canView')) && emp.role?.toLowerCase() !== 'admin' && (
                               <DropdownMenuItem 
                                 onClick={() => router.push(`/employees/permissions/${emp.id}`)}

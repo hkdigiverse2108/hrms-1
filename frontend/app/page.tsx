@@ -57,13 +57,45 @@ import { RequestPunchOutDialog } from "@/components/dashboard/RequestPunchOutDia
 import { AddEventDialog } from "@/components/dashboard/AddEventDialog";
 import { ViewAllEventsDialog } from "@/components/dashboard/ViewAllEventsDialog";
  
+const formatToHhMm = (totalMinutes: number) => {
+  if (!totalMinutes || totalMinutes <= 0) return "0h 0m";
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h}h ${m}m`;
+};
+
+const formatWorkHours = (workHours: string) => {
+  if (!workHours || workHours === "--" || workHours === "-") return "--";
+  const hMatch = workHours.match(/(\d+)\s*h/i);
+  const mMatch = workHours.match(/(\d+)\s*m/i);
+  if (hMatch || mMatch) {
+    const h = hMatch ? parseInt(hMatch[1]) : 0;
+    const m = mMatch ? parseInt(mMatch[1]) : 0;
+    return `${h}h ${m}m`;
+  }
+  const decMatch = workHours.match(/([\d.]+)\s*h/i);
+  if (decMatch) {
+    const totalMinutes = Math.round(parseFloat(decMatch[1]) * 60);
+    return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+  }
+  const timeParts = workHours.split(':');
+  if (timeParts.length >= 2) {
+    const h = parseInt(timeParts[0]);
+    const m = parseInt(timeParts[1]);
+    if (!isNaN(h) && !isNaN(m)) {
+      return `${h}h ${m}m`;
+    }
+  }
+  return workHours;
+};
+
 export default function DashboardPage() {
   const { user, isLoading, getISTNow, isTimeSynced } = useUserContext();
   const [attendanceStatus, setAttendanceStatus] = useState<{isPunchedIn: boolean, record: any} | null>(null);
   const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
   const [isPunching, setIsPunching] = useState(false);
   const [workTime, setWorkTime] = useState("00:00:00");
-  const [totalBreakTime, setTotalBreakTime] = useState("0m");
+  const [totalBreakTime, setTotalBreakTime] = useState("0h 0m");
   const [currentTime, setCurrentTime] = useState(getISTNow());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
@@ -249,7 +281,9 @@ export default function DashboardPage() {
           if (b.duration) return acc + parseInt(b.duration);
           return acc;
         }, 0);
-        setTotalBreakTime(`${totalMinutes}m`);
+        const bh = Math.floor(totalMinutes / 60);
+        const bm = totalMinutes % 60;
+        setTotalBreakTime(`${bh}h ${bm}m`);
       }
 
       return () => {
@@ -306,9 +340,20 @@ export default function DashboardPage() {
         const myHistory = data
           .filter((a: any) => a.employeeId === user.id)
           .sort((a: any, b: any) => {
-            const dateTimeA = new Date(`${a.date} ${a.checkIn}`).getTime();
-            const dateTimeB = new Date(`${b.date} ${b.checkIn}`).getTime();
-            return dateTimeB - dateTimeA;
+            if (a.date !== b.date) {
+              return b.date.localeCompare(a.date);
+            }
+            const parseTime = (timeStr: string) => {
+              if (!timeStr || timeStr === "--" || timeStr === "--:--") return 0;
+              const parsed = dayjs(`2000-01-01 ${timeStr}`, [
+                'YYYY-MM-DD hh:mm A',
+                'YYYY-MM-DD HH:mm:ss',
+                'YYYY-MM-DD HH:mm',
+                'YYYY-MM-DD h:mm A'
+              ]);
+              return parsed.isValid() ? parsed.valueOf() : 0;
+            };
+            return parseTime(b.checkIn) - parseTime(a.checkIn);
           })
           .slice(0, 5);
         setRecentAttendance(myHistory);
@@ -839,7 +884,7 @@ function EmployeeView({
                 const isToday = record.date === dayjs().format("YYYY-MM-DD");
                 const dateDisplay = isToday ? `Today, ${dayjs(record.date).format("MMM DD")}` : dayjs(record.date).format("ddd, MMM DD");
                 const totalBreak = (record.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
-                const breakStr = totalBreak >= 60 ? `${Math.floor(totalBreak / 60)}h ${totalBreak % 60}m` : `${totalBreak}m`;
+                const breakStr = `${Math.floor(totalBreak / 60)}h ${totalBreak % 60}m`;
  
                 return (
                   <tr key={i} className="hover:bg-muted/50 transition-colors">
@@ -847,14 +892,27 @@ function EmployeeView({
                     <td className="px-6 py-4 text-foreground font-medium">{formatTime12h(record.checkIn)}</td>
                     <td className="px-6 py-4 text-muted-foreground font-medium">{formatTime12h(record.checkOut) || '--'}</td>
                     <td className="px-6 py-4 text-muted-foreground font-medium">{breakStr}</td>
-                    <td className="px-6 py-4 font-semibold text-foreground">{record.workHours || '--'}</td>
+                    <td className="px-6 py-4 font-semibold text-foreground">{formatWorkHours(record.workHours)}</td>
                     <td className="px-6 py-4 text-right">
-                      <span className={`inline-flex px-3 py-1 text-[11px] font-bold rounded-full ${
+                      <span className={`inline-flex px-3 py-1 text-[11px] font-bold rounded-full border ${
                         record.status === 'Active' || record.status === 'On Break' 
-                        ? 'bg-brand-light text-brand-teal' 
-                        : record.isLate ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
+                        ? 'bg-brand-light text-brand-teal border-brand-teal/10' 
+                        : record.status === 'Leave'
+                        ? 'bg-blue-50 text-blue-600 border-blue-100'
+                        : record.status === 'Absent'
+                        ? 'bg-red-50 text-red-600 border-red-100'
+                        : record.isLate ? 'bg-amber-50 text-amber-600 border-amber-100' 
+                        : 'bg-gray-100 text-gray-500 border-gray-200'
                       }`}>
-                        {record.status === 'Active' || record.status === 'On Break' ? 'Active' : (record.isLate ? 'Late Entry' : 'Logged')}
+                        {record.status === 'Active' || record.status === 'On Break' 
+                          ? 'Active' 
+                          : record.status === 'Leave'
+                          ? 'Leave'
+                          : record.status === 'Absent'
+                          ? 'Absent'
+                          : record.isLate 
+                          ? 'Late Entry' 
+                          : 'Logged'}
                       </span>
                     </td>
                   </tr>
