@@ -140,6 +140,20 @@ export default function ChatPage() {
     options: ["", ""], 
     isMultiple: false 
   });
+  const [viewingVotesPoll, setViewingVotesPoll] = useState<any>(null);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [audioPlayer, setAudioPlayer] = useState<HTMLAudioElement | null>(null);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      if (audioPlayer) {
+        audioPlayer.pause();
+      }
+    };
+  }, [audioPlayer]);
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -362,7 +376,7 @@ export default function ChatPage() {
         setCurrentMessages(marked);
         
         // If there are unread messages from others, mark them seen
-        const hasUnread = marked.some(m => !m.isMe && (!m.seenBy || !m.seenBy.includes(user.id)));
+        const hasUnread = marked.some((m: any) => !m.isMe && (!m.seenBy || !m.seenBy.includes(user.id)));
         if (hasUnread) {
           markAsSeen();
         }
@@ -465,12 +479,21 @@ export default function ChatPage() {
     }
   };
 
+  const getFullUploadUrl = (url: string) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      return url;
+    }
+    const cleanUrl = url.startsWith("/") ? url : `/${url}`;
+    return `${API_URL}${cleanUrl}`;
+  };
+
   const handleDownload = async (url: string, filename: string) => {
     if (!url || url === "#") {
       alert(`This attachment is not available for download (URL: ${url}). Please send a NEW file to test.`);
       return;
     }
-    const fullUrl = url.startsWith('http') ? url : `${API_URL}${url}`;
+    const fullUrl = getFullUploadUrl(url);
     
     try {
       const response = await fetch(fullUrl);
@@ -831,6 +854,65 @@ export default function ChatPage() {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       clearInterval(recordingTimerRef.current);
+    }
+  };
+
+  const handleToggleAudio = async (msgId: string, attachmentUrl: string) => {
+    if (playingAudioId === msgId) {
+      if (audioPlayer) {
+        audioPlayer.pause();
+      }
+      setPlayingAudioId(null);
+    } else {
+      if (audioPlayer) {
+        audioPlayer.pause();
+      }
+      try {
+        const fullUrl = getFullUploadUrl(attachmentUrl);
+        const newAudio = new Audio(fullUrl);
+        newAudio.onended = () => {
+          setPlayingAudioId(null);
+          setAudioProgress(0);
+          setAudioCurrentTime(0);
+        };
+        newAudio.onpause = () => {
+          setPlayingAudioId(null);
+        };
+        newAudio.onloadedmetadata = () => {
+          setAudioDuration(newAudio.duration);
+        };
+        newAudio.ontimeupdate = () => {
+          if (newAudio.duration) {
+            setAudioProgress((newAudio.currentTime / newAudio.duration) * 100);
+            setAudioCurrentTime(newAudio.currentTime);
+          }
+        };
+        setAudioPlayer(newAudio);
+        setPlayingAudioId(msgId);
+        setAudioProgress(0);
+        setAudioCurrentTime(0);
+        await newAudio.play();
+      } catch (err) {
+        console.error("Audio playback failed:", err);
+        alert("Could not play voice message. The file might be missing or unsupported.");
+        setPlayingAudioId(null);
+      }
+    }
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>, msgId: string) => {
+    e.stopPropagation(); // Prevent the parent card click from pausing the audio
+    if (playingAudioId !== msgId || !audioPlayer) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const width = rect.width;
+    const percentage = Math.max(0, Math.min(1, clickX / width));
+    
+    if (audioPlayer.duration && !isNaN(audioPlayer.duration)) {
+      audioPlayer.currentTime = percentage * audioPlayer.duration;
+      setAudioProgress(percentage * 100);
+      setAudioCurrentTime(percentage * audioPlayer.duration);
     }
   };
 
@@ -1572,27 +1654,37 @@ export default function ChatPage() {
                     {messageSearchQuery ? "No messages matching your search." : `No messages yet. Say hi to ${selectedChat.name}!`}
                   </p>
                 </div>
-              ) : displayMessages.map((msg) => (
-                <div 
-                  key={msg.id}
-                  id={`msg-${msg.id}`}
-                  className={cn(
-                    "flex items-start gap-3 group",
-                    msg.isMe ? "flex-row-reverse" : "flex-row"
-                  )}
-                >
-                  {!msg.isMe && (
-                    <Avatar className="w-9 h-9 border border-border shrink-0 mt-1">
-                      {selectedChat.avatar && <AvatarImage src={selectedChat.avatar} />}
-                      <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
-                        {selectedChat.name[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
-                  <div className={cn(
-                    "flex flex-col gap-1.5 max-w-[70%]",
-                    msg.isMe ? "items-end" : "items-start"
-                  )}>
+              ) : displayMessages.map((msg) => {
+                const messageSender = employees.find(e => e.id === msg.senderId) || (msg.isMe ? user : null);
+                const isGroupChat = selectedChat?.type === 'group' || selectedChat?.type === 'general';
+                return (
+                  <div 
+                    key={msg.id}
+                    id={`msg-${msg.id}`}
+                    className={cn(
+                      "flex items-start gap-3 group",
+                      msg.isMe ? "flex-row-reverse" : "flex-row"
+                    )}
+                  >
+                    {!msg.isMe && (
+                      <Avatar className="w-9 h-9 border border-border shrink-0 mt-1">
+                        {(messageSender?.profilePhoto || messageSender?.avatar) && (
+                          <AvatarImage src={messageSender.profilePhoto || messageSender.avatar} />
+                        )}
+                        <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
+                          {messageSender?.name ? messageSender.name[0] : (selectedChat.name ? selectedChat.name[0] : "?")}
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
+                    <div className={cn(
+                      "flex flex-col gap-1.5 max-w-[70%]",
+                      msg.isMe ? "items-end" : "items-start"
+                    )}>
+                      {isGroupChat && !msg.isMe && messageSender && (
+                        <span className="text-[10px] font-bold text-brand-teal mb-0.5 ml-1">
+                          {messageSender.name}
+                        </span>
+                      )}
                     {editingMessageId === msg.id ? (
                       <div className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-brand-teal shadow-sm min-w-[200px]">
                         <Input 
@@ -1609,28 +1701,31 @@ export default function ChatPage() {
                     ) : (
                       <div className="relative group/msg">
                         <div className={cn(
-                          "px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm",
+                          "rounded-2xl text-[13px] leading-relaxed shadow-sm transition-all",
+                          msg.poll ? "p-4 w-full md:min-w-[280px]" : "px-4 py-2.5",
                           msg.isMe 
-                            ? "bg-brand-teal text-white rounded-tr-none" 
+                            ? (msg.poll 
+                                ? "bg-[#E6F5F2] text-slate-800 border border-brand-teal/20 rounded-tr-none" 
+                                : "bg-brand-teal text-white rounded-tr-none")
                             : "bg-white border border-border text-slate-700 rounded-tl-none"
                         )}>
                           <div className="flex items-center justify-between gap-4 mb-1">
                             <div className="flex items-center gap-2">
-                              {msg.isPinned && <Pin className={cn("w-3 h-3 fill-current", msg.isMe ? "text-white" : "text-brand-teal")} />}
-                              {msg.savedBy?.includes(user?.id) && <Bookmark className={cn("w-3 h-3 fill-current", msg.isMe ? "text-white" : "text-brand-teal")} />}
+                              {msg.isPinned && <Pin className={cn("w-3 h-3 fill-current", (msg.isMe && !msg.poll) ? "text-white" : "text-brand-teal")} />}
+                              {msg.savedBy?.includes(user?.id) && <Bookmark className={cn("w-3 h-3 fill-current", (msg.isMe && !msg.poll) ? "text-white" : "text-brand-teal")} />}
                             </div>
                             {msg.forwardedFrom && (
                               <>
                                 <div className={cn(
                                   "flex items-center gap-1.5 py-0.5 px-2 rounded-md w-fit text-[10px] font-bold uppercase tracking-wider",
-                                  msg.isMe ? "bg-white/20 text-white" : "bg-brand-teal/10 text-brand-teal"
+                                  (msg.isMe && !msg.poll) ? "bg-white/20 text-white" : "bg-brand-teal/10 text-brand-teal"
                                 )}>
                                   <Forward className="w-3 h-3" />
                                   Forwarded
                                 </div>
                                 <div className={cn(
                                   "border-l-2 pl-3 py-0.5 text-xs italic opacity-90",
-                                  msg.isMe ? "border-white/40" : "border-brand-teal/40"
+                                  (msg.isMe && !msg.poll) ? "border-white/40" : "border-brand-teal/40"
                                 )}>
                                   {msg.text}
                                 </div>
@@ -1642,7 +1737,7 @@ export default function ChatPage() {
                               {msg.replyToText && (
                                 <div className={cn(
                                   "mb-2 p-2 rounded-lg border-l-4 text-[11px] bg-black/5",
-                                  msg.isMe ? "border-white/50 text-white/90" : "border-brand-teal text-muted-foreground"
+                                  (msg.isMe && !msg.poll) ? "border-white/50 text-white/90" : "border-brand-teal text-muted-foreground"
                                 )}>
                                   <div className="font-bold opacity-70 mb-0.5">
                                     {msg.isMe ? "Replying to" : selectedChat.name}
@@ -1677,80 +1772,163 @@ export default function ChatPage() {
                               )}
 
                               {msg.isVoice && (
-                                <div className={cn(
-                                  "flex items-center gap-3 p-2 rounded-xl mb-2 min-w-[200px]",
-                                  msg.isMe ? "bg-white/10" : "bg-gray-50"
-                                )}>
+                                <div 
+                                  className={cn(
+                                    "flex items-center gap-3 p-2 rounded-xl mb-2 min-w-[200px] cursor-pointer hover:opacity-90 transition-opacity",
+                                    msg.isMe ? "bg-white/10" : "bg-gray-50"
+                                  )}
+                                  onClick={() => handleToggleAudio(msg.id, msg.attachmentUrl)}
+                                >
                                   <Button 
                                     size="icon" 
                                     variant="ghost" 
                                     className={cn("h-9 w-9 rounded-full shrink-0", msg.isMe ? "text-white hover:bg-white/20" : "text-brand-teal hover:bg-brand-teal/10")}
-                                    onClick={async () => {
-                                      try {
-                                        const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
-                                        const audio = new Audio(fullUrl);
-                                        await audio.play();
-                                      } catch (err) {
-                                        console.error("Audio playback failed:", err);
-                                        alert("Could not play voice message. The file might be missing or unsupported.");
-                                      }
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleAudio(msg.id, msg.attachmentUrl);
                                     }}
                                   >
-                                    <Play className="w-5 h-5 fill-current" />
+                                    {playingAudioId === msg.id ? (
+                                      <Pause className="w-5 h-5 fill-current" />
+                                    ) : (
+                                      <Play className="w-5 h-5 fill-current" />
+                                    )}
                                   </Button>
                                   <div className="flex-1 space-y-1">
-                                    <div className="h-1 bg-current opacity-20 rounded-full w-full" />
+                                    {/* Interactive Progress Bar Track */}
+                                    <div 
+                                      className={cn(
+                                        "h-1.5 rounded-full w-full relative overflow-hidden bg-current/25",
+                                        playingAudioId === msg.id ? "cursor-pointer" : "cursor-default"
+                                      )}
+                                      onClick={(e) => handleProgressClick(e, msg.id)}
+                                    >
+                                      <div 
+                                        className="h-full bg-current absolute left-0 top-0 rounded-full transition-all duration-100" 
+                                        style={{ width: `${playingAudioId === msg.id ? audioProgress : 0}%` }}
+                                      />
+                                    </div>
                                     <div className="flex justify-between text-[9px] opacity-70 font-bold uppercase">
-                                      <span>{msg.voiceDuration ? `${Math.floor(msg.voiceDuration / 60)}:${String(Math.floor(msg.voiceDuration % 60)).padStart(2, '0')}` : "0:00"}</span>
+                                      <span>
+                                        {playingAudioId === msg.id 
+                                          ? `${Math.floor(audioCurrentTime / 60)}:${String(Math.floor(audioCurrentTime % 60)).padStart(2, '0')}`
+                                          : (msg.voiceDuration 
+                                              ? `${Math.floor(msg.voiceDuration / 60)}:${String(Math.floor(msg.voiceDuration % 60)).padStart(2, '0')}` 
+                                              : "0:00"
+                                            )
+                                        }
+                                      </span>
                                       <span>Voice Note</span>
                                     </div>
                                   </div>
                                 </div>
                               )}
 
-                              {msg.poll && (
-                                <div className={cn(
-                                  "p-4 rounded-xl border mb-2 min-w-[240px]",
-                                  msg.isMe ? "bg-white/10 border-white/20" : "bg-white border-border"
-                                )}>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <BarChart2 className="w-4 h-4" />
-                                    <h4 className="font-bold text-[14px]">{msg.poll.question}</h4>
-                                  </div>
-                                  <div className="space-y-2">
-                                    {msg.poll.options.map((option: any) => {
-                                      const totalVotes = msg.poll.options.reduce((acc: number, opt: any) => acc + opt.votes.length, 0);
-                                      const percentage = totalVotes > 0 ? (option.votes.length / totalVotes) * 100 : 0;
-                                      const hasVoted = option.votes.includes(user?.id);
+                              {msg.poll && (() => {
+                                const totalVotes = msg.poll.options.reduce((acc: number, opt: any) => acc + opt.votes.length, 0);
+                                const hasVotedAnyOption = msg.poll.options.some((opt: any) => opt.votes.includes(user?.id));
+                                const showResults = msg.isMe || hasVotedAnyOption;
 
-                                      return (
-                                        <button 
-                                          key={option.id}
-                                          onClick={() => handleVote(msg.id, option.id)}
-                                          className="w-full text-left group/opt relative overflow-hidden rounded-lg border border-border p-2.5 transition-all hover:border-brand-teal/50"
-                                        >
-                                          <div 
-                                            className="absolute left-0 top-0 bottom-0 bg-brand-teal/10 transition-all duration-500" 
-                                            style={{ width: `${percentage}%` }}
-                                          />
-                                          <div className="relative flex items-center justify-between gap-3">
-                                            <div className="flex items-center gap-2">
-                                              {hasVoted && <Check className="w-3.5 h-3.5 text-brand-teal" />}
-                                              <span className="text-[12px] font-medium">{option.text}</span>
+                                return (
+                                  <div className="w-full min-w-[260px] text-slate-800 space-y-3">
+                                    <div className="flex items-start gap-2">
+                                      <BarChart2 className="w-4 h-4 text-brand-teal shrink-0 mt-0.5" />
+                                      <h4 className="font-bold text-[14px] text-slate-800 leading-tight">
+                                        {msg.poll.question}
+                                      </h4>
+                                    </div>
+                                    
+                                    <div className="space-y-3">
+                                      {msg.poll.options.map((option: any) => {
+                                        const percentage = totalVotes > 0 ? (option.votes.length / totalVotes) * 100 : 0;
+                                        const hasVoted = option.votes.includes(user?.id);
+
+                                        return (
+                                          <button 
+                                            key={option.id}
+                                            onClick={() => handleVote(msg.id, option.id)}
+                                            className="w-full text-left flex items-start gap-3 py-1.5 px-1 hover:bg-black/5 rounded-lg transition-all active:scale-[0.99] group/opt"
+                                          >
+                                            {/* Circle Indicator on the Left */}
+                                            <div className="mt-0.5 shrink-0">
+                                              {hasVoted ? (
+                                                <div className="w-5 h-5 rounded-full bg-brand-teal flex items-center justify-center text-white shadow-sm">
+                                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                                </div>
+                                              ) : (
+                                                <div className="w-5 h-5 rounded-full border-2 border-slate-300 bg-white group-hover/opt:border-brand-teal/50" />
+                                              )}
                                             </div>
-                                            <span className="text-[10px] font-bold text-muted-foreground">{option.votes.length}</span>
-                                          </div>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                  <p className="mt-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
-                                    {msg.poll.options.reduce((acc: number, opt: any) => acc + opt.votes.length, 0)} votes total
-                                  </p>
-                                </div>
-                              )}
 
-                              {renderMessageText(msg.text)}
+                                            {/* Text, Progress Bar, and Avatars */}
+                                            <div className="flex-1 min-w-0 space-y-1.5">
+                                              <div className="flex items-center justify-between gap-3">
+                                                <span className={cn(
+                                                  "text-[13px] break-words flex-1",
+                                                  hasVoted ? "font-bold text-brand-teal" : "font-medium text-slate-700"
+                                                )}>
+                                                  {option.text}
+                                                </span>
+                                                
+                                                {/* Overlapping Avatars & Vote Count */}
+                                                {showResults && option.votes.length > 0 && (
+                                                  <div className="flex items-center gap-1.5 shrink-0">
+                                                    <div className="flex -space-x-1.5 overflow-hidden">
+                                                      {option.votes.slice(0, 3).map((voterId: string) => {
+                                                        const voter = employees.find((e: any) => e.id === voterId) || (voterId === user?.id ? user : null);
+                                                        return (
+                                                          <Avatar key={voterId} className="w-4 h-4 border border-white shrink-0 shadow-sm">
+                                                            <AvatarImage src={voter?.profilePhoto || voter?.avatar} />
+                                                            <AvatarFallback className="text-[7px] bg-brand-teal/10 text-brand-teal font-semibold">
+                                                              {voter?.name?.[0] || "?"}
+                                                            </AvatarFallback>
+                                                          </Avatar>
+                                                        );
+                                                      })}
+                                                    </div>
+                                                    <span className="text-[11px] font-bold text-slate-500 tabular-nums">
+                                                      {option.votes.length}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              </div>
+
+                                              {/* Underneath Horizontal Progress Bar */}
+                                              {showResults && (
+                                                <div className="w-full bg-brand-teal/10 rounded-full h-[6px] overflow-hidden">
+                                                  <div 
+                                                    className="bg-brand-teal h-full rounded-full transition-all duration-500"
+                                                    style={{ width: `${percentage}%` }}
+                                                  />
+                                                </div>
+                                              )}
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+
+                                    {/* Bottom Action / Metadata Area */}
+                                    <div className="border-t border-slate-200/60 pt-3 flex items-center justify-between">
+                                      <button 
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setViewingVotesPoll(msg.poll);
+                                        }}
+                                        className="text-[12px] font-bold text-brand-teal hover:text-brand-teal/80 hover:underline transition-all"
+                                      >
+                                        View votes
+                                      </button>
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                        {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                              {!msg.poll && renderMessageText(msg.text)}
                             </>
                           )}
                           {msg.isEdited && <span className="ml-2 text-[8px] opacity-60 italic">(edited)</span>}
@@ -1874,7 +2052,8 @@ export default function ChatPage() {
                     </span>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
 
             {/* Chat Input */}
@@ -2090,6 +2269,70 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+
+      {/* View Poll Votes Dialog */}
+      <Dialog open={!!viewingVotesPoll} onOpenChange={(open) => !open && setViewingVotesPoll(null)}>
+        <DialogContent className="sm:max-w-[480px] rounded-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <BarChart2 className="w-5 h-5 text-brand-teal" />
+              Poll Results
+            </DialogTitle>
+            <DialogDescription className="text-sm font-semibold text-slate-500 mt-1">
+              {viewingVotesPoll?.question}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4 max-h-[350px] overflow-y-auto space-y-4 pr-1">
+            {viewingVotesPoll?.options.map((option: any) => {
+              const voters = option.votes || [];
+              return (
+                <div key={option.id} className="border border-slate-100 rounded-xl p-3 bg-slate-50/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-bold text-slate-700">{option.text}</span>
+                    <span className="text-[11px] font-extrabold text-brand-teal bg-brand-teal/10 px-2 py-0.5 rounded-full">
+                      {voters.length} {voters.length === 1 ? "vote" : "votes"}
+                    </span>
+                  </div>
+
+                  {voters.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-2 pt-1">
+                      {voters.map((voterId: string) => {
+                        const voter = employees.find((e: any) => e.id === voterId) || (voterId === user?.id ? user : null);
+                        return (
+                          <div key={voterId} className="flex items-center gap-2.5 p-1.5 rounded-lg bg-white border border-slate-100 shadow-sm">
+                            <Avatar className="w-7 h-7 border border-border">
+                              <AvatarImage src={voter?.profilePhoto || voter?.avatar} />
+                              <AvatarFallback className="bg-brand-teal/10 text-brand-teal text-[10px] font-bold">
+                                {voter?.name?.[0] || "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[12px] font-bold text-slate-800 truncate">{voter?.name}</span>
+                              <span className="text-[10px] text-slate-400 truncate">{voter?.role || voter?.department || "Team Member"}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic pl-1">No votes for this option yet</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button 
+              onClick={() => setViewingVotesPoll(null)}
+              className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold rounded-xl"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!forwardingMessage} onOpenChange={(open) => !open && setForwardingMessage(null)}>
         <DialogContent className="sm:max-w-[425px]">

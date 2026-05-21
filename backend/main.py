@@ -6,9 +6,17 @@ import crud, schemas, database
 import uvicorn
 import os
 import uuid
+import mimetypes
 from bson import ObjectId
 from database import get_db
 
+# Explicitly register media MIME types for Windows environments
+mimetypes.add_type("audio/webm", ".webm")
+mimetypes.add_type("audio/ogg", ".ogg")
+mimetypes.add_type("audio/wav", ".wav")
+mimetypes.add_type("audio/mpeg", ".mp3")
+mimetypes.add_type("audio/mp4", ".m4a")
+mimetypes.add_type("video/webm", ".webm")
 
 app = FastAPI(title="HRMS API")
 
