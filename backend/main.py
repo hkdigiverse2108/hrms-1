@@ -459,7 +459,19 @@ async def create_remark(remark: schemas.RemarkCreate, db=Depends(get_db)): retur
 @app.put("/remarks/{remark_id}", response_model=schemas.Remark)
 async def update_remark(remark_id: str, update: schemas.RemarkUpdate, db=Depends(get_db)): return await crud.update_remark(db, remark_id, update)
 @app.delete("/remarks/{remark_id}")
-async def delete_remark(remark_id: str, db=Depends(get_db)): return await crud.delete_remark(db, remark_id)
+async def delete_remark(remark_id: str, db=Depends(get_db)):
+    await crud.delete_remark(db, remark_id)
+    return {"message": "Remark soft-deleted successfully"}
+
+@app.post("/remarks/{remark_id}/restore")
+async def restore_remark(remark_id: str, db=Depends(get_db)):
+    await crud.restore_remark(db, remark_id)
+    return {"message": "Remark restored successfully"}
+
+@app.delete("/remarks/{remark_id}/permanent")
+async def permanently_delete_remark(remark_id: str, db=Depends(get_db)):
+    await crud.permanently_delete_remark(db, remark_id)
+    return {"message": "Remark permanently deleted"}
 
 # Penalty Type Endpoints
 @app.get("/penalty-types", response_model=List[schemas.PenaltyType])

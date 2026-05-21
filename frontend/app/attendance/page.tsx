@@ -501,12 +501,8 @@ export default function AttendancePage() {
  
   const CalendarWidget = () => {
     const istNow = dayjs(getISTNow());
-    const startOfMonth = istNow.startOf('month');
     const daysInMonth = istNow.daysInMonth();
-    const startDayOfWeek = startOfMonth.day(); // Sunday = 0, Monday = 1, etc.
-    
-    const prefixDays = Array.from({ length: startDayOfWeek });
-    const monthDays = Array.from({ length: daysInMonth });
+    const firstDayOfMonth = istNow.startOf('month').day();
 
     return (
       <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
@@ -520,26 +516,40 @@ export default function AttendancePage() {
           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
             <div key={i} className="text-muted-foreground font-semibold text-xs py-2">{day}</div>
           ))}
-          {prefixDays.map((_, i) => (
-            <div key={`empty-${i}`} className="py-2" />
-          ))}
-          {monthDays.map((_, i) => {
-            const dayNum = i + 1;
-            const isToday = dayNum === istNow.date();
-            const hasRecord = attendance.some(a => dayjs(a.date).date() === dayNum && dayjs(a.date).month() === istNow.month());
+          {(() => {
+            const days = [];
             
-            return (
-              <div 
-                key={`day-${dayNum}`} 
-                className={`py-2 rounded-md m-0.5 text-xs ${
-                  isToday ? 'bg-brand-teal text-white font-bold shadow-sm' : 
-                  hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium' : 'text-foreground bg-gray-50'
-                }`}
-              >
-                {dayNum}
-              </div>
-            );
-          })}
+            // Prepend empty slots for weekday alignment
+            for (let i = 0; i < firstDayOfMonth; i++) {
+              days.push(
+                <div key={`empty-${i}`} className="py-2 rounded-md m-0.5 text-xs"></div>
+              );
+            }
+            
+            // Render days of the month
+            for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+              const isToday = dayNum === istNow.date();
+              const hasRecord = attendance.some(a => {
+                const recordDate = dayjs(a.date);
+                return recordDate.date() === dayNum && 
+                       recordDate.month() === istNow.month() && 
+                       recordDate.year() === istNow.year();
+              });
+              
+              days.push(
+                <div 
+                  key={dayNum} 
+                  className={`py-2 rounded-md m-0.5 text-xs ${
+                    isToday ? 'bg-brand-teal text-white font-bold shadow-sm' : 
+                    hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium' : 'text-foreground bg-gray-50'
+                  }`}
+                >
+                  {dayNum}
+                </div>
+              );
+            }
+            return days;
+          })()}
         </div>
       </div>
     );

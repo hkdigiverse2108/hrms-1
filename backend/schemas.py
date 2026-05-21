@@ -659,6 +659,7 @@ class RemarkBase(BaseModel):
     details: str
     addedBy: str
     date: Optional[RobustDateDMY] = None
+    isDeleted: Optional[bool] = False
 
 class RemarkCreate(RemarkBase):
     pass
@@ -666,6 +667,7 @@ class RemarkCreate(RemarkBase):
 class RemarkUpdate(BaseModel):
     type: Optional[str] = None
     details: Optional[str] = None
+    isDeleted: Optional[bool] = None
 
 class Remark(RemarkBase):
     id: str
@@ -1192,6 +1194,7 @@ class EmployeeDailyReportBase(BaseModel):
     nextDayPlan: Optional[str] = None
     hoursWorked: float = 8.0
     status: str = "Submitted" # Submitted, Reviewed
+    note: Optional[str] = None
 
 class EmployeeDailyReportCreate(EmployeeDailyReportBase):
     pass
@@ -1203,6 +1206,9 @@ class EmployeeDailyReportUpdate(BaseModel):
     nextDayPlan: Optional[str] = None
     hoursWorked: Optional[float] = None
     status: Optional[str] = None
+    note: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class EmployeeDailyReport(EmployeeDailyReportBase):
     id: str

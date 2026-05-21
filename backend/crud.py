@@ -217,7 +217,7 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
     penalty_names = [p["name"] for p in penalty_types]
     
     # 3. Get remarks
-    remark_query = {}
+    remark_query = {"isDeleted": {"$nin": [True, "true", "True"]}}
     if month and year:
         try:
             month_num = list(calendar.month_name).index(month)
@@ -519,7 +519,8 @@ async def run_payroll_processing(db, month: str, year: int):
         
         remark_query = {
             "employeeId": emp_id,
-            "date": {"$gte": rem_start_dt, "$lte": rem_end_dt}
+            "date": {"$gte": rem_start_dt, "$lte": rem_end_dt},
+            "isDeleted": {"$nin": [True, "true", "True"]}
         }
         remarks_cursor = db.remarks.find(remark_query)
         emp_remarks = await remarks_cursor.to_list(length=100)
@@ -847,7 +848,16 @@ async def create_remark(db, remark: schemas.RemarkCreate):
         remark_dict["date"] = get_now().strftime("%d-%m-%Y")
     return await create_item(db, "remarks", remark_dict)
 async def update_remark(db, remark_id: str, update: schemas.RemarkUpdate): return await update_item(db, "remarks", remark_id, update.dict(exclude_unset=True))
-async def delete_remark(db, remark_id: str): return await delete_item(db, "remarks", remark_id)
+async def delete_remark(db, remark_id: str):
+    await db.remarks.update_one({"_id": ObjectId(remark_id)}, {"$set": {"isDeleted": True}})
+    return True
+
+async def restore_remark(db, remark_id: str):
+    await db.remarks.update_one({"_id": ObjectId(remark_id)}, {"$set": {"isDeleted": False}})
+    return True
+
+async def permanently_delete_remark(db, remark_id: str):
+    return await delete_item(db, "remarks", remark_id)
 
 async def get_events(db, skip: int = 0, limit: int = 100): return await get_items(db, "events", skip, limit)
 async def create_event(db, event: schemas.EventCreate): return await create_item(db, "events", event.dict())
@@ -2581,7 +2591,7 @@ async def create_employee_daily_report(db, report: schemas.EmployeeDailyReportCr
     result = await db.employee_daily_reports.insert_one(report_dict)
     report_dict["id"] = str(result.inserted_id)
     # Log activity
-    await log_task_activity(db, None, "Daily Report Submitted", report_dict["employeeId"], report_dict["employeeName"], f"Submitted daily report for {report_dict['date']}")
+    await log_activity(db, "Daily Report Submitted", report_dict["employeeId"], report_dict["employeeName"], f"Submitted daily report for {report_dict['date']}", dailyReportId=report_dict["id"])
     
     if report_dict.get("status") == "Rejected":
         await apply_work_rejection_penalty(db, report_dict["employeeId"], report_dict["date"])
@@ -2780,6 +2790,9 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
 
 async def update_employee_daily_report(db, report_id: str, report_update: schemas.EmployeeDailyReportUpdate):
     update_data = report_update.dict(exclude_unset=True)
+    performedBy = update_data.pop("performedBy", "Unknown")
+    userName = update_data.pop("userName", "Unknown User")
+    
     if not update_data:
         return fix_id(await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)}))
     
@@ -2791,6 +2804,23 @@ async def update_employee_daily_report(db, report_id: str, report_update: schema
     # Apply penalty if status changed to Rejected
     if update_data.get("status") == "Rejected" and existing and existing.get("status") != "Rejected":
         await apply_work_rejection_penalty(db, existing["employeeId"], existing["date"])
+        
+    # Log activity
+    log_details = []
+    if "status" in update_data and existing.get("status") != update_data["status"]:
+        log_details.append(f"Status changed from '{existing.get('status')}' to '{update_data['status']}'")
+    if "note" in update_data and existing.get("note") != update_data["note"]:
+        log_details.append(f"Note updated to '{update_data['note']}'")
+        
+    if log_details and existing:
+        await log_activity(
+            db, 
+            "Daily Report Updated", 
+            performedBy, 
+            userName, 
+            f"Daily report for {existing.get('employeeName')} on {existing.get('date')}: " + ", ".join(log_details), 
+            dailyReportId=report_id
+        )
         
     doc = await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)})
     return fix_id(doc)

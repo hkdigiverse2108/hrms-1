@@ -25,10 +25,10 @@ import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const STAGES = [
-  { id: "todo", label: "To Do", color: "text-slate-700 bg-transparent" },
-  { id: "in-progress", label: "In Progress", color: "text-blue-700 bg-transparent" },
-  { id: "review", label: "Review", color: "text-amber-700 bg-transparent" },
-  { id: "completed", label: "Completed", color: "text-green-700 bg-transparent" },
+  { id: "todo", label: "To Do", color: "text-slate-700 bg-transparent", lineColor: "bg-slate-400" },
+  { id: "in-progress", label: "In Progress", color: "text-blue-700 bg-transparent", lineColor: "bg-blue-500" },
+  { id: "review", label: "Review", color: "text-amber-700 bg-transparent", lineColor: "bg-amber-500" },
+  { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
 
 export default function TasksPage() {
@@ -628,10 +628,13 @@ export default function TasksPage() {
                                       }
                                     }}
                                   >
-                                    <div className={`p-4 rounded-xl transition-all cursor-pointer border ${
+                                    <div className={`p-4 rounded-xl transition-all cursor-pointer border relative overflow-hidden ${
                                       snapshot.isDragging ? "opacity-90 scale-[1.02] shadow-xl border-brand-teal ring-4 ring-brand-teal/5" : 
                                       "bg-white hover:border-brand-teal/30 border-slate-200 shadow-sm hover:shadow-md"
                                     } ${isOverdue(task.dueDate, task.status) ? "border-red-200 bg-red-50/20" : ""}`}>
+                                      
+                                      {/* Selection Indicator */}
+                                      <div className={`absolute top-0 left-0 w-1 h-full transition-all ${stage.lineColor}`} />
                                       
                                       <div className="flex items-start justify-between gap-3 mb-3">
                                         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
