@@ -45,6 +45,24 @@ const PENALTIES_FALLBACK = [
   { name: "Late Punch-in", amount: 50 },
 ];
 
+const parseRemarkDate = (dateStr: string): Date | null => {
+  if (!dateStr) return null;
+  // Match "DD-MM-YYYY" or "DD/MM/YYYY"
+  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(dateStr)) {
+    const parts = dateStr.split(/[-/]/);
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; // 0-indexed month
+    const year = parseInt(parts[2], 10);
+    return new Date(year, month, day);
+  }
+  
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d;
+  }
+  return null;
+};
+
 
 
 export default function RemarksPage() {
@@ -281,20 +299,28 @@ export default function RemarksPage() {
     const matchesType = typeFilter === "All" || r.type === typeFilter;
     const matchesEmployee = employeeFilter === "All" || r.employeeId === employeeFilter || r.employeeName === employeeFilter;
     
-    // Simple date filtering logic
+    // Robust date filtering logic
     let matchesDate = true;
-    if (dateFilter === "Today") {
-       const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-       matchesDate = r.date === today;
-    } else if (dateFilter === "This Month") {
-       const currentMonth = new Date().toLocaleString('default', { month: 'short' });
-       matchesDate = r.date?.includes(currentMonth);
-    } else if (dateFilter === "Specific Date" && specificDate) {
-       // Convert input date (YYYY-MM-DD) to the format stored in remarks (e.g. "May 13, 2026")
-       const d = new Date(specificDate);
-       // Handle timezone offset to ensure it doesn't jump a day back
-       const customDate = new Date(d.getTime() + Math.abs(d.getTimezoneOffset() * 60000)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-       matchesDate = r.date === customDate;
+    if (dateFilter !== "All Time") {
+      const rDateObj = parseRemarkDate(r.date);
+      if (rDateObj) {
+        const today = new Date();
+        if (dateFilter === "Today") {
+           matchesDate = rDateObj.getDate() === today.getDate() &&
+                         rDateObj.getMonth() === today.getMonth() &&
+                         rDateObj.getFullYear() === today.getFullYear();
+        } else if (dateFilter === "This Month") {
+           matchesDate = rDateObj.getMonth() === today.getMonth() &&
+                         rDateObj.getFullYear() === today.getFullYear();
+        } else if (dateFilter === "Specific Date" && specificDate) {
+           const filterDate = new Date(specificDate);
+           matchesDate = rDateObj.getDate() === filterDate.getDate() &&
+                         rDateObj.getMonth() === filterDate.getMonth() &&
+                         rDateObj.getFullYear() === filterDate.getFullYear();
+        }
+      } else {
+        matchesDate = false;
+      }
     }
     
     return matchesSearch && matchesType && matchesDate && matchesEmployee;
@@ -672,7 +698,9 @@ export default function RemarksPage() {
                 paginatedRemarks.map((remark) => (
                   <tr key={remark.id} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="px-6 py-4 font-semibold text-slate-500">
-                      {remark.date}
+                      {remark.date && parseRemarkDate(remark.date) 
+                        ? parseRemarkDate(remark.date)!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : remark.date}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
