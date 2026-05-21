@@ -2591,7 +2591,7 @@ async def create_employee_daily_report(db, report: schemas.EmployeeDailyReportCr
     result = await db.employee_daily_reports.insert_one(report_dict)
     report_dict["id"] = str(result.inserted_id)
     # Log activity
-    await log_task_activity(db, None, "Daily Report Submitted", report_dict["employeeId"], report_dict["employeeName"], f"Submitted daily report for {report_dict['date']}")
+    await log_activity(db, "Daily Report Submitted", report_dict["employeeId"], report_dict["employeeName"], f"Submitted daily report for {report_dict['date']}", dailyReportId=report_dict["id"])
     
     if report_dict.get("status") == "Rejected":
         await apply_work_rejection_penalty(db, report_dict["employeeId"], report_dict["date"])
@@ -2790,6 +2790,9 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
 
 async def update_employee_daily_report(db, report_id: str, report_update: schemas.EmployeeDailyReportUpdate):
     update_data = report_update.dict(exclude_unset=True)
+    performedBy = update_data.pop("performedBy", "Unknown")
+    userName = update_data.pop("userName", "Unknown User")
+    
     if not update_data:
         return fix_id(await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)}))
     
@@ -2801,6 +2804,23 @@ async def update_employee_daily_report(db, report_id: str, report_update: schema
     # Apply penalty if status changed to Rejected
     if update_data.get("status") == "Rejected" and existing and existing.get("status") != "Rejected":
         await apply_work_rejection_penalty(db, existing["employeeId"], existing["date"])
+        
+    # Log activity
+    log_details = []
+    if "status" in update_data and existing.get("status") != update_data["status"]:
+        log_details.append(f"Status changed from '{existing.get('status')}' to '{update_data['status']}'")
+    if "note" in update_data and existing.get("note") != update_data["note"]:
+        log_details.append(f"Note updated to '{update_data['note']}'")
+        
+    if log_details and existing:
+        await log_activity(
+            db, 
+            "Daily Report Updated", 
+            performedBy, 
+            userName, 
+            f"Daily report for {existing.get('employeeName')} on {existing.get('date')}: " + ", ".join(log_details), 
+            dailyReportId=report_id
+        )
         
     doc = await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)})
     return fix_id(doc)

@@ -13,7 +13,7 @@ import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { usePermissions } from '@/hooks/usePermissions'
-import { Loader2, MessageSquare } from 'lucide-react'
+import { Loader2, MessageSquare, History } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { ActivityLogDialog } from '@/components/common/ActivityLogDialog'
 
 export default function DailyProgressPage() {
   const { data, refresh } = useApi()
@@ -46,6 +47,10 @@ export default function DailyProgressPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [noteRecord, setNoteRecord] = useState<any>(null)
   const [noteText, setNoteText] = useState('')
+  const [logsOpen, setLogsOpen] = useState(false)
+  const [reportLogs, setReportLogs] = useState<any[]>([])
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false)
+  const [logFilter, setLogFilter] = useState<{reportId?: string, employeeName?: string}>({})
 
   const isAdmin = user?.role?.toLowerCase() === 'admin'
   const isTeamLeader = user?.role === 'Team Leader'
@@ -85,7 +90,11 @@ export default function DailyProgressPage() {
         : `${API_URL}/employee-daily-reports`
 
       const payload = emp.reportId 
-        ? { status: newStatus }
+        ? { 
+            status: newStatus,
+            performedBy: user?.id,
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`
+          }
         : {
             employeeId: emp.employeeId,
             employeeName: emp.employeeName,
@@ -125,7 +134,11 @@ export default function DailyProgressPage() {
         : `${API_URL}/employee-daily-reports`
 
       const payload = noteRecord.reportId 
-        ? { note: noteText }
+        ? { 
+            note: noteText,
+            performedBy: user?.id,
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`
+          }
         : {
             employeeId: noteRecord.employeeId,
             employeeName: noteRecord.employeeName,
@@ -157,6 +170,24 @@ export default function DailyProgressPage() {
       toast.error('Failed to save note')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const fetchLogs = async (reportId?: string, employeeName?: string) => {
+    if (!reportId) return
+    setIsLoadingLogs(true)
+    setLogsOpen(true)
+    setLogFilter({ reportId, employeeName })
+    try {
+      const url = `${API_URL}/task-logs?dailyReportId=${reportId}`
+      const res = await fetch(url)
+      if (res.ok) {
+        setReportLogs(await res.json())
+      }
+    } catch (err) {
+      console.error("Error fetching logs:", err)
+    } finally {
+      setIsLoadingLogs(false)
     }
   }
 
@@ -239,6 +270,19 @@ export default function DailyProgressPage() {
           }}
         >
           <MessageSquare className="w-3 h-3 mr-1" /> Note
+        </Button>
+        <Button 
+          size="sm" 
+          variant="outline"
+          className="h-7 w-7 p-0 text-slate-500 hover:bg-slate-50 border-slate-200 flex items-center justify-center"
+          onClick={(e) => {
+            e.stopPropagation()
+            fetchLogs(record.reportId, record.employeeName)
+          }}
+          disabled={!record.reportId}
+          title="View History"
+        >
+          <History className="w-3.5 h-3.5" />
         </Button>
       </div>
     )
@@ -332,6 +376,15 @@ export default function DailyProgressPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ActivityLogDialog 
+        open={logsOpen}
+        onOpenChange={setLogsOpen}
+        title="Verification History"
+        subtitle={logFilter.employeeName ? `Activity logs for ${logFilter.employeeName}` : undefined}
+        logs={reportLogs}
+        isLoading={isLoadingLogs}
+      />
     </div>
   )
 }

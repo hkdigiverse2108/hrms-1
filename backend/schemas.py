@@ -1207,6 +1207,8 @@ class EmployeeDailyReportUpdate(BaseModel):
     hoursWorked: Optional[float] = None
     status: Optional[str] = None
     note: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class EmployeeDailyReport(EmployeeDailyReportBase):
     id: str
