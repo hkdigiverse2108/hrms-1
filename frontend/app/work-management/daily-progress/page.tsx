@@ -13,7 +13,15 @@ import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { usePermissions } from '@/hooks/usePermissions'
-import { Loader2 } from 'lucide-react'
+import { Loader2, MessageSquare } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 
 export default function DailyProgressPage() {
   const { data, refresh } = useApi()
@@ -36,6 +44,8 @@ export default function DailyProgressPage() {
   
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [noteRecord, setNoteRecord] = useState<any>(null)
+  const [noteText, setNoteText] = useState('')
 
   const isAdmin = user?.role?.toLowerCase() === 'admin'
   const isTeamLeader = user?.role === 'Team Leader'
@@ -60,7 +70,8 @@ export default function DailyProgressPage() {
         department: emp.department,
         date: selectedDate,
         status: report?.status || 'Pending Verification',
-        reportId: report?.id
+        reportId: report?.id,
+        note: report?.note || ''
       }
     })
   }, [employees, allReports, selectedDate, user, isAdmin, isTeamLeader])
@@ -104,6 +115,51 @@ export default function DailyProgressPage() {
     }
   }
 
+  const handleSaveNote = async () => {
+    if (!noteRecord) return
+    setIsSubmitting(true)
+    try {
+      const method = noteRecord.reportId ? 'PUT' : 'POST'
+      const url = noteRecord.reportId 
+        ? `${API_URL}/employee-daily-reports/${noteRecord.reportId}` 
+        : `${API_URL}/employee-daily-reports`
+
+      const payload = noteRecord.reportId 
+        ? { note: noteText }
+        : {
+            employeeId: noteRecord.employeeId,
+            employeeName: noteRecord.employeeName,
+            department: noteRecord.department,
+            date: noteRecord.date,
+            status: noteRecord.status,
+            tasksCompleted: ["Work verified by TL"],
+            tasksInProgress: [],
+            hoursWorked: 8.0,
+            note: noteText
+          }
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (response.ok) {
+        toast.success('Note saved successfully')
+        setNoteRecord(null)
+        setNoteText('')
+        refresh()
+      } else {
+        toast.error('Failed to save note')
+      }
+    } catch (error) {
+      console.error('Error saving note:', error)
+      toast.error('Failed to save note')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const columns = [
     { key: 'employeeName' as const, header: 'Employee', render: (record: any) => (
       <div className="flex items-center gap-2">
@@ -132,6 +188,15 @@ export default function DailyProgressPage() {
         {record.status}
       </span>
     )},
+    { key: 'note' as const, header: 'Verification Note', render: (record: any) => (
+      record.note ? (
+        <span className="text-[11px] text-slate-600 font-medium italic break-words max-w-[200px] block" title={record.note}>
+          "{record.note}"
+        </span>
+      ) : (
+        <span className="text-[10px] text-slate-400 italic">No note added</span>
+      )
+    )},
   ]
 
   const actions = (record: any) => {
@@ -158,11 +223,22 @@ export default function DailyProgressPage() {
         <Button 
           size="sm" 
           variant="outline"
-          className="h-7 px-3 text-[10px] font-bold border-rose-200 text-rose-600 hover:bg-rose-50"
+          className="h-7 px-3 text-[10px] font-bold border-rose-200 text-rose-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
           onClick={() => handleStatusUpdate(record, 'Rejected')}
           disabled={isSubmitting || record.status === 'Rejected'}
         >
           <XCircle className="w-3 h-3 mr-1" /> Reject
+        </Button>
+        <Button 
+          size="sm" 
+          variant="outline"
+          className="h-7 px-3 text-[10px] font-bold border-slate-200 text-slate-600 hover:bg-slate-50"
+          onClick={() => {
+            setNoteRecord(record)
+            setNoteText(record.note || '')
+          }}
+        >
+          <MessageSquare className="w-3 h-3 mr-1" /> Note
         </Button>
       </div>
     )
@@ -216,6 +292,46 @@ export default function DailyProgressPage() {
             </div>
         </div>
       )}
+
+      <Dialog open={!!noteRecord} onOpenChange={(open) => !open && setNoteRecord(null)}>
+        <DialogContent className="sm:max-w-[425px] bg-white rounded-2xl shadow-xl border border-slate-100 p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-brand-teal" />
+              <span>Verification Note</span>
+            </DialogTitle>
+            <div className="text-[11px] text-slate-400 font-medium tracking-tight mt-1">
+              Add verification remarks for <span className="font-bold text-slate-600">{noteRecord?.employeeName}</span> on <span className="font-bold text-slate-600">{noteRecord?.date}</span>.
+            </div>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Enter details, feedback, or verification remarks..."
+              className="min-h-[120px] text-xs resize-none border-slate-200 focus:border-brand-teal focus:ring-brand-teal rounded-xl p-3"
+            />
+          </div>
+          <DialogFooter className="flex items-center justify-end gap-2 border-t border-slate-50 pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNoteRecord(null)}
+              className="h-8 text-xs font-bold border-slate-200 text-slate-500 rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveNote}
+              disabled={isSubmitting}
+              className="h-8 text-xs font-bold bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg shadow-sm"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Note'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

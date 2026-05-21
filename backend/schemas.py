@@ -1194,6 +1194,7 @@ class EmployeeDailyReportBase(BaseModel):
     nextDayPlan: Optional[str] = None
     hoursWorked: float = 8.0
     status: str = "Submitted" # Submitted, Reviewed
+    note: Optional[str] = None
 
 class EmployeeDailyReportCreate(EmployeeDailyReportBase):
     pass
@@ -1205,6 +1206,7 @@ class EmployeeDailyReportUpdate(BaseModel):
     nextDayPlan: Optional[str] = None
     hoursWorked: Optional[float] = None
     status: Optional[str] = None
+    note: Optional[str] = None
 
 class EmployeeDailyReport(EmployeeDailyReportBase):
     id: str
