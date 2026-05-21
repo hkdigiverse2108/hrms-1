@@ -659,6 +659,7 @@ class RemarkBase(BaseModel):
     details: str
     addedBy: str
     date: Optional[RobustDateDMY] = None
+    isDeleted: Optional[bool] = False
 
 class RemarkCreate(RemarkBase):
     pass
@@ -666,6 +667,7 @@ class RemarkCreate(RemarkBase):
 class RemarkUpdate(BaseModel):
     type: Optional[str] = None
     details: Optional[str] = None
+    isDeleted: Optional[bool] = None
 
 class Remark(RemarkBase):
     id: str

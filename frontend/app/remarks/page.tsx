@@ -10,7 +10,8 @@ import {
   Edit2,
   Trash2,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  RotateCcw
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUser } from "@/hooks/useUser";
@@ -25,6 +26,7 @@ import { TablePagination } from "@/components/common/TablePagination";
 import { exportToCSV } from "@/lib/export-utils";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 const getTypeBadge = (type: string) => {
@@ -57,6 +59,7 @@ export default function RemarksPage() {
   const [typeFilter, setTypeFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState("This Month");
   const [specificDate, setSpecificDate] = useState("");
+  const [activeTab, setActiveTab] = useState("active");
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -239,6 +242,28 @@ export default function RemarksPage() {
     }
   };
 
+  const handleRestoreRemark = async (id: string) => {
+    if (!confirm("Are you sure you want to restore this remark?")) return;
+    
+    try {
+      const res = await fetch(`${API_URL}/remarks/${id}/restore`, { method: 'POST' });
+      if (res.ok) fetchData();
+    } catch (err) {
+      console.error("Error restoring remark:", err);
+    }
+  };
+
+  const handlePermanentDeleteRemark = async (id: string) => {
+    if (!confirm("WARNING: Are you sure you want to PERMANENTLY delete this remark? This action cannot be undone.")) return;
+    
+    try {
+      const res = await fetch(`${API_URL}/remarks/${id}/permanent`, { method: 'DELETE' });
+      if (res.ok) fetchData();
+    } catch (err) {
+      console.error("Error permanently deleting remark:", err);
+    }
+  };
+
   const openEditModal = (remark: any) => {
     setSelectedRemark(remark);
     setEditModalOpen(true);
@@ -275,13 +300,15 @@ export default function RemarksPage() {
     return matchesSearch && matchesType && matchesDate && matchesEmployee;
   });
 
-  const totalPages = Math.ceil(filteredRemarks.length / itemsPerPage);
-  const paginatedRemarks = filteredRemarks.slice(
+  const tabRemarks = filteredRemarks.filter(r => activeTab === "deleted" ? r.isDeleted : !r.isDeleted);
+
+  const totalPages = Math.ceil(tabRemarks.length / itemsPerPage);
+  const paginatedRemarks = tabRemarks.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
 
-  const totalPenalty = filteredRemarks.reduce((sum, r) => sum + (r.amount || getPenaltyAmount(r.type)), 0);
+  const totalPenalty = tabRemarks.reduce((sum, r) => sum + (r.amount || getPenaltyAmount(r.type)), 0);
 
   if (permissionsLoading) {
     return (
@@ -495,6 +522,13 @@ export default function RemarksPage() {
         </DialogContent>
       </Dialog>
 
+      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCurrentPage(1); }} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+          <TabsTrigger value="active">Active Remarks ({remarks.filter(r => !r.isDeleted).length})</TabsTrigger>
+          <TabsTrigger value="deleted">Deleted Remarks ({remarks.filter(r => r.isDeleted).length})</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {/* Main Table Container */}
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 sm:p-6 border-b border-border flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -576,7 +610,7 @@ export default function RemarksPage() {
             variant="outline" 
             className="w-full xl:w-auto shadow-sm font-medium text-foreground bg-white hover:bg-gray-50 border-border"
             onClick={() => {
-              const exportData = filteredRemarks.map(r => ({
+              const exportData = tabRemarks.map(r => ({
                 'Date': r.date,
                 'Employee Name': r.employeeName,
                 'Role': r.role,
@@ -673,15 +707,52 @@ export default function RemarksPage() {
                     {(canEditRemarks || canDeleteRemarks) && (
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {canEditRemarks && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(remark)}>
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                          {canDeleteRemarks && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" onClick={() => handleDeleteRemark(remark.id)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
+                          {activeTab === "deleted" ? (
+                            <>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-muted-foreground hover:text-green-600" 
+                                title="Restore Remark"
+                                onClick={() => handleRestoreRemark(remark.id)}
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-muted-foreground hover:text-red-600" 
+                                title="Permanently Delete"
+                                onClick={() => handlePermanentDeleteRemark(remark.id)}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              {canEditRemarks && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-muted-foreground hover:text-brand-teal" 
+                                  title="Edit Remark"
+                                  onClick={() => openEditModal(remark)}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                              {canDeleteRemarks && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-muted-foreground hover:text-red-600" 
+                                  title="Delete Remark"
+                                  onClick={() => handleDeleteRemark(remark.id)}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>
@@ -690,7 +761,7 @@ export default function RemarksPage() {
                 ))
               )}
             </tbody>
-            {filteredRemarks.length > 0 && (
+            {tabRemarks.length > 0 && (
               <tfoot className="bg-gray-50/50 border-t-2 border-border font-bold">
                 <tr>
                   <td colSpan={5} className="px-6 py-4 text-right text-slate-500 uppercase tracking-wider text-[11px] font-bold">Total Penalty Amount:</td>
@@ -703,7 +774,7 @@ export default function RemarksPage() {
         </div>
         
         <TablePagination 
-          totalItems={filteredRemarks.length} 
+          totalItems={tabRemarks.length} 
           itemsPerPage={itemsPerPage} 
           currentPage={currentPage} 
           onPageChange={setCurrentPage}

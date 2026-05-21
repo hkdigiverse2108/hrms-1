@@ -217,7 +217,7 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
     penalty_names = [p["name"] for p in penalty_types]
     
     # 3. Get remarks
-    remark_query = {}
+    remark_query = {"isDeleted": {"$ne": True}}
     if month and year:
         try:
             month_num = list(calendar.month_name).index(month)
@@ -519,7 +519,8 @@ async def run_payroll_processing(db, month: str, year: int):
         
         remark_query = {
             "employeeId": emp_id,
-            "date": {"$gte": rem_start_dt, "$lte": rem_end_dt}
+            "date": {"$gte": rem_start_dt, "$lte": rem_end_dt},
+            "isDeleted": {"$ne": True}
         }
         remarks_cursor = db.remarks.find(remark_query)
         emp_remarks = await remarks_cursor.to_list(length=100)
@@ -847,7 +848,16 @@ async def create_remark(db, remark: schemas.RemarkCreate):
         remark_dict["date"] = get_now().strftime("%d-%m-%Y")
     return await create_item(db, "remarks", remark_dict)
 async def update_remark(db, remark_id: str, update: schemas.RemarkUpdate): return await update_item(db, "remarks", remark_id, update.dict(exclude_unset=True))
-async def delete_remark(db, remark_id: str): return await delete_item(db, "remarks", remark_id)
+async def delete_remark(db, remark_id: str):
+    await db.remarks.update_one({"_id": ObjectId(remark_id)}, {"$set": {"isDeleted": True}})
+    return True
+
+async def restore_remark(db, remark_id: str):
+    await db.remarks.update_one({"_id": ObjectId(remark_id)}, {"$set": {"isDeleted": False}})
+    return True
+
+async def permanently_delete_remark(db, remark_id: str):
+    return await delete_item(db, "remarks", remark_id)
 
 async def get_events(db, skip: int = 0, limit: int = 100): return await get_items(db, "events", skip, limit)
 async def create_event(db, event: schemas.EventCreate): return await create_item(db, "events", event.dict())
