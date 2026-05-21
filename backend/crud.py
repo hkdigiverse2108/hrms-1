@@ -217,7 +217,7 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
     penalty_names = [p["name"] for p in penalty_types]
     
     # 3. Get remarks
-    remark_query = {"isDeleted": {"$ne": True}}
+    remark_query = {"isDeleted": {"$nin": [True, "true", "True"]}}
     if month and year:
         try:
             month_num = list(calendar.month_name).index(month)
@@ -520,7 +520,7 @@ async def run_payroll_processing(db, month: str, year: int):
         remark_query = {
             "employeeId": emp_id,
             "date": {"$gte": rem_start_dt, "$lte": rem_end_dt},
-            "isDeleted": {"$ne": True}
+            "isDeleted": {"$nin": [True, "true", "True"]}
         }
         remarks_cursor = db.remarks.find(remark_query)
         emp_remarks = await remarks_cursor.to_list(length=100)
