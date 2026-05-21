@@ -662,7 +662,7 @@ export default function RemarksPage() {
             }}
           >
             <Download className="w-4 h-4 mr-2 text-brand-teal" />
-            Export CSV
+            Export PDF
           </Button>
 
         </div>
@@ -736,26 +736,15 @@ export default function RemarksPage() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {activeTab === "deleted" ? (
-                            <>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-muted-foreground hover:text-green-600" 
-                                title="Restore Remark"
-                                onClick={() => handleRestoreRemark(remark.id)}
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-muted-foreground hover:text-red-600" 
-                                title="Permanently Delete"
-                                onClick={() => handlePermanentDeleteRemark(remark.id)}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-muted-foreground hover:text-green-600" 
+                              title="Restore Remark"
+                              onClick={() => handleRestoreRemark(remark.id)}
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </Button>
                           ) : (
                             <>
                               {canEditRemarks && (
