@@ -416,11 +416,17 @@ async def run_payroll_processing(db, month: str, year: int):
                 pass
 
         # 2. Map out actual presence
-        att_start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=IST)
-        att_end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(tzinfo=IST)
+        att_start_dt_naive = datetime.strptime(start_date_str, "%Y-%m-%d")
+        att_end_dt_naive = datetime.strptime(end_date_str, "%Y-%m-%d") + timedelta(days=1)
+        att_start_dt_aware = att_start_dt_naive.replace(tzinfo=IST)
+        att_end_dt_aware = (att_end_dt_naive - timedelta(seconds=1)).replace(tzinfo=IST)
+        
         attendance_cursor = db.attendance.find({
             "employeeId": emp_id,
-            "date": {"$gte": att_start_dt, "$lte": att_end_dt}
+            "$or": [
+                {"date": {"$gte": att_start_dt_naive, "$lt": att_end_dt_naive}},
+                {"date": {"$gte": att_start_dt_aware, "$lte": att_end_dt_aware}}
+            ]
         })
         attendance_records = await attendance_cursor.to_list(length=100)
         attendance_dates = {
@@ -896,33 +902,33 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
     # Get approved leaves to skip
     start_date_str = f"{year}-{str(month_num).zfill(2)}-01"
     end_date_str = f"{year}-{str(month_num).zfill(2)}-{num_days}"
+    
+    # We fetch all approved leaves and filter in Python to handle multiple formats robustly
     leave_cursor = db.leave_requests.find({
         "$or": [
             {"employeeId": employee_id},
             {"employee_id": employee_id}
         ],
-        "status": "Approved",
-        "$or": [
-            {
-                "start_date": {"$lte": bulk_end_dt},
-                "end_date": {"$gte": bulk_start_dt}
-            },
-            {
-                "startDate": {"$lte": bulk_end_dt},
-                "endDate": {"$gte": bulk_start_dt}
-            }
-        ]
+        "status": "Approved"
     })
     leaves = await leave_cursor.to_list(length=100)
     leave_dates = set()
+    leave_date_types = {}
     
     def robust_parse(val):
+        if not val:
+            return None
         if isinstance(val, datetime):
             return val
         if isinstance(val, date):
             return datetime.combine(val, datetime.min.time()).replace(tzinfo=IST)
-        # Fallback to string parse
-        return datetime.strptime(val, "%Y-%m-%d")
+        # Try both common string date formats
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y"):
+            try:
+                return datetime.strptime(val.strip(), fmt).replace(tzinfo=IST)
+            except ValueError:
+                continue
+        return None
         
     for l in leaves:
         try:
@@ -932,29 +938,61 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
                 continue
             s = robust_parse(raw_s)
             e = robust_parse(raw_e)
+            if not s or not e:
+                continue
             curr = s
             while curr <= e:
-                leave_dates.add(curr.strftime("%Y-%m-%d"))
+                if curr.month == month_num and curr.year == year:
+                    date_str_key = curr.strftime("%Y-%m-%d")
+                    leave_dates.add(date_str_key)
+                    leave_date_types[date_str_key] = l.get("leaveType") or l.get("type") or "leave"
                 curr += timedelta(days=1)
+                if (curr - s).days > 365:
+                    break
         except Exception as e:
-            print(f"Error parsing leave: {e}")
+            print(f"Error parsing leave in bulk generation: {e}")
             pass
     
     attendance_records = []
     
     import random
     
-    # Identify available working days
     available_working_days = []
     for d in range(1, num_days + 1):
         date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
         if calendar.weekday(year, month_num, d) == 6: continue
         if date_str in holiday_dates: continue
-        if date_str in leave_dates: continue
         
-        date_dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=IST)
-        existing = await db.attendance.find_one({"employeeId": employee_id, "date": date_dt})
+        date_dt_naive = datetime.strptime(date_str, "%Y-%m-%d")
+        date_dt_aware = date_dt_naive.replace(tzinfo=IST)
+        existing = await db.attendance.find_one({
+            "employeeId": employee_id,
+            "date": {"$in": [date_dt_naive, date_dt_aware]}
+        })
         if existing: continue
+        
+        if date_str in leave_dates:
+            l_type = leave_date_types.get(date_str, "leave")
+            remark_str = f"Auto-marked leave - {l_type.lower()} approved"
+            record = {
+                "employeeId": employee_id,
+                "employeeName": employee["name"],
+                "date": date_dt_naive,
+                "checkIn": "--",
+                "lastPunchIn": "--",
+                "checkOut": "--",
+                "status": "Leave",
+                "workHours": "--",
+                "accumulatedWorkSeconds": 0,
+                "breaks": [],
+                "punches": [],
+                "remarks": remark_str
+            }
+            result = await db.attendance.insert_one(record)
+            record["id"] = str(result.inserted_id)
+            attendance_records.append(fix_id(record))
+            continue
+            
         available_working_days.append(d)
     
     # Pick 1-2 random days to be 'late'
@@ -1002,7 +1040,7 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
         record = {
             "employeeId": employee_id,
             "employeeName": employee["name"],
-            "date": datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=IST),
+            "date": datetime.strptime(date_str, "%Y-%m-%d"),
             "checkIn": check_in,
             "lastPunchIn": check_in,
             "checkOut": check_out,
@@ -1055,14 +1093,19 @@ async def punch_in(db, employee_id: str):
         
         # If logged out, resume this record instead of creating a new one
         new_punch = {"punchIn": now_time_str, "punchOut": None}
+        set_values = {
+            "status": "Active",
+            "checkOut": None,
+            "lastPunchIn": now_time_str
+        }
+        # If the existing checkIn is a placeholder or empty, set it to the actual first punch-in time!
+        if existing_record.get("checkIn") in [None, "--", "--:--", "", "-"]:
+            set_values["checkIn"] = now_time_str
+
         await db.attendance.update_one(
             {"_id": existing_record["_id"]},
             {
-                "$set": {
-                    "status": "Active",
-                    "checkOut": None,
-                    "lastPunchIn": now_time_str
-                },
+                "$set": set_values,
                 "$push": {"punches": new_punch}
             }
         )
@@ -1197,7 +1240,7 @@ async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
             if isinstance(date_val, (datetime, date)):
                 date_str = date_val.strftime("%Y-%m-%d")
             else:
-                date_str = str(date_val)
+                date_str = str(date_val).split('T')[0].split(' ')[0]
                 
             ci = attendance_dict['checkIn']
             co = attendance_dict['checkOut']
@@ -1243,7 +1286,7 @@ async def update_attendance(db, attendance_id: str, attendance_update: schemas.A
                     if isinstance(date_val, (datetime, date)):
                         date_str = date_val.strftime("%Y-%m-%d")
                     else:
-                        date_str = str(date_val)
+                        date_str = str(date_val).split('T')[0].split(' ')[0]
                     
                     # Pad seconds if not present
                     if len(ci_val.split(':')) == 2: ci_val = f"{ci_val}:00"
@@ -1403,26 +1446,113 @@ async def get_user_leave_requests(db, employee_id: str, skip: int = 0, limit: in
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
+async def auto_create_leave_attendance(db, employee_id: str, start_date, end_date, leave_type: str = "leave"):
+    def robust_parse(val):
+        if not val:
+            return None
+        if isinstance(val, datetime):
+            return val
+        if isinstance(val, date):
+            return datetime.combine(val, datetime.min.time()).replace(tzinfo=IST)
+        # Parse string
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y"):
+            try:
+                return datetime.strptime(val, fmt).replace(tzinfo=IST)
+            except ValueError:
+                continue
+        return None
+
+    s = robust_parse(start_date)
+    e = robust_parse(end_date)
+    if not s or not e:
+        return
+
+    employee = await get_employee(db, employee_id)
+    if not employee:
+        return
+
+    curr = s
+    remark_str = f"Auto-marked leave - {leave_type.lower()} approved"
+    while curr <= e:
+        date_naive = curr.replace(tzinfo=None)
+        date_aware = curr.replace(tzinfo=IST)
+        
+        existing = await db.attendance.find_one({
+            "employeeId": employee_id,
+            "date": {"$in": [date_naive, date_aware]}
+        })
+
+        if existing:
+            await db.attendance.update_one(
+                {"_id": existing["_id"]},
+                {"$set": {
+                    "status": "Leave",
+                    "checkIn": "--",
+                    "lastPunchIn": "--",
+                    "checkOut": "--",
+                    "workHours": "--",
+                    "accumulatedWorkSeconds": 0,
+                    "breaks": [],
+                    "punches": [],
+                    "remarks": remark_str
+                }}
+            )
+        else:
+            record = {
+                "employeeId": employee_id,
+                "employeeName": employee["name"],
+                "date": date_naive,
+                "checkIn": "--",
+                "lastPunchIn": "--",
+                "checkOut": "--",
+                "status": "Leave",
+                "workHours": "--",
+                "accumulatedWorkSeconds": 0,
+                "breaks": [],
+                "punches": [],
+                "remarks": remark_str
+            }
+            await db.attendance.insert_one(record)
+
+        curr += timedelta(days=1)
+        if (curr - s).days > 365:
+            break
+
 async def update_leave_request(db, leave_id: str, update_data: dict):
     # Fetch current leave request
     leave = await db.leave_requests.find_one({"_id": ObjectId(leave_id)})
     if not leave:
         return None
     
-    # Don't allow updates if already approved/rejected unless it's just a status change by Admin
-    # (Actually, let's just update whatever is passed for now, frontend handles permission)
-    
     await db.leave_requests.update_one(
         {"_id": ObjectId(leave_id)},
         {"$set": update_data}
     )
+
+    # Check if the status has become Approved
+    if "status" in update_data and update_data["status"] == "Approved":
+        emp_id = leave.get("employee_id") or leave.get("employeeId")
+        raw_start = leave.get("start_date") or leave.get("startDate")
+        raw_end = leave.get("end_date") or leave.get("endDate")
+        leave_type = leave.get("leaveType") or leave.get("type") or "leave"
+        if emp_id and raw_start and raw_end:
+            try:
+                await auto_create_leave_attendance(db, emp_id, raw_start, raw_end, leave_type)
+            except Exception as e:
+                print(f"Error auto creating leave attendance: {e}")
     
     # Create notification if status changed
     if "status" in update_data and update_data["status"] in ["Approved", "Rejected", "Cancelled"]:
+        msg = f"Your {leave['type']} request from {leave['start_date']} to {leave['end_date']} has been {update_data['status'].lower()}."
+        if update_data["status"] == "Rejected" and update_data.get("reject_reason"):
+            msg += f" Reason: {update_data['reject_reason']}"
+        elif update_data["status"] == "Approved" and update_data.get("approve_reason"):
+            msg += f" Message: {update_data['approve_reason']}"
+        
         await create_notification(db, schemas.NotificationCreate(
             employee_id=leave["employee_id"],
             title=f"Leave Request {update_data['status']}",
-            message=f"Your {leave['type']} request from {leave['start_date']} to {leave['end_date']} has been {update_data['status'].lower()}.",
+            message=msg,
             type="leave",
             created_at=get_now().strftime("%d-%m-%Y %H:%M")
         ))
@@ -1430,7 +1560,7 @@ async def update_leave_request(db, leave_id: str, update_data: dict):
     result = await db.leave_requests.find_one({"_id": ObjectId(leave_id)})
     return fix_id(result)
 
-async def update_leave_request_status(db, leave_id: str, status: str, approved_by: str = None, approved_by_role: str = None, approved_by_id: str = None, approved_by_photo: str = None):
+async def update_leave_request_status(db, leave_id: str, status: str, approved_by: str = None, approved_by_role: str = None, approved_by_id: str = None, approved_by_photo: str = None, reject_reason: str = None, approve_reason: str = None):
     update_data = {"status": status}
     if approved_by:
         update_data["approved_by"] = approved_by
@@ -1440,6 +1570,10 @@ async def update_leave_request_status(db, leave_id: str, status: str, approved_b
         update_data["approved_by_id"] = approved_by_id
     if approved_by_photo:
         update_data["approved_by_photo"] = approved_by_photo
+    if reject_reason:
+        update_data["reject_reason"] = reject_reason
+    if approve_reason:
+        update_data["approve_reason"] = approve_reason
     return await update_leave_request(db, leave_id, update_data)
 
 

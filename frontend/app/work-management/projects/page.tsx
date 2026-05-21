@@ -14,9 +14,18 @@ import { Progress } from "@/components/ui/progress";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function ProjectsPage() {
   const { user } = useUser();
+  const router = useRouter();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+
+  const canViewProjects = isAdmin || checkPermission('projects', 'canView');
+  const canAddProjects = isAdmin || checkPermission('projects', 'canAdd');
+  const canEditProjects = isAdmin || checkPermission('projects', 'canEdit');
+  const canDeleteProjects = isAdmin || checkPermission('projects', 'canDelete');
+
   const [projects, setProjects] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,21 +33,13 @@ export default function ProjectsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const router = useRouter();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (user && user.role?.toLowerCase() !== "admin") {
-        const dept = user.department?.toLowerCase();
-        if (dept === "sales") {
-          router.replace("/work-management/sales");
-        } else if (dept === "marketing") {
-          router.replace("/work-management/marketing-reports");
-        }
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [user, router]);
+    if (permissionsLoading) return;
+    if (!canViewProjects) {
+      router.push("/");
+    }
+  }, [router, permissionsLoading, canViewProjects]);
   
   // Logs state
   const [logsOpen, setLogsOpen] = useState(false);
@@ -164,6 +165,14 @@ export default function ProjectsPage() {
     return matchesSearch;
   });
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -175,12 +184,14 @@ export default function ProjectsPage() {
             setModalOpen(open);
             if (!open) setEditingProject(null);
           }}>
-            <DialogTrigger asChild>
-              <Button className="bg-brand-teal hover:bg-brand-teal-light text-white">
-                <Plus className="w-4 h-4 mr-2" />
-                New Project
-              </Button>
-            </DialogTrigger>
+            {canAddProjects && (
+              <DialogTrigger asChild>
+                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white">
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Project
+                </Button>
+              </DialogTrigger>
+            )}
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">
@@ -255,15 +266,19 @@ export default function ProjectsPage() {
                       </Button>
                       {user && (
                         <>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
-                            setEditingProject(project);
-                            setModalOpen(true);
-                          }}>
-                            <Pencil className="w-4 h-4 text-muted-foreground" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(project.id)}>
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
+                          {canEditProjects && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                              setEditingProject(project);
+                              setModalOpen(true);
+                            }}>
+                              <Pencil className="w-4 h-4 text-muted-foreground" />
+                            </Button>
+                          )}
+                          {canDeleteProjects && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(project.id)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          )}
                         </>
                       )}
                     </div>
@@ -334,7 +349,7 @@ export default function ProjectsPage() {
               {searchTerm ? `No projects matching "${searchTerm}"` : "You don't have any projects assigned to you yet."}
             </p>
           </div>
-          {!searchTerm && user && (
+          {!searchTerm && user && canAddProjects && (
             <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={() => setModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Create Project

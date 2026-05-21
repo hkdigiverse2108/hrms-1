@@ -5,19 +5,25 @@ import { API_URL } from '@/lib/config'
 import { useUser } from './useUser'
 
 export function usePermissions(moduleName?: string) {
-  const { user } = useUser()
+  const { user, isLoading: userLoading } = useUser()
   const [permissions, setPermissions] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (userLoading) {
+      setLoading(true)
+      return
+    }
+
     if (user?.id) {
       fetchPermissions()
     } else {
       setLoading(false)
     }
-  }, [user?.id])
+  }, [user?.id, userLoading])
 
   const fetchPermissions = async () => {
+    setLoading(true)
     try {
       const response = await fetch(`${API_URL}/user-permissions/${user?.id}`)
       if (response.ok) {

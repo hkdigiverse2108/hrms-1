@@ -21,6 +21,8 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { TablePagination } from "@/components/common/TablePagination";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/hooks/useUser";
+import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const reviewsData = [
   {
@@ -117,8 +119,21 @@ export default function ReviewPage() {
   const [newRating, setNewRating] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useUser();
-  
-  const canManageReviews = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'team leader';
+  const router = useRouter();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+
+  const canViewReviews = isAdmin || checkPermission('review', 'canView');
+  const canAddReviews = isAdmin || checkPermission('review', 'canAdd');
+  const canEditReviews = isAdmin || checkPermission('review', 'canEdit');
+  const canDeleteReviews = isAdmin || checkPermission('review', 'canDelete');
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!canViewReviews) {
+        router.push('/');
+      }
+    }
+  }, [permissionsLoading, canViewReviews, router]);
   
   // New review form state
   const [newReview, setNewReview] = useState({
@@ -228,13 +243,21 @@ export default function ReviewPage() {
     r.department?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-10">
       <PageHeader 
         title="Employee Reviews" 
         description="Review records with department, summary, rating, timestamps, and quick actions."
       >
-        {canManageReviews && (
+        {canAddReviews && (
           <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
             <DialogTrigger asChild>
               <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto mt-4 sm:mt-0">
@@ -252,7 +275,7 @@ export default function ReviewPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-foreground">Employee</label>
-                    <Select onValueChange={(val) => setNewReview(prev => ({ ...prev, employeeId: val }))} value={newReview.employeeId}>
+                    <Select onValueChange={(val: string) => setNewReview(prev => ({ ...prev, employeeId: val }))} value={newReview.employeeId}>
                       <SelectTrigger className="w-full bg-white shadow-sm border-border">
                         <SelectValue placeholder="Select employee..." />
                       </SelectTrigger>
@@ -284,7 +307,7 @@ export default function ReviewPage() {
                   <label className="text-sm font-semibold text-foreground">Summary</label>
                   <Textarea 
                     value={newReview.summary}
-                    onChange={(e) => setNewReview(prev => ({ ...prev, summary: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewReview(prev => ({ ...prev, summary: e.target.value }))}
                     placeholder="Write a detailed performance summary here..." 
                     className="h-32 resize-none bg-white"
                   />
@@ -313,7 +336,7 @@ export default function ReviewPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
               placeholder="Search employees, reports..." 
               className="pl-9 bg-gray-50/50 border-border rounded-lg h-10" 
             />
@@ -329,20 +352,20 @@ export default function ReviewPage() {
                 <th className="px-6 py-4">Department</th>
                 <th className="px-6 py-4">Summary</th>
                 <th className="px-6 py-4">Rating</th>
-                <th className="px-6 py-4 text-right">Action</th>
+                {(canEditReviews || canDeleteReviews) && <th className="px-6 py-4 text-right">Action</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center">
+                  <td colSpan={(canEditReviews || canDeleteReviews) ? 6 : 5} className="px-6 py-10 text-center">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
                     <p className="text-sm text-muted-foreground mt-2">Loading reviews...</p>
                   </td>
                 </tr>
               ) : filteredReviews.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">
+                  <td colSpan={(canEditReviews || canDeleteReviews) ? 6 : 5} className="px-6 py-10 text-center text-muted-foreground">
                     No reviews found.
                   </td>
                 </tr>
@@ -377,18 +400,22 @@ export default function ReviewPage() {
                     <td className="px-6 py-4">
                       <RatingStars rating={review.rating} />
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      {canManageReviews && (
+                    {(canEditReviews || canDeleteReviews) && (
+                      <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(review)}>
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" onClick={() => handleDeleteReview(review.id)}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          {canEditReviews && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(review)}>
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {canDeleteReviews && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" onClick={() => handleDeleteReview(review.id)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </div>
-                      )}
-                    </td>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -428,7 +455,7 @@ export default function ReviewPage() {
                 <label className="text-sm font-semibold text-foreground">Summary</label>
                 <Textarea 
                   value={selectedReview.summary}
-                  onChange={(e) => setSelectedReview((prev: any) => ({ ...prev, summary: e.target.value }))}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSelectedReview((prev: any) => ({ ...prev, summary: e.target.value }))}
                   className="h-32 resize-none bg-white"
                 />
               </div>

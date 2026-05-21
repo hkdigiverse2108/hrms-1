@@ -16,7 +16,10 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  FileText
+  FileText,
+  Pencil,
+  Trash2,
+  Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,8 +32,46 @@ import dayjs from "dayjs";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { exportToCSV } from "@/lib/export-utils";
 import { formatTime12h } from "@/lib/utils";
+import { toast } from "sonner";
+
+import { usePermissions } from "@/hooks/usePermissions";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 export default function EmployeeAttendanceListPage() {
+  const router = useRouter();
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+  const formatToHhMm = (totalMinutes: number) => {
+    if (!totalMinutes || totalMinutes <= 0) return "-";
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h}h ${m}m`;
+  };
+
+  const formatWorkHours = (workHours: string) => {
+    if (!workHours || workHours === "--" || workHours === "-") return "--";
+    const hMatch = workHours.match(/(\d+)\s*h/i);
+    const mMatch = workHours.match(/(\d+)\s*m/i);
+    if (hMatch || mMatch) {
+      const h = hMatch ? parseInt(hMatch[1]) : 0;
+      const m = mMatch ? parseInt(mMatch[1]) : 0;
+      return `${h}h ${m}m`;
+    }
+    const decMatch = workHours.match(/([\d.]+)\s*h/i);
+    if (decMatch) {
+      const totalMinutes = Math.round(parseFloat(decMatch[1]) * 60);
+      return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+    }
+    const timeParts = workHours.split(':');
+    if (timeParts.length >= 2) {
+      const h = parseInt(timeParts[0]);
+      const m = parseInt(timeParts[1]);
+      if (!isNaN(h) && !isNaN(m)) {
+        return `${h}h ${m}m`;
+      }
+    }
+    return workHours;
+  };
   const [view, setView] = useState<"list" | "calendar">("list");
   const [attendance, setAttendance] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -53,20 +94,57 @@ export default function EmployeeAttendanceListPage() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [sysSettings, setSysSettings] = useState<any>(null);
   const [recoveryRequests, setRecoveryRequests] = useState<any[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+
+  // CRUD Modals and state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  const [editForm, setEditForm] = useState<any>({
+    id: "",
+    date: "",
+    checkIn: "",
+    checkOut: "",
+    status: "Logged"
+  });
+  
+  const [createForm, setCreateForm] = useState<any>({
+    employeeId: "",
+    employeeName: "",
+    date: dayjs().format("YYYY-MM-DD"),
+    checkIn: "09:30:00",
+    checkOut: "18:30:00",
+    status: "Logged"
+  });
+
+  const canAdd = isAdmin || checkPermission('employee-attendance', 'canAdd');
+  const canEdit = isAdmin || checkPermission('employee-attendance', 'canEdit');
+  const canDelete = isAdmin || checkPermission('employee-attendance', 'canDelete');
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('employee-attendance', 'canView')) {
+        router.push('/');
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission]);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  async function fetchData() {
     setIsLoading(true);
     try {
-      const [attRes, empRes, deptRes, sysRes, recRes] = await Promise.all([
+      const [attRes, empRes, deptRes, sysRes, recRes, leaveRes] = await Promise.all([
         fetch(`${API_URL}/attendance`),
         fetch(`${API_URL}/employees`),
         fetch(`${API_URL}/departments`),
         fetch(`${API_URL}/system-settings`),
-        fetch(`${API_URL}/time-recovery`)
+        fetch(`${API_URL}/time-recovery`),
+        fetch(`${API_URL}/leaves`)
       ]);
       
       if (attRes.ok) setAttendance(await attRes.json());
@@ -74,10 +152,108 @@ export default function EmployeeAttendanceListPage() {
       if (deptRes.ok) setDepartments(await deptRes.json());
       if (sysRes.ok) setSysSettings(await sysRes.json());
       if (recRes.ok) setRecoveryRequests(await recRes.json());
+      if (leaveRes.ok) setLeaveRequests(await leaveRes.json());
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  const handleCreateManual = async () => {
+    if (!createForm.employeeId) {
+      toast.error("Please select an employee");
+      return;
+    }
+    const emp = employees.find(e => e.id === createForm.employeeId || e.employeeId === createForm.employeeId);
+    try {
+      const res = await fetch(`${API_URL}/attendance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...createForm,
+          employeeName: emp?.name || ""
+        })
+      });
+      if (res.ok) {
+        toast.success("Attendance record created successfully");
+        setCreateModalOpen(false);
+        fetchData();
+      } else {
+        const errorData = await res.json();
+        toast.error(errorData.detail || "Failed to create record");
+      }
+    } catch (err) {
+      console.error("Error creating attendance:", err);
+      toast.error("An error occurred while creating the record");
+    }
+  };
+
+  const handleUpdate = async () => {
+    setIsUpdating(true);
+    try {
+      let res;
+      if (editForm.id?.toString().startsWith("synthesized-")) {
+        const emp = employees.find(e => e.id === editForm.employeeId || e.employeeId === editForm.employeeId);
+        res = await fetch(`${API_URL}/attendance`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            employeeId: editForm.employeeId,
+            employeeName: emp?.name || "",
+            date: editForm.date,
+            checkIn: editForm.checkIn || "09:30:00",
+            checkOut: editForm.checkOut || "18:30:00",
+            status: editForm.status || "Logged"
+          })
+        });
+      } else {
+        res = await fetch(`${API_URL}/attendance/${editForm.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            checkIn: editForm.checkIn,
+            checkOut: editForm.checkOut,
+            status: editForm.status,
+            date: editForm.date
+          })
+        });
+      }
+      if (res.ok) {
+        toast.success("Attendance updated successfully");
+        setEditModalOpen(false);
+        fetchData();
+      } else {
+        const errorData = await res.json();
+        toast.error(errorData.detail || "Failed to update attendance");
+      }
+    } catch (err) {
+      console.error("Error updating attendance:", err);
+      toast.error("An error occurred while updating the record");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this record? This action cannot be undone.")) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`${API_URL}/attendance/${id}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        toast.success("Attendance deleted successfully");
+        fetchData();
+      } else {
+        const errorData = await res.json();
+        toast.error(errorData.detail || "Failed to delete attendance");
+      }
+    } catch (err) {
+      console.error("Error deleting attendance:", err);
+      toast.error("An error occurred while deleting the record");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -127,23 +303,84 @@ export default function EmployeeAttendanceListPage() {
         if (dayjs(d).isAfter(dayjs())) break; // Don't synthesize future dates
         datesToSynthesize.push(d);
       }
+    } else if (dateFilter === "all") {
+      let earliestDateStr = dayjs().subtract(30, 'day').format('YYYY-MM-DD');
+      if (attendance.length > 0) {
+        attendance.forEach(a => {
+          const aDateStr = a.date?.split('T')[0]?.split(' ')[0];
+          if (aDateStr && aDateStr < earliestDateStr) {
+            earliestDateStr = aDateStr;
+          }
+        });
+      }
+      
+      const maxDays = 90;
+      const ninetyDaysAgoStr = dayjs().subtract(maxDays, 'day').format('YYYY-MM-DD');
+      if (earliestDateStr < ninetyDaysAgoStr) {
+        earliestDateStr = ninetyDaysAgoStr;
+      }
+      
+      const diffDays = Math.min(maxDays, dayjs().diff(dayjs(earliestDateStr), 'day'));
+      for (let i = 0; i <= diffDays; i++) {
+        const d = dayjs().subtract(i, 'day').format('YYYY-MM-DD');
+        datesToSynthesize.push(d);
+      }
     }
 
     // Synthesize missing records for each employee and each date in the range
     datesToSynthesize.forEach(dateStr => {
       employees.forEach(emp => {
         // We use employeeId for the check because some records might use emp.id or emp.employeeId
-        const existing = baseRecords.find(a => (a.employeeId === emp.id || a.employeeId === emp.employeeId) && a.date === dateStr);
+        const existing = baseRecords.find(a => {
+          const aDateStr = a.date?.split('T')[0]?.split(' ')[0];
+          return (a.employeeId === emp.id || a.employeeId === emp.employeeId) && aDateStr === dateStr;
+        });
+
+        // Check if employee is on leave on this dateStr
+        const isEmployeeOnLeave = leaveRequests.some(l => {
+          if (l.status !== "Approved") return false;
+          // Check employee match
+          const empMatch = l.employee_id === emp.id || l.employee_id === emp.employeeId || l.employeeId === emp.id || l.employeeId === emp.employeeId;
+          if (!empMatch) return false;
+
+          // Parse start and end date
+          const parseDate = (dVal: any) => {
+            if (!dVal) return null;
+            const strVal = String(dVal).split('T')[0].split(' ')[0];
+            if (strVal.includes('-')) {
+              const parts = strVal.split('-');
+              if (parts[0].length === 4) {
+                // YYYY-MM-DD
+                return dayjs(strVal);
+              } else {
+                // DD-MM-YYYY
+                return dayjs(`${parts[2]}-${parts[1]}-${parts[0]}`);
+              }
+            }
+            return dayjs(strVal);
+          };
+
+          const start = parseDate(l.start_date);
+          const end = parseDate(l.end_date);
+          const current = dayjs(dateStr);
+
+          if (start && end && current.isValid() && start.isValid() && end.isValid()) {
+            return (current.isSame(start, 'day') || current.isAfter(start, 'day')) &&
+                   (current.isSame(end, 'day') || current.isBefore(end, 'day'));
+          }
+          return false;
+        });
+
         if (!existing) {
           baseRecords.push({
             id: `synthesized-${emp.id}-${dateStr}`,
             employeeId: emp.id,
             employeeName: emp.name,
             date: dateStr,
-            checkIn: "--:--",
-            checkOut: "--:--",
+            checkIn: isEmployeeOnLeave ? "--" : "--:--",
+            checkOut: isEmployeeOnLeave ? "--" : "--:--",
             workHours: "--",
-            status: "Absent",
+            status: isEmployeeOnLeave ? "Leave" : "Absent",
             punches: [],
             breaks: []
           });
@@ -161,24 +398,32 @@ export default function EmployeeAttendanceListPage() {
       const matchesDept = selectedDept === "all" || emp?.department?.toLowerCase() === selectedDept.toLowerCase();
       
       let matchesDate = true;
-      const recordDate = dayjs(a.date);
+      const aDateStr = a.date?.split('T')[0]?.split(' ')[0];
+      const recordDate = dayjs(aDateStr);
       const yesterdayStr = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
       
       if (specificDate) {
-        matchesDate = a.date === dayjs(specificDate).format('YYYY-MM-DD');
+        matchesDate = aDateStr === dayjs(specificDate).format('YYYY-MM-DD');
       } else if (dateFilter === "today") {
-        matchesDate = a.date === todayStr;
+        matchesDate = aDateStr === todayStr;
       } else if (dateFilter === "yesterday") {
-        matchesDate = a.date === yesterdayStr;
+        matchesDate = aDateStr === yesterdayStr;
       } else if (dateFilter === "last_7_days") {
         matchesDate = recordDate.valueOf() >= dayjs().subtract(7, 'day').startOf('day').valueOf();
       } else if (dateFilter === "this_month") {
         matchesDate = recordDate.month() === dayjs().month() && recordDate.year() === dayjs().year();
+      } else if (dateFilter === "all") {
+        const earliestDateLimit = dayjs().subtract(90, 'day').startOf('day');
+        matchesDate = recordDate.valueOf() >= earliestDateLimit.valueOf();
       }
 
       return matchesSearch && matchesStatus && matchesDept && matchesDate;
-    }).sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf() || a.employeeName?.localeCompare(b.employeeName));
-  }, [attendance, employees, dateFilter, specificDate, selectedStatus, selectedDept, searchQuery]);
+    }).sort((a, b) => {
+      const aDateStr = a.date?.split('T')[0]?.split(' ')[0];
+      const bDateStr = b.date?.split('T')[0]?.split(' ')[0];
+      return dayjs(bDateStr).valueOf() - dayjs(aDateStr).valueOf() || a.employeeName?.localeCompare(b.employeeName);
+    });
+  }, [attendance, employees, leaveRequests, dateFilter, specificDate, selectedStatus, selectedDept, searchQuery]);
 
   const paginatedAttendance = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -357,6 +602,14 @@ export default function EmployeeAttendanceListPage() {
     };
   }, [selectedDay, attendance, employees, modalSearchQuery, recoveryRequests, sysSettings]);
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader 
@@ -364,16 +617,39 @@ export default function EmployeeAttendanceListPage() {
         description="Manage your team members and their account permissions here."
       >
         <div className="flex items-center gap-3">
-          <Link href="/attendance/recovery-requests">
-            <Button variant="outline" className="h-9 shadow-sm font-medium border-brand-teal text-brand-teal hover:bg-brand-light/20">
-              <Eye className="w-4 h-4 mr-2" />
-              View Requests
+          {(isAdmin || checkPermission('employee-attendance', 'canView')) && (
+            <Link href="/attendance/recovery-requests">
+              <Button variant="outline" className="h-9 shadow-sm font-medium border-brand-teal text-brand-teal hover:bg-brand-light/20">
+                <Eye className="w-4 h-4 mr-2" />
+                View Requests
+              </Button>
+            </Link>
+          )}
+          {(isAdmin || checkPermission('employee-attendance', 'canView')) && (
+            <Button variant="outline" className="h-9 shadow-sm" onClick={() => exportToCSV(filteredAttendance, 'employee_attendance')}>
+              <Download className="w-4 h-4 mr-2" />
+              Export
             </Button>
-          </Link>
-          <Button variant="outline" className="h-9 shadow-sm" onClick={() => exportToCSV(filteredAttendance, 'employee_attendance')}>
-            <Download className="w-4 h-4 mr-2" />
-            Export
-          </Button>
+          )}
+          {canAdd && (
+            <Button 
+              onClick={() => {
+                setCreateForm({
+                  employeeId: "",
+                  employeeName: "",
+                  date: dayjs().format("YYYY-MM-DD"),
+                  checkIn: sysSettings?.officeStartTime ? `${sysSettings.officeStartTime}:00` : "09:30:00",
+                  checkOut: sysSettings?.officeEndTime ? `${sysSettings.officeEndTime}:00` : "18:30:00",
+                  status: "Logged"
+                });
+                setCreateModalOpen(true);
+              }}
+              className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Manual Entry
+            </Button>
+          )}
         </div>
       </PageHeader>
 
@@ -497,7 +773,7 @@ export default function EmployeeAttendanceListPage() {
                 ) : (
                   paginatedAttendance.map((record, idx) => {
                     const totalBreakMinutes = (record.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
-                    const breakStr = totalBreakMinutes > 0 ? (totalBreakMinutes >= 60 ? `${Math.floor(totalBreakMinutes/60)}H ${totalBreakMinutes%60}Min` : `${totalBreakMinutes}Min`) : "-";
+                    const breakStr = formatToHhMm(totalBreakMinutes);
                     
                     const isToday = dayjs(record.date).isSame(dayjs(), 'day');
                     const checkIn = dayjs(`${record.date} ${record.checkIn}`);
@@ -509,10 +785,10 @@ export default function EmployeeAttendanceListPage() {
                     if (checkIn.isValid() && checkOut && checkOut.isValid()) {
                       totalWorkingMinutes = checkOut.diff(checkIn, 'minute');
                     }
-                    const totalWorkingStr = totalWorkingMinutes > 0 ? (totalWorkingMinutes >= 60 ? `${Math.floor(totalWorkingMinutes/60)}H ${totalWorkingMinutes%60}Min` : `${totalWorkingMinutes}Min`) : "-";
+                    const totalWorkingStr = formatToHhMm(totalWorkingMinutes);
                     
                     const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
-                    const productionStr = productionMinutes > 0 ? (productionMinutes >= 60 ? `${Math.floor(productionMinutes/60)}H ${productionMinutes%60}Min` : `${productionMinutes}Min`) : "-";
+                    const productionStr = formatToHhMm(productionMinutes);
                     
                     const recoveryReq = recoveryRequests.find(req => 
                       req.date === record.date && 
@@ -536,7 +812,7 @@ export default function EmployeeAttendanceListPage() {
                     })();
                     
                     const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${record.date} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
-                    const lateStr = isLate || recoveryReq ? `${lateMinutes}Min` : "-";
+                    const lateStr = isLate || recoveryReq ? formatToHhMm(lateMinutes) : "-";
                     
                     const shiftDurationMinutes = (() => {
                       const officeStartTime = sysSettings?.officeStartTime || "09:30";
@@ -547,7 +823,7 @@ export default function EmployeeAttendanceListPage() {
                     })();
                     
                     const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
-                    const overtimeStr = overtimeMinutes > 0 ? (overtimeMinutes >= 60 ? `${Math.floor(overtimeMinutes/60)}H ${overtimeMinutes%60}Min` : `${overtimeMinutes}Min`) : "-";
+                    const overtimeStr = formatToHhMm(overtimeMinutes);
 
                     const day = dayjs(record.date).format("dddd");
                     const statusLabel = getCalculatedStatus(record);
@@ -596,16 +872,74 @@ export default function EmployeeAttendanceListPage() {
                             ) : "-"}
                         </td>
                         <td className="px-4 py-4 text-slate-700 font-medium whitespace-nowrap">{totalWorkingStr}</td>
-                        <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate">
-                          {isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-"}
+                        <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={record.remarks || (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : undefined)}>
+                          {record.remarks || (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-")}
                         </td>
                         <td className="px-4 py-4 text-right">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setSelectedRecord(record); setIsDetailModalOpen(true); }}
-                            className="inline-flex items-center justify-center h-8 w-8 text-brand-teal bg-brand-light/20 hover:bg-brand-light/40 rounded-full transition-colors"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setSelectedRecord(record); setIsDetailModalOpen(true); }}
+                              className="inline-flex items-center justify-center h-8 w-8 text-brand-teal bg-brand-light/20 hover:bg-brand-light/40 rounded-full transition-colors"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            {record.id?.toString().startsWith('synthesized-') ? (
+                              <>
+                                {canEdit && (
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      setEditForm({
+                                        id: record.id,
+                                        employeeId: record.employeeId,
+                                        date: record.date?.split('T')[0]?.split(' ')[0],
+                                        checkIn: sysSettings?.officeStartTime ? `${sysSettings.officeStartTime}:00` : "09:30:00",
+                                        checkOut: sysSettings?.officeEndTime ? `${sysSettings.officeEndTime}:00` : "18:30:00",
+                                        status: "Logged"
+                                      }); 
+                                      setEditModalOpen(true); 
+                                    }}
+                                    className="inline-flex items-center justify-center h-8 w-8 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full transition-colors"
+                                    title="Update Attendance Entry"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {canEdit && (
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      setEditForm({
+                                        id: record.id,
+                                        employeeId: record.employeeId,
+                                        date: record.date?.split('T')[0]?.split(' ')[0],
+                                        checkIn: record.checkIn,
+                                        checkOut: record.checkOut || "",
+                                        status: record.status || "Logged"
+                                      }); 
+                                      setEditModalOpen(true); 
+                                    }}
+                                    className="inline-flex items-center justify-center h-8 w-8 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full transition-colors"
+                                    title="Edit Attendance Entry"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {canDelete && (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(record.id); }}
+                                    className="inline-flex items-center justify-center h-8 w-8 text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition-colors"
+                                    title="Delete Attendance Entry"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -738,7 +1072,7 @@ export default function EmployeeAttendanceListPage() {
                 </div>
                 <div className="border border-brand-teal/30 bg-brand-light/20 rounded-lg p-3 text-center">
                   <div className="text-[10px] uppercase font-bold text-brand-teal mb-1">Work</div>
-                  <div className="font-bold text-xl text-brand-teal">{selectedRecord.workHours || '--'}</div>
+                  <div className="font-bold text-xl text-brand-teal">{formatWorkHours(selectedRecord.workHours)}</div>
                 </div>
               </div>
  
@@ -840,6 +1174,133 @@ export default function EmployeeAttendanceListPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDetailModalOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Manual Modal */}
+      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Manual Attendance Entry</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Employee</label>
+              <Select value={createForm.employeeId} onValueChange={(v) => setCreateForm({...createForm, employeeId: v})}>
+                <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                <SelectContent>
+                  {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Date</label>
+              <input 
+                type="date" 
+                className="w-full p-2 border rounded-md" 
+                value={createForm.date}
+                onChange={(e) => setCreateForm({...createForm, date: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Check In</label>
+                <input 
+                  type="time" 
+                  step="1"
+                  className="w-full p-2 border rounded-md" 
+                  value={createForm.checkIn}
+                  onChange={(e) => setCreateForm({...createForm, checkIn: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Check Out</label>
+                <input 
+                  type="time" 
+                  step="1"
+                  className="w-full p-2 border rounded-md" 
+                  value={createForm.checkOut}
+                  onChange={(e) => setCreateForm({...createForm, checkOut: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select value={createForm.status} onValueChange={(v) => setCreateForm({...createForm, status: v})}>
+                <SelectTrigger><SelectValue placeholder="Select Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Logged">Present (Logged)</SelectItem>
+                  <SelectItem value="Present">Present</SelectItem>
+                  <SelectItem value="Absent">Absent</SelectItem>
+                  <SelectItem value="Leave">On Leave</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+            <Button className="bg-brand-teal text-white" onClick={handleCreateManual}>Save Entry</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Manual Modal */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Edit Attendance Entry</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Date</label>
+              <input 
+                type="date" 
+                className="w-full p-2 border rounded-md bg-gray-50 cursor-not-allowed" 
+                value={editForm.date}
+                disabled
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Check In</label>
+                <input 
+                  type="time" 
+                  step="1"
+                  className="w-full p-2 border rounded-md" 
+                  value={editForm.checkIn}
+                  onChange={(e) => setEditForm({...editForm, checkIn: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Check Out</label>
+                <input 
+                  type="time" 
+                  step="1"
+                  className="w-full p-2 border rounded-md" 
+                  value={editForm.checkOut}
+                  onChange={(e) => setEditForm({...editForm, checkOut: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm({...editForm, status: v})}>
+                <SelectTrigger><SelectValue placeholder="Select Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Logged">Present (Logged)</SelectItem>
+                  <SelectItem value="Present">Present</SelectItem>
+                  <SelectItem value="Absent">Absent</SelectItem>
+                  <SelectItem value="Leave">On Leave</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditModalOpen(false)}>Cancel</Button>
+            <Button className="bg-brand-teal text-white" onClick={handleUpdate} disabled={isUpdating}>
+              {isUpdating ? "Updating..." : "Save Changes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

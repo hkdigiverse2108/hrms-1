@@ -30,12 +30,29 @@ import { useUserContext } from "@/context/UserContext";
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from 'sonner';
 import { formatTime12h } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
  
 export default function AttendancePage() {
   const { user, getISTNow } = useUserContext();
-  const isAdmin = user?.role?.toLowerCase() === 'admin';
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+  const router = useRouter();
+
   const isHR = user?.role?.toLowerCase() === 'hr';
   const canManageAttendance = isAdmin || isHR;
+
+  const canViewAttendance = isAdmin || checkPermission('attendance', 'canView');
+  const canAddAttendance = isAdmin || checkPermission('attendance', 'canAdd');
+  const canEditAttendance = isAdmin || checkPermission('attendance', 'canEdit');
+  const canDeleteAttendance = isAdmin || checkPermission('attendance', 'canDelete');
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('attendance', 'canView')) {
+        router.push('/');
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission]);
 
   const [attendance, setAttendance] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -83,9 +100,9 @@ export default function AttendancePage() {
   const [recoveryRequests, setRecoveryRequests] = useState<any[]>([]);
   const [stats, setStats] = useState({
     presentDays: 0,
-    avgHours: "0",
-    totalWorkTime: "0H 0M",
-    totalBreakTime: "0M"
+    avgHours: "0h 0m",
+    totalWorkTime: "0h 0m",
+    totalBreakTime: "0h 0m"
   });
   const [sysSettings, setSysSettings] = useState<any>(null);
  
@@ -181,6 +198,38 @@ export default function AttendancePage() {
     }
   };
  
+  const formatToHhMm = (totalMinutes: number) => {
+    if (!totalMinutes || totalMinutes <= 0) return "-";
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h}h ${m}m`;
+  };
+
+  const formatWorkHours = (workHours: string) => {
+    if (!workHours || workHours === "--" || workHours === "-") return "--";
+    const hMatch = workHours.match(/(\d+)\s*h/i);
+    const mMatch = workHours.match(/(\d+)\s*m/i);
+    if (hMatch || mMatch) {
+      const h = hMatch ? parseInt(hMatch[1]) : 0;
+      const m = mMatch ? parseInt(mMatch[1]) : 0;
+      return `${h}h ${m}m`;
+    }
+    const decMatch = workHours.match(/([\d.]+)\s*h/i);
+    if (decMatch) {
+      const totalMinutes = Math.round(parseFloat(decMatch[1]) * 60);
+      return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+    }
+    const timeParts = workHours.split(':');
+    if (timeParts.length >= 2) {
+      const h = parseInt(timeParts[0]);
+      const m = parseInt(timeParts[1]);
+      if (!isNaN(h) && !isNaN(m)) {
+        return `${h}h ${m}m`;
+      }
+    }
+    return workHours;
+  };
+
   const calculateStats = (data: any[]) => {
     const presentDays = data.length;
     let totalMinutes = 0;
@@ -188,9 +237,26 @@ export default function AttendancePage() {
  
     data.forEach(a => {
       if (a.workHours) {
-        const parts = a.workHours.match(/(\d+)h\s+(\d+)m/);
-        if (parts) {
-          totalMinutes += parseInt(parts[1]) * 60 + parseInt(parts[2]);
+        const hMatch = a.workHours.match(/(\d+)\s*h/i);
+        const mMatch = a.workHours.match(/(\d+)\s*m/i);
+        if (hMatch || mMatch) {
+          const h = hMatch ? parseInt(hMatch[1]) : 0;
+          const m = mMatch ? parseInt(mMatch[1]) : 0;
+          totalMinutes += h * 60 + m;
+        } else {
+          const decMatch = a.workHours.match(/([\d.]+)\s*h/i);
+          if (decMatch) {
+            totalMinutes += Math.round(parseFloat(decMatch[1]) * 60);
+          } else {
+            const timeParts = a.workHours.split(':');
+            if (timeParts.length >= 2) {
+              const h = parseInt(timeParts[0]);
+              const m = parseInt(timeParts[1]);
+              if (!isNaN(h) && !isNaN(m)) {
+                totalMinutes += h * 60 + m;
+              }
+            }
+          }
         }
       }
       (a.breaks || []).forEach((b: any) => {
@@ -198,12 +264,21 @@ export default function AttendancePage() {
       });
     });
  
-    const avg = presentDays > 0 ? (totalMinutes / presentDays / 60).toFixed(1) : "0";
+    const avgMinutes = presentDays > 0 ? (totalMinutes / presentDays) : 0;
+    const avgH = Math.floor(avgMinutes / 60);
+    const avgM = Math.round(avgMinutes % 60);
+
+    const workH = Math.floor(totalMinutes / 60);
+    const workM = totalMinutes % 60;
+
+    const breakH = Math.floor(totalBreakMinutes / 60);
+    const breakM = totalBreakMinutes % 60;
+ 
     setStats({
       presentDays,
-      avgHours: avg,
-      totalWorkTime: `${Math.floor(totalMinutes / 60)}H ${totalMinutes % 60}M`,
-      totalBreakTime: `${totalBreakMinutes}M`
+      avgHours: `${avgH}h ${avgM}m`,
+      totalWorkTime: `${workH}h ${workM}m`,
+      totalBreakTime: `${breakH}h ${breakM}m`
     });
   };
 
@@ -458,6 +533,14 @@ export default function AttendancePage() {
     </div>
   );
  
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -571,7 +654,7 @@ export default function AttendancePage() {
             Export
           </Button>
 
-          {selectedIds.size > 0 && (
+          {canDeleteAttendance && selectedIds.size > 0 && (
             <Button 
               variant="destructive" 
               className="shadow-sm w-full sm:w-auto font-medium" 
@@ -583,7 +666,7 @@ export default function AttendancePage() {
             </Button>
           )}
 
-          {canManageAttendance && (
+          {canAddAttendance && (
             <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm w-full sm:w-auto">
@@ -645,7 +728,7 @@ export default function AttendancePage() {
             </Dialog>
           )}
 
-          {canManageAttendance && (
+          {canAddAttendance && (
             <Dialog open={bulkModalOpen} onOpenChange={setBulkModalOpen}>
             <DialogTrigger asChild>
               <Button className="bg-orange-600 hover:bg-orange-700 text-white font-medium shadow-sm w-full sm:w-auto">
@@ -753,7 +836,7 @@ export default function AttendancePage() {
               <div className="flex items-stretch gap-2 sm:gap-3 w-full md:w-auto">
                 <div className="flex-1 md:flex-none md:min-w-[100px] bg-gray-50 border border-border rounded-lg p-2 sm:p-3 flex flex-col justify-center">
                   <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Today</span>
-                  <span className="text-sm sm:text-lg font-bold text-foreground">{currentRecord?.workHours || '--'}</span>
+                  <span className="text-sm sm:text-lg font-bold text-foreground">{formatWorkHours(currentRecord?.workHours)}</span>
                 </div>
                 <div className="flex-1 md:flex-none md:min-w-[100px] bg-gray-50 border border-border rounded-lg p-2 sm:p-3 flex flex-col justify-center">
                   <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Check-in</span>
@@ -785,7 +868,7 @@ export default function AttendancePage() {
                   <span className="text-xs font-medium text-muted-foreground">Avg Daily Hours</span>
                   <Clock className="w-4 h-4 text-muted-foreground" />
                 </div>
-                <div className="text-3xl font-bold text-foreground mb-2">{stats.avgHours}h</div>
+                <div className="text-3xl font-bold text-foreground mb-2">{stats.avgHours}</div>
                 <p className="text-xs text-muted-foreground">Based on your activity</p>
               </div>
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
@@ -801,7 +884,7 @@ export default function AttendancePage() {
                   <span className="text-xs font-medium text-muted-foreground">Working Time</span>
                   <Briefcase className="w-4 h-4 text-muted-foreground" />
                 </div>
-                <div className="text-3xl font-bold text-foreground mb-2">{stats.totalWorkTime.split(' ')[0]}</div>
+                <div className="text-3xl font-bold text-foreground mb-2">{stats.totalWorkTime}</div>
                 <p className="text-xs text-muted-foreground">Total hours this month</p>
               </div>
             </div>
@@ -840,12 +923,14 @@ export default function AttendancePage() {
                 <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="text-[11px] text-muted-foreground font-bold bg-white border-b border-border uppercase tracking-wider">
                     <tr>
-                      <th className="px-4 py-4">
-                        <Checkbox 
-                          checked={attendance.length > 0 && selectedIds.size === attendance.length}
-                          onCheckedChange={toggleSelectAll}
-                        />
-                      </th>
+                      {canDeleteAttendance && (
+                        <th className="px-4 py-4">
+                          <Checkbox 
+                            checked={attendance.length > 0 && selectedIds.size === attendance.length}
+                            onCheckedChange={toggleSelectAll}
+                          />
+                        </th>
+                      )}
                       <th className="px-4 py-4">Sr. No.</th>
                       <th className="px-4 py-4">Date</th>
                       <th className="px-4 py-4">Day</th>
@@ -865,7 +950,7 @@ export default function AttendancePage() {
                   <tbody className="divide-y divide-border">
                     {attendance.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row, idx) => {
                       const totalBreakMinutes = (row.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
-                      const breakStr = totalBreakMinutes > 0 ? (totalBreakMinutes >= 60 ? `${Math.floor(totalBreakMinutes/60)}H ${totalBreakMinutes%60}Min` : `${totalBreakMinutes}Min`) : "-";
+                      const breakStr = formatToHhMm(totalBreakMinutes);
                       
                       const isToday = dayjs(row.date).isSame(dayjs(), 'day');
                       const checkIn = dayjs(`${row.date} ${row.checkIn}`);
@@ -878,11 +963,11 @@ export default function AttendancePage() {
                       if (checkIn.isValid() && checkOut && checkOut.isValid()) {
                         totalWorkingMinutes = checkOut.diff(checkIn, 'minute');
                       }
-                      const totalWorkingStr = totalWorkingMinutes > 0 ? (totalWorkingMinutes >= 60 ? `${Math.floor(totalWorkingMinutes/60)}H ${totalWorkingMinutes%60}Min` : `${totalWorkingMinutes}Min`) : "-";
+                      const totalWorkingStr = formatToHhMm(totalWorkingMinutes);
                       
                       // Production Hours
                       const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
-                      const productionStr = productionMinutes > 0 ? (productionMinutes >= 60 ? `${Math.floor(productionMinutes/60)}H ${productionMinutes%60}Min` : `${productionMinutes}Min`) : "-";
+                      const productionStr = formatToHhMm(productionMinutes);
                       
                       // Late
                       // Check for approved recovery request
@@ -910,7 +995,7 @@ export default function AttendancePage() {
                       const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${row.date} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
                       // Just show the actual minutes as requested
                       const lateStr = isLate || recoveryReq 
-                        ? `${lateMinutes}Min` 
+                        ? formatToHhMm(lateMinutes) 
                         : "-";
                       
                       // Overtime
@@ -923,7 +1008,7 @@ export default function AttendancePage() {
                       })();
                       
                       const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
-                      const overtimeStr = overtimeMinutes > 0 ? (overtimeMinutes >= 60 ? `${Math.floor(overtimeMinutes/60)}H ${overtimeMinutes%60}Min` : `${overtimeMinutes}Min`) : "-";
+                      const overtimeStr = formatToHhMm(overtimeMinutes);
 
                       let statusLabel = row.status === "Leave" ? "Leave" : (row.checkIn ? "Present" : "Absent");
                       let statusClass = statusLabel === "Present" 
@@ -941,12 +1026,14 @@ export default function AttendancePage() {
 
                       return (
                         <tr key={idx} className={`hover:bg-muted/30 transition-colors group border-b border-border ${selectedIds.has(row.id) ? 'bg-brand-light/20' : ''}`}>
-                          <td className="px-4 py-4">
-                            <Checkbox 
-                              checked={selectedIds.has(row.id)}
-                              onCheckedChange={() => toggleSelect(row.id)}
-                            />
-                          </td>
+                          {canDeleteAttendance && (
+                            <td className="px-4 py-4">
+                              <Checkbox 
+                                checked={selectedIds.has(row.id)}
+                                onCheckedChange={() => toggleSelect(row.id)}
+                              />
+                            </td>
+                          )}
                           <td className="px-4 py-4 font-medium text-muted-foreground">{idx + 1}</td>
                           <td className="px-4 py-4 font-medium text-foreground">{row.date}</td>
                           <td className="px-4 py-4 text-muted-foreground">{day}</td>
@@ -971,8 +1058,8 @@ export default function AttendancePage() {
                             ) : "-"}
                           </td>
                           <td className="px-4 py-4 font-medium text-foreground">{totalWorkingStr}</td>
-                          <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate">
-                            {isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-"}
+                          <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={row.remarks || (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : undefined)}>
+                            {row.remarks || (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-")}
                           </td>
                           <td className="px-4 py-4 text-right">
                               <div className="flex justify-end gap-2">
@@ -984,34 +1071,34 @@ export default function AttendancePage() {
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Button>
-                                {canManageAttendance && (
-                                  <>
-                                    <Button 
-                                      onClick={() => { 
-                                        setEditForm({
-                                          id: row.id,
-                                          date: row.date,
-                                          checkIn: row.checkIn,
-                                          checkOut: row.checkOut || "",
-                                          status: row.status || "Logged"
-                                        }); 
-                                        setEditModalOpen(true); 
-                                      }}
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-8 w-8 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full"
-                                    >
-                                      <Pencil className="w-4 h-4" />
-                                    </Button>
-                                    <Button 
-                                      onClick={() => handleDelete(row.id)}
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-8 w-8 text-red-600 bg-red-50 hover:bg-red-100 rounded-full"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </>
+                                {canEditAttendance && (
+                                  <Button 
+                                    onClick={() => { 
+                                      setEditForm({
+                                        id: row.id,
+                                        date: row.date,
+                                        checkIn: row.checkIn,
+                                        checkOut: row.checkOut || "",
+                                        status: row.status || "Logged"
+                                      }); 
+                                      setEditModalOpen(true); 
+                                    }}
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-full"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {canDeleteAttendance && (
+                                  <Button 
+                                    onClick={() => handleDelete(row.id)}
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8 text-red-600 bg-red-50 hover:bg-red-100 rounded-full"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
                                 )}
                               </div>
                           </td>
@@ -1065,7 +1152,7 @@ export default function AttendancePage() {
                 </div>
                 <div className="border border-brand-teal/30 bg-brand-light/20 rounded-lg p-3 text-center">
                   <div className="text-[10px] uppercase font-bold text-brand-teal mb-1">Work</div>
-                  <div className="font-bold text-sm text-brand-teal">{selectedRecord.workHours || '--'}</div>
+                  <div className="font-bold text-sm text-brand-teal">{formatWorkHours(selectedRecord.workHours)}</div>
                 </div>
               </div>
  

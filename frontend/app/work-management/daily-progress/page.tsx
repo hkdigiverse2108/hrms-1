@@ -11,12 +11,28 @@ import { useApi } from '@/hooks/useApi'
 import { useUser } from '@/hooks/useUser'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
+import { usePermissions } from '@/hooks/usePermissions'
+import { Loader2 } from 'lucide-react'
 
 export default function DailyProgressPage() {
   const { data, refresh } = useApi()
   const { user } = useUser()
+  const router = useRouter()
+  const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions()
+
+  const canViewDailyProgress = isUserAdmin || checkPermission('daily-progress', 'canView')
+  const canEditDailyProgress = isUserAdmin || checkPermission('daily-progress', 'canEdit')
+
+  useEffect(() => {
+    if (permissionsLoading) return;
+    if (!canViewDailyProgress) {
+      router.push("/");
+    }
+  }, [router, permissionsLoading, canViewDailyProgress]);
+
   const employees = data?.employees || []
-  const allReports = data?.employeeDailyReports || []
+  const allReports = (data as any)?.employeeDailyReports || []
   
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -120,7 +136,7 @@ export default function DailyProgressPage() {
 
   const actions = (record: any) => {
     const isSelf = user?.id === record.employeeId
-    const canManage = (isAdmin || (isTeamLeader && user?.department === record.department)) && !isSelf
+    const canManage = (canEditDailyProgress || (isTeamLeader && user?.department === record.department)) && !isSelf
     
     if (!canManage) {
         return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">
@@ -150,6 +166,14 @@ export default function DailyProgressPage() {
         </Button>
       </div>
     )
+  }
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
   }
 
   return (

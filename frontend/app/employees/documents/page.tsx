@@ -16,14 +16,28 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
+import { usePermissions } from '@/hooks/usePermissions'
+import { useRouter } from 'next/navigation'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
 
 export default function EmployeeDocumentsPage() {
+  const router = useRouter()
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
   const { data, refresh } = useApi()
   const employees = data?.employees || []
   const documents = data?.employeeDocuments || []
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('employee-documents', 'canView')) {
+        router.push('/')
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission])
+
+
   const [modalOpen, setModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -44,7 +58,7 @@ export default function EmployeeDocumentsPage() {
     "Degree Certificate",
     "10th Marksheet",
     "12th Marksheet",
-    "Profile Photo",
+    "Passport Photo",
     "Security Deposite (Employee - 10000)",
     "Security Deposite (Intern - 2000)",
     "Other"
@@ -149,19 +163,28 @@ export default function EmployeeDocumentsPage() {
     )},
   ]
 
-  const actions = (record: any) => (
-    <div className="flex items-center gap-2">
-      <Button variant="ghost" size="icon" onClick={() => window.open(record.fileUrl, '_blank')}>
-        <ExternalLink className="h-4 w-4" />
-      </Button>
-      <Button variant="ghost" size="icon" className="text-brand-teal" onClick={() => handleEdit(record)}>
-        <Pencil className="h-4 w-4" />
-      </Button>
-      <Button variant="ghost" size="icon" className="text-rose-500" onClick={() => handleDelete(record.id)}>
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </div>
-  )
+  const actions = (record: any) => {
+    const hasEdit = isAdmin || checkPermission('employee-documents', 'canEdit')
+    const hasDelete = isAdmin || checkPermission('employee-documents', 'canDelete')
+
+    return (
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" onClick={() => window.open(record.fileUrl, '_blank')}>
+          <ExternalLink className="h-4 w-4" />
+        </Button>
+        {hasEdit && (
+          <Button variant="ghost" size="icon" className="text-brand-teal" onClick={() => handleEdit(record)}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+        )}
+        {hasDelete && (
+          <Button variant="ghost" size="icon" className="text-rose-500" onClick={() => handleDelete(record.id)}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    )
+  }
 
   const [filterType, setFilterType] = useState<string>('all')
   const [filterEmployee, setFilterEmployee] = useState<string>('all')
@@ -172,13 +195,23 @@ export default function EmployeeDocumentsPage() {
     return matchesType && matchesEmployee
   })
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader title="Employee Documents" description="Manage and track official documents, certifications, and identification for all employees.">
-        <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={() => { setEditingId(null); setModalOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" />
-          Upload Document
-        </Button>
+        {(isAdmin || checkPermission('employee-documents', 'canAdd')) && (
+          <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={() => { setEditingId(null); setModalOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" />
+            Upload Document
+          </Button>
+        )}
       </PageHeader>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">

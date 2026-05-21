@@ -1,16 +1,34 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { EmployeeForm, EmployeeFormData } from '@/components/hrms/employee-form'
 import { API_URL } from '@/lib/config'
+import { usePermissions } from '@/hooks/usePermissions'
 
 export default function AddEmployeePage() {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('employee-list', 'canAdd')) {
+        router.push('/employees')
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission])
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
+      </div>
+    )
+  }
 
   const handleSubmit = async (formData: EmployeeFormData) => {
     setIsSubmitting(true)

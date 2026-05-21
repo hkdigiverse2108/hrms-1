@@ -30,8 +30,11 @@ import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
 import type { Designation, Department } from '@/lib/types'
 
+import { usePermissions } from '@/hooks/usePermissions'
+
 export default function DesignationsPage() {
   const { data, isLoading: apiLoading, refresh } = useApi()
+  const { checkPermission, isAdmin } = usePermissions()
   const [designations, setDesignations] = useState<Designation[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -117,29 +120,40 @@ export default function DesignationsPage() {
     },
   ]
 
-  const renderActions = (item: Designation) => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => handleOpenModal(item)}>
-          <Pencil className="mr-2 h-4 w-4" /> Edit
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => {
-            setItemToDelete(item)
-            setDeleteDialogOpen(true)
-          }}
-          className="text-destructive"
-        >
-          <Trash2 className="mr-2 h-4 w-4" /> Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
+  const renderActions = (item: Designation) => {
+    const hasEdit = isAdmin || checkPermission('org-structure', 'canEdit')
+    const hasDelete = isAdmin || checkPermission('org-structure', 'canDelete')
+    
+    if (!hasEdit && !hasDelete) return null
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {hasEdit && (
+            <DropdownMenuItem onClick={() => handleOpenModal(item)}>
+              <Pencil className="mr-2 h-4 w-4" /> Edit
+            </DropdownMenuItem>
+          )}
+          {hasDelete && (
+            <DropdownMenuItem
+              onClick={() => {
+                setItemToDelete(item)
+                setDeleteDialogOpen(true)
+              }}
+              className="text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Delete
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
@@ -154,12 +168,14 @@ export default function DesignationsPage() {
             <p className="text-xs font-medium text-slate-500 uppercase tracking-widest">{designations.length} defined roles</p>
           </div>
         </div>
-        <Button 
-          onClick={() => handleOpenModal()} 
-          className="bg-brand-teal hover:bg-brand-teal/90 text-white shadow-lg shadow-brand-teal/20 px-6 h-11 rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <Plus className="w-5 h-5 mr-2" /> Add Designation
-        </Button>
+        {(isAdmin || checkPermission('org-structure', 'canAdd')) && (
+          <Button 
+            onClick={() => handleOpenModal()} 
+            className="bg-brand-teal hover:bg-brand-teal/90 text-white shadow-lg shadow-brand-teal/20 px-6 h-11 rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Plus className="w-5 h-5 mr-2" /> Add Designation
+          </Button>
+        )}
       </div>
 
       {/* Table Content */}

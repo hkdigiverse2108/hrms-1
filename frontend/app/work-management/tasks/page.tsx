@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const STAGES = [
   { id: "todo", label: "To Do", color: "text-slate-700 bg-transparent" },
@@ -32,6 +33,14 @@ const STAGES = [
 
 export default function TasksPage() {
   const { user } = useUser();
+  const router = useRouter();
+  const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions();
+
+  const canViewTasks = isUserAdmin || checkPermission('tasks', 'canView');
+  const canAddTask = isUserAdmin || checkPermission('tasks', 'canAdd');
+  const canEditTask = isUserAdmin || checkPermission('tasks', 'canEdit');
+  const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete');
+
   const [tasks, setTasks] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -48,21 +57,13 @@ export default function TasksPage() {
   const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showAllTasks, setShowAllTasks] = useState(false);
-  const router = useRouter();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (user && user.role?.toLowerCase() !== "admin") {
-        const dept = user.department?.toLowerCase();
-        if (dept === "sales") {
-          router.replace("/work-management/sales");
-        } else if (dept === "marketing") {
-          router.replace("/work-management/marketing-reports");
-        }
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [user, router]);
+    if (permissionsLoading) return;
+    if (!canViewTasks) {
+      router.push("/");
+    }
+  }, [router, permissionsLoading, canViewTasks]);
 
   const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
 
@@ -164,6 +165,10 @@ export default function TasksPage() {
   };
 
   const onDragEnd = async (result: DropResult) => {
+    if (!canEditTask) {
+      alert("You do not have permission to edit tasks");
+      return;
+    }
     const { destination, source, draggableId } = result;
 
     if (!destination) return;
@@ -257,9 +262,9 @@ export default function TasksPage() {
       isVisible = true;
     } else if (user?.role === "Team Leader") {
       const project = projects.find(p => p.id === t.projectId);
-      isVisible = project?.teamLeaderId === user.id || t.assignedToId === user.id;
+      isVisible = project?.teamLeaderId === user?.id || t.assignedToId === user?.id;
     } else {
-      isVisible = t.assignedToId === user.id;
+      isVisible = t.assignedToId === user?.id;
     }
 
     if (!isVisible) return false;
@@ -296,6 +301,14 @@ export default function TasksPage() {
     return dueDate < today;
   };
 
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 flex flex-col h-[calc(100vh-140px)]">
       <PageHeader
@@ -308,12 +321,14 @@ export default function TasksPage() {
             setModalOpen(open);
             if (!open) setEditingTask(null);
           }}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="bg-brand-teal hover:bg-brand-teal-light text-white h-9 px-4 text-[12px] rounded-lg">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Task
-              </Button>
-            </DialogTrigger>
+            {canAddTask && (
+              <DialogTrigger asChild>
+                <Button size="sm" className="bg-brand-teal hover:bg-brand-teal-light text-white h-9 px-4 text-[12px] rounded-lg">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Task
+                </Button>
+              </DialogTrigger>
+            )}
             <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto custom-scrollbar">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">
@@ -464,9 +479,9 @@ export default function TasksPage() {
                       ].map((col) => (
                         <td 
                           key={col.key} 
-                          className={`px-4 py-3 ${col.type !== 'readonly' ? 'cursor-text hover:bg-brand-teal/5 transition-colors' : ''}`}
+                          className={`px-4 py-3 ${col.type !== 'readonly' && canEditTask ? 'cursor-text hover:bg-brand-teal/5 transition-colors' : ''}`}
                           style={{ minWidth: col.minWidth }}
-                          onClick={() => col.type !== 'readonly' && setEditingCell({ id: task.id, field: col.key })}
+                          onClick={() => col.type !== 'readonly' && canEditTask && setEditingCell({ id: task.id, field: col.key })}
                         >
                           {editingCell?.id === task.id && editingCell?.field === col.key ? (
                             col.type === 'select' ? (
@@ -538,22 +553,26 @@ export default function TasksPage() {
                           >
                             <History className="w-3.5 h-3.5" />
                           </button>
-                          <button 
-                            onClick={() => { setEditingTask(task); setModalOpen(true); }} 
-                            className="flex items-center gap-1 px-2 py-1 hover:bg-slate-100 rounded text-blue-600 transition-colors"
-                            title="Edit Task"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                            <span className="text-[10px] font-bold">Edit</span>
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(task.id)} 
-                            className="flex items-center gap-1 px-2 py-1 hover:bg-red-50 rounded text-red-500 transition-colors"
-                            title="Delete Task"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span className="text-[10px] font-bold">Delete</span>
-                          </button>
+                          {canEditTask && (
+                            <button 
+                              onClick={() => { setEditingTask(task); setModalOpen(true); }} 
+                              className="flex items-center gap-1 px-2 py-1 hover:bg-slate-100 rounded text-blue-600 transition-colors"
+                              title="Edit Task"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              <span className="text-[10px] font-bold">Edit</span>
+                            </button>
+                          )}
+                          {canDeleteTask && (
+                            <button 
+                              onClick={() => handleDelete(task.id)} 
+                              className="flex items-center gap-1 px-2 py-1 hover:bg-red-50 rounded text-red-500 transition-colors"
+                              title="Delete Task"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span className="text-[10px] font-bold">Delete</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -603,8 +622,10 @@ export default function TasksPage() {
                                     {...provided.dragHandleProps}
                                     className="group"
                                     onClick={() => {
-                                      setEditingTask(task);
-                                      setModalOpen(true);
+                                      if (canEditTask) {
+                                        setEditingTask(task);
+                                        setModalOpen(true);
+                                      }
                                     }}
                                   >
                                     <div className={`p-4 rounded-xl transition-all cursor-pointer border ${
@@ -629,7 +650,9 @@ export default function TasksPage() {
 
                                         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                           <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-brand-teal/10 rounded-md text-brand-teal" title="View History"><History className="w-3.5 h-3.5" /></button>
-                                          <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
+                                          {canDeleteTask && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
+                                          )}
                                         </div>
                                       </div>
 

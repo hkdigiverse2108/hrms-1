@@ -5,7 +5,9 @@ import pytz
 
 IST = pytz.timezone('Asia/Kolkata')
 
-def parse_robust_date(v: Any) -> date:
+def parse_robust_date(v: Any) -> Optional[date]:
+    if v is None:
+        return None
     if isinstance(v, datetime):
         return v.date()
     if isinstance(v, date):
@@ -13,28 +15,65 @@ def parse_robust_date(v: Any) -> date:
     if not isinstance(v, str):
         raise ValueError("Must be a string or date")
     v_clean = v.strip()
-    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%b %d, %Y", "%B %d, %Y"):
+    if not v_clean:
+        return None
+    
+    # Try parsing full datetime/date formats first
+    for fmt in (
+        "%Y-%m-%d %I:%M %p",
+        "%Y-%m-%d %I:%M%p",
+        "%d-%m-%Y %I:%M %p",
+        "%d-%m-%Y %I:%M%p",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%d-%m-%Y %H:%M:%S",
+        "%d-%m-%Y %H:%M",
+        "%Y-%m-%d",
+        "%d-%m-%Y",
+        "%b %d, %Y",
+        "%B %d, %Y",
+        "%Y/%m/%d",
+        "%d/%m/%Y"
+    ):
         try:
             return datetime.strptime(v_clean, fmt).date()
         except ValueError:
             continue
+            
     try:
         return datetime.fromisoformat(v_clean.replace('Z', '+00:00')).date()
     except ValueError:
         pass
+        
+    # Fallback: if there's a space or 'T', try parsing just the first part
+    for sep in (' ', 'T'):
+        if sep in v_clean:
+            first_part = v_clean.split(sep)[0]
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y"):
+                try:
+                    return datetime.strptime(first_part, fmt).date()
+                except ValueError:
+                    continue
+                    
     raise ValueError(f"Cannot parse date: {v}")
 
-def serialize_robust_date_standard(v: date, info: SerializationInfo) -> Any:
+def serialize_robust_date_standard(v: Optional[date], info: SerializationInfo) -> Any:
+    if v is None:
+        return None
     if info.mode == 'json':
         return v.strftime("%Y-%m-%d")
-    return datetime.combine(v, datetime.min.time()).replace(tzinfo=IST)
+    return datetime.combine(v, datetime.min.time())
 
-def serialize_robust_date_dmy(v: date, info: SerializationInfo) -> Any:
+def serialize_robust_date_dmy(v: Optional[date], info: SerializationInfo) -> Any:
+    if v is None:
+        return None
     if info.mode == 'json':
         return v.strftime("%d-%m-%Y")
-    return datetime.combine(v, datetime.min.time()).replace(tzinfo=IST)
+    return datetime.combine(v, datetime.min.time())
 
-def parse_robust_datetime(v: Any) -> datetime:
+def parse_robust_datetime(v: Any) -> Optional[datetime]:
+    if v is None:
+        return None
     if isinstance(v, datetime):
         return v
     if isinstance(v, date):
@@ -42,8 +81,15 @@ def parse_robust_datetime(v: Any) -> datetime:
     if not isinstance(v, str):
         raise ValueError("Must be a string or datetime")
     v_clean = v.strip()
+    if not v_clean:
+        return None
     for fmt in (
+        "%Y-%m-%d %I:%M %p",
+        "%Y-%m-%d %I:%M%p",
+        "%d-%m-%Y %I:%M %p",
+        "%d-%m-%Y %I:%M%p",
         "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S%z",
         "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S%z",
@@ -51,7 +97,9 @@ def parse_robust_datetime(v: Any) -> datetime:
         "%d-%m-%Y %H:%M:%S",
         "%d-%m-%Y %H:%M",
         "%Y-%m-%d",
-        "%d-%m-%Y"
+        "%d-%m-%Y",
+        "%Y/%m/%d",
+        "%d/%m/%Y"
     ):
         try:
             dt = datetime.strptime(v_clean, fmt)
@@ -69,20 +117,24 @@ def parse_robust_datetime(v: Any) -> datetime:
         pass
     raise ValueError(f"Cannot parse datetime: {v}")
 
-def serialize_robust_datetime_standard(v: datetime, info: SerializationInfo) -> Any:
+def serialize_robust_datetime_standard(v: Optional[datetime], info: SerializationInfo) -> Any:
+    if v is None:
+        return None
     if info.mode == 'json':
         return v.isoformat()
     return v
 
-def serialize_robust_datetime_dmy(v: datetime, info: SerializationInfo) -> Any:
+def serialize_robust_datetime_dmy(v: Optional[datetime], info: SerializationInfo) -> Any:
+    if v is None:
+        return None
     if info.mode == 'json':
         return v.strftime("%d-%m-%Y %H:%M")
     return v
 
-RobustDate = Annotated[date, BeforeValidator(parse_robust_date), PlainSerializer(serialize_robust_date_standard, when_used='always')]
-RobustDateDMY = Annotated[date, BeforeValidator(parse_robust_date), PlainSerializer(serialize_robust_date_dmy, when_used='always')]
-RobustDatetime = Annotated[datetime, BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_standard, when_used='always')]
-RobustDatetimeDMY = Annotated[datetime, BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_dmy, when_used='always')]
+RobustDate = Annotated[Optional[date], BeforeValidator(parse_robust_date), PlainSerializer(serialize_robust_date_standard, when_used='always')]
+RobustDateDMY = Annotated[Optional[date], BeforeValidator(parse_robust_date), PlainSerializer(serialize_robust_date_dmy, when_used='always')]
+RobustDatetime = Annotated[Optional[datetime], BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_standard, when_used='always')]
+RobustDatetimeDMY = Annotated[Optional[datetime], BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_dmy, when_used='always')]
 
 class BaseModel(PydanticBaseModel):
     created_at: Optional[RobustDatetime] = None
@@ -108,16 +160,16 @@ class EmployeeBase(BaseModel):
     middleName: Optional[str] = None
     lastName: Optional[str] = None
     email: str
-    phone: str
+    phone: Optional[str] = None
     password: Optional[str] = None
     dob: Optional[RobustDate] = None
-    department: str
-    designation: str
-    joinDate: RobustDate
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    joinDate: Optional[RobustDate] = None
     status: Optional[str] = "active"
     gender: Optional[str] = "Male"
     position: Optional[str] = "Intern"
-    salary: float
+    salary: Optional[float] = None
     company: Optional[str] = None
     role: Optional[str] = None
     upiId: Optional[str] = None
@@ -194,6 +246,7 @@ class AttendanceBase(BaseModel):
     workHours: Optional[str] = None
     breaks: List[Break] = []
     punches: List[PunchLog] = []
+    remarks: Optional[str] = None
  
 class Attendance(AttendanceBase):
     id: str
@@ -210,6 +263,7 @@ class AttendanceUpdate(BaseModel):
     status: Optional[str] = None
     workHours: Optional[str] = None
     punches: Optional[List[PunchLog]] = None
+    remarks: Optional[str] = None
  
 class PunchRequest(BaseModel):
     employeeId: str
@@ -231,6 +285,8 @@ class LeaveRequestBase(BaseModel):
     approved_by_id: Optional[str] = None
     approved_by_photo: Optional[str] = None
     proof_image: Optional[str] = None
+    reject_reason: Optional[str] = None
+    approve_reason: Optional[str] = None
 
 class LeaveRequestCreate(LeaveRequestBase):
     pass
@@ -249,6 +305,8 @@ class LeaveRequestUpdate(BaseModel):
     approved_by_id: Optional[str] = None
     approved_by_photo: Optional[str] = None
     proof_image: Optional[str] = None
+    reject_reason: Optional[str] = None
+    approve_reason: Optional[str] = None
 
 class LeaveRequest(LeaveRequestBase):
     id: str
@@ -951,6 +1009,7 @@ class MarketingDailyReportBase(BaseModel):
     followers: int = 0
     spend: float = 0
     cpl: float = 0
+    remarks: Optional[str] = None
 
 class MarketingDailyReportCreate(MarketingDailyReportBase):
     clientId: Optional[str] = None
@@ -967,6 +1026,7 @@ class MarketingDailyReportUpdate(BaseModel):
     followers: Optional[int] = None
     spend: Optional[float] = None
     cpl: Optional[float] = None
+    remarks: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 

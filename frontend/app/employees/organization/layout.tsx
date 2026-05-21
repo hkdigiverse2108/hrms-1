@@ -3,13 +3,32 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Building2, UserCircle2 } from 'lucide-react'
+import { Building2, UserCircle2, Loader2 } from 'lucide-react'
+import { useEffect } from 'react'
+import { usePermissions } from '@/hooks/usePermissions'
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
+
+  useEffect(() => {
+    if (!permissionsLoading) {
+      if (!isAdmin && !checkPermission('org-structure', 'canView')) {
+        router.push('/')
+      }
+    }
+  }, [permissionsLoading, isAdmin, router, checkPermission])
 
   const currentTab = pathname.includes('designations') ? 'designations' : 'departments'
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-brand-teal" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
