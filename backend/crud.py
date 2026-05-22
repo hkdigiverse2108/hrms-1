@@ -1640,6 +1640,13 @@ async def mark_notification_as_read(db, notification_id: str):
     result = await db.notifications.find_one({"_id": ObjectId(notification_id)})
     return fix_id(result)
 
+async def mark_all_notifications_as_read(db, employee_id: str):
+    await db.notifications.update_many(
+        {"employee_id": employee_id, "is_read": False},
+        {"$set": {"is_read": True}}
+    )
+    return {"message": "All notifications marked as read"}
+
 async def delete_leave_request(db, leave_id: str):
     result = await db.leave_requests.delete_one({"_id": ObjectId(leave_id)})
     return result.deleted_count > 0

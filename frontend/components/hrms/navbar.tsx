@@ -18,6 +18,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useUser } from '@/hooks/useUser'
 import { getAvatarUrl } from '@/lib/config'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import dayjs from "dayjs"
+import relativeTime from "dayjs/plugin/relativeTime"
+
+dayjs.extend(relativeTime);
  
 export function HRMSNavbar() {
   const router = useRouter();
@@ -26,6 +32,25 @@ export function HRMSNavbar() {
   const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
+
+  const markAllAsRead = async () => {
+    if (!user?.id) return;
+    try {
+      const { API_URL } = await import('@/lib/config');
+      const response = await fetch(`${API_URL}/notifications/read-all/${user.id}`, {
+        method: "PUT"
+      });
+      if (response.ok) {
+        const { toast } = await import('sonner');
+        toast.success("All notifications marked as read");
+        fetchNotifications();
+      }
+    } catch (err) {
+      console.error("Error marking all as read:", err);
+    }
+  };
  
   useEffect(() => {
     setMounted(true);
@@ -35,6 +60,7 @@ export function HRMSNavbar() {
   }, [user]);
 
   const fetchNotifications = async () => {
+    if (!user?.id) return;
     try {
       const { API_URL } = await import('@/lib/config');
       const response = await fetch(`${API_URL}/notifications/${user.id}`);
@@ -162,8 +188,13 @@ export function HRMSNavbar() {
               )}
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="justify-center text-brand-teal font-medium">
-              View all notifications
+            <DropdownMenuItem 
+              onClick={markAllAsRead} 
+              disabled={unreadCount === 0}
+              className="flex items-center justify-center gap-1.5 text-brand-teal font-medium cursor-pointer py-2 focus:bg-brand-light/50 focus:text-brand-teal disabled:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Check className="w-4 h-4" />
+              <span>Mark all read</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -214,6 +245,141 @@ export function HRMSNavbar() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <Dialog open={isNotificationsModalOpen} onOpenChange={setIsNotificationsModalOpen}>
+        <DialogContent className="sm:max-w-[550px] max-h-[85vh] flex flex-col p-0 overflow-hidden bg-white border border-border rounded-xl shadow-2xl">
+          <DialogHeader className="p-6 pb-4 border-b border-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-lg font-bold text-foreground">Notifications Center</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Stay updated with your latest activities, requests, and system alerts.
+                </DialogDescription>
+              </div>
+              {unreadCount > 0 && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={markAllAsRead} 
+                  className="text-xs border-brand-teal text-brand-teal hover:bg-brand-light flex items-center gap-1.5 h-8 font-medium"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Mark all as read
+                </Button>
+              )}
+            </div>
+            {/* Tabs for All vs Unread */}
+            <div className="flex gap-2 mt-4 border-b border-border pb-1">
+              <button 
+                onClick={() => setActiveTab("all")}
+                className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-all ${activeTab === 'all' ? 'border-brand-teal text-brand-teal' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+              >
+                All Notifications ({notifications.length})
+              </button>
+              <button 
+                onClick={() => setActiveTab("unread")}
+                className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-all ${activeTab === 'unread' ? 'border-brand-teal text-brand-teal' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+              >
+                Unread ({unreadCount})
+              </button>
+            </div>
+          </DialogHeader>
+
+          <ScrollArea className="flex-1 overflow-y-auto px-6 max-h-[50vh]">
+            {(() => {
+              const displayed = activeTab === "unread" 
+                ? notifications.filter(n => !n.is_read)
+                : notifications;
+              
+              if (displayed.length === 0) {
+                return (
+                  <div className="py-16 text-center flex flex-col items-center justify-center gap-3">
+                    <div className="bg-brand-light/50 p-4 rounded-full text-brand-teal">
+                      <Bell className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground text-sm">No notifications found</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">You're all caught up!</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="divide-y divide-border">
+                  {displayed.map((n) => {
+                    const isUnread = !n.is_read;
+                    // Determine icon based on notification type
+                    let iconBg = "bg-blue-50 text-blue-600";
+                    if (n.type === 'leave') {
+                      iconBg = "bg-amber-50 text-amber-600";
+                    } else if (n.type === 'attendance') {
+                      iconBg = "bg-emerald-50 text-emerald-600";
+                    }
+
+                    return (
+                      <div 
+                        key={n.id} 
+                        className={`py-4 flex gap-4 transition-colors relative group ${isUnread ? 'bg-brand-light/5' : ''}`}
+                      >
+                        {isUnread && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-brand-teal rounded-full" />}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
+                          <Bell className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start gap-2">
+                            <span className={`font-semibold text-sm text-foreground block truncate ${isUnread ? 'text-brand-teal font-bold' : ''}`}>
+                              {n.title}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground whitespace-nowrap pt-0.5">
+                              {dayjs(n.created_at).fromNow()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed break-words">{n.message}</p>
+                          
+                          <div className="flex items-center gap-3 mt-3">
+                            <Button 
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setIsNotificationsModalOpen(false);
+                                if (n.type === 'leave') {
+                                  router.push(user?.role === 'Employee' ? '/leave' : '/employees/leave');
+                                }
+                              }}
+                              className="h-7 px-2.5 text-[10px] font-bold border-brand-teal text-brand-teal hover:bg-brand-light"
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              View Details
+                            </Button>
+                            {isUnread && (
+                              <Button 
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => markAsRead(n.id)}
+                                className="h-7 px-2.5 text-[10px] font-bold text-muted-foreground hover:bg-gray-100 hover:text-foreground"
+                              >
+                                <Check className="w-3.5 h-3.5 mr-1" />
+                                Mark as Read
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </ScrollArea>
+
+          <div className="p-4 border-t border-border bg-gray-50/50 flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setIsNotificationsModalOpen(false)} className="text-xs font-semibold">
+              Close Notifications
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </header>
   )
 }

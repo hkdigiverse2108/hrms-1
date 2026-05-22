@@ -330,6 +330,10 @@ async def read_notifications(employee_id: str, db=Depends(get_db)):
 async def mark_notification_read(notification_id: str, db=Depends(get_db)):
     return await crud.mark_notification_as_read(db, notification_id)
 
+@app.put("/notifications/read-all/{employee_id}")
+async def mark_all_notifications_read(employee_id: str, db=Depends(get_db)):
+    return await crud.mark_all_notifications_as_read(db, employee_id)
+
 # Department Endpoints
 @app.get("/departments", response_model=List[schemas.Department])
 async def read_departments(skip: int = 0, limit: int = 100, db=Depends(get_db)):
