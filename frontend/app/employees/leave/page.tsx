@@ -26,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "antd";
 
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { toast } from "sonner";
 
@@ -59,9 +59,12 @@ export default function LeaveRequestsPage() {
   const [isMobileDetailView, setIsMobileDetailView] = useState(false);
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [approveReason, setApproveReason] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [timeFilter, setTimeFilter] = useState("today"); // "today" | "custom"
   const [filterDate, setFilterDate] = useState(dayjs());
@@ -115,13 +118,13 @@ export default function LeaveRequestsPage() {
     setIsUpdating(true);
     try {
       const body: any = { status: newStatus };
-      if ((newStatus === 'Approved' || newStatus === 'Rejected') && user) {
+      if ((newStatus === 'Approved' || newStatus === 'Rejected' || newStatus === 'Cancelled') && user) {
         body.approved_by = user.name;
         body.approved_by_role = user.role;
         body.approved_by_id = user.id;
         body.approved_by_photo = user.profilePhoto;
       }
-      if (newStatus === 'Rejected' && reasonText) {
+      if ((newStatus === 'Rejected' || newStatus === 'Cancelled') && reasonText) {
         body.reject_reason = reasonText;
       }
       if (newStatus === 'Approved' && reasonText) {
@@ -140,6 +143,7 @@ export default function LeaveRequestsPage() {
         fetchRequests();
         setApproveModalOpen(false);
         setRejectModalOpen(false);
+        setCancelModalOpen(false);
       } else {
         toast.error("Failed to update status");
       }
@@ -406,13 +410,75 @@ export default function LeaveRequestsPage() {
                       <Button 
                         variant="outline" 
                         disabled={isUpdating}
-                        onClick={() => handleStatusUpdate(selectedReq.id, 'Cancelled')}
+                        onClick={() => {
+                          setCancellingId(selectedReq.id);
+                          setCancelReason("");
+                          setCancelModalOpen(true);
+                        }}
                         className="flex-1 sm:flex-none text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 font-medium"
                       >
                         <X className="w-4 h-4 mr-2" />
                         Cancel Leave
                       </Button>
                     )}
+
+                    <Dialog open={cancelModalOpen} onOpenChange={(open) => { setCancelModalOpen(open); if (open) setCancelReason(""); }}>
+                      <DialogContent className="sm:max-w-[450px]">
+                        <DialogHeader>
+                          <DialogTitle className="text-xl font-bold text-amber-600 flex items-center gap-2">
+                            <X className="w-5 h-5 text-amber-600" />
+                            Cancel Leave Request
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-2">
+                          <p className="text-sm text-muted-foreground">
+                            Please provide a reason (optional) for cancelling this approved leave request. The employee will be notified automatically.
+                          </p>
+                          
+                          <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-4 mb-4">
+                            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-amber-100">
+                              <Avatar className="w-10 h-10">
+                                <AvatarFallback className="bg-amber-100 text-amber-700 font-bold">
+                                  {selectedReq.employee_name.split(' ').map((n: string) => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <div className="font-semibold text-foreground text-sm">{selectedReq.employee_name}</div>
+                                <div className="text-xs text-muted-foreground">Employee Request</div>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                <span className="font-semibold text-foreground capitalize">{selectedReq.type} ({selectedReq.duration})</span>
+                              </div>
+                              <span className="text-muted-foreground">{selectedReq.start_date} - {selectedReq.end_date}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-foreground">Cancellation Reason (Optional)</label>
+                            <Textarea 
+                              value={cancelReason}
+                              onChange={(e) => setCancelReason(e.target.value)}
+                              placeholder="Please write the reason for cancelling the leave request..." 
+                              className="resize-none h-24 text-sm bg-white"
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter className="gap-2 sm:gap-2 mt-4">
+                          <Button variant="outline" onClick={() => setCancelModalOpen(false)}>Cancel</Button>
+                          <Button 
+                            disabled={isUpdating}
+                            className="bg-amber-600 hover:bg-amber-700 text-white font-medium" 
+                            onClick={() => handleStatusUpdate(cancellingId || selectedReq.id, 'Cancelled', cancelReason)}
+                          >
+                            {isUpdating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <X className="w-4 h-4 mr-2" />}
+                            Confirm Cancellation
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   </>
                 )}
 
@@ -631,7 +697,7 @@ export default function LeaveRequestsPage() {
                         <div className="flex flex-col gap-3 mt-3">
                           <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-border">
                             <Avatar className="w-10 h-10 rounded-md">
-                              <AvatarImage src={selectedReq.approved_by_photo} className="object-cover" />
+                              <AvatarImage src={getAvatarUrl(selectedReq.approved_by_photo)} className="object-cover" />
                               <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
                                 {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
                               </AvatarFallback>
@@ -653,7 +719,7 @@ export default function LeaveRequestsPage() {
                           {selectedReq.approved_by && (
                             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-border">
                               <Avatar className="w-10 h-10 rounded-md">
-                                <AvatarImage src={selectedReq.approved_by_photo} className="object-cover" />
+                                <AvatarImage src={getAvatarUrl(selectedReq.approved_by_photo)} className="object-cover" />
                                 <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
                                   {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
                                 </AvatarFallback>
@@ -668,6 +734,29 @@ export default function LeaveRequestsPage() {
                             <div className="p-3 bg-rose-50/50 rounded-lg border border-rose-100 text-sm">
                               <span className="font-bold text-rose-800 block mb-1">Reason for Rejection:</span>
                               <span className="text-rose-700 leading-relaxed">{selectedReq.reject_reason}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : selectedReq.status === 'Cancelled' ? (
+                        <div className="flex flex-col gap-3 mt-3">
+                          {selectedReq.approved_by && (
+                            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-border">
+                              <Avatar className="w-10 h-10 rounded-md">
+                                <AvatarImage src={getAvatarUrl(selectedReq.approved_by_photo)} className="object-cover" />
+                                <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
+                                  {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold text-foreground">Cancelled by {selectedReq.approved_by}</span>
+                                <span className="text-xs text-muted-foreground">{selectedReq.approved_by_role || 'Admin'}</span>
+                              </div>
+                            </div>
+                          )}
+                          {selectedReq.reject_reason && (
+                            <div className="p-3 bg-amber-50/50 rounded-lg border border-amber-100 text-sm">
+                              <span className="font-bold text-amber-800 block mb-1">Reason for Cancellation:</span>
+                              <span className="text-amber-700 leading-relaxed">{selectedReq.reject_reason}</span>
                             </div>
                           )}
                         </div>

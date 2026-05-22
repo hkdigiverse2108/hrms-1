@@ -1449,12 +1449,32 @@ async def create_leave_request(db, leave: schemas.LeaveRequestCreate):
 async def get_all_leave_requests(db, skip: int = 0, limit: int = 100):
     cursor = db.leave_requests.find().sort("requested_on", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
-    return [fix_id(row) for row in rows]
+    leaves = [fix_id(row) for row in rows]
+    for leave in leaves:
+        approved_by_id = leave.get("approved_by_id")
+        if approved_by_id:
+            try:
+                employee = await db.employees.find_one({"_id": ObjectId(approved_by_id)})
+                if employee:
+                    leave["approved_by_photo"] = employee.get("profilePhoto") or None
+            except:
+                pass
+    return leaves
 
 async def get_user_leave_requests(db, employee_id: str, skip: int = 0, limit: int = 100):
     cursor = db.leave_requests.find({"employee_id": employee_id}).sort("requested_on", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
-    return [fix_id(row) for row in rows]
+    leaves = [fix_id(row) for row in rows]
+    for leave in leaves:
+        approved_by_id = leave.get("approved_by_id")
+        if approved_by_id:
+            try:
+                employee = await db.employees.find_one({"_id": ObjectId(approved_by_id)})
+                if employee:
+                    leave["approved_by_photo"] = employee.get("profilePhoto") or None
+            except:
+                pass
+    return leaves
 
 async def auto_create_leave_attendance(db, employee_id: str, start_date, end_date, leave_type: str = "leave"):
     def robust_parse(val):
