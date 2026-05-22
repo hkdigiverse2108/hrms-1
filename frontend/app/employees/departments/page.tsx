@@ -154,7 +154,7 @@ function DesignationsTab({ designations, departments, apiLoading, refresh }: { d
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={() => exportToCSV(designations, 'designations')} className="bg-white">
             <Download className="mr-2 h-4 w-4" />
-            Export
+            Export PDF
           </Button>
           <Button onClick={() => handleOpenModal()} className="bg-brand-teal hover:bg-brand-teal-light text-white">
             <Plus className="mr-2 h-4 w-4" />

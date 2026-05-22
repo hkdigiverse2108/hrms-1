@@ -33,7 +33,7 @@ export default function LatePenaltyPage() {
       >
         <Button variant="outline" onClick={() => exportToCSV(lateEmployees, 'late-penalty-report')}>
           <Download className="mr-2 h-4 w-4" />
-          Export
+          Export PDF
         </Button>
       </PageHeader>
 

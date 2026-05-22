@@ -161,7 +161,7 @@ export default function ApplicationsPage() {
       <PageHeader title="Applications" description="Track and manage candidate applications.">
         <Button variant="outline" onClick={() => exportToCSV(applications, 'applications')}>
           <Download className="mr-2 h-4 w-4" />
-          Export
+          Export PDF
         </Button>
       </PageHeader>
 

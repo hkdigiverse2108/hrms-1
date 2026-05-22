@@ -50,7 +50,7 @@ export default function AllInvoicesPage() {
             onClick={() => exportToCSV(invoicesData, 'invoices')}
           >
             <Download className="w-4 h-4 mr-2" />
-            Export
+            Export PDF
           </Button>
 
           <Link href="/invoice/create">

@@ -81,7 +81,7 @@ export default function ReviewsPage() {
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={() => exportToCSV(reviews, 'performance-reviews')}>
             <Download className="mr-2 h-4 w-4" />
-            Export
+            Export PDF
           </Button>
           <Button>
             <Plus className="mr-2 h-4 w-4" />

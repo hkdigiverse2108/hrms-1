@@ -36,7 +36,7 @@ export default function LifecyclePage() {
       >
         <Button variant="outline" onClick={() => exportToCSV(employees, 'employee-lifecycle')}>
           <Download className="mr-2 h-4 w-4" />
-          Export
+          Export PDF
         </Button>
       </PageHeader>
 

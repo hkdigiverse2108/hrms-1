@@ -152,7 +152,7 @@ export default function InterviewsPage() {
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={() => exportToCSV(interviews, 'interviews')}>
             <Download className="mr-2 h-4 w-4" />
-            Export
+            Export PDF
           </Button>
           <Button>
             <Plus className="mr-2 h-4 w-4" />
