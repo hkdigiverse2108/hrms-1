@@ -1197,7 +1197,8 @@ class EmployeeDailyReportBase(BaseModel):
     note: Optional[str] = None
 
 class EmployeeDailyReportCreate(EmployeeDailyReportBase):
-    pass
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class EmployeeDailyReportUpdate(BaseModel):
     tasksCompleted: Optional[List[str]] = None

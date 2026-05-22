@@ -28,6 +28,24 @@ interface ActivityLogDialogProps {
   isLoading?: boolean;
 }
 
+const formatTimestamp = (timestampString: string) => {
+  if (!timestampString) return "";
+  try {
+    const date = new Date(timestampString);
+    if (isNaN(date.getTime())) return timestampString;
+    return date.toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).replace(",", " •");
+  } catch (e) {
+    return timestampString;
+  }
+};
+
 export function ActivityLogDialog({
   open,
   onOpenChange,
@@ -54,7 +72,7 @@ export function ActivityLogDialog({
             </div>
           </div>
         </div>
-
+ 
         <div className="px-8 py-4 max-h-[60vh] overflow-y-auto custom-scrollbar relative">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
@@ -75,7 +93,7 @@ export function ActivityLogDialog({
                     <div className="bg-[#F9FAFB] border border-[#F3F4F6] rounded-[16px] p-5 transition-all group-hover:shadow-md group-hover:border-[#0D9488]/20 group-hover:bg-white">
                       <div className="flex justify-between items-start mb-2">
                         <span className="text-[14px] font-bold text-[#111827]">{log.userName}</span>
-                        <span className="text-[11px] font-medium text-[#9CA3AF] tabular-nums">{log.timestamp}</span>
+                        <span className="text-[11px] font-medium text-[#9CA3AF] tabular-nums">{formatTimestamp(log.timestamp)}</span>
                       </div>
                       
                       {log.action && (
@@ -87,7 +105,7 @@ export function ActivityLogDialog({
                       )}
                       
                       <p className="text-[13px] text-[#4B5563] leading-[1.6] font-medium">
-                        {log.details}
+                        {log.details ? log.details.replace(" 00:00:00", "") : ""}
                       </p>
                     </div>
                   </div>
