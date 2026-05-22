@@ -78,7 +78,7 @@ export default function PerformancePage() {
       <PageHeader title="KPI Tracking" description="Monitor employee performance and key metrics.">
         <Button variant="outline" onClick={() => exportToCSV(kpiRecords, 'kpi-report')}>
           <Download className="mr-2 h-4 w-4" />
-          Export Report
+          Export PDF
         </Button>
       </PageHeader>
 

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { SearchBar } from "@/components/common/SearchBar";
 import { TablePagination } from "@/components/common/TablePagination";
 import { Button } from "@/components/ui/button";
@@ -45,44 +47,9 @@ export default function EmployeeListPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  useEffect(() => {
-    const loadScript = (src: string) => {
-      return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) {
-          resolve(true)
-          return
-        }
-        const script = document.createElement('script')
-        script.src = src
-        script.async = true
-        script.onload = () => resolve(true)
-        script.onerror = reject
-        document.body.appendChild(script)
-      })
-    }
-
-    const loadPdfLibraries = async () => {
-      try {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js')
-      } catch (err) {
-        console.error("Failed to load PDF libraries:", err)
-      }
-    }
-
-    loadPdfLibraries()
-  }, [])
-
   const handleExportPDF = async () => {
     setIsExporting(true)
     try {
-      const { jsPDF } = (window as any).jspdf
-      if (!jsPDF) {
-        alert('PDF libraries are still loading. Please wait a second and try again.')
-        setIsExporting(false)
-        return
-      }
-
       const doc = new jsPDF('l', 'mm', 'a4')
 
       // Header styling
@@ -123,47 +90,32 @@ export default function EmployeeListPage() {
         emp.joinDate || ""
       ])
 
-      if (typeof (doc as any).autoTable === 'function') {
-        (doc as any).autoTable({
-          head: headers,
-          body: rows,
-          startY: 32,
-          theme: 'striped',
-          styles: {
-            fontSize: 9,
-            cellPadding: 3.5,
-            textColor: [51, 65, 85], // slate-700
-            lineColor: [241, 245, 249],
-            lineWidth: 0.1,
-          },
-          headStyles: {
-            fillColor: [9, 160, 138], // brand-teal
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
-            fontSize: 9.5,
-          },
-          alternateRowStyles: {
-            fillColor: [248, 250, 252], // slate-50
-          },
-          columnStyles: {
-            0: { fontStyle: 'bold', textColor: [15, 23, 42] }, // Slate-900 for name
-          },
-          margin: { left: 14, right: 14 }
-        })
-      } else {
-        // Fallback drawing if plugin failed to hook
-        let y = 38
-        doc.setFontSize(9)
-        doc.setFont("Helvetica", "bold")
-        doc.text(headers[0].join("   |   "), 14, y)
-        doc.line(14, y + 2, 283, y + 2)
-        y += 8
-        doc.setFont("Helvetica", "normal")
-        rows.forEach(row => {
-          doc.text(row.join("   |   "), 14, y)
-          y += 6
-        })
-      }
+      autoTable(doc, {
+        head: headers,
+        body: rows,
+        startY: 32,
+        theme: 'striped',
+        styles: {
+          fontSize: 9,
+          cellPadding: 3.5,
+          textColor: [51, 65, 85], // slate-700
+          lineColor: [241, 245, 249],
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [9, 160, 138], // brand-teal
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 9.5,
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252], // slate-50
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', textColor: [15, 23, 42] }, // Slate-900 for name
+        },
+        margin: { left: 14, right: 14 }
+      })
 
       doc.save(`Employee_Directory_${new Date().toISOString().slice(0,10)}.pdf`)
     } catch (err) {

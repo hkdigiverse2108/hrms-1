@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
       >
         <Button variant="outline" onClick={() => exportToCSV([...departmentData, ...attendanceTrend, ...leaveDistribution, ...hiringTrend, ...performanceDistribution], 'analytics-summary')}>
           <Download className="mr-2 h-4 w-4" />
-          Export Report
+          Export PDF
         </Button>
       </PageHeader>
 

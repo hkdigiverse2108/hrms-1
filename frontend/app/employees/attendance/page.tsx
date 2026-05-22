@@ -628,7 +628,7 @@ export default function EmployeeAttendanceListPage() {
           {(isAdmin || checkPermission('employee-attendance', 'canView')) && (
             <Button variant="outline" className="h-9 shadow-sm" onClick={() => exportToCSV(filteredAttendance, 'employee_attendance')}>
               <Download className="w-4 h-4 mr-2" />
-              Export
+              Export PDF
             </Button>
           )}
           {canAdd && (
@@ -1039,7 +1039,7 @@ export default function EmployeeAttendanceListPage() {
               className="w-full bg-[#0d9488] hover:bg-[#0f766e] text-white font-bold h-11 rounded-xl shadow-md transition-all active:scale-[0.98]"
               onClick={() => exportToCSV(dailySummary?.records || [], `attendance_report_${selectedDay}`)}
             >
-              <Download className="w-4 h-4 mr-2" /> Export Daily Report
+              <Download className="w-4 h-4 mr-2" /> Export PDF Daily Report
             </Button>
           </div>
         </DialogContent>

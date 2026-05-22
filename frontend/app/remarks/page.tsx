@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { 
   Plus, 
   Search, 
@@ -78,6 +80,7 @@ export default function RemarksPage() {
   const [dateFilter, setDateFilter] = useState("This Month");
   const [specificDate, setSpecificDate] = useState("");
   const [activeTab, setActiveTab] = useState("active");
+  const [isExporting, setIsExporting] = useState(false);
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -286,6 +289,112 @@ export default function RemarksPage() {
     setSelectedRemark(remark);
     setEditModalOpen(true);
   };
+
+  const handleExportPDF = async () => {
+    setIsExporting(true)
+    try {
+      const doc = new jsPDF('l', 'mm', 'a4')
+
+      // Header styling
+      doc.setFont("Helvetica", "bold")
+      doc.setFontSize(22)
+      doc.setTextColor(9, 160, 138) // Brand Teal: #09A08A
+      doc.text("HK DIGIVERSE LLP", 14, 16)
+
+      doc.setFont("Helvetica", "normal")
+      doc.setFontSize(10)
+      doc.setTextColor(110, 110, 110)
+      doc.text("Remarks & Penalty Report", 14, 22)
+      
+      const formattedDate = new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+      doc.text(`Generated: ${formattedDate}`, 220, 22)
+
+      // Separator
+      doc.setDrawColor(9, 160, 138)
+      doc.setLineWidth(0.8)
+      doc.line(14, 26, 283, 26)
+
+      // Prepare Table Data
+      const headers = [["Date", "Employee Name", "Role", "Violation Type", "Remark Details", "Added By", "Penalty"]]
+      const rows = tabRemarks.map(r => [
+        r.date && parseRemarkDate(r.date) 
+          ? parseRemarkDate(r.date)!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : r.date || "",
+        r.employeeName || "",
+        r.role || "",
+        r.type || "",
+        r.details || "",
+        r.addedBy || "",
+        `Rs. ${r.amount || getPenaltyAmount(r.type)}`
+      ])
+
+      if (rows.length > 0) {
+        rows.push([
+          "TOTAL PENALTY AMOUNT",
+          "",
+          "",
+          "",
+          "",
+          "",
+          `Rs. ${totalPenalty}`
+        ])
+      }
+
+      autoTable(doc, {
+        head: headers,
+        body: rows,
+        startY: 32,
+        theme: 'striped',
+        styles: {
+          fontSize: 9,
+          cellPadding: 3.5,
+          textColor: [51, 65, 85], // slate-700
+          lineColor: [241, 245, 249],
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [9, 160, 138], // brand-teal
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 9.5,
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252], // slate-50
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', textColor: [15, 23, 42] }, // Slate-900 for Date
+          6: { fontStyle: 'bold', textColor: [220, 38, 38], halign: 'right' }, // Red-600 color for Penalty
+        },
+        didParseCell: (data: any) => {
+          // Apply custom style to the TOTAL row
+          if (data.row.index === rows.length - 1 && rows.length > 0) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [241, 245, 249]; // slate-100
+            if (data.column.index === 0) {
+              data.cell.styles.textColor = [15, 23, 42];
+            }
+            if (data.column.index === 6) {
+              data.cell.styles.textColor = [15, 23, 42]; // dark color for total penalty amount
+            }
+          }
+        },
+        margin: { left: 14, right: 14 }
+      })
+
+      doc.save(`Remarks_Penalty_Report_${new Date().toISOString().slice(0,10)}.pdf`)
+    } catch (err) {
+      console.error("PDF Export error:", err)
+      alert("Failed to export PDF file.")
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   const filteredRemarks = remarks.filter(r => {
     // Role-based visibility check: Employees only see their own remarks
@@ -635,33 +744,14 @@ export default function RemarksPage() {
           <Button 
             variant="outline" 
             className="w-full xl:w-auto shadow-sm font-medium text-foreground bg-white hover:bg-gray-50 border-border"
-            onClick={() => {
-              const exportData = tabRemarks.map(r => ({
-                'Date': r.date,
-                'Employee Name': r.employeeName,
-                'Role': r.role,
-                'Violation Type': r.type,
-                'Remark Details': r.details,
-                'Penalty Amount': `₹${r.amount || getPenaltyAmount(r.type)}`,
-                'Added By': r.addedBy
-              }));
-              
-              if (exportData.length > 0) {
-                exportData.push({
-                  'Date': 'TOTAL',
-                  'Employee Name': '',
-                  'Role': '',
-                  'Violation Type': '',
-                  'Remark Details': '',
-                  'Penalty Amount': `₹${totalPenalty}`,
-                  'Added By': ''
-                });
-              }
-              
-              exportToCSV(exportData, `Remarks_Penalty_Report_${new Date().toLocaleDateString().replace(/\//g, '-')}`);
-            }}
+            onClick={handleExportPDF}
+            disabled={isExporting}
           >
-            <Download className="w-4 h-4 mr-2 text-brand-teal" />
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin text-brand-teal" />
+            ) : (
+              <Download className="w-4 h-4 mr-2 text-brand-teal" />
+            )}
             Export PDF
           </Button>
 
