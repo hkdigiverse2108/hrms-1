@@ -1955,14 +1955,16 @@ export default function ChatPage() {
                                 {msg.savedBy?.includes(user?.id) ? "Unsave" : "Save for later"}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                className="gap-2"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(msg.text);
-                                }}
-                              >
-                                <Copy className="w-4 h-4" /> Copy message
-                              </DropdownMenuItem>
+                              {!(msg.poll || msg.isVoice) && (
+                                <DropdownMenuItem 
+                                  className="gap-2"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(msg.text);
+                                  }}
+                                >
+                                  <Copy className="w-4 h-4" /> Copy message
+                                </DropdownMenuItem>
+                              )}
 
                               <DropdownMenuItem 
                                 className="gap-2"
