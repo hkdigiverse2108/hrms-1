@@ -90,6 +90,88 @@ const INITIAL_MESSAGES: Record<string, any[]> = {
   ]
 };
 
+const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+    const audio = new Audio(fullUrl);
+    audioRef.current = audio;
+
+    const handleTimeUpdate = () => {
+      setProgress((audio.currentTime / (audio.duration || 1)) * 100);
+      setCurrentTime(audio.currentTime);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentTime(0);
+    };
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audio.pause();
+    };
+  }, [msg.attachmentUrl]);
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(err => {
+          console.error("Audio playback failed:", err);
+          alert("Could not play voice message. The file might be missing or unsupported.");
+        });
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const displayTime = currentTime > 0 || isPlaying
+    ? `${Math.floor(currentTime / 60)}:${String(Math.floor(currentTime % 60)).padStart(2, '0')}`
+    : msg.voiceDuration
+      ? `${Math.floor(msg.voiceDuration / 60)}:${String(Math.floor(msg.voiceDuration % 60)).padStart(2, '0')}`
+      : "0:00";
+
+  return (
+    <div className={cn(
+      "flex items-center gap-3 p-2 rounded-xl mb-2 min-w-[200px]",
+      isMe ? "bg-white/10" : "bg-gray-50"
+    )}>
+      <Button 
+        size="icon" 
+        variant="ghost" 
+        className={cn("h-9 w-9 rounded-full shrink-0", isMe ? "text-white hover:bg-white/20" : "text-brand-teal hover:bg-brand-teal/10")}
+        onClick={togglePlay}
+      >
+        {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
+      </Button>
+      <div className="flex-1 space-y-1">
+        <div className="relative h-1 w-full rounded-full">
+          <div className="absolute inset-0 bg-current opacity-20 rounded-full" />
+          <div 
+            className="absolute top-0 left-0 h-full bg-current transition-all duration-100 ease-linear rounded-full" 
+            style={{ width: `${progress}%` }} 
+          />
+        </div>
+        <div className="flex justify-between text-[9px] opacity-70 font-bold uppercase">
+          <span>{displayTime}</span>
+          <span>Voice Note</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function ChatPage() {
   const { user } = useUser();
   const { data: apiData, isLoading } = useApi();
@@ -1677,35 +1759,7 @@ export default function ChatPage() {
                               )}
 
                               {msg.isVoice && (
-                                <div className={cn(
-                                  "flex items-center gap-3 p-2 rounded-xl mb-2 min-w-[200px]",
-                                  msg.isMe ? "bg-white/10" : "bg-gray-50"
-                                )}>
-                                  <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className={cn("h-9 w-9 rounded-full shrink-0", msg.isMe ? "text-white hover:bg-white/20" : "text-brand-teal hover:bg-brand-teal/10")}
-                                    onClick={async () => {
-                                      try {
-                                        const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
-                                        const audio = new Audio(fullUrl);
-                                        await audio.play();
-                                      } catch (err) {
-                                        console.error("Audio playback failed:", err);
-                                        alert("Could not play voice message. The file might be missing or unsupported.");
-                                      }
-                                    }}
-                                  >
-                                    <Play className="w-5 h-5 fill-current" />
-                                  </Button>
-                                  <div className="flex-1 space-y-1">
-                                    <div className="h-1 bg-current opacity-20 rounded-full w-full" />
-                                    <div className="flex justify-between text-[9px] opacity-70 font-bold uppercase">
-                                      <span>{msg.voiceDuration ? `${Math.floor(msg.voiceDuration / 60)}:${String(Math.floor(msg.voiceDuration % 60)).padStart(2, '0')}` : "0:00"}</span>
-                                      <span>Voice Note</span>
-                                    </div>
-                                  </div>
-                                </div>
+                                <VoiceMessagePlayer msg={msg} isMe={msg.isMe} />
                               )}
 
                               {msg.poll && (() => {
