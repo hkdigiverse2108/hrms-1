@@ -1939,12 +1939,14 @@ export default function ChatPage() {
                               >
                                 <Reply className="w-4 h-4" /> Reply
                               </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                className="gap-2"
-                                onClick={() => setForwardingMessage(msg)}
-                              >
-                                <Forward className="w-4 h-4" /> Forward message...
-                              </DropdownMenuItem>
+                              {!(msg.poll || msg.isVoice) && (
+                                <DropdownMenuItem 
+                                  className="gap-2"
+                                  onClick={() => setForwardingMessage(msg)}
+                                >
+                                  <Forward className="w-4 h-4" /> Forward message...
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem 
                                 className="gap-2"
                                 onClick={() => handleToggleSave(msg.id)}
@@ -1953,17 +1955,17 @@ export default function ChatPage() {
                                 {msg.savedBy?.includes(user?.id) ? "Unsave" : "Save for later"}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                className="gap-2"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(msg.text);
-                                }}
-                              >
-                                <Copy className="w-4 h-4" /> Copy message
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2">
-                                <LinkIcon className="w-4 h-4" /> Copy link
-                              </DropdownMenuItem>
+                              {!(msg.poll || msg.isVoice) && (
+                                <DropdownMenuItem 
+                                  className="gap-2"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(msg.text);
+                                  }}
+                                >
+                                  <Copy className="w-4 h-4" /> Copy message
+                                </DropdownMenuItem>
+                              )}
+
                               <DropdownMenuItem 
                                 className="gap-2"
                                 onClick={() => handleTogglePin(msg.id)}
@@ -1972,25 +1974,7 @@ export default function ChatPage() {
                                 {msg.isPinned ? "Unpin from conversation" : "Pin to this conversation"}
                               </DropdownMenuItem>
                               
-                              {(msg.isMe || user?.role === "Admin" || user?.role === "HR") && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  {msg.isMe && (
-                                    <DropdownMenuItem 
-                                      className="gap-2 text-brand-teal"
-                                      onClick={() => { setEditingMessageId(msg.id); setEditText(msg.text); }}
-                                    >
-                                      <Pencil className="w-4 h-4" /> Edit message
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem 
-                                    className="gap-2 text-red-600 focus:text-red-600 focus:bg-red-50"
-                                    onClick={() => handleDeleteMessage(msg)}
-                                  >
-                                    <Trash2 className="w-4 h-4" /> Delete message
-                                  </DropdownMenuItem>
-                                </>
-                              )}
+
                               <DropdownMenuSeparator />
                               <div className="p-2 flex flex-wrap gap-1 justify-center">
                                 {["👍", "❤️", "😂", "😮", "😢", "🔥"].map(emoji => (
