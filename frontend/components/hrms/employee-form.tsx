@@ -166,6 +166,12 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
     const file = e.target.files?.[0]
     if (!file) return
 
+    if (file.size > 512 * 1024 * 1024) {
+      alert('File size cannot exceed 512 MB')
+      e.target.value = ''
+      return
+    }
+
     setIsUploading(true)
     const formDataUpload = new FormData()
     formDataUpload.append('file', file)

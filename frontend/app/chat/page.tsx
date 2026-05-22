@@ -503,6 +503,11 @@ export default function ChatPage() {
     }
 
     if (pendingFile) {
+      if (pendingFile.size > 512 * 1024 * 1024) {
+        alert("File size cannot exceed 512 MB");
+        setPendingFile(null);
+        return;
+      }
       // Real upload to backend
       const formData = new FormData();
       formData.append('file', pendingFile);

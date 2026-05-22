@@ -342,6 +342,12 @@ export default function EmployeeDocumentsPage() {
                         const file = e.target.files?.[0]
                         if (!file) return
                         
+                        if (file.size > 512 * 1024 * 1024) {
+                          toast.error('File size cannot exceed 512 MB')
+                          e.target.value = ''
+                          return
+                        }
+                        
                         setIsSubmitting(true)
                         const formDataUpload = new FormData()
                         formDataUpload.append('file', file)
