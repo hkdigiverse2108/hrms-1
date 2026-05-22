@@ -126,7 +126,8 @@ export default function PayrollPage() {
     { key: 'employeeName' as const, header: 'Employee' },
     { key: 'totalWorkingDays' as const, header: 'Working Days' },
     { key: 'workedDays' as const, header: 'Worked' },
-    { key: 'leaveDays' as const, header: 'Leaves' },
+    { key: 'leaveDays' as const, header: 'Total Leaves' },
+    { key: 'lopDays' as const, header: 'LOP / Unpaid Days' },
     {
       key: 'basicSalary' as const,
       header: 'Basic',
@@ -143,7 +144,17 @@ export default function PayrollPage() {
       key: 'deductions' as const,
       header: 'Deductions',
       render: (record: Payroll) => (
-        <span className="text-red-600">-{formatCurrency(record.deductions)}</span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-red-600 font-medium">-{formatCurrency(record.deductions)}</span>
+          {record.deductionRemarks && (
+            <span 
+              className="text-[10px] text-slate-400 max-w-[180px] truncate cursor-help hover:text-slate-600 transition-colors"
+              title={record.deductionRemarks.split('; ').join('\n')}
+            >
+              {record.deductionRemarks}
+            </span>
+          )}
+        </div>
       ),
     },
     {

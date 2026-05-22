@@ -103,6 +103,28 @@ function SinglePayslip({ record, employee, numberToWords }: { record: any, emplo
         </div>
       </div>
 
+      {/* Attendance & Leave Details Section */}
+      <div className="mt-8 border-t border-slate-100 pt-8">
+        <div className="grid grid-cols-4 gap-8">
+          <div className="space-y-1">
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Working Days</p>
+            <p className="text-[14px] font-black text-slate-900">{record.totalWorkingDays}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Worked Days</p>
+            <p className="text-[14px] font-black text-slate-900">{record.workedDays}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Total Leaves</p>
+            <p className="text-[14px] font-black text-slate-900">{record.leaveDays}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">LOP / Unpaid Days</p>
+            <p className="text-[14px] font-black text-rose-600">{record.lopDays}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Salary Details Section */}
       <div className="mt-8">
         <div className="bg-[#111827] text-white px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.2em] border-b-[32px] border-[#111827] relative">
@@ -137,6 +159,18 @@ function SinglePayslip({ record, employee, numberToWords }: { record: any, emplo
             </div>
           )}
           
+          {record.deductionRemarks && (
+            <div className="mt-4 pt-4 border-t border-dashed border-slate-200">
+              <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-2 text-left">Deduction Details</p>
+              <ul className="list-disc pl-4 space-y-1 text-[12px] text-slate-600 font-medium text-left">
+                {record.deductionRemarks.split(';').map((remark: string, index: number) => {
+                  const r = remark.trim();
+                  if (!r) return null;
+                  return <li key={index}>{r}</li>;
+                })}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 
@@ -238,7 +272,7 @@ function PayslipContent() {
     const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
     const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
-    const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/) as any;
     if (!n) return '';
     let str = '';
     str += (Number(n[1]) !== 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';

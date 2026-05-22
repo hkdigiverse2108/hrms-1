@@ -27,6 +27,7 @@ interface DataTableProps<T> {
   actions?: (item: T) => React.ReactNode
   pageSize?: number
   extraFilters?: React.ReactNode
+  isLoading?: boolean
 }
 
 export function DataTable<T extends { id: string }>({

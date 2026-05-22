@@ -317,11 +317,11 @@ export default function DashboardPage() {
  
   const fetchStatus = async () => {
     try {
-      const res = await fetch(`${API_URL}/attendance/status/${user.id}`);
+      const res = await fetch(`${API_URL}/attendance/status/${user?.id}`);
       if (res.ok) {
         const data = await res.json();
         // If data has checkIn and no checkOut, it's an active punch-in
-        if (data && data.checkIn && data.checkOut === null) {
+        if (data && data.checkIn && data.checkIn !== "--" && data.checkIn !== "--:--" && data.checkOut === null) {
           setAttendanceStatus({ isPunchedIn: true, record: data });
         } else {
           setAttendanceStatus({ isPunchedIn: false, record: data });
@@ -338,7 +338,7 @@ export default function DashboardPage() {
       if (res.ok) {
         const data = await res.json();
         const myHistory = data
-          .filter((a: any) => a.employeeId === user.id)
+          .filter((a: any) => a.employeeId === user?.id)
           .sort((a: any, b: any) => {
             if (a.date !== b.date) {
               return b.date.localeCompare(a.date);
@@ -366,7 +366,7 @@ export default function DashboardPage() {
   const handlePunch = async (type: 'punch-in' | 'punch-out' | 'break-in' | 'break-out') => {
     setIsPunching(true);
     try {
-      const res = await fetch(`${API_URL}/attendance/${type}/${user.id}`, {
+      const res = await fetch(`${API_URL}/attendance/${type}/${user?.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -712,7 +712,7 @@ function EmployeeView({
   currentTime: Date,
   isTimeSynced: boolean,
   getISTNow: () => Date,
-  punchCardRef: React.RefObject<HTMLDivElement>
+  punchCardRef: React.RefObject<HTMLDivElement | null>
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];

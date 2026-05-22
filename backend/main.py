@@ -17,6 +17,11 @@ import asyncio
 @app.on_event("startup")
 async def startup_migration():
     try:
+        import sys
+        from pathlib import Path
+        root_dir = Path(__file__).resolve().parent.parent
+        if str(root_dir) not in sys.path:
+            sys.path.append(str(root_dir))
         from scratch.migrate_db_to_objectids import migrate_database
         asyncio.create_task(migrate_database())
     except Exception as e:

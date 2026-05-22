@@ -252,7 +252,7 @@ export default function AttendancePage() {
   };
 
   const calculateStats = (data: any[]) => {
-    const presentDays = data.length;
+    const presentDays = data.filter(a => a.checkIn && a.checkIn !== "--" && a.checkIn !== "--:--").length;
     let totalMinutes = 0;
     let totalBreakMinutes = 0;
  
@@ -876,12 +876,17 @@ export default function AttendancePage() {
                     {selectedEmployeeId === "all" ? `${displayEmployee?.name} (You)` : displayEmployee?.name}
                   </h2>
                   <p className="text-sm text-muted-foreground mb-2">{displayEmployee?.role} • {displayEmployee?.designation}</p>
-                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-semibold ${
-                    currentRecord ? 'bg-brand-light/50 border-brand-teal/20 text-brand-teal' : 'bg-gray-50 border-gray-200 text-gray-500'
-                  }`}>
-                    {currentRecord ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                    {currentRecord ? 'Present today' : 'Not Punched In'}
-                  </div>
+                  {(() => {
+                    const isPunchedInToday = currentRecord && currentRecord.checkIn && currentRecord.checkIn !== "--" && currentRecord.checkIn !== "--:--";
+                    return (
+                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-semibold ${
+                        isPunchedInToday ? 'bg-brand-light/50 border-brand-teal/20 text-brand-teal' : 'bg-gray-50 border-gray-200 text-gray-500'
+                      }`}>
+                        {isPunchedInToday ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                        {isPunchedInToday ? 'Present today' : 'Not Punched In'}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
  
@@ -899,7 +904,7 @@ export default function AttendancePage() {
                 }`}>
                   <span className="text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5 sm:mb-1">Status</span>
                   <span className={`text-sm sm:text-lg font-bold ${currentRecord?.status === "On Break" ? 'text-amber-600' : 'text-brand-teal'}`}>
-                    {currentRecord?.status || 'Inactive'}
+                    {(currentRecord?.status && currentRecord.status !== "--") ? currentRecord.status : 'Inactive'}
                   </span>
                 </div>
               </div>
@@ -1090,7 +1095,7 @@ export default function AttendancePage() {
                       const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
                       const overtimeStr = formatToHhMm(overtimeMinutes);
  
-                      let statusLabel = row.status === "Leave" ? "Leave" : (row.checkIn ? "Present" : "Absent");
+                      let statusLabel = row.status === "Leave" ? "Leave" : (row.checkIn && row.checkIn !== "--" && row.checkIn !== "--:--" ? "Present" : "Absent");
                       let statusClass = statusLabel === "Present" 
                         ? "bg-green-50 text-green-600 border-green-100" 
                         : (statusLabel === "Leave" ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-red-50 text-red-600 border-red-100");

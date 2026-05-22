@@ -361,23 +361,29 @@ async def run_payroll_processing(db, month: str, year: int):
                 unique_holidays += 1
 
         # 1. Map out approved leaves for this month with deduction factors
-        # Robust query checking both camelCase and snake_case for employee ID
+        # Robust query checking both camelCase and snake_case for employee ID, and case-insensitive status
         leave_cursor = db.leave_requests.find({
             "$or": [
                 {"employee_id": emp_id},
                 {"employeeId": emp_id}
             ],
-            "status": "Approved",
-            # We fetch all and filter dates in Python to handle multiple formats robustly
+            "status": {"$in": ["Approved", "approved"]}
         })
         all_emp_leaves = await leave_cursor.to_list(length=100)
         
         leave_map = {} # date -> deduction_factor (1.0 for Full, 0.5 for Half)
         for l in all_emp_leaves:
             try:
-                # Check both snake_case and camelCase for day type
-                day_type = l.get("day_type") or l.get("dayType") or "Full Day"
-                factor = 0.5 if day_type in ["Half Day", "First Half", "Second Half"] else 1.0
+                # Robust day type & half day detection (handles strings, booleans, case differences)
+                day_type_str = str(l.get("day_type") or l.get("dayType") or "").strip().lower()
+                is_half = (
+                    l.get("half_day") == True or 
+                    l.get("halfDay") == True or 
+                    l.get("half_day") in [True, "true", "True"] or
+                    l.get("halfDay") in [True, "true", "True"] or
+                    day_type_str in ["half day", "first half", "second half", "half-day"]
+                )
+                factor = 0.5 if is_half else 1.0
                 
                 # Check both snake_case and camelCase for dates
                 raw_start = l.get("start_date") or l.get("startDate")
@@ -386,11 +392,24 @@ async def run_payroll_processing(db, month: str, year: int):
                 if not raw_start or not raw_end:
                     continue
 
-                # Try to parse different date formats robustly
-                def parse_date(d_str):
-                    for fmt in ("%d-%m-%Y", "%Y-%m-%d"):
+                # Try to parse different date formats robustly (handles datetime, date, str)
+                def parse_date(val):
+                    if not val:
+                        return None
+                    if isinstance(val, datetime):
+                        return val
+                    if isinstance(val, date):
+                        return datetime.combine(val, datetime.min.time())
+                    if not isinstance(val, str):
+                        return None
+                    val_str = val.strip()
+                    if "T" in val_str:
+                        val_str = val_str.split("T")[0]
+                    elif " " in val_str:
+                        val_str = val_str.split(" ")[0]
+                    for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
                         try:
-                            return datetime.strptime(d_str, fmt)
+                            return datetime.strptime(val_str.strip(), fmt)
                         except ValueError:
                             continue
                     return None
@@ -400,6 +419,12 @@ async def run_payroll_processing(db, month: str, year: int):
                 
                 if not s or not e:
                     continue
+
+                # Clean tzinfo to avoid comparison crashes
+                if s.tzinfo is not None:
+                    s = s.replace(tzinfo=None)
+                if e.tzinfo is not None:
+                    e = e.replace(tzinfo=None)
 
                 curr = s
                 while curr <= e:
@@ -442,7 +467,11 @@ async def run_payroll_processing(db, month: str, year: int):
         }
         
         actual_worked_days = 0.0
-        lop_days = 0.0
+        
+        half_day_leave_days = 0.0
+        full_day_leave_days = 0.0
+        unapproved_absent_days = 0.0
+        attendance_present_days = 0.0
 
         for d in range(1, num_days + 1):
             date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
@@ -451,32 +480,45 @@ async def run_payroll_processing(db, month: str, year: int):
             if date_str not in sunday_dates_set and date_str not in holiday_dates_set:
                 if date_str in leave_map:
                     factor = leave_map[date_str]
-                    lop_days += factor
-                    actual_worked_days += (1.0 - factor)
+                    if factor == 0.5:
+                        half_day_leave_days += 0.5
+                        actual_worked_days += 0.5
+                    else:
+                        full_day_leave_days += 1.0
                 elif date_str in attendance_dates:
-                    actual_worked_days += 1
+                    attendance_present_days += 1.0
+                    actual_worked_days += 1.0
                 else:
-                    lop_days += 1
+                    unapproved_absent_days += 1.0
         
         total_working_days = num_days - sundays - unique_holidays
         
-        # Apply 1 paid leave allowance per month
+        # Apply 1 paid leave allowance per month only to full-day leaves/absences
         paid_leave_allowance = 1.0
-        deducted_leaves = min(lop_days, paid_leave_allowance)
-        lop_days -= deducted_leaves
+        other_lop_days = full_day_leave_days + unapproved_absent_days
+        deducted_leaves = min(other_lop_days, paid_leave_allowance)
+        remaining_other_lop_days = other_lop_days - deducted_leaves
+        
+        # Unpaid loss of pay days includes half days and remaining other LOP days
+        lop_days = half_day_leave_days + remaining_other_lop_days
         actual_worked_days += deducted_leaves
         
         per_day_gross = salary["monthlyGross"] / total_working_days
+        half_day_lop_amount = half_day_leave_days * per_day_gross
+        remaining_other_lop_amount = remaining_other_lop_days * per_day_gross
         lop_amount = lop_days * per_day_gross
         
         deduction_details = []
         if deducted_leaves > 0:
             deduction_details.append(f"Paid Leave Allowance - {round(deducted_leaves, 1)} day(s) applied")
             
-        if lop_days > 0:
+        if half_day_leave_days > 0:
+            deduction_details.append(f"Half-day Leave Deduction - {round(half_day_leave_days, 1)} day(s): ₹{round(half_day_lop_amount, 2)}")
+            
+        if remaining_other_lop_days > 0:
             leave_types = {l.get("type") or l.get("leaveType") for l in all_emp_leaves if l.get("type") or l.get("leaveType")}
             leave_desc = f" ({', '.join(leave_types)})" if leave_types else ""
-            deduction_details.append(f"LOP/Leave{leave_desc} - {round(lop_days, 1)} days: ₹{round(lop_amount, 2)}")
+            deduction_details.append(f"Unpaid Leave/Absence{leave_desc} - {round(remaining_other_lop_days, 1)} day(s): ₹{round(remaining_other_lop_amount, 2)}")
 
         # Ad-hoc Bonus/Deductions
         adjustments = await get_bonus_deductions(db, month, year)
@@ -561,7 +603,7 @@ async def run_payroll_processing(db, month: str, year: int):
             "year": year,
             "totalWorkingDays": int(total_working_days),
             "workedDays": round(actual_worked_days, 1),
-            "leaveDays": round(lop_days, 1),
+            "leaveDays": round(half_day_leave_days + full_day_leave_days, 1),
             "lopDays": round(lop_days, 1),
             "basicSalary": salary["basic"],
             "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"] + incentive_amount,
@@ -933,6 +975,7 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
     leaves = await leave_cursor.to_list(length=100)
     leave_dates = set()
     leave_date_types = {}
+    half_day_leaves = {} # date_str -> display_day_type
     
     def robust_parse(val):
         if not val:
@@ -941,10 +984,17 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
             return val
         if isinstance(val, date):
             return datetime.combine(val, datetime.min.time()).replace(tzinfo=IST)
-        # Try both common string date formats
-        for fmt in ("%Y-%m-%d", "%d-%m-%Y"):
+        if not isinstance(val, str):
+            return None
+        val_str = val.strip()
+        if "T" in val_str:
+            val_str = val_str.split("T")[0]
+        elif " " in val_str:
+            val_str = val_str.split(" ")[0]
+        # Try common string date formats
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y"):
             try:
-                return datetime.strptime(val.strip(), fmt).replace(tzinfo=IST)
+                return datetime.strptime(val_str.strip(), fmt).replace(tzinfo=IST)
             except ValueError:
                 continue
         return None
@@ -959,12 +1009,31 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
             e = robust_parse(raw_e)
             if not s or not e:
                 continue
+            
+            day_type_str = str(l.get("day_type") or l.get("dayType") or "").strip().lower()
+            is_half = (
+                l.get("half_day") == True or 
+                l.get("halfDay") == True or 
+                l.get("half_day") in [True, "true", "True"] or
+                l.get("halfDay") in [True, "true", "True"] or
+                day_type_str in ["half day", "first half", "second half", "half-day"]
+            )
+            
+            display_day_type = "Half Day"
+            if day_type_str in ["first half", "second half"]:
+                display_day_type = day_type_str.title()
+            elif day_type_str:
+                display_day_type = day_type_str.title()
+                
             curr = s
             while curr <= e:
                 if curr.month == month_num and curr.year == year:
                     date_str_key = curr.strftime("%Y-%m-%d")
-                    leave_dates.add(date_str_key)
-                    leave_date_types[date_str_key] = l.get("leaveType") or l.get("type") or "leave"
+                    if is_half:
+                        half_day_leaves[date_str_key] = display_day_type
+                    else:
+                        leave_dates.add(date_str_key)
+                        leave_date_types[date_str_key] = l.get("leaveType") or l.get("type") or "leave"
                 curr += timedelta(days=1)
                 if (curr - s).days > 365:
                     break
@@ -1014,12 +1083,15 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
             
         available_working_days.append(d)
     
-    # Pick 1-2 random days to be 'late'
     late_days_indices = random.sample(available_working_days, min(random.randint(1, 2), len(available_working_days))) if available_working_days else []
-    
+    today_ist = get_now().date()
     for d in available_working_days:
         date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
         
+        if date_obj >= today_ist:
+            continue
+            
         sys_settings = await get_system_settings(db)
         office_start = sys_settings.get("officeStartTime", "09:30")
         office_end = sys_settings.get("officeEndTime", "18:30")
@@ -1070,6 +1142,9 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
             "punches": [{"punchIn": check_in, "punchOut": check_out}]
         }
         
+        if date_str in half_day_leaves:
+            record["remarks"] = f"On Leave: {half_day_leaves[date_str]}"
+            
         result = await db.attendance.insert_one(record)
         record["id"] = str(result.inserted_id)
         attendance_records.append(fix_id(record))
@@ -1099,6 +1174,73 @@ async def punch_in(db, employee_id: str):
     today_dt_aware = today_dt_naive.replace(tzinfo=IST)
     now_time_str = today.strftime("%H:%M:%S")
 
+    # Check if there is an approved half-day leave for today
+    half_day_type = None
+    try:
+        leave_cursor = db.leave_requests.find({
+            "$or": [
+                {"employeeId": employee_id},
+                {"employee_id": employee_id}
+            ],
+            "status": {"$in": ["Approved", "approved"]}
+        })
+        all_emp_leaves = await leave_cursor.to_list(length=100)
+        for l in all_emp_leaves:
+            raw_s = l.get("startDate") or l.get("start_date")
+            raw_e = l.get("endDate") or l.get("end_date")
+            if not raw_s or not raw_e:
+                continue
+            
+            def robust_parse(val):
+                if not val:
+                    return None
+                if isinstance(val, datetime):
+                    return val
+                if isinstance(val, date):
+                    return datetime.combine(val, datetime.min.time()).replace(tzinfo=IST)
+                if not isinstance(val, str):
+                    return None
+                val_str = val.strip()
+                if "T" in val_str:
+                    val_str = val_str.split("T")[0]
+                elif " " in val_str:
+                    val_str = val_str.split(" ")[0]
+                for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y"):
+                    try:
+                        return datetime.strptime(val_str, fmt).replace(tzinfo=IST)
+                    except ValueError:
+                        continue
+                return None
+            
+            s = robust_parse(raw_s)
+            e = robust_parse(raw_e)
+            if not s or not e:
+                continue
+            
+            s_date = s.date()
+            e_date = e.date()
+            today_date = today.date()
+            
+            if s_date <= today_date <= e_date:
+                day_type_str = str(l.get("day_type") or l.get("dayType") or "").strip().lower()
+                is_half = (
+                    l.get("half_day") == True or 
+                    l.get("halfDay") == True or 
+                    l.get("half_day") in [True, "true", "True"] or
+                    l.get("halfDay") in [True, "true", "True"] or
+                    day_type_str in ["half day", "first half", "second half", "half-day"]
+                )
+                if is_half:
+                    display_day_type = "Half Day"
+                    if day_type_str in ["first half", "second half"]:
+                        display_day_type = day_type_str.title()
+                    elif day_type_str:
+                        display_day_type = day_type_str.title()
+                    half_day_type = display_day_type
+                    break
+    except Exception as e_leave:
+        print(f"Error checking leave for punch-in: {e_leave}")
+
     # Check for existing record for today to consolidate - supports naive and aware dates
     existing_record = await db.attendance.find_one({
         "employeeId": employee_id,
@@ -1120,6 +1262,14 @@ async def punch_in(db, employee_id: str):
         # If the existing checkIn is a placeholder or empty, set it to the actual first punch-in time!
         if existing_record.get("checkIn") in [None, "--", "--:--", "", "-"]:
             set_values["checkIn"] = now_time_str
+            
+        if half_day_type:
+            remark_str = f"On Leave: {half_day_type}"
+            existing_remarks = existing_record.get("remarks") or ""
+            if not existing_remarks or existing_remarks == "-":
+                set_values["remarks"] = remark_str
+            elif remark_str not in existing_remarks:
+                set_values["remarks"] = f"{existing_remarks}; {remark_str}"
 
         await db.attendance.update_one(
             {"_id": existing_record["_id"]},
@@ -1142,7 +1292,8 @@ async def punch_in(db, employee_id: str):
         "status": "Active",
         "workHours": None,
         "accumulatedWorkSeconds": 0,
-        "punches": [{"punchIn": now_time_str, "punchOut": None}]
+        "punches": [{"punchIn": now_time_str, "punchOut": None}],
+        "remarks": f"On Leave: {half_day_type}" if half_day_type else "-"
     }
     
     # Check for late punch-in (using system settings) - only for first punch of the day
@@ -1485,7 +1636,7 @@ async def get_user_leave_requests(db, employee_id: str, skip: int = 0, limit: in
                 pass
     return leaves
 
-async def auto_create_leave_attendance(db, employee_id: str, start_date, end_date, leave_type: str = "leave"):
+async def auto_create_leave_attendance(db, employee_id: str, start_date, end_date, leave_type: str = "leave", is_half: bool = False, day_type: str = "Half Day"):
     def robust_parse(val):
         if not val:
             return None
@@ -1511,7 +1662,11 @@ async def auto_create_leave_attendance(db, employee_id: str, start_date, end_dat
         return
 
     curr = s
-    remark_str = f"Auto-marked leave - {leave_type.lower()} approved"
+    if is_half:
+        remark_str = f"On Leave: {day_type}"
+    else:
+        remark_str = f"Auto-marked leave - {leave_type.lower()} approved"
+
     while curr <= e:
         date_naive = curr.replace(tzinfo=None)
         date_aware = curr.replace(tzinfo=IST)
@@ -1522,36 +1677,58 @@ async def auto_create_leave_attendance(db, employee_id: str, start_date, end_dat
         })
 
         if existing:
-            await db.attendance.update_one(
-                {"_id": existing["_id"]},
-                {"$set": {
-                    "status": "Leave",
+            if is_half:
+                # For half-day leaves, do NOT overwrite check-in/out times, punches, status etc.
+                # Just append remark and ensure status isn't "Leave"
+                new_status = existing.get("status")
+                if new_status == "Leave":
+                    new_status = "--"
+                
+                existing_remarks = existing.get("remarks") or ""
+                if remark_str not in existing_remarks:
+                    new_remarks = f"{existing_remarks}; {remark_str}" if existing_remarks else remark_str
+                else:
+                    new_remarks = existing_remarks
+
+                await db.attendance.update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": {
+                        "status": new_status,
+                        "remarks": new_remarks
+                    }}
+                )
+            else:
+                await db.attendance.update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": {
+                        "status": "Leave",
+                        "checkIn": "--",
+                        "lastPunchIn": "--",
+                        "checkOut": "--",
+                        "workHours": "--",
+                        "accumulatedWorkSeconds": 0,
+                        "breaks": [],
+                        "punches": [],
+                        "remarks": remark_str
+                    }}
+                )
+        else:
+            if not is_half:
+                record = {
+                    "employeeId": employee_id,
+                    "employeeName": employee["name"],
+                    "date": date_naive,
                     "checkIn": "--",
                     "lastPunchIn": "--",
                     "checkOut": "--",
+                    "status": "Leave",
                     "workHours": "--",
                     "accumulatedWorkSeconds": 0,
                     "breaks": [],
                     "punches": [],
                     "remarks": remark_str
-                }}
-            )
-        else:
-            record = {
-                "employeeId": employee_id,
-                "employeeName": employee["name"],
-                "date": date_naive,
-                "checkIn": "--",
-                "lastPunchIn": "--",
-                "checkOut": "--",
-                "status": "Leave",
-                "workHours": "--",
-                "accumulatedWorkSeconds": 0,
-                "breaks": [],
-                "punches": [],
-                "remarks": remark_str
-            }
-            await db.attendance.insert_one(record)
+                }
+                await db.attendance.insert_one(record)
 
         curr += timedelta(days=1)
         if (curr - s).days > 365:
@@ -1576,7 +1753,23 @@ async def update_leave_request(db, leave_id: str, update_data: dict):
         leave_type = leave.get("leaveType") or leave.get("type") or "leave"
         if emp_id and raw_start and raw_end:
             try:
-                await auto_create_leave_attendance(db, emp_id, raw_start, raw_end, leave_type)
+                # Detect half day and day type
+                day_type_str = str(leave.get("day_type") or leave.get("dayType") or "").strip().lower()
+                is_half = (
+                    leave.get("half_day") == True or 
+                    leave.get("halfDay") == True or 
+                    leave.get("half_day") in [True, "true", "True"] or
+                    leave.get("halfDay") in [True, "true", "True"] or
+                    day_type_str in ["half day", "first half", "second half", "half-day"]
+                )
+                
+                display_day_type = "Half Day"
+                if day_type_str in ["first half", "second half"]:
+                    display_day_type = day_type_str.title()
+                elif day_type_str:
+                    display_day_type = day_type_str.title()
+                    
+                await auto_create_leave_attendance(db, emp_id, raw_start, raw_end, leave_type, is_half=is_half, day_type=display_day_type)
             except Exception as e:
                 print(f"Error auto creating leave attendance: {e}")
     
