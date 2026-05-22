@@ -1654,7 +1654,14 @@ export default function ChatPage() {
                     {messageSearchQuery ? "No messages matching your search." : `No messages yet. Say hi to ${selectedChat.name}!`}
                   </p>
                 </div>
-              ) : displayMessages.map((msg) => (
+              ) : displayMessages.map((msg) => {
+                const isGroup = selectedChat.type === 'group' || selectedChat.type === 'general';
+                const sender = isGroup ? employees.find((e: any) => e.id === msg.senderId) : null;
+                const avatarSrc = isGroup ? (sender?.profilePhoto ? (sender.profilePhoto.startsWith('http') ? sender.profilePhoto : `${API_URL}/uploads/${sender.profilePhoto}`) : null) : selectedChat.avatar;
+                const avatarFallback = isGroup ? (sender?.name?.[0] || msg.sender?.[0] || "U") : selectedChat.name[0];
+                const displayName = isGroup ? (sender?.name || msg.sender || "User") : selectedChat.name;
+
+                return (
                 <div 
                   key={msg.id}
                   id={`msg-${msg.id}`}
@@ -1664,10 +1671,10 @@ export default function ChatPage() {
                   )}
                 >
                   {!msg.isMe && (
-                    <Avatar className="w-9 h-9 border border-border shrink-0 mt-1">
-                      {selectedChat.avatar && <AvatarImage src={selectedChat.avatar} />}
+                    <Avatar className="w-9 h-9 border border-border shrink-0 mt-1" title={displayName}>
+                      {avatarSrc && <AvatarImage src={avatarSrc} />}
                       <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
-                        {selectedChat.name[0]}
+                        {avatarFallback}
                       </AvatarFallback>
                     </Avatar>
                   )}
@@ -1675,6 +1682,9 @@ export default function ChatPage() {
                     "flex flex-col gap-1.5 max-w-[70%]",
                     msg.isMe ? "items-end" : "items-start"
                   )}>
+                    {isGroup && !msg.isMe && (
+                      <span className="text-[10px] text-muted-foreground font-bold ml-1">{displayName}</span>
+                    )}
                     {editingMessageId === msg.id ? (
                       <div className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-brand-teal shadow-sm min-w-[200px]">
                         <Input 
@@ -2012,7 +2022,8 @@ export default function ChatPage() {
                     </span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Chat Input */}
