@@ -26,11 +26,44 @@ dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 
 import { useUserContext } from "@/context/UserContext";
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 
   // Holidays will be fetched from database
+
+interface TableAvatarProps {
+  photoUrl?: string;
+  name?: string;
+}
+
+function TableAvatar({ photoUrl, name }: TableAvatarProps) {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [photoUrl]);
+  
+  const isInvalidPhoto = !photoUrl || photoUrl === "undefined" || photoUrl === "null";
+  const resolvedUrl = isInvalidPhoto ? undefined : getAvatarUrl(photoUrl);
+
+  if (!resolvedUrl || hasError) {
+    return (
+      <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-sm">
+        {(name || "Employee")[0].toUpperCase()}
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={resolvedUrl} 
+      alt="" 
+      className="w-full h-full object-cover" 
+      onError={() => setHasError(true)}
+    />
+  );
+}
 
 export default function LeavePage() {
   const { user } = useUserContext();
@@ -55,6 +88,9 @@ export default function LeavePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [cancellingLeaveId, setCancellingLeaveId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(dayjs());
 
@@ -339,6 +375,45 @@ export default function LeavePage() {
     }
   };
 
+  const handleCancelInitiate = (id: string) => {
+    setCancellingLeaveId(id);
+    setCancelReason("");
+    setIsCancelDialogOpen(true);
+  };
+
+  const handleCancelSubmit = async () => {
+    if (!cancellingLeaveId) return;
+    if (!cancelReason.trim()) {
+      toast.error("Please enter a reason for cancellation");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/leaves/${cancellingLeaveId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: 'Cancelled',
+          reject_reason: cancelReason.trim()
+        })
+      });
+
+      if (res.ok) {
+        toast.success("Request cancelled successfully");
+        setIsCancelDialogOpen(false);
+        setCancellingLeaveId(null);
+        setCancelReason("");
+        fetchLeaves();
+      } else {
+        toast.error("Failed to cancel request");
+      }
+    } catch (err) {
+      toast.error("Error connecting to server");
+    }
+  };
+
   const handleSearch = () => {
     setAppliedFilters({
       type: filterType,
@@ -465,6 +540,132 @@ export default function LeavePage() {
     if (type.includes("Casual")) return Briefcase;
     return Clock;
   };
+
+  // Helper to parse leave request duration from string (e.g., "1 Day", "0.5 Days", "2.5 Days")
+  const parseDuration = (durationStr: string): number => {
+    if (!durationStr) return 0;
+    const cleaned = durationStr.replace(/[^\d.]/g, '');
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Filter leaves for the current logged-in employee to calculate stats
+  const myLeaves = leaves.filter(l => l.employee_id === user?.id);
+
+  // 1. Annual Leave Calculations (strictly matching 'annual')
+  const annualApproved = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return (t.includes('annual') || t === 'annual') && l.status === 'Approved';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const annualPending = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return (t.includes('annual') || t === 'annual') && l.status === 'Pending';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const annualCurrentMonth = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      const isCurrentMonth = l.start_date ? dayjs(l.start_date, "DD-MM-YYYY").isSame(dayjs(), 'month') : false;
+      return (t.includes('annual') || t === 'annual') && l.status === 'Approved' && isCurrentMonth;
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  // 2. Sick Leave Calculations
+  const sickApproved = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return (t.includes('sick') || t === 'sick') && l.status === 'Approved';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const sickPending = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return (t.includes('sick') || t === 'sick') && l.status === 'Pending';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const sickCurrentMonth = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      const isCurrentMonth = l.start_date ? dayjs(l.start_date, "DD-MM-YYYY").isSame(dayjs(), 'month') : false;
+      return (t.includes('sick') || t === 'sick') && l.status === 'Approved' && isCurrentMonth;
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  // 3. Casual Leave Calculations
+  const casualApproved = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return (t.includes('casual') || t === 'casual') && l.status === 'Approved';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const casualPending = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return (t.includes('casual') || t === 'casual') && l.status === 'Pending';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const casualCurrentMonth = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      const isCurrentMonth = l.start_date ? dayjs(l.start_date, "DD-MM-YYYY").isSame(dayjs(), 'month') : false;
+      return (t.includes('casual') || t === 'casual') && l.status === 'Approved' && isCurrentMonth;
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  // 4. Unpaid Leave Calculations
+  const unpaidApproved = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return (t.includes('unpaid') || t === 'unpaid') && l.status === 'Approved';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const unpaidPending = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return (t.includes('unpaid') || t === 'unpaid') && l.status === 'Pending';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const unpaidCurrentMonth = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      const isCurrentMonth = l.start_date ? dayjs(l.start_date, "DD-MM-YYYY").isSame(dayjs(), 'month') : false;
+      return (t.includes('unpaid') || t === 'unpaid') && l.status === 'Approved' && isCurrentMonth;
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  // 5. Other Leave Calculations
+  const otherApproved = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return !t.includes('annual') && !t.includes('sick') && !t.includes('casual') && !t.includes('unpaid') && l.status === 'Approved';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const otherPending = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      return !t.includes('annual') && !t.includes('sick') && !t.includes('casual') && !t.includes('unpaid') && l.status === 'Pending';
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
+
+  const otherCurrentMonth = myLeaves
+    .filter(l => {
+      const t = (l.type || '').toLowerCase();
+      const isCurrentMonth = l.start_date ? dayjs(l.start_date, "DD-MM-YYYY").isSame(dayjs(), 'month') : false;
+      return !t.includes('annual') && !t.includes('sick') && !t.includes('casual') && !t.includes('unpaid') && l.status === 'Approved' && isCurrentMonth;
+    })
+    .reduce((sum, l) => sum + parseDuration(l.duration), 0);
 
   if (permissionsLoading) {
     return (
@@ -640,6 +841,30 @@ export default function LeavePage() {
                 </div>
               )}
 
+              {isViewOnly && viewStatus === 'Cancelled' && (
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-3.5 flex flex-col gap-1.5 mt-4">
+                  <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
+                    <X className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Request Cancelled</span>
+                  </div>
+                  {viewApprovedBy && (
+                    <p className="text-xs text-amber-700 pl-6 leading-relaxed">
+                      Cancelled by <span className="font-bold">{viewApprovedBy}</span>.
+                    </p>
+                  )}
+                  {viewRejectReason ? (
+                    <div className="text-xs text-amber-700 leading-relaxed pl-6">
+                      <span className="font-bold block mb-0.5">Reason:</span>
+                      <span>{viewRejectReason}</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-amber-700 italic pl-6">
+                      No cancellation reason was provided.
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2 pt-2">
                 <Label className="text-sm font-semibold text-slate-700">Proof of Leave (Optional)</Label>
                 {isViewOnly ? (
@@ -739,81 +964,133 @@ export default function LeavePage() {
       </PageHeader>
 
       {/* Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Annual Leave Card */}
-        <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
-          <div className="flex justify-between items-start mb-6">
-            <span className="font-medium text-sm">Annual Leave</span>
-            <div className="p-1.5 bg-brand-light rounded-md">
-              <Sun className="w-4 h-4 text-brand-teal" />
+        <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <span className="font-medium text-xs text-slate-700">Annual Leave</span>
+            <div className="p-1 bg-brand-light rounded-md">
+              <Sun className="w-3.5 h-3.5 text-brand-teal" />
             </div>
           </div>
-          <div className="mb-6">
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold text-foreground">9</span>
-              <span className="text-sm text-muted-foreground">Days Available</span>
+          <div className="mb-4">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-3xl font-bold text-foreground">{annualCurrentMonth}</span>
+              <span className="text-[11px] text-muted-foreground">Days Taken ({dayjs().format('MMMM')})</span>
             </div>
           </div>
-          <div className="flex justify-between text-sm pt-4 border-t border-border">
+          <div className="flex justify-between text-xs pt-3 border-t border-border">
             <div>
-              <div className="text-muted-foreground mb-1">Used</div>
-              <div className="font-medium">5 Days</div>
+              <div className="text-muted-foreground mb-0.5">Pending</div>
+              <div className="font-medium">{annualPending} Day{annualPending !== 1 ? 's' : ''}</div>
             </div>
             <div className="text-right">
-              <div className="text-muted-foreground mb-1">Allowance</div>
-              <div className="font-medium">14 Days</div>
+              <div className="text-muted-foreground mb-0.5">Overall Total</div>
+              <div className="font-semibold text-slate-700">{annualApproved} Day{annualApproved !== 1 ? 's' : ''}</div>
             </div>
           </div>
         </div>
 
         {/* Sick Leave Card */}
-        <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
-          <div className="flex justify-between items-start mb-6">
-            <span className="font-medium text-sm">Sick Leave</span>
-            <div className="p-1.5 bg-brand-light rounded-md">
-              <Thermometer className="w-4 h-4 text-brand-teal" />
+        <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <span className="font-medium text-xs text-slate-700">Sick Leave</span>
+            <div className="p-1 bg-brand-light rounded-md">
+              <Thermometer className="w-3.5 h-3.5 text-brand-teal" />
             </div>
           </div>
-          <div className="mb-6">
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold text-foreground">4</span>
-              <span className="text-sm text-muted-foreground">Days Available</span>
+          <div className="mb-4">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-3xl font-bold text-foreground">{sickCurrentMonth}</span>
+              <span className="text-[11px] text-muted-foreground">Days Taken ({dayjs().format('MMMM')})</span>
             </div>
           </div>
-          <div className="flex justify-between text-sm pt-4 border-t border-border">
+          <div className="flex justify-between text-xs pt-3 border-t border-border">
             <div>
-              <div className="text-muted-foreground mb-1">Used</div>
-              <div className="font-medium">3 Days</div>
+              <div className="text-muted-foreground mb-0.5">Pending</div>
+              <div className="font-medium">{sickPending} Day{sickPending !== 1 ? 's' : ''}</div>
             </div>
             <div className="text-right">
-              <div className="text-muted-foreground mb-1">Allowance</div>
-              <div className="font-medium">7 Days</div>
+              <div className="text-muted-foreground mb-0.5">Overall Total</div>
+              <div className="font-semibold text-slate-700">{sickApproved} Day{sickApproved !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Casual Leave Card */}
+        <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <span className="font-medium text-xs text-slate-700">Casual Leave</span>
+            <div className="p-1 bg-brand-light rounded-md">
+              <Briefcase className="w-3.5 h-3.5 text-brand-teal" />
+            </div>
+          </div>
+          <div className="mb-4">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-3xl font-bold text-foreground">{casualCurrentMonth}</span>
+              <span className="text-[11px] text-muted-foreground">Days Taken ({dayjs().format('MMMM')})</span>
+            </div>
+          </div>
+          <div className="flex justify-between text-xs pt-3 border-t border-border">
+            <div>
+              <div className="text-muted-foreground mb-0.5">Pending</div>
+              <div className="font-medium">{casualPending} Day{casualPending !== 1 ? 's' : ''}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-muted-foreground mb-0.5">Overall Total</div>
+              <div className="font-semibold text-slate-700">{casualApproved} Day{casualApproved !== 1 ? 's' : ''}</div>
             </div>
           </div>
         </div>
 
         {/* Unpaid Leave Card */}
-        <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
-          <div className="flex justify-between items-start mb-6">
-            <span className="font-medium text-sm">Unpaid Leave</span>
-            <div className="p-1.5 bg-brand-light rounded-md">
-              <Clock className="w-4 h-4 text-brand-teal" />
+        <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <span className="font-medium text-xs text-slate-700">Unpaid Leave</span>
+            <div className="p-1 bg-brand-light rounded-md">
+              <Clock className="w-3.5 h-3.5 text-brand-teal" />
             </div>
           </div>
-          <div className="mb-6">
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold text-foreground">0</span>
-              <span className="text-sm text-muted-foreground">Days Taken</span>
+          <div className="mb-4">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-3xl font-bold text-foreground">{unpaidCurrentMonth}</span>
+              <span className="text-[11px] text-muted-foreground">Days Taken ({dayjs().format('MMMM')})</span>
             </div>
           </div>
-          <div className="flex justify-between text-sm pt-4 border-t border-border">
+          <div className="flex justify-between text-xs pt-3 border-t border-border">
             <div>
-              <div className="text-muted-foreground mb-1">Current Year</div>
-              <div className="font-medium">0 Days</div>
+              <div className="text-muted-foreground mb-0.5">Pending</div>
+              <div className="font-medium">{unpaidPending} Day{unpaidPending !== 1 ? 's' : ''}</div>
             </div>
             <div className="text-right">
-              <div className="text-muted-foreground mb-1">Limit</div>
-              <div className="font-medium">No limit</div>
+              <div className="text-muted-foreground mb-0.5">Overall Total</div>
+              <div className="font-semibold text-slate-700">{unpaidApproved} Day{unpaidApproved !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Other Leave Card */}
+        <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+          <div className="flex justify-between items-start mb-4">
+            <span className="font-medium text-xs text-slate-700">Other Leave</span>
+            <div className="p-1 bg-brand-light rounded-md">
+              <CalendarIcon className="w-3.5 h-3.5 text-brand-teal" />
+            </div>
+          </div>
+          <div className="mb-4">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-3xl font-bold text-foreground">{otherCurrentMonth}</span>
+              <span className="text-[11px] text-muted-foreground">Days Taken ({dayjs().format('MMMM')})</span>
+            </div>
+          </div>
+          <div className="flex justify-between text-xs pt-3 border-t border-border">
+            <div>
+              <div className="text-muted-foreground mb-0.5">Pending</div>
+              <div className="font-medium">{otherPending} Day{otherPending !== 1 ? 's' : ''}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-muted-foreground mb-0.5">Overall Total</div>
+              <div className="font-semibold text-slate-700">{otherApproved} Day{otherApproved !== 1 ? 's' : ''}</div>
             </div>
           </div>
         </div>
@@ -850,6 +1127,7 @@ export default function LeavePage() {
                 <SelectItem value="Pending">Pending</SelectItem>
                 <SelectItem value="Approved">Approved</SelectItem>
                 <SelectItem value="Rejected">Rejected</SelectItem>
+                <SelectItem value="Cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -915,7 +1193,7 @@ export default function LeavePage() {
                     <th className="px-6 py-4 font-bold">Leave Type</th>
                     <th className="px-6 py-4 font-bold">Day Type</th>
                     <th className="px-6 py-4 font-bold">From</th>
-                    <th className="px-6 py-4 font-bold text-center">Reviewed By</th>
+                    <th className="px-6 py-4 font-bold">Approved By</th>
                     <th className="px-6 py-4 font-bold">To</th>
                     <th className="px-6 py-4 font-bold">No of Days</th>
                     <th className="px-6 py-4 font-bold">Status</th>
@@ -960,32 +1238,28 @@ export default function LeavePage() {
                             {item.start_date}
                           </td>
                           <td className="px-6 py-4">
-                            {item.status === 'Approved' || item.status === 'Rejected' ? (
-                              item.approved_by ? (
-                                <div className="flex items-center gap-3 w-fit mx-auto">
+                            {item.status === 'Approved' || item.status === 'Rejected' || item.status === 'Cancelled' ? (
+                              item.approved_by || item.status === 'Cancelled' ? (
+                                <div className="flex items-center gap-3">
                                   <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0">
-                                    {item.approved_by_photo ? (
-                                      <img src={item.approved_by_photo} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                      <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-sm">
-                                        {(item.approved_by || "A")[0].toUpperCase()}
-                                      </div>
-                                    )}
+                                    <TableAvatar photoUrl={item.approved_by_photo} name={item.approved_by || 'Employee'} />
                                   </div>
                                   <div className="flex flex-col text-left">
                                     <span className="text-[14px] font-bold text-[#111827] leading-tight">
-                                      {item.status === 'Approved' ? 'Approved by' : 'Rejected by'} {item.approved_by}
+                                      {item.approved_by || 'Employee'}
                                     </span>
-                                    <span className="text-[13px] font-medium text-slate-500">{item.approved_by_role || "Hr"}</span>
+                                    <span className="text-[13px] font-medium text-slate-500">
+                                      {item.status === 'Cancelled' && !item.approved_by ? "Self" : (item.approved_by_role || "Hr")}
+                                    </span>
                                   </div>
                                 </div>
                               ) : (
-                                <div className="text-center">
+                                <div className="text-left">
                                   <span className="text-slate-400 font-medium text-[13px]">Reviewed</span>
                                 </div>
                               )
                             ) : (
-                              <div className="text-center">
+                              <div className="text-left">
                                 <span className="text-slate-300 font-medium italic text-[13px]">Pending Review</span>
                               </div>
                             )}
@@ -998,27 +1272,24 @@ export default function LeavePage() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col gap-1 items-start justify-center">
-                              <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${
-                                  item.status === 'Approved' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 
-                                  item.status === 'Rejected' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
-                                  'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                  item.status === 'Approved' ? 'bg-emerald-500' : 
+                                  item.status === 'Rejected' ? 'bg-rose-500' : 
+                                  item.status === 'Cancelled' ? 'bg-slate-400' : 
+                                  'bg-amber-500'
                                 }`} />
-                                <span className={`text-[12px] font-bold ${
-                                  item.status === 'Approved' ? 'text-emerald-600' : 
-                                  item.status === 'Rejected' ? 'text-rose-600' : 
-                                  'text-amber-600'
-                                }`}>
+                                <span className="text-[12px] font-semibold text-slate-900">
                                   {item.status}
                                 </span>
                               </div>
-                              {item.status === 'Rejected' && item.reject_reason && (
-                                <span className="text-[10px] text-rose-500/80 italic font-medium max-w-[150px] truncate block pl-4" title={item.reject_reason}>
+                              {(item.status === 'Rejected' || item.status === 'Cancelled') && item.reject_reason && (
+                                <span className="text-[10px] text-slate-500 font-normal max-w-[150px] truncate block pl-3 mt-0.5" title={item.reject_reason}>
                                   Reason: {item.reject_reason}
                                 </span>
                               )}
                               {item.status === 'Approved' && item.approve_reason && (
-                                <span className="text-[10px] text-emerald-600/80 italic font-medium max-w-[150px] truncate block pl-4" title={item.approve_reason}>
+                                <span className="text-[10px] text-slate-500 font-normal max-w-[150px] truncate block pl-3 mt-0.5" title={item.approve_reason}>
                                   Note: {item.approve_reason}
                                 </span>
                               )}
@@ -1043,10 +1314,10 @@ export default function LeavePage() {
                                     size="sm" 
                                     variant="ghost" 
                                     className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
-                                    onClick={() => handleDelete(item.id)}
-                                    title="Delete Request"
+                                    onClick={() => handleCancelInitiate(item.id)}
+                                    title="Cancel Request"
                                    >
-                                     <Trash2 className="w-4 h-4" />
+                                     <X className="w-4 h-4" />
                                    </Button>
                                  )}
                                  {!canEditLeave && !canDeleteLeave && (
@@ -1111,7 +1382,7 @@ export default function LeavePage() {
                     <th className="px-6 py-4 font-bold">Leave Type</th>
                     <th className="px-6 py-4 font-bold text-center">Day Type</th>
                     <th className="px-6 py-4 font-bold text-center">From</th>
-                    <th className="px-6 py-4 font-bold text-center">Reviewed By</th>
+                    <th className="px-6 py-4 font-bold text-left">Approved By</th>
                     <th className="px-6 py-4 font-bold text-center">To</th>
                     <th className="px-6 py-4 font-bold text-center">No of Days</th>
                     <th className="px-6 py-4 font-bold text-center">Status</th>
@@ -1150,36 +1421,32 @@ export default function LeavePage() {
                           <td className="px-6 py-4 font-medium text-slate-600">
                             {item.start_date}
                           </td>
-                          <td className="px-6 py-4">
-                            {item.status === 'Approved' || item.status === 'Rejected' ? (
-                              item.approved_by ? (
-                                <div className="flex items-center justify-center gap-3 w-fit mx-auto">
-                                  <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0">
-                                    {item.approved_by_photo ? (
-                                      <img src={item.approved_by_photo} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                      <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-sm">
-                                        {(item.approved_by || "A")[0].toUpperCase()}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex flex-col text-left">
-                                    <span className="text-[14px] font-bold text-[#111827] leading-tight">
-                                      {item.status === 'Approved' ? 'Approved by' : 'Rejected by'} {item.approved_by}
-                                    </span>
-                                    <span className="text-[13px] font-medium text-slate-500">{item.approved_by_role || "Hr"}</span>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-center">
-                                  <span className="text-slate-400 font-medium text-[13px]">Reviewed</span>
-                                </div>
-                              )
-                            ) : (
-                              <div className="text-center">
-                                <span className="text-slate-300 font-medium italic text-[13px]">Pending Review</span>
-                              </div>
-                            )}
+                          <td className="px-6 py-4 text-left">
+                            {item.status === 'Approved' || item.status === 'Rejected' || item.status === 'Cancelled' ? (
+                               item.approved_by || item.status === 'Cancelled' ? (
+                                 <div className="flex items-center gap-3">
+                                   <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0">
+                                     <TableAvatar photoUrl={item.approved_by_photo} name={item.approved_by || 'Employee'} />
+                                   </div>
+                                   <div className="flex flex-col text-left">
+                                     <span className="text-[14px] font-bold text-[#111827] leading-tight">
+                                       {item.approved_by || 'Employee'}
+                                     </span>
+                                     <span className="text-[13px] font-medium text-slate-500">
+                                       {item.status === 'Cancelled' && !item.approved_by ? "Self" : (item.approved_by_role || "Hr")}
+                                     </span>
+                                   </div>
+                                 </div>
+                               ) : (
+                                 <div className="text-left">
+                                   <span className="text-slate-400 font-medium text-[13px]">Reviewed</span>
+                                 </div>
+                               )
+                             ) : (
+                               <div className="text-left">
+                                 <span className="text-slate-300 font-medium italic text-[13px]">Pending Review</span>
+                               </div>
+                             )}
                           </td>
                           <td className="px-6 py-4 font-medium text-slate-600">
                             {item.end_date}
@@ -1189,27 +1456,24 @@ export default function LeavePage() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col gap-1 items-center justify-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${
-                                  item.status === 'Approved' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 
-                                  item.status === 'Rejected' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]' : 
-                                  'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                              <div className="flex items-center justify-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                  item.status === 'Approved' ? 'bg-emerald-500' : 
+                                  item.status === 'Rejected' ? 'bg-rose-500' : 
+                                  item.status === 'Cancelled' ? 'bg-slate-400' : 
+                                  'bg-amber-500'
                                 }`} />
-                                <span className={`text-[12px] font-bold ${
-                                  item.status === 'Approved' ? 'text-emerald-600' : 
-                                  item.status === 'Rejected' ? 'text-rose-600' : 
-                                  'text-amber-600'
-                                }`}>
+                                <span className="text-[12px] font-semibold text-slate-900">
                                   {item.status}
                                 </span>
                               </div>
-                              {item.status === 'Rejected' && item.reject_reason && (
-                                <span className="text-[10px] text-rose-500/80 italic font-medium max-w-[150px] truncate block" title={item.reject_reason}>
+                              {(item.status === 'Rejected' || item.status === 'Cancelled') && item.reject_reason && (
+                                <span className="text-[10px] text-slate-500 font-normal max-w-[150px] truncate block mt-0.5" title={item.reject_reason}>
                                   Reason: {item.reject_reason}
                                 </span>
                               )}
                               {item.status === 'Approved' && item.approve_reason && (
-                                <span className="text-[10px] text-emerald-600/80 italic font-medium max-w-[150px] truncate block" title={item.approve_reason}>
+                                <span className="text-[10px] text-slate-500 font-normal max-w-[150px] truncate block mt-0.5" title={item.approve_reason}>
                                   Note: {item.approve_reason}
                                 </span>
                               )}
@@ -1301,23 +1565,6 @@ export default function LeavePage() {
                               <SelectItem value="National">National</SelectItem>
                               <SelectItem value="Regional">Regional</SelectItem>
                               <SelectItem value="Optional">Optional</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Company</Label>
-                          <Select 
-                            value={holidayForm.company}
-                            onValueChange={(val) => setHolidayForm({...holidayForm, company: val})}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="All Companies">All Companies</SelectItem>
-                              {companies.map(c => (
-                                <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                              ))}
                             </SelectContent>
                           </Select>
                         </div>
@@ -1550,6 +1797,48 @@ export default function LeavePage() {
           </div>
           <DialogFooter className="p-4 bg-gray-50 border-t border-border">
              <Button onClick={() => setIsCalendarOpen(false)} className="bg-brand-teal hover:bg-brand-teal-light text-white w-full sm:w-auto font-bold">Close Calendar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+        <DialogContent className="sm:max-w-[420px] p-6 rounded-xl">
+          <DialogHeader className="shrink-0 pb-2">
+            <DialogTitle className="text-lg font-bold text-slate-900">Cancel Leave Request</DialogTitle>
+            <DialogDescription className="text-sm text-slate-500 mt-1">
+              Please provide the reason for cancelling this leave request. This will notify your manager.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="cancel-reason" className="text-xs font-bold text-slate-700 block mb-2">
+              Reason for Cancellation <span className="text-red-500">*</span>
+            </Label>
+            <Textarea
+              id="cancel-reason"
+              placeholder="e.g. Plans changed, task rescheduled..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="w-full min-h-[100px] text-sm"
+            />
+          </div>
+          <DialogFooter className="pt-4 border-t border-slate-100 flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCancelDialogOpen(false);
+                setCancellingLeaveId(null);
+                setCancelReason("");
+              }}
+              className="font-bold text-slate-700"
+            >
+              Back
+            </Button>
+            <Button
+              onClick={handleCancelSubmit}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold"
+            >
+              Cancel Leave
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
