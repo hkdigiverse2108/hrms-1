@@ -537,7 +537,7 @@ function AdminView({ user, leaves, employees, interns, allAttendance }: { user: 
             <div className="p-5 flex justify-between items-center border-b border-border">
               <h3 className="font-bold text-lg">Organization Attendance</h3>
               <Link href="/attendance">
-                <Button variant="outline" size="sm">View All</Button>
+                <Button variant="outline" size="sm" className="text-brand-teal border-brand-teal/30 hover:bg-brand-teal hover:text-white hover:border-brand-teal transition-all font-bold rounded-lg h-8 text-[12px] px-3.5">View All</Button>
               </Link>
             </div>
             <div className="p-6 h-[300px] flex items-center justify-center text-muted-foreground w-full">
@@ -550,9 +550,15 @@ function AdminView({ user, leaves, employees, interns, allAttendance }: { user: 
                     contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
                     cursor={{ fill: '#f3f4f6' }} 
                   />
-                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Bar dataKey="Present" fill="#0d9488" radius={[4, 4, 0, 0]} barSize={32} />
-                  <Bar dataKey="Absent" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={32} />
+                  <Legend 
+                    iconType="circle" 
+                    wrapperStyle={{ paddingTop: '20px' }} 
+                    formatter={(value, entry: any) => (
+                      <span style={{ color: entry.color, fontWeight: 'bold', fontSize: '13px' }}>{value}</span>
+                    )}
+                  />
+                  <Bar dataKey="Present" fill="#09A08A" radius={[4, 4, 0, 0]} barSize={32} />
+                  <Bar dataKey="Absent" fill="#F43F5E" radius={[4, 4, 0, 0]} barSize={32} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

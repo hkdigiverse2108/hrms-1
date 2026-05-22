@@ -103,7 +103,9 @@ export default function DailyProgressPage() {
             status: newStatus,
             tasksCompleted: ["Work verified by TL"],
             tasksInProgress: [],
-            hoursWorked: 8.0
+            hoursWorked: 8.0,
+            performedBy: user?.id,
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`
           }
 
       const response = await fetch(url, {
@@ -148,7 +150,9 @@ export default function DailyProgressPage() {
             tasksCompleted: ["Work verified by TL"],
             tasksInProgress: [],
             hoursWorked: 8.0,
-            note: noteText
+            note: noteText,
+            performedBy: user?.id,
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`
           }
 
       const response = await fetch(url, {
@@ -174,10 +178,13 @@ export default function DailyProgressPage() {
   }
 
   const fetchLogs = async (reportId?: string, employeeName?: string) => {
-    if (!reportId) return
-    setIsLoadingLogs(true)
     setLogsOpen(true)
     setLogFilter({ reportId, employeeName })
+    if (!reportId) {
+      setReportLogs([])
+      return
+    }
+    setIsLoadingLogs(true)
     try {
       const url = `${API_URL}/task-logs?dailyReportId=${reportId}`
       const res = await fetch(url)
@@ -279,7 +286,6 @@ export default function DailyProgressPage() {
             e.stopPropagation()
             fetchLogs(record.reportId, record.employeeName)
           }}
-          disabled={!record.reportId}
           title="View History"
         >
           <History className="w-3.5 h-3.5" />

@@ -2588,11 +2588,26 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
 
 async def create_employee_daily_report(db, report: schemas.EmployeeDailyReportCreate):
     report_dict = report.dict()
+    performedBy = report_dict.pop("performedBy", None)
+    userName = report_dict.pop("userName", None)
+    
     result = await db.employee_daily_reports.insert_one(report_dict)
     report_dict["id"] = str(result.inserted_id)
-    # Log activity
-    await log_activity(db, "Daily Report Submitted", report_dict["employeeId"], report_dict["employeeName"], f"Submitted daily report for {report_dict['date']}", dailyReportId=report_dict["id"])
     
+    # Log activity
+    status = report_dict.get("status", "Submitted")
+    report_date = str(report_dict['date']).split(" ")[0]
+    if status in ["Approved", "Rejected"] and performedBy and userName:
+        # Created directly as Approved or Rejected by TL/Admin
+        action = f"Daily Report {status}"
+        details = f"{status} daily report for {report_dict['employeeName']} on {report_date}"
+        await log_activity(db, action, performedBy, userName, details, dailyReportId=report_dict["id"])
+    else:
+        # Submitted by the employee themselves
+        actor_id = performedBy or report_dict["employeeId"]
+        actor_name = userName or report_dict["employeeName"]
+        await log_activity(db, "Daily Report Submitted", actor_id, actor_name, f"Submitted daily report for {report_date}", dailyReportId=report_dict["id"])
+        
     if report_dict.get("status") == "Rejected":
         await apply_work_rejection_penalty(db, report_dict["employeeId"], report_dict["date"])
         
@@ -2806,21 +2821,27 @@ async def update_employee_daily_report(db, report_id: str, report_update: schema
         await apply_work_rejection_penalty(db, existing["employeeId"], existing["date"])
         
     # Log activity
-    log_details = []
-    if "status" in update_data and existing.get("status") != update_data["status"]:
-        log_details.append(f"Status changed from '{existing.get('status')}' to '{update_data['status']}'")
-    if "note" in update_data and existing.get("note") != update_data["note"]:
-        log_details.append(f"Note updated to '{update_data['note']}'")
-        
-    if log_details and existing:
-        await log_activity(
-            db, 
-            "Daily Report Updated", 
-            performedBy, 
-            userName, 
-            f"Daily report for {existing.get('employeeName')} on {existing.get('date')}: " + ", ".join(log_details), 
-            dailyReportId=report_id
-        )
+    if existing:
+        report_date = str(existing.get('date')).split(" ")[0]
+        if "status" in update_data and existing.get("status") != update_data["status"]:
+            status = update_data["status"]
+            await log_activity(
+                db,
+                f"Daily Report {status}",
+                performedBy,
+                userName,
+                f"{status} daily report for {existing.get('employeeName')} on {report_date}",
+                dailyReportId=report_id
+            )
+        if "note" in update_data and existing.get("note") != update_data["note"]:
+            await log_activity(
+                db,
+                "Verification Note Added",
+                performedBy,
+                userName,
+                f"Verification note for {existing.get('employeeName')} on {report_date} updated to: \"{update_data['note']}\"",
+                dailyReportId=report_id
+            )
         
     doc = await db.employee_daily_reports.find_one({"_id": ObjectId(report_id)})
     return fix_id(doc)
