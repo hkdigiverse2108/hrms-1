@@ -52,8 +52,12 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 async def root():
     return {"message": "Welcome to HRMS API"}
 
+MAX_FILE_SIZE = 512 * 1024 * 1024  # 512 MB
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds the 512 MB limit")
     filename = f"{uuid.uuid4().hex}_{file.filename}"
     file_path = os.path.join(UPLOAD_DIR, filename)
     with open(file_path, "wb") as buffer:
@@ -62,6 +66,8 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/upload-profile-photo/{user_id}")
 async def upload_profile_photo(user_id: str, file: UploadFile = File(...), db=Depends(get_db)):
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds the 512 MB limit")
     filename = f"{uuid.uuid4().hex}_{file.filename}"
     file_path = os.path.join(UPLOAD_DIR, filename)
     with open(file_path, "wb") as buffer:
@@ -81,6 +87,8 @@ async def upload_profile_photo(user_id: str, file: UploadFile = File(...), db=De
 
 @app.post("/chat/upload")
 async def upload_chat_file(file: UploadFile = File(...)):
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size exceeds the 512 MB limit")
     filename = f"{uuid.uuid4().hex}_{file.filename}"
     file_path = os.path.join(UPLOAD_DIR, filename)
     with open(file_path, "wb") as buffer:
