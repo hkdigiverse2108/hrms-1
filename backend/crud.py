@@ -460,10 +460,19 @@ async def run_payroll_processing(db, month: str, year: int):
         
         total_working_days = num_days - sundays - unique_holidays
         
+        # Apply 1 paid leave allowance per month
+        paid_leave_allowance = 1.0
+        deducted_leaves = min(lop_days, paid_leave_allowance)
+        lop_days -= deducted_leaves
+        actual_worked_days += deducted_leaves
+        
         per_day_gross = salary["monthlyGross"] / total_working_days
         lop_amount = lop_days * per_day_gross
         
         deduction_details = []
+        if deducted_leaves > 0:
+            deduction_details.append(f"Paid Leave Allowance - {round(deducted_leaves, 1)} day(s) applied")
+            
         if lop_days > 0:
             leave_types = {l.get("type") or l.get("leaveType") for l in all_emp_leaves if l.get("type") or l.get("leaveType")}
             leave_desc = f" ({', '.join(leave_types)})" if leave_types else ""

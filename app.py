@@ -208,7 +208,7 @@ def run_app():
         return subprocess.Popen(
             backend_cmd,
             cwd=str(backend_dir),
-            env=os.environ.copy(),
+            env=backend_env,
             creationflags=creation_flags,
         )
 
