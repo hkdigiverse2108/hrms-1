@@ -1537,13 +1537,6 @@ export default function ChatPage() {
               </div>
 
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="text-brand-teal hover:bg-brand-light/50 h-9 w-9 rounded-full border border-brand-teal/5 bg-brand-teal/5">
-                  <Phone className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="text-brand-teal hover:bg-brand-light/50 h-9 w-9 rounded-full border border-brand-teal/5 bg-brand-teal/5">
-                  <Video className="w-4 h-4" />
-                </Button>
-                <div className="w-[1px] h-6 bg-border mx-2" />
                 {isSearchingMessages ? (
                   <div className="flex items-center gap-2 bg-gray-50 border border-border px-3 py-1 rounded-full animate-in slide-in-from-right-2">
                     <Search className="w-3.5 h-3.5 text-muted-foreground" />
