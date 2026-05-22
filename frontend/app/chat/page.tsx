@@ -1611,8 +1611,8 @@ export default function ChatPage() {
                         <div className={cn(
                           "px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm",
                           msg.isMe 
-                            ? "bg-brand-teal text-white rounded-tr-none" 
-                            : "bg-white border border-border text-slate-700 rounded-tl-none"
+                            ? "bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-tr-none border border-emerald-400/20" 
+                            : "bg-white border border-slate-200 text-slate-700 rounded-tl-none"
                         )}>
                           <div className="flex items-center justify-between gap-4 mb-1">
                             <div className="flex items-center gap-2">
@@ -1708,49 +1708,133 @@ export default function ChatPage() {
                                 </div>
                               )}
 
-                              {msg.poll && (
-                                <div className={cn(
-                                  "p-4 rounded-xl border mb-2 min-w-[240px]",
-                                  msg.isMe ? "bg-white/10 border-white/20" : "bg-white border-border"
-                                )}>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <BarChart2 className="w-4 h-4" />
-                                    <h4 className="font-bold text-[14px]">{msg.poll.question}</h4>
+                              {msg.poll && (() => {
+                                const totalVotes = msg.poll.options.reduce((acc: number, opt: any) => acc + opt.votes.length, 0);
+                                const maxVotes = Math.max(...msg.poll.options.map((o: any) => o.votes.length), 1);
+
+                                return (
+                                <div className="rounded-2xl overflow-hidden mb-1.5 min-w-[280px] max-w-[360px] bg-white border border-slate-200 shadow-sm">
+                                  {/* Poll Header */}
+                                  <div className="px-4 pt-4 pb-3 bg-slate-50/80">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-emerald-50">
+                                        <BarChart2 className="w-3.5 h-3.5 text-emerald-500" />
+                                      </div>
+                                      <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600/80">Poll</span>
+                                    </div>
+                                    <h4 className="font-bold text-[15px] leading-snug text-slate-800">{msg.poll.question}</h4>
                                   </div>
-                                  <div className="space-y-2">
+
+                                  {/* Poll Options */}
+                                  <div className="p-3 space-y-2 bg-white">
                                     {msg.poll.options.map((option: any) => {
-                                      const totalVotes = msg.poll.options.reduce((acc: number, opt: any) => acc + opt.votes.length, 0);
                                       const percentage = totalVotes > 0 ? (option.votes.length / totalVotes) * 100 : 0;
                                       const hasVoted = option.votes.includes(user?.id);
+                                      const isWinning = option.votes.length === maxVotes && option.votes.length > 0;
+                                      const voterEmployees = option.votes
+                                        .map((voterId: string) => {
+                                          if (voterId === user?.id) return { id: voterId, name: "You", profilePhoto: user?.profilePhoto };
+                                          return employees.find((e: any) => e.id === voterId);
+                                        })
+                                        .filter(Boolean);
 
                                       return (
-                                        <button 
-                                          key={option.id}
-                                          onClick={() => handleVote(msg.id, option.id)}
-                                          className="w-full text-left group/opt relative overflow-hidden rounded-lg border border-border p-2.5 transition-all hover:border-brand-teal/50"
-                                        >
-                                          <div 
-                                            className="absolute left-0 top-0 bottom-0 bg-brand-teal/10 transition-all duration-500" 
-                                            style={{ width: `${percentage}%` }}
-                                          />
-                                          <div className="relative flex items-center justify-between gap-3">
-                                            <div className="flex items-center gap-2">
-                                              {hasVoted && <Check className="w-3.5 h-3.5 text-brand-teal" />}
-                                              <span className="text-[12px] font-medium">{option.text}</span>
+                                        <div key={option.id} className="group/opt">
+                                          <button 
+                                            onClick={() => handleVote(msg.id, option.id)}
+                                            className={cn(
+                                              "w-full text-left relative overflow-hidden rounded-xl p-3 transition-all duration-300 border",
+                                              hasVoted 
+                                                ? "bg-emerald-50/50 border-emerald-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)]" 
+                                                : "bg-slate-50/50 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                                            )}
+                                          >
+                                            {/* Progress bar */}
+                                            <div 
+                                              className="absolute left-0 top-0 bottom-0 bg-emerald-100/60 transition-all duration-700 ease-out" 
+                                              style={{ width: `${percentage}%` }}
+                                            />
+                                            <div className="relative flex items-center justify-between gap-3">
+                                              <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className={cn(
+                                                  "w-4 h-4 rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-all duration-300",
+                                                  hasVoted ? "border-emerald-500 bg-emerald-50" : "border-slate-300"
+                                                )}>
+                                                  {hasVoted && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                                                </div>
+                                                <span className={cn(
+                                                  "text-[13px] font-medium truncate",
+                                                  hasVoted ? "text-slate-800 font-bold" : "text-slate-600"
+                                                )}>{option.text}</span>
+                                              </div>
+                                              <div className="flex items-center gap-2 shrink-0">
+                                                {isWinning && totalVotes > 1 && (
+                                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-500 border border-amber-200">
+                                                    ★
+                                                  </span>
+                                                )}
+                                                <span className={cn(
+                                                  "text-[12px] font-bold tabular-nums min-w-[32px] text-right",
+                                                  hasVoted ? "text-emerald-600" : "text-slate-400"
+                                                )}>
+                                                  {Math.round(percentage)}%
+                                                </span>
+                                              </div>
                                             </div>
-                                            <span className="text-[10px] font-bold text-muted-foreground">{option.votes.length}</span>
-                                          </div>
-                                        </button>
+                                          </button>
+
+                                          {/* Voter avatars + names */}
+                                          {voterEmployees.length > 0 && (
+                                            <div className="flex items-center gap-1.5 mt-1.5 pl-3 animate-in fade-in duration-300">
+                                              <div className="flex -space-x-1.5">
+                                                {voterEmployees.slice(0, 5).map((voter: any, vi: number) => (
+                                                  <div
+                                                    key={voter.id || vi}
+                                                    className="w-5 h-5 rounded-full border-2 border-white overflow-hidden shrink-0 bg-slate-100"
+                                                    title={voter.name || "User"}
+                                                  >
+                                                    {voter.profilePhoto ? (
+                                                      <img src={voter.profilePhoto.startsWith("http") ? voter.profilePhoto : `${API_URL}/uploads/${voter.profilePhoto}`} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                      <div className="w-full h-full flex items-center justify-center text-[8px] font-bold text-slate-500 bg-slate-200">
+                                                        {(voter.name || "?")[0].toUpperCase()}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                              <span className="text-[10px] font-medium truncate max-w-[200px] text-slate-400">
+                                                {voterEmployees.length <= 3
+                                                  ? voterEmployees.map((v: any) => v.name || "User").join(", ")
+                                                  : `${voterEmployees.slice(0, 2).map((v: any) => v.name || "User").join(", ")} +${voterEmployees.length - 2} more`
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
                                       );
                                     })}
                                   </div>
-                                  <p className="mt-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
-                                    {msg.poll.options.reduce((acc: number, opt: any) => acc + opt.votes.length, 0)} votes total
-                                  </p>
-                                </div>
-                              )}
 
-                              {renderMessageText(msg.text)}
+                                  {/* Poll Footer */}
+                                  <div className="px-4 py-2.5 flex items-center justify-between border-t border-slate-100 bg-slate-50/50">
+                                    <div className="flex items-center gap-1.5">
+                                      <Users className="w-3.5 h-3.5 text-slate-400" />
+                                      <span className="text-[11px] font-bold tabular-nums text-slate-500">
+                                        {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
+                                      </span>
+                                    </div>
+                                    {msg.poll.isMultiple && (
+                                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                                        Multiple choice
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                );
+                              })()}
+
+                              {msg.text !== `Poll: ${msg.poll?.question}` && renderMessageText(msg.text)}
                             </>
                           )}
                           {msg.isEdited && <span className="ml-2 text-[8px] opacity-60 italic">(edited)</span>}
