@@ -303,6 +303,13 @@ async def process_payroll(request: dict, db=Depends(get_db)):
         raise HTTPException(status_code=400, detail="Month and year required")
     return await crud.run_payroll_processing(db, month, year)
 
+@app.put("/payroll/{payroll_id}", response_model=schemas.Payroll)
+async def update_payroll(payroll_id: str, request: dict, db=Depends(get_db)):
+    res = await crud.update_item(db, "payroll", payroll_id, request)
+    if not res:
+        raise HTTPException(status_code=404, detail="Payroll record not found")
+    return res
+
 @app.get("/salary-structures", response_model=List[schemas.SalaryStructure])
 async def read_salary_structures(skip: int = 0, limit: int = 100, db=Depends(get_db)):
     return await crud.get_salary_structures(db, skip=skip, limit=limit)

@@ -246,7 +246,7 @@ export default function PayrollPage() {
         />
         <StatsCard
           title="To Process"
-          value={finalPayroll.length - (paidCount + pendingCount)}
+          value={pendingCount}
           icon={<Clock className="h-6 w-6 text-amber-500" />}
         />
       </div>
