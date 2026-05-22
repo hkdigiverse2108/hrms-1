@@ -1647,21 +1647,33 @@ export default function ChatPage() {
                     {messageSearchQuery ? "No messages matching your search." : `No messages yet. Say hi to ${selectedChat.name}!`}
                   </p>
                 </div>
-              ) : displayMessages.map((msg) => {
+              ) : displayMessages.map((msg, index) => {
                 const isGroup = selectedChat.type === 'group' || selectedChat.type === 'general';
                 const sender = isGroup ? employees.find((e: any) => e.id === msg.senderId) : null;
                 const avatarSrc = isGroup ? (sender?.profilePhoto ? (sender.profilePhoto.startsWith('http') ? sender.profilePhoto : `${API_URL}/uploads/${sender.profilePhoto}`) : null) : selectedChat.avatar;
                 const avatarFallback = isGroup ? (sender?.name?.[0] || msg.sender?.[0] || "U") : selectedChat.name[0];
                 const displayName = isGroup ? (sender?.name || msg.sender || "User") : selectedChat.name;
 
+                const showDateSeparator = index === 0 || !dayjs(msg.timestamp).isSame(dayjs(displayMessages[index - 1].timestamp), 'day');
+                const isToday = dayjs(msg.timestamp).isSame(dayjs(), 'day');
+                const isYesterday = dayjs(msg.timestamp).isSame(dayjs().subtract(1, 'day'), 'day');
+                const dateText = isToday ? "Today" : isYesterday ? "Yesterday" : dayjs(msg.timestamp).format("MMMM D, YYYY");
+
                 return (
-                <div 
-                  key={msg.id}
-                  id={`msg-${msg.id}`}
-                  className={cn(
-                    "flex items-start gap-3 group",
-                    msg.isMe ? "flex-row-reverse" : "flex-row"
-                  )}
+                  <React.Fragment key={msg.id}>
+                    {showDateSeparator && (
+                      <div className="flex justify-center my-4">
+                        <span className="px-3 py-1 bg-white border border-border rounded-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider shadow-sm">
+                          {dateText}
+                        </span>
+                      </div>
+                    )}
+                    <div 
+                      id={`msg-${msg.id}`}
+                      className={cn(
+                        "flex items-start gap-3 group",
+                        msg.isMe ? "flex-row-reverse" : "flex-row"
+                      )}
                 >
                   {!msg.isMe && (
                     <Avatar className="w-9 h-9 border border-border shrink-0 mt-1" title={displayName}>
@@ -1999,6 +2011,7 @@ export default function ChatPage() {
                     </span>
                   </div>
                 </div>
+                </React.Fragment>
                 );
               })}
             </div>
