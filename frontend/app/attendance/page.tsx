@@ -1,6 +1,6 @@
 "use client";
  
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ export default function AttendancePage() {
   const router = useRouter();
 
   const isHR = user?.role?.toLowerCase() === 'hr';
-  const canManageAttendance = isAdmin || isHR;
+  const canManageAttendance = isAdmin;
 
   const canViewAttendance = isAdmin || checkPermission('attendance', 'canView');
   const canAddAttendance = isAdmin || checkPermission('attendance', 'canAdd');
@@ -68,6 +68,8 @@ export default function AttendancePage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState({
     employeeId: "",
@@ -189,7 +191,6 @@ export default function AttendancePage() {
  
         data.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setAttendance(data);
-        calculateStats(data);
       }
     } catch (err) {
       console.error("Error fetching attendance:", err);
@@ -197,6 +198,26 @@ export default function AttendancePage() {
       setIsLoading(false);
     }
   };
+
+  const filteredAttendance = useMemo(() => {
+    let result = attendance;
+    if (selectedEmployeeId !== "all") {
+      result = result.filter((a: any) => a.employeeId === selectedEmployeeId);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((a: any) => 
+        a.employeeName?.toLowerCase().includes(q) || 
+        a.employeeId?.toLowerCase().includes(q) ||
+        a.date?.includes(q)
+      );
+    }
+    return result;
+  }, [attendance, selectedEmployeeId, searchQuery]);
+
+  useEffect(() => {
+    calculateStats(filteredAttendance);
+  }, [filteredAttendance]);
  
   const formatToHhMm = (totalMinutes: number) => {
     if (!totalMinutes || totalMinutes <= 0) return "-";
@@ -420,10 +441,10 @@ export default function AttendancePage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === attendance.length) {
+    if (selectedIds.size === filteredAttendance.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(attendance.map(a => a.id)));
+      setSelectedIds(new Set(filteredAttendance.map(a => a.id)));
     }
   };
 
@@ -497,7 +518,14 @@ export default function AttendancePage() {
     }
   };
 
-  const currentRecord = attendance.find(a => a.date === dayjs(getISTNow()).format("YYYY-MM-DD"));
+  const displayEmployee = (selectedEmployeeId === "all" || selectedEmployeeId === "") 
+    ? user 
+    : (allEmployees.find(e => e.id === selectedEmployeeId || e.employeeId === selectedEmployeeId) || user);
+
+  const currentRecord = attendance.find(a => 
+    a.date === dayjs(getISTNow()).format("YYYY-MM-DD") && 
+    a.employeeId === (selectedEmployeeId === "all" ? (user?.id || user?.employeeId) : selectedEmployeeId)
+  );
  
   const CalendarWidget = () => {
     const istNow = dayjs(getISTNow());
@@ -529,7 +557,7 @@ export default function AttendancePage() {
             // Render days of the month
             for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
               const isToday = dayNum === istNow.date();
-              const hasRecord = attendance.some(a => {
+              const hasRecord = filteredAttendance.some(a => {
                 const recordDate = dayjs(a.date);
                 return recordDate.date() === dayNum && 
                        recordDate.month() === istNow.month() && 
@@ -838,14 +866,16 @@ export default function AttendancePage() {
             <div className="bg-white border border-border rounded-xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-center gap-4">
                 <Avatar className="w-16 h-16 border border-border">
-                  <AvatarImage src={getAvatarUrl(user?.profilePhoto, user?.name)} />
+                  <AvatarImage src={getAvatarUrl(displayEmployee?.profilePhoto, displayEmployee?.name)} />
                   <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xl">
-                    {user?.name?.split(' ').map((n:any) => n[0]).join('')}
+                    {displayEmployee?.name?.split(' ').map((n:any) => n[0]).join('')}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h2 className="text-xl font-bold text-foreground mb-1">{user?.name}</h2>
-                  <p className="text-sm text-muted-foreground mb-2">{user?.role} • {user?.designation}</p>
+                  <h2 className="text-xl font-bold text-foreground mb-1">
+                    {selectedEmployeeId === "all" ? `${displayEmployee?.name} (You)` : displayEmployee?.name}
+                  </h2>
+                  <p className="text-sm text-muted-foreground mb-2">{displayEmployee?.role} • {displayEmployee?.designation}</p>
                   <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-semibold ${
                     currentRecord ? 'bg-brand-light/50 border-brand-teal/20 text-brand-teal' : 'bg-gray-50 border-gray-200 text-gray-500'
                   }`}>
@@ -878,12 +908,15 @@ export default function AttendancePage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-medium text-muted-foreground">{user?.role === "Admin" || user?.role === "HR" ? "Total Attendance" : "Present Days"}</span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {selectedEmployeeId === "all" ? "Total Attendance" : "Present Days"}
+                  </span>
                   <CalendarIcon className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.presentDays}</div>
-                <p className="text-xs text-muted-foreground">{canManageAttendance ? "All employee records" : "Days recorded this month"}</p>
-
+                <p className="text-xs text-muted-foreground">
+                  {selectedEmployeeId === "all" ? "All employee records" : "Days recorded this month"}
+                </p>
               </div>
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
@@ -891,7 +924,9 @@ export default function AttendancePage() {
                   <Clock className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.avgHours}</div>
-                <p className="text-xs text-muted-foreground">Based on your activity</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedEmployeeId === "all" ? "Across all active days" : "Based on active logs"}
+                </p>
               </div>
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
@@ -899,7 +934,9 @@ export default function AttendancePage() {
                   <Coffee className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.totalBreakTime}</div>
-                <p className="text-xs text-muted-foreground">Cumulative break duration</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedEmployeeId === "all" ? "Total organizational breaks" : "Cumulative break duration"}
+                </p>
               </div>
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
@@ -907,7 +944,9 @@ export default function AttendancePage() {
                   <Briefcase className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.totalWorkTime}</div>
-                <p className="text-xs text-muted-foreground">Total hours this month</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedEmployeeId === "all" ? "Total across organization" : "Total hours this month"}
+                </p>
               </div>
             </div>
           </div>
@@ -921,7 +960,22 @@ export default function AttendancePage() {
             {/* Table Filters */}
 
             <div className="p-4 border-b border-border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/30">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                {canManageAttendance && (
+                  <div className="w-full md:w-[240px]">
+                    <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+                      <SelectTrigger className="w-full bg-white h-9 border-border focus:ring-brand-teal focus:border-brand-teal">
+                        <SelectValue placeholder="Filter by Employee" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Employees</SelectItem>
+                        {allEmployees.map(emp => (
+                          <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
               <div className="relative w-full md:w-[280px]">
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
@@ -929,7 +983,9 @@ export default function AttendancePage() {
                 </div>
                 <input 
                   type="text" 
-                  placeholder="Search employees..." 
+                  placeholder="Search attendance logs..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-1.5 h-9 text-sm rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal transition-all bg-white"
                 />
               </div>
@@ -948,12 +1004,15 @@ export default function AttendancePage() {
                       {canDeleteAttendance && (
                         <th className="px-4 py-4">
                           <Checkbox 
-                            checked={attendance.length > 0 && selectedIds.size === attendance.length}
+                            checked={filteredAttendance.length > 0 && selectedIds.size === filteredAttendance.length}
                             onCheckedChange={toggleSelectAll}
                           />
                         </th>
                       )}
                       <th className="px-4 py-4">Sr. No.</th>
+                      {canManageAttendance && selectedEmployeeId === "all" && (
+                        <th className="px-4 py-4">Employee</th>
+                      )}
                       <th className="px-4 py-4">Date</th>
                       <th className="px-4 py-4">Day</th>
                       <th className="px-4 py-4">Current Status</th>
@@ -969,8 +1028,7 @@ export default function AttendancePage() {
                       <th className="px-4 py-4 text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
-                    {attendance.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row, idx) => {
+                  <tbody className="divide-y divide-border">{filteredAttendance.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row, idx) => {
                       const totalBreakMinutes = (row.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
                       const breakStr = formatToHhMm(totalBreakMinutes);
                       
@@ -998,7 +1056,7 @@ export default function AttendancePage() {
                         (req.employee_id === row.employeeId || req.employee_id === row.employeeId) && 
                         req.status === 'approved'
                       );
-
+ 
                       const isLate = (() => {
                         if (recoveryReq) return false; // Recovery approved, no longer late
                         if (!row.checkIn || row.checkIn === "--") return false;
@@ -1031,7 +1089,7 @@ export default function AttendancePage() {
                       
                       const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
                       const overtimeStr = formatToHhMm(overtimeMinutes);
-
+ 
                       let statusLabel = row.status === "Leave" ? "Leave" : (row.checkIn ? "Present" : "Absent");
                       let statusClass = statusLabel === "Present" 
                         ? "bg-green-50 text-green-600 border-green-100" 
@@ -1045,7 +1103,7 @@ export default function AttendancePage() {
                             ? "break-in" 
                             : (lastBreak?.endTime ? "break-out" : "punch-in"));
                       const day = dayjs(row.date).format("dddd");
-
+ 
                       return (
                         <tr key={idx} className={`hover:bg-muted/30 transition-colors group border-b border-border ${selectedIds.has(row.id) ? 'bg-brand-light/20' : ''}`}>
                           {canDeleteAttendance && (
@@ -1057,6 +1115,31 @@ export default function AttendancePage() {
                             </td>
                           )}
                           <td className="px-4 py-4 font-medium text-muted-foreground">{idx + 1}</td>
+                          {canManageAttendance && selectedEmployeeId === "all" && (
+                            <td className="px-4 py-4">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="w-8 h-8 border border-border">
+                                  {(() => {
+                                    const emp = allEmployees.find(e => e.id === row.employeeId || e.employeeId === row.employeeId);
+                                    return (
+                                      <>
+                                        <AvatarImage src={getAvatarUrl(emp?.profilePhoto, row.employeeName)} />
+                                        <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
+                                          {row.employeeName?.split(' ').map((n:any) => n[0]).join('')}
+                                        </AvatarFallback>
+                                      </>
+                                    );
+                                  })()}
+                                </Avatar>
+                                <div>
+                                  <div className="font-semibold text-foreground">{row.employeeName}</div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {allEmployees.find(e => e.id === row.employeeId || e.employeeId === row.employeeId)?.designation || "Employee"}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          )}
                           <td className="px-4 py-4 font-medium text-foreground">{row.date}</td>
                           <td className="px-4 py-4 text-muted-foreground">{day}</td>
                           <td className="px-4 py-4 text-muted-foreground">{currentStatus}</td>
@@ -1135,7 +1218,7 @@ export default function AttendancePage() {
 
             {!isLoading && (
               <TablePagination 
-                totalItems={attendance.length} 
+                totalItems={filteredAttendance.length} 
                 itemsPerPage={itemsPerPage} 
                 currentPage={currentPage} 
                 onPageChange={setCurrentPage}

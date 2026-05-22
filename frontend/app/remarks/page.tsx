@@ -329,7 +329,7 @@ export default function RemarksPage() {
         r.employeeName || "",
         r.role || "",
         r.type || "",
-        r.details || "",
+        (r.details || "").replace(/₹/g, "Rs."),
         r.addedBy || "",
         `Rs. ${r.amount || getPenaltyAmount(r.type)}`
       ])
