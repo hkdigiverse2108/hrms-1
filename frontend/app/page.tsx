@@ -284,7 +284,32 @@ export default function DashboardPage() {
       runTimer();
       interval = setInterval(runTimer, 1000);
     } else {
-      setWorkTime("00:00:00");
+      if (recentAttendance && recentAttendance.length > 0) {
+        const lastRecord = recentAttendance[0];
+        const isToday = lastRecord.date === dayjs(getISTNow()).format('YYYY-MM-DD');
+        if (isToday) {
+          if (lastRecord.accumulatedWorkSeconds !== undefined && lastRecord.accumulatedWorkSeconds !== null) {
+            const total = lastRecord.accumulatedWorkSeconds;
+            const h = Math.floor(total / 3600);
+            const m = Math.floor((total % 3600) / 60);
+            const s = Math.floor(total % 60);
+            setWorkTime(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+          } else if (lastRecord.workHours && typeof lastRecord.workHours === 'string') {
+             const match = lastRecord.workHours.match(/(\d+)\s*h\s*(\d+)\s*m/i);
+             if (match) {
+               setWorkTime(`${match[1].padStart(2, '0')}:${match[2].padStart(2, '0')}:00`);
+             } else {
+               setWorkTime("00:00:00");
+             }
+          } else {
+            setWorkTime("00:00:00");
+          }
+        } else {
+          setWorkTime("00:00:00");
+        }
+      } else {
+        setWorkTime("00:00:00");
+      }
     }
       if (attendanceStatus?.record?.breaks) {
         const totalMinutes = attendanceStatus.record.breaks.reduce((acc: number, b: any) => {
@@ -299,7 +324,7 @@ export default function DashboardPage() {
       return () => {
         if (interval) clearInterval(interval);
       };
-    }, [attendanceStatus, getISTNow]);
+    }, [attendanceStatus, getISTNow, recentAttendance]);
 
   const [allTimeHours, setAllTimeHours] = useState("0h 0m");
 
