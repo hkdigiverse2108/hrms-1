@@ -757,33 +757,51 @@ function EmployeeView({
                   </div>
                 </div>
               </div>
- 
-              <div className="bg-[#F9FAFB] border border-[#F3F4F6] rounded-xl p-4 min-w-[220px] flex items-center justify-between">
+               <div className="bg-[#F9FAFB] border border-[#F3F4F6] rounded-xl p-4 min-w-[220px] flex items-center justify-between">
                 <div>
                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`w-1.5 h-1.5 rounded-full ${isPunchedIn && !isOnBreak ? 'bg-brand-teal animate-pulse' : 'bg-gray-400'}`}></div>
-                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Live working time</span>
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Current Time</span>
                    </div>
-                   <div className="text-2xl font-black text-[#111827] font-mono tracking-tight">{workTime}</div>
+                   <div className="text-2xl font-black text-[#111827] font-mono tracking-tight">
+                     {!isTimeSynced ? (
+                       <span className="text-brand-teal/20 animate-pulse">--:-- --</span>
+                     ) : (
+                       getISTNow().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+                     )}
+                   </div>
+                   <div className="text-[10px] text-gray-400 font-semibold mt-0.5">
+                     {!isTimeSynced ? (
+                       <span className="text-brand-teal/20 animate-pulse italic">Synchronizing IST...</span>
+                     ) : (
+                       dayjs(getISTNow()).format('dddd, MMMM D, YYYY')
+                     )}
+                   </div>
                 </div>
-                {isPunchedIn && !isOnBreak && <span className="bg-brand-light text-brand-teal text-[10px] font-black px-2 py-1 rounded-lg">Live</span>}
               </div>
             </div>
  
             <div className="bg-[#EAF7F6]/40 rounded-2xl p-10 mb-8 text-center border border-brand-teal/10">
-              <span className="text-xs text-gray-500 font-bold uppercase tracking-widest block mb-1">Current Time</span>
+              <span className="text-xs text-gray-500 font-bold uppercase tracking-widest block mb-1">
+                Live working time {isPunchedIn && !isOnBreak}
+              </span>
               <div className="text-5xl font-black text-[#111827] tracking-tighter mb-2 min-h-[48px] flex items-center justify-center">
-                {!isTimeSynced ? (
-                  <span className="text-brand-teal/20 animate-pulse">--:-- --</span>
-                ) : (
-                  getISTNow().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
-                )}
+                {workTime}
               </div>
-              <div className="text-sm text-gray-500 font-medium min-h-[20px]">
-                {!isTimeSynced ? (
-                  <span className="text-brand-teal/20 animate-pulse italic">Synchronizing IST...</span>
+              <div className="text-sm text-gray-500 font-medium min-h-[20px] flex items-center justify-center gap-2">
+                {isPunchedIn ? (
+                  isOnBreak ? (
+                    <span className="text-amber-600 font-bold flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      On Break
+                    </span>
+                  ) : (
+                    <span className="text-brand-teal font-bold flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse"></span>
+                      Live Tracking Active
+                    </span>
+                  )
                 ) : (
-                  dayjs(getISTNow()).format('dddd, MMMM D, YYYY')
+                  <span className="text-gray-400 font-bold">Not Started</span>
                 )}
               </div>
             </div>

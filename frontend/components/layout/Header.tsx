@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import { Bell, MessageSquare, Menu, LogOut } from "lucide-react";
 import { Layout } from "antd";
 import Link from "next/link";
-import { SearchBar } from "@/components/common/SearchBar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { SidebarNav } from "./SidebarNav";
@@ -115,7 +114,6 @@ export function Header() {
             <SidebarNav />
           </SheetContent>
         </Sheet>
-        <SearchBar placeholder="Search employees, reports..." className="hidden sm:flex" containerClassName="hidden sm:flex" />
       </div>
  
       {/* Right - Profile & Actions */}
