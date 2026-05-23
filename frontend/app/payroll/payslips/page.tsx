@@ -35,163 +35,179 @@ import { PlusCircle } from 'lucide-react'
 import { useUser } from '@/hooks/useUser'
 import type { Payroll } from '@/lib/types'
 
-function SinglePayslip({ record, employee, numberToWords }: { record: any, employee: any, numberToWords: (n: number) => string }) {
+const monthMap: Record<string, string> = {
+  'January': '01',
+  'February': '02',
+  'March': '03',
+  'April': '04',
+  'May': '05',
+  'June': '06',
+  'July': '07',
+  'August': '08',
+  'September': '09',
+  'October': '10',
+  'November': '11',
+  'December': '12'
+}
+
+const getMonthNumber = (monthName: string): string => {
+  if (!monthName) return '01'
+  const trimmed = monthName.trim()
+  const name = trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase()
+  return monthMap[name] || '01'
+}
+
+const getPayslipNumber = (record: any, allPayrolls: any[]): string => {
+  const yearStr = record.year ? String(record.year).trim() : '2026'
+  const recordMonthTrimmed = record.month ? String(record.month).trim().toLowerCase() : ''
+
+  // Filter all records matching this month and year (case-insensitive and trimmed)
+  const filtered = allPayrolls.filter(p => {
+    const pMonthTrimmed = p.month ? String(p.month).trim().toLowerCase() : ''
+    const pYearStr = p.year ? String(p.year).trim() : ''
+    return pMonthTrimmed === recordMonthTrimmed && pYearStr === yearStr
+  })
+
+  // Sort them stable by id / _id
+  const sorted = [...filtered].sort((a, b) => {
+    const idA = a.id || a._id || ''
+    const idB = b.id || b._id || ''
+    return idA.localeCompare(idB)
+  })
+
+  // Find index of current record
+  const index = sorted.findIndex(p => (p.id || p._id) === (record.id || record._id))
+  
+  // Convert 0-based index to 1-based sequential number, pad with leading zeros to 3 digits (e.g. 001)
+  const sequenceNum = index !== -1 ? index + 1 : sorted.length + 1
+  const sequenceStr = String(sequenceNum).padStart(3, '0')
+
+  const monthStr = getMonthNumber(record.month)
+  return `SSHK-${yearStr}${monthStr}${sequenceStr}`
+}
+
+function SinglePayslip({ 
+  record, 
+  employee, 
+  numberToWords,
+  isAdminOrHR,
+  onMarkAsPaid,
+  onUpdate,
+  onDelete,
+  payslipNumber
+}: { 
+  record: any, 
+  employee: any, 
+  numberToWords: (n: number) => string,
+  isAdminOrHR?: boolean,
+  onMarkAsPaid?: (record: any) => void,
+  onUpdate?: (record: any) => void,
+  onDelete?: (id: string) => void,
+  payslipNumber?: string
+}) {
   return (
-    <div className="payslip-card bg-white p-16 rounded-lg shadow-sm border border-slate-200 print:shadow-none print:border-none print:p-0 font-sans mb-8 last:mb-0 break-after-page">
+    <div 
+      className="payslip-card bg-white p-12 mb-8 last:mb-0 break-after-page max-w-4xl mx-auto relative border-0 shadow-none"
+      style={{ fontFamily: "'Poppins', sans-serif", WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' }}
+    >
       {/* Header - Brand Section */}
-      <div className="flex justify-between items-start pb-10 border-b border-slate-100">
-        <div className="flex items-center gap-4">
-           <div className="w-12 h-12 bg-[#1F2937] rounded flex items-center justify-center">
-             <span className="text-white font-black text-2xl">HK</span>
-           </div>
-           <div className="flex flex-col leading-tight">
-             <span className="text-[20px] font-black text-slate-900 tracking-tight">HK DigiVerse</span>
-             <span className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">& IT Consultancy</span>
-           </div>
+      <div className="flex justify-between items-center pb-4 border-b-3 border-gray-300">
+        <div className="flex items-center">
+          <img 
+            src="/logo.png" 
+            alt="HK DigiVerse Logo" 
+            width={220}
+            height={107}
+            className="w-[220px] h-auto object-contain"
+            style={{ imageRendering: 'auto' }}
+          />
         </div>
-        <div className="text-right text-[12px] text-slate-600 space-y-0.5 font-medium">
-          <p>Email: <span className="text-slate-900 font-bold">hrmangukiya3494@gmail.com</span></p>
-          <p>Contact No: <span className="text-slate-900 font-bold">8866005029</span></p>
+        <div className="text-left text-[15px] text-slate-700 space-y-1.5 font-normal">
+          <p>Email: hrmangukiya3494@gmail.com</p>
+          <p>Contact No: 8866005029</p>
         </div>
       </div>
 
       {/* Metadata Section */}
-      <div className="grid grid-cols-4 gap-8 py-10">
+      <div className="grid grid-cols-[1.5fr_0.8fr_0.8fr_0.9fr] gap-4 py-8">
         <div className="space-y-1">
-          <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Invoice No.</p>
-          <p className="text-[14px] font-black text-slate-900 uppercase">INV-{record.year}{record.month.slice(0,3).toUpperCase()}-{record.id.slice(-6).toUpperCase()}</p>
+          <p className="text-[15px] text-slate-700 font-normal">Payslip No.</p>
+          <p className="text-[17px] font-bold text-slate-900 text-black whitespace-nowrap">
+            {payslipNumber || `INV-${record.year}${record.month.toLowerCase()}-${record.id?.slice(-12).toUpperCase()}`}
+          </p>
         </div>
         <div className="space-y-1">
-          <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Date</p>
-          <p className="text-[14px] font-black text-slate-900">{new Date().toLocaleDateString('en-GB')}</p>
+          <p className="text-[15px] text-slate-700 font-normal">Date :</p>
+          <p className="text-[17px] font-bold text-slate-900 text-black">
+            {new Date().toLocaleDateString('en-GB')}
+          </p>
         </div>
         <div className="space-y-1">
-          <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Payment Status</p>
-          <p className="text-[14px] font-black text-slate-900 uppercase tracking-tighter">{record.status || 'Draft'}</p>
+          <p className="text-[15px] text-slate-700 font-normal">Payment Status :</p>
+          <p className="text-[17px] font-bold text-slate-900 text-black lowercase">
+            {record.status === 'processed' ? 'draft' : (record.status || 'draft')}
+          </p>
         </div>
-        <div className="space-y-1 text-right">
-          <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Total Amount</p>
-          <p className="text-[18px] font-black text-slate-900">₹{record.netSalary?.toLocaleString()}</p>
+        <div className="space-y-1">
+          <p className="text-[15px] text-slate-700 font-normal">Total Amount :</p>
+          <p className="text-[17px] font-bold text-slate-900 text-black">
+            {record.netSalary?.toLocaleString()}
+          </p>
         </div>
       </div>
 
       {/* Employee Info Section */}
-      <div className="grid grid-cols-2 gap-x-24 gap-y-5 py-10">
-        <div className="flex justify-between items-center text-[13px]">
-          <span className="text-slate-400 font-bold">Name :</span>
-          <span className="font-black text-slate-900 text-right">{record.employeeName}</span>
+      <div className="grid grid-cols-2 gap-x-8 gap-y-2 py-2">
+        <div className="flex justify-between items-center py-1">
+          <span className="text-[16px] text-slate-700 font-medium">Name :</span>
+          <span className="text-[17px] font-medium text-slate-900 text-right">{record.employeeName}</span>
         </div>
-        <div className="flex justify-between items-center text-[13px]">
-          <span className="text-slate-400 font-bold">Department :</span>
-          <span className="font-black text-slate-900 text-right">{employee?.department}</span>
+        <div className="flex justify-between items-center py-1">
+          <span className="text-[16px] text-slate-700 font-medium">Department :</span>
+          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.department || 'Development'}</span>
         </div>
-        <div className="flex justify-between items-center text-[13px]">
-          <span className="text-slate-400 font-bold">Designation :</span>
-          <span className="font-black text-slate-900 text-right">{employee?.designation}</span>
+        <div className="flex justify-between items-center py-1">
+          <span className="text-[16px] text-slate-700 font-medium">Designation :</span>
+          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.designation || 'Software Engineer'}</span>
         </div>
-        <div className="flex justify-between items-center text-[13px]">
-          <span className="text-slate-400 font-bold">Position :</span>
-          <span className="font-black text-slate-900 text-right">{employee?.role || 'Employee'}</span>
+        <div className="flex justify-between items-center py-1">
+          <span className="text-[16px] text-slate-700 font-medium">Position :</span>
+          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.role || 'Intern'}</span>
         </div>
-        <div className="flex justify-between items-center text-[13px]">
-          <span className="text-slate-400 font-bold">Email :</span>
-          <span className="font-black text-slate-900 text-right">{employee?.email}</span>
+        <div className="flex justify-between items-center py-1">
+          <span className="text-[16px] text-slate-700 font-medium">Email :</span>
+          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.email || 'janvivasani13@gmil.com'}</span>
         </div>
-        <div className="flex justify-between items-center text-[13px]">
-          <span className="text-slate-400 font-bold">Phone :</span>
-          <span className="font-black text-slate-900 text-right">{employee?.phone}</span>
-        </div>
-      </div>
-
-      {/* Attendance & Leave Details Section */}
-      <div className="mt-8 border-t border-slate-100 pt-8">
-        <div className="grid grid-cols-4 gap-8">
-          <div className="space-y-1">
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Working Days</p>
-            <p className="text-[14px] font-black text-slate-900">{record.totalWorkingDays}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Worked Days</p>
-            <p className="text-[14px] font-black text-slate-900">{record.workedDays}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Total Leaves</p>
-            <p className="text-[14px] font-black text-slate-900">{record.leaveDays}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">LOP / Unpaid Days</p>
-            <p className="text-[14px] font-black text-rose-600">{record.lopDays}</p>
-          </div>
+        <div className="flex justify-between items-center py-1">
+          <span className="text-[16px] text-slate-700 font-medium">Phone :</span>
+          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.phone || '8200548988'}</span>
         </div>
       </div>
 
       {/* Salary Details Section */}
-      <div className="mt-8">
-        <div className="bg-[#111827] text-white px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.2em] border-b-[32px] border-[#111827] relative">
-          <span className="absolute inset-0 flex items-center px-5">Salary Details</span>
+      <div className="mt-6">
+        <div className="bg-[#2b5f60] text-white px-6 py-2 text-[21px] font-bold">
+          Salary Details
         </div>
-        <div className="px-5 py-6 space-y-4">
-          <div className="flex justify-between text-[13px]">
-            <span className="text-slate-400 font-bold">Base Salary</span>
-            <span className="font-black text-slate-900">{record.basicSalary?.toLocaleString()}</span>
+        <div className="bg-[#f5f6f9] px-6 py-4 space-y-4">
+          <div className="flex justify-between items-center text-slate-700">
+            <span className="text-[16px] text-slate-700 font-medium">Base Salary</span>
+            <span className="text-[16px] font-medium text-slate-900 tabular-nums text-right">{record.basicSalary?.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between text-[13px]">
-            <span className="text-slate-400 font-bold">Bonus / Incentives</span>
-            <span className="font-black text-slate-900">{( (record.bonus || 0) + (record.allowances || 0) ).toLocaleString()}</span>
+          <div className="flex justify-between items-center text-slate-700">
+            <span className="text-[16px] text-slate-700 font-medium">Bonus</span>
+            <span className="text-[16px] font-medium text-slate-900 tabular-nums text-right">{((record.bonus || 0) + (record.allowances || 0)).toLocaleString()}</span>
           </div>
-        </div>
-      </div>
-
-      {/* Deductions Section */}
-      <div className="mt-4">
-        <div className="bg-[#111827] text-white px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.2em] border-b-[32px] border-[#111827] relative">
-          <span className="absolute inset-0 flex items-center px-5">Deductions</span>
-        </div>
-        <div className="px-5 py-6 space-y-4 border-b border-slate-100">
-          <div className="flex justify-between text-[13px]">
-            <span className="text-slate-400 font-bold">Loss of Pay (LOP)</span>
-            <span className="font-black text-rose-600">-{ (record.deductions - (record.penalty || 0)).toLocaleString() }</span>
-          </div>
-          {record.penalty > 0 && (
-            <div className="flex justify-between text-[13px]">
-              <span className="text-slate-400 font-bold">Performance Penalties</span>
-              <span className="font-black text-rose-600">-{record.penalty?.toLocaleString()}</span>
+          {record.deductions && record.deductions > 0 ? (
+            <div className="flex justify-between items-center text-slate-700">
+              <span className="text-[16px] text-slate-700 font-medium">Deductions</span>
+              <span className="text-[16px] font-medium text-slate-900 tabular-nums text-right">-{record.deductions?.toLocaleString()}</span>
             </div>
-          )}
-          
-          {record.deductionRemarks && (
-            <div className="mt-4 pt-4 border-t border-dashed border-slate-200">
-              <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mb-2 text-left">Deduction Details</p>
-              <ul className="list-disc pl-4 space-y-1 text-[12px] text-slate-600 font-medium text-left">
-                {record.deductionRemarks.split(';').map((remark: string, index: number) => {
-                  const r = remark.trim();
-                  if (!r) return null;
-                  return <li key={index}>{r}</li>;
-                })}
-              </ul>
-            </div>
-          )}
+          ) : null}
         </div>
-      </div>
-
-      {/* Final Summary Section */}
-      <div className="mt-16 flex justify-end px-5">
-         <div className="flex items-center gap-12">
-           <span className="text-[14px] font-black text-slate-300 uppercase tracking-[0.2em]">Total Salary</span>
-           <span className="text-[28px] font-black text-slate-900 tracking-tighter">₹{record.netSalary?.toLocaleString()}</span>
-         </div>
-      </div>
-
-      {/* Footer Area */}
-      <div className="mt-20 grid grid-cols-2 gap-24 items-end px-5">
-        <div className="space-y-2">
-          <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Amount in words</p>
-          <p className="text-[13px] font-black text-slate-700 capitalize italic leading-tight">Rupees {numberToWords(Math.round(record.netSalary))}</p>
-        </div>
-        <div className="text-center">
-          <div className="w-full border-t border-slate-800 pt-4">
-            <p className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Authorized Signatory</p>
-          </div>
+        <div className="flex justify-end items-center gap-20 py-6">
+          <span className="text-[16px] font-medium text-slate-700">Total Salary</span>
+          <span className="text-[17px] font-bold text-slate-900 text-black">{record.netSalary?.toLocaleString()}</span>
         </div>
       </div>
     </div>
@@ -312,14 +328,51 @@ function PayslipContent() {
 
         for (let i = 0; i < nodes.length; i++) {
           const node = nodes[i] as HTMLElement
-          const dataUrl = await (window as any).domtoimage.toPng(node, {
+          
+          const rect = node.getBoundingClientRect()
+          const nodeWidth = rect.width || node.clientWidth || 800
+          const nodeHeight = rect.height || node.clientHeight || 1131
+          
+          const clone = node.cloneNode(true) as HTMLElement
+          
+          const container = document.createElement('div')
+          container.style.position = 'fixed'
+          container.style.left = '-10000px'
+          container.style.top = '0'
+          container.style.width = `${nodeWidth}px`
+          container.style.height = `${nodeHeight}px`
+          container.style.overflow = 'hidden'
+          container.style.background = 'white'
+          container.appendChild(clone)
+          document.body.appendChild(container)
+
+          clone.style.width = `${nodeWidth}px`
+          clone.style.height = `${nodeHeight}px`
+          clone.style.margin = '0'
+          clone.style.padding = '48px'
+          clone.style.position = 'relative'
+          clone.style.transform = 'none'
+          clone.style.boxShadow = 'none'
+          clone.style.border = 'none'
+
+          const scale = 2
+          const dataUrl = await (window as any).domtoimage.toPng(clone, {
             bgcolor: '#ffffff',
-            style: { margin: '0', transform: 'scale(1)', borderRadius: '0' }
+            width: nodeWidth * scale,
+            height: nodeHeight * scale,
+            cacheBust: true,
+            style: {
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              width: `${nodeWidth}px`,
+              height: `${nodeHeight}px`,
+            }
           })
           
-          const imgProps = pdf.getImageProperties(dataUrl)
+          document.body.removeChild(container)
+          
           const pdfWidth = pdf.internal.pageSize.getWidth()
-          const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width
+          const pdfHeight = (nodeHeight * pdfWidth) / nodeWidth
           
           if (i > 0) pdf.addPage()
           pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight)
@@ -427,6 +480,30 @@ function PayslipContent() {
     }
   }
 
+  const handleMarkAsPaid = async (record: any) => {
+    try {
+      const response = await fetch(`${API_URL}/payroll/${record.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...record,
+          status: 'paid'
+        })
+      })
+
+      if (response.ok) {
+        toast.success('Payroll marked as paid')
+        fetchInitialData() // Refresh
+      } else {
+        const err = await response.text()
+        toast.error(`Failed to mark as paid: ${err}`)
+      }
+    } catch (error) {
+      console.error('Mark as paid error:', error)
+      toast.error('Error marking as paid')
+    }
+  }
+
   const columns = [
     { key: 'employeeName', header: 'Employee' },
     { key: 'month', header: 'Month' },
@@ -439,13 +516,16 @@ function PayslipContent() {
     { 
       key: 'status', 
       header: 'Status',
-      render: (record: any) => (
-        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
-          record.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-        }`}>
-          {record.status}
-        </span>
-      )
+      render: (record: any) => {
+        const displayStatus = record.status === 'processed' ? 'draft' : record.status;
+        return (
+          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+            record.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+          }`}>
+            {displayStatus}
+          </span>
+        )
+      }
     },
   ]
 
@@ -467,6 +547,12 @@ function PayslipContent() {
         </DropdownMenuItem>
         {isAdminOrHR && (
           <>
+            {record.status !== 'paid' && (
+              <DropdownMenuItem onClick={() => handleMarkAsPaid(record)} className="text-green-600 font-medium">
+                <CreditCard className="mr-2 h-4 w-4" />
+                Mark as Paid
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => handleUpdate(record)}>
               <Edit className="mr-2 h-4 w-4 text-blue-500" />
               Update
@@ -660,12 +746,24 @@ function PayslipContent() {
               record={record} 
               employee={employees.find(e => e.id === record.employeeId)}
               numberToWords={numberToWords}
+              isAdminOrHR={isAdminOrHR}
+              onMarkAsPaid={handleMarkAsPaid}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              payslipNumber={getPayslipNumber(record, allPayrolls)}
             />
           ))}
         </div>
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+        .payslip-card, .payslip-card * {
+          font-family: 'Poppins', sans-serif !important;
+          -webkit-font-smoothing: antialiased !important;
+          -moz-osx-font-smoothing: grayscale !important;
+          text-rendering: optimizeLegibility !important;
+        }
         @media print {
           @page { size: A4; margin: 0; }
           body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -769,7 +867,7 @@ function PayslipContent() {
               <Select value={formData.status} onValueChange={(val: any) => setFormData({...formData, status: val})}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="processed">Processed</SelectItem>
+                  <SelectItem value="processed">Draft</SelectItem>
                   <SelectItem value="paid">Paid</SelectItem>
                 </SelectContent>
               </Select>
