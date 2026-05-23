@@ -758,6 +758,17 @@ function EmployeeView({
   const punchOutTimeRaw = attendanceStatus?.record?.checkOut || (recentAttendance[0]?.checkOut || "Active");
   const punchInTime = formatTime12h(punchInTimeRaw);
   const punchOutTime = formatTime12h(punchOutTimeRaw);
+
+  const getFormattedWorkedTime = () => {
+    if (!workTime || workTime === "00:00:00") return "Not Started";
+    const parts = workTime.split(':');
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0]);
+      const m = parseInt(parts[1]);
+      return `${h}h ${m}m`;
+    }
+    return "Not Started";
+  };
  
   return (
     <div className="space-y-6">
@@ -817,7 +828,7 @@ function EmployeeView({
  
             <div className="bg-[#EAF7F6]/40 rounded-2xl p-10 mb-8 text-center border border-brand-teal/10">
               <span className="text-xs text-gray-500 font-bold uppercase tracking-widest block mb-1">
-                Live working time {isPunchedIn && !isOnBreak}
+                Live working time {isPunchedIn && !isOnBreak && <span className="ml-2 bg-brand-light text-brand-teal text-[10px] font-black px-2 py-0.5 rounded-md">Live</span>}
               </span>
               <div className="text-5xl font-black text-[#111827] tracking-tighter mb-2 min-h-[48px] flex items-center justify-center">
                 {workTime}
@@ -874,7 +885,7 @@ function EmployeeView({
                  { label: 'First In', value: punchInTime, highlight: false },
                  { label: 'Last Out', value: punchOutTime, highlight: punchOutTime === "Active" },
                  { label: 'Break In Time', value: totalBreakTime, highlight: false },
-                 { label: 'Worked Time', value: isPunchedIn ? "Active" : "Not Started", highlight: isPunchedIn },
+                 { label: 'Worked Time', value: isPunchedIn ? "Active" : (workTime !== "00:00:00" ? getFormattedWorkedTime() : "Not Started"), highlight: isPunchedIn },
                ].map((item, idx) => (
                  <div key={idx} className={`p-4 ${idx < 3 ? 'border-r border-brand-teal/10' : ''} bg-[#EAF7F6]/10`}>
                    <div className="text-[10px] font-bold text-gray-500 uppercase mb-1">{item.label}</div>
@@ -885,15 +896,15 @@ function EmployeeView({
           </div>
  
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-             <StatCard 
-               title="Today's Hours" 
-               value={isPunchedIn ? workTime.split(':').slice(0, 2).join('h ') + 'm' : '0h 0m'} 
-               trend="12%" 
-               trendLabel="vs yesterday" 
-               icon={<Clock className="w-5 h-5 text-brand-teal" />} 
-               trendUp 
-               color="brand"
-             />
+              <StatCard 
+                title="Today's Hours" 
+                value={isPunchedIn ? workTime.split(':').slice(0, 2).join('h ') + 'm' : (workTime !== "00:00:00" ? getFormattedWorkedTime() : '0h 0m')} 
+                trend="12%" 
+                trendLabel="vs yesterday" 
+                icon={<Clock className="w-5 h-5 text-brand-teal" />} 
+                trendUp 
+                color="brand"
+              />
              <StatCard 
                title="All Time Hours" 
                value={allTimeHours} 
