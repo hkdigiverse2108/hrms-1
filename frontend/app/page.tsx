@@ -231,17 +231,38 @@ export default function DashboardPage() {
         const lastPunchInStr = attendanceStatus.record.lastPunchIn || attendanceStatus.record.checkIn;
         if (!lastPunchInStr) return;
 
-        const lastPunchInDate = parseTimeToDate(lastPunchInStr, istNow);
+        const normalizeDate = (d: Date) => {
+          if (d.getTime() > istNow.getTime() + 60000) {
+            d.setDate(d.getDate() - 1);
+          }
+          return d;
+        };
+
+        const lastPunchInDate = normalizeDate(parseTimeToDate(lastPunchInStr, istNow));
         const accumulated = (attendanceStatus.record.accumulatedWorkSeconds || 0);
         let total = accumulated;
+        let breakSeconds = 0;
+        
+        (attendanceStatus.record.breaks || []).forEach((b: any) => {
+          if (b.startTime && b.endTime) {
+            const bStartDate = normalizeDate(parseTimeToDate(b.startTime, istNow));
+            const bEndDate = normalizeDate(parseTimeToDate(b.endTime, istNow));
+            if (bEndDate.getTime() < bStartDate.getTime()) {
+              bEndDate.setDate(bEndDate.getDate() + 1);
+            }
+            if (bStartDate.getTime() >= lastPunchInDate.getTime()) {
+              breakSeconds += Math.floor((bEndDate.getTime() - bStartDate.getTime()) / 1000);
+            }
+          }
+        });
 
         if (attendanceStatus.record.status === "On Break") {
-          // If on break, freeze the timer at the start time of the active break
           const activeBreak = (attendanceStatus.record.breaks || []).find((b: any) => !b.endTime);
           if (activeBreak && activeBreak.startTime) {
-            const breakStartDate = parseTimeToDate(activeBreak.startTime, istNow);
-            if (breakStartDate.getTime() > lastPunchInDate.getTime()) {
-              total = accumulated + Math.floor((breakStartDate.getTime() - lastPunchInDate.getTime()) / 1000);
+            const breakStartDate = normalizeDate(parseTimeToDate(activeBreak.startTime, istNow));
+            if (breakStartDate.getTime() >= lastPunchInDate.getTime()) {
+              const sessionSeconds = Math.floor((breakStartDate.getTime() - lastPunchInDate.getTime()) / 1000);
+              total = accumulated + Math.max(0, sessionSeconds - breakSeconds);
             } else {
               total = accumulated;
             }
@@ -249,18 +270,7 @@ export default function DashboardPage() {
             total = accumulated;
           }
         } else {
-          // If active (not on break), calculate elapsed time since lastPunchIn, subtracting any completed breaks in this session
           const currentSessionSeconds = Math.floor((istNow.getTime() - lastPunchInDate.getTime()) / 1000);
-          let breakSeconds = 0;
-          (attendanceStatus.record.breaks || []).forEach((b: any) => {
-            if (b.startTime && b.endTime) {
-              const bStartDate = parseTimeToDate(b.startTime, istNow);
-              const bEndDate = parseTimeToDate(b.endTime, istNow);
-              if (bStartDate.getTime() > lastPunchInDate.getTime() && bEndDate.getTime() > bStartDate.getTime()) {
-                breakSeconds += Math.floor((bEndDate.getTime() - bStartDate.getTime()) / 1000);
-              }
-            }
-          });
           total = accumulated + Math.max(0, currentSessionSeconds - breakSeconds);
         }
 

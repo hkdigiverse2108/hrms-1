@@ -1152,15 +1152,13 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
     return attendance_records
 
 async def get_attendance_status(db, employee_id: str):
-    today = get_now().strftime("%Y-%m-%d")
-    today_dt_naive = datetime.strptime(today, "%Y-%m-%d")
-    today_dt_aware = today_dt_naive.replace(tzinfo=IST)
-    # Find active punch for today (checkIn present, checkOut missing) - supports naive and aware dates
-    record = await db.attendance.find_one({
+    # Find most recent active punch (checkOut missing)
+    cursor = db.attendance.find({
         "employeeId": employee_id,
-        "date": {"$in": [today_dt_naive, today_dt_aware]},
         "checkOut": None
-    })
+    }).sort("date", -1).limit(1)
+    records = await cursor.to_list(length=1)
+    record = records[0] if records else None
     return fix_id(record)
 
 async def punch_in(db, employee_id: str):
@@ -1353,6 +1351,8 @@ async def punch_out(db, employee_id: str):
                 b_end_str = b_copy.get("endTime")
                 if b_end_str:
                     b_end = parse_datetime(status['date'], b_end_str)
+                    if b_end < b_start:
+                        b_end += timedelta(days=1)
                     break_dur = (b_end - b_start).total_seconds()
                 else:
                     # User punched out while on active break: close the break at now
@@ -1421,6 +1421,8 @@ async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
             
             start = datetime.strptime(f"{date_str} {ci}", "%Y-%m-%d %H:%M:%S")
             end = datetime.strptime(f"{date_str} {co}", "%Y-%m-%d %H:%M:%S")
+            if end < start:
+                end += timedelta(days=1)
             duration = end - start
             total_seconds = max(0.0, duration.total_seconds())
             
@@ -1464,6 +1466,8 @@ async def update_attendance(db, attendance_id: str, attendance_update: schemas.A
                     
                     start = datetime.strptime(f"{date_str} {ci_val}", "%Y-%m-%d %H:%M:%S")
                     end = datetime.strptime(f"{date_str} {co_val}", "%Y-%m-%d %H:%M:%S")
+                    if end < start:
+                        end += timedelta(days=1)
                     duration = end - start
                     total_seconds = max(0.0, duration.total_seconds())
                     
@@ -1532,14 +1536,14 @@ async def break_in(db, employee_id: str):
 
 async def break_out(db, employee_id: str):
     # Find record where status is 'On Break'
-    today = get_now().strftime("%Y-%m-%d")
-    today_dt_naive = datetime.strptime(today, "%Y-%m-%d")
-    today_dt_aware = today_dt_naive.replace(tzinfo=IST)
-    record = await db.attendance.find_one({
+    # Find most recent record where status is 'On Break'
+    cursor = db.attendance.find({
         "employeeId": employee_id,
-        "date": {"$in": [today_dt_naive, today_dt_aware]},
-        "status": "On Break"
-    })
+        "status": "On Break",
+        "checkOut": None
+    }).sort("date", -1).limit(1)
+    records = await cursor.to_list(length=1)
+    record = records[0] if records else None
     
     if not record or not record.get("breaks"):
         return None
@@ -1551,8 +1555,11 @@ async def break_out(db, employee_id: str):
     now = get_now()
     start_time = parse_datetime(record['date'], last_break['startTime'])
     
+    if last_break.get("endTime") is not None:
+        return None
+        
     duration_delta = now - start_time
-    minutes = duration_delta.seconds // 60
+    minutes = int(duration_delta.total_seconds()) // 60
     duration_str = f"{minutes}m"
     
     await db.attendance.update_one(
