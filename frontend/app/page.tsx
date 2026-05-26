@@ -454,12 +454,6 @@ export default function DashboardPage() {
       </PageHeader>
  
       {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} />}
-      {isHR && (
-        <div className="mb-8">
-          <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />
-          <div className="my-8 border-t border-gray-100" />
-        </div>
-      )}
 
       {(isEmployee || isHR || userRole === "team leader") && (
         <EmployeeView 

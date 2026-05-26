@@ -532,17 +532,6 @@ export default function ProfilePage() {
                       focusedField={focusedField}
                     />
                     <ProfileField 
-                      label="Position" 
-                      id="position" 
-                      value={isEditing ? formData.position : user.position} 
-                      isEditing={isEditing} 
-                      onChange={(v) => handleFieldChange('position', v)} 
-                      disabled={!isAdmin} 
-                      icon={Briefcase} 
-                      onEditInitiate={handleEditClick}
-                      focusedField={focusedField}
-                    />
-                    <ProfileField 
                       label="Status" 
                       id="status" 
                       value={isEditing ? formData.status : user.status} 

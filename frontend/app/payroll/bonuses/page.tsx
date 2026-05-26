@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Loader2, Save, Trash2, Tag } from 'lucide-react'
+import { Plus, Loader2, Save, Trash2, Tag, Search, Filter, Calendar } from 'lucide-react'
 import { useUser } from '@/hooks/useUser'
 import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
@@ -29,6 +29,12 @@ export default function BonusesPage() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Screenshot Matching Filter States
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedType, setSelectedType] = useState<string>('all')
+  const [selectedEmpId, setSelectedEmpId] = useState<string>('all')
+  const [timePeriod, setTimePeriod] = useState<string>('This Month')
 
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -102,24 +108,131 @@ export default function BonusesPage() {
     { key: 'reason' as const, header: 'Reason' },
   ]
 
+  // Filter adjustment records dynamically
+  const filteredAdjustments = adjustments
+    .filter(a => {
+      return canManage || a.employeeId === user?.id || a.employeeId === user?.employeeId
+    })
+    .filter(a => {
+      if (!searchQuery) return true
+      return a.reason?.toLowerCase().includes(searchQuery.toLowerCase())
+    })
+    .filter(a => {
+      return selectedEmpId === 'all' || a.employeeId === selectedEmpId
+    })
+    .filter(a => {
+      return selectedType === 'all' || a.type === selectedType
+    })
+    .filter(a => {
+      if (timePeriod === 'All Time') return true
+      const now = new Date()
+      const currentMonthName = now.toLocaleString('default', { month: 'long' }) // e.g. "May"
+      const currentYear = now.getFullYear() // e.g. 2026
+      if (timePeriod === 'This Month' || timePeriod === 'Today') {
+        return a.month === currentMonthName && a.year === currentYear
+      }
+      return true
+    })
+
   return (
     <>
       <PageHeader title="Bonuses & Deductions" description="Add ad-hoc salary adjustments for specific months.">
         {canManage && (
-          <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={() => setModalOpen(true)}>
+          <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={() => setModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Add Adjustment
           </Button>
         )}
       </PageHeader>
 
+      {/* Screenshot Matching Inline Filters Bar */}
+      <div className="flex flex-wrap items-center gap-3 mb-6 bg-transparent">
+        {/* Search input with loupe icon */}
+        <div className="relative min-w-[240px] max-w-[280px] flex-1">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#0f968c] w-4 h-4" />
+          <input 
+            type="text" 
+            placeholder="Search by reason..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full h-10 pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0f968c]/25 transition-all placeholder:text-gray-400 text-gray-700 shadow-sm"
+          />
+        </div>
+
+        {/* Employee Dropdown */}
+        {canManage && (
+          <div className="w-[180px]">
+            <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
+              <SelectTrigger className="h-10 text-sm font-semibold border-gray-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm">
+                <SelectValue placeholder="All Employees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Employees</SelectItem>
+                {(employees as any[])?.map(emp => (
+                  <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Type Dropdown */}
+        <div className="w-[180px]">
+          <Select value={selectedType} onValueChange={setSelectedType}>
+            <SelectTrigger className="h-10 text-sm font-semibold border-gray-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-emerald-600" />
+                <span>Type: {selectedType === 'all' ? 'All' : selectedType === 'bonus' ? 'Bonus' : 'Deduction'}</span>
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Type: All</SelectItem>
+              <SelectItem value="bonus">Type: Bonus</SelectItem>
+              <SelectItem value="deduction">Type: Deduction</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Period Dropdown */}
+        <div className="w-[160px]">
+          <Select value={timePeriod} onValueChange={setTimePeriod}>
+            <SelectTrigger className="h-10 text-sm font-semibold border-gray-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-gray-500" />
+                <span>{timePeriod}</span>
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All Time">All Time</SelectItem>
+              <SelectItem value="Today">Today</SelectItem>
+              <SelectItem value="This Month">This Month</SelectItem>
+              <SelectItem value="Specific Date...">Specific Date...</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {(searchQuery || selectedType !== 'all' || selectedEmpId !== 'all' || timePeriod !== 'This Month') && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => {
+              setSearchQuery('')
+              setSelectedType('all')
+              setSelectedEmpId('all')
+              setTimePeriod('This Month')
+            }}
+            className="text-brand-teal h-10 px-3 text-xs font-bold hover:bg-brand-light/50"
+          >
+            Clear Filters
+          </Button>
+        )}
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <DataTable
-          data={adjustments.filter(a => canManage || a.employeeId === user?.id || a.employeeId === user?.employeeId)}
+          data={filteredAdjustments}
           columns={columns}
           isLoading={loading}
-          searchKey="reason"
-          searchPlaceholder="Search by reason..."
         />
       </div>
 

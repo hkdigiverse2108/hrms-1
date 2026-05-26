@@ -155,6 +155,10 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!formData.startTime || !formData.endTime) {
+      alert('Please enter both Start Time and End Time.')
+      return
+    }
     onSubmit(formData)
   }
 
@@ -212,7 +216,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
       <div className="grid gap-x-12 gap-y-6 md:grid-cols-3">
         {/* Row 1 */}
         <FormField label="First Name" id="firstName" required value={formData.firstName} onChange={v => handleChange('firstName', v)} />
-        <FormField label="Middle Name" id="middleName" value={formData.middleName} onChange={v => handleChange('middleName', v)} />
+        <FormField label="Middle Name" id="middleName" required value={formData.middleName} onChange={v => handleChange('middleName', v)} />
         <FormField label="Last Name" id="lastName" required value={formData.lastName} onChange={v => handleChange('lastName', v)} />
 
         {/* Row 2 */}
@@ -222,10 +226,10 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           label="Password" 
           id="password" 
           type={showPassword ? "text" : "password"} 
-          required={mode === 'add'} 
+          required 
           value={formData.password} 
           onChange={v => handleChange('password', v)} 
-          placeholder={mode === 'edit' ? "Leave blank to keep current" : "............"} 
+          placeholder={mode === 'edit' ? "Enter new or current password" : "............"} 
           rightElement={
             <button
               type="button"
@@ -266,7 +270,10 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           required
           value={formData.role}
           onValueChange={(v) => handleChange('role', v)}
-          options={roles.map((r: any) => ({ label: r.name, value: r.name }))}
+          options={[
+            ...roles.map((r: any) => ({ label: r.name, value: r.name })),
+            ...(roles.some((r: any) => r.name?.toLowerCase() === 'intern') ? [] : [{ label: 'Intern', value: 'Intern' }])
+          ]}
           placeholder="Select role"
         />
       </div>
@@ -341,7 +348,6 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           placeholder="Select department" 
         />
         <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
-        <FormField label="Position" id="position" value={formData.position} onChange={v => handleChange('position', v)} placeholder="Intern" />
         
         <FormSelect 
           label="Status" 
@@ -362,16 +368,16 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             Working Hours{<span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
           </Label>
           <div className="flex items-center gap-4 flex-1 max-w-[400px]">
-            <Input type="time" value={formData.startTime} onChange={(e) => handleChange('startTime', e.target.value)} />
+            <Input type="time" required value={formData.startTime} onChange={(e) => handleChange('startTime', e.target.value)} />
             <span className="text-gray-400 font-medium whitespace-nowrap">to</span>
-            <Input type="time" value={formData.endTime} onChange={(e) => handleChange('endTime', e.target.value)} />
+            <Input type="time" required value={formData.endTime} onChange={(e) => handleChange('endTime', e.target.value)} />
           </div>
         </div>
 
         {/* Profile Photo */}
         <div className="flex items-start gap-4">
           <Label className="w-44 text-left font-medium text-gray-700 pt-3">
-            Profile Photo{<span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
+            Profile Photo:
           </Label>
           <div 
             onClick={triggerFileUpload}
