@@ -74,21 +74,37 @@ async def upload_file(file: UploadFile = File(...)):
 async def upload_profile_photo(user_id: str, file: UploadFile = File(...), db=Depends(get_db)):
     if file.size and file.size > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File size exceeds the 512 MB limit")
+
+    # Fetch the employee first so we can grab the old photo filename
+    user = await crud.get_employee(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    old_photo = user.get("profilePhoto") if isinstance(user, dict) else getattr(user, "profilePhoto", None)
+
     filename = f"{uuid.uuid4().hex}_{file.filename}"
     file_path = os.path.join(UPLOAD_DIR, filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-        
-    user = await crud.get_employee(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
+
     update_data = schemas.EmployeeUpdate(profilePhoto=filename)
     updated_user = await crud.update_employee(db, user_id, update_data)
-    
+
     if not updated_user:
+        # DB update failed – remove the newly uploaded file to avoid orphaned files
+        if os.path.exists(file_path):
+            os.remove(file_path)
         raise HTTPException(status_code=400, detail="Failed to update user profile photo")
-        
+
+    # Delete the old profile photo from disk now that the DB is updated
+    if old_photo:
+        old_file_path = os.path.join(UPLOAD_DIR, old_photo)
+        if os.path.exists(old_file_path):
+            try:
+                os.remove(old_file_path)
+            except Exception as e:
+                print(f"Warning: could not delete old profile photo '{old_photo}': {e}")
+
     return updated_user
 
 @app.post("/chat/upload")
