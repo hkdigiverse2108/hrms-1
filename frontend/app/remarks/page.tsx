@@ -432,8 +432,7 @@ export default function RemarksPage() {
       if (!isOwnRemark) return false;
     }
 
-    const matchesSearch = r.employeeName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         r.details?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = r.details?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === "All" || r.type === typeFilter;
     const matchesEmployee = employeeFilter === "All" || r.employeeId === employeeFilter || r.employeeName === employeeFilter;
     
@@ -759,21 +758,9 @@ export default function RemarksPage() {
 
       {/* Main Table Container */}
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
-        <div className="p-4 sm:p-6 border-b border-border flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="p-4 sm:p-6 border-b border-border flex flex-col xl:flex-row xl:items-center justify-end gap-4">
           
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            {canManageRemarks && (
-              <div className="relative w-full sm:w-[250px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by employee name..." 
-                  className="pl-9 bg-gray-50/50" 
-                />
-              </div>
-            )}
-
             {canManageRemarks && (
               <div className="w-full sm:w-auto">
                 <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setCurrentPage(1); }}>

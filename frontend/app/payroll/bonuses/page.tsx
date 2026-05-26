@@ -148,22 +148,22 @@ export default function BonusesPage() {
       {/* Screenshot Matching Inline Filters Bar */}
       <div className="flex flex-wrap items-center gap-3 mb-6 bg-transparent">
         {/* Search input with loupe icon */}
-        <div className="relative min-w-[240px] max-w-[280px] flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#0f968c] w-4 h-4" />
+        <div className="relative w-[280px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
           <input 
             type="text" 
             placeholder="Search by reason..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-10 pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0f968c]/25 transition-all placeholder:text-gray-400 text-gray-700 shadow-sm"
+            className="w-full h-9 pl-9 pr-4 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-teal focus:border-brand-teal transition-all placeholder:text-slate-400 text-gray-700 shadow-sm"
           />
         </div>
 
         {/* Employee Dropdown */}
         {canManage && (
-          <div className="w-[180px]">
+          <div className="w-[200px]">
             <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
-              <SelectTrigger className="h-10 text-sm font-semibold border-gray-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm">
+              <SelectTrigger className="h-10 text-sm font-semibold border-slate-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm">
                 <SelectValue placeholder="All Employees" />
               </SelectTrigger>
               <SelectContent>
@@ -177,11 +177,11 @@ export default function BonusesPage() {
         )}
 
         {/* Type Dropdown */}
-        <div className="w-[180px]">
+        <div className="w-[200px]">
           <Select value={selectedType} onValueChange={setSelectedType}>
-            <SelectTrigger className="h-10 text-sm font-semibold border-gray-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm flex items-center gap-2">
+            <SelectTrigger className="h-10 text-sm font-semibold border-slate-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-emerald-600" />
+                <Filter className="w-4 h-4 text-slate-400" />
                 <span>Type: {selectedType === 'all' ? 'All' : selectedType === 'bonus' ? 'Bonus' : 'Deduction'}</span>
               </div>
             </SelectTrigger>
@@ -194,11 +194,11 @@ export default function BonusesPage() {
         </div>
 
         {/* Period Dropdown */}
-        <div className="w-[160px]">
+        <div className="w-[200px]">
           <Select value={timePeriod} onValueChange={setTimePeriod}>
-            <SelectTrigger className="h-10 text-sm font-semibold border-gray-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm flex items-center gap-2">
+            <SelectTrigger className="h-10 text-sm font-semibold border-slate-200 rounded-lg bg-white text-gray-700 focus:ring-brand-teal shadow-sm flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-gray-500" />
+                <Calendar className="w-4 h-4 text-slate-400" />
                 <span>{timePeriod}</span>
               </div>
             </SelectTrigger>
