@@ -1003,6 +1003,7 @@ function EventsSidebar({ user }: { user: any }) {
   const [events, setEvents] = useState<any[]>([]);
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [currentMonth, setCurrentMonth] = useState(dayjs());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const canAddEvents = user?.role === "Admin" || user?.role === "HR";
  
   useEffect(() => {
@@ -1098,6 +1099,13 @@ function EventsSidebar({ user }: { user: any }) {
       const eventDate = dayjs(e.date);
       const isCurrentMonthView = currentMonth.isSame(dayjs(), 'month');
       
+      if (selectedDate) {
+        if (e.type === 'birthday') {
+          return eventDate.month() === dayjs(selectedDate).month() && eventDate.date() === dayjs(selectedDate).date();
+        }
+        return eventDate.format('YYYY-MM-DD') === selectedDate;
+      }
+
       // If viewing current month, hide past events
       if (isCurrentMonthView && eventDate.isBefore(dayjs().startOf('day'))) {
         if (e.type !== 'birthday') return false;
@@ -1125,7 +1133,14 @@ function EventsSidebar({ user }: { user: any }) {
         <h3 className="font-bold text-lg text-[#111827]">View Events</h3>
         <Button onClick={() => setIsViewAllOpen(true)} variant="outline" size="sm" className="h-8 text-[11px] font-bold border-gray-200 px-3 rounded-lg text-gray-600">View all</Button>
       </div>
-      <p className="text-[13px] text-gray-500 mb-6 font-medium">This month events</p>
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-[13px] text-gray-500 font-medium">This month events</p>
+        {selectedDate && (
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-brand-teal" onClick={() => setSelectedDate(null)}>
+            Clear Filter <X className="w-3 h-3 ml-1" />
+          </Button>
+        )}
+      </div>
  
       <div className="bg-[#F9FAFB] border border-[#F3F4F6] rounded-2xl p-5 mb-6">
         <div className="flex items-center justify-between mb-6">
@@ -1133,7 +1148,10 @@ function EventsSidebar({ user }: { user: any }) {
              variant="ghost" 
              size="icon" 
              className="h-8 w-8 bg-white border border-gray-100 shadow-sm rounded-lg"
-             onClick={() => setCurrentMonth(currentMonth.subtract(1, 'month'))}
+             onClick={() => {
+               setCurrentMonth(currentMonth.subtract(1, 'month'));
+               setSelectedDate(null);
+             }}
            >
              <ChevronLeft className="w-4 h-4 text-gray-400" />
            </Button>
@@ -1142,7 +1160,10 @@ function EventsSidebar({ user }: { user: any }) {
              variant="ghost" 
              size="icon" 
              className="h-8 w-8 bg-white border border-gray-100 shadow-sm rounded-lg"
-             onClick={() => setCurrentMonth(currentMonth.add(1, 'month'))}
+             onClick={() => {
+               setCurrentMonth(currentMonth.add(1, 'month'));
+               setSelectedDate(null);
+             }}
            >
              <ChevronRight className="w-4 h-4 text-gray-400" />
            </Button>
@@ -1164,18 +1185,24 @@ function EventsSidebar({ user }: { user: any }) {
              
              for (let i = 1; i <= daysInMonth; i++) {
                const dayDate = currentMonth.date(i);
-               const isToday = dayDate.format('YYYY-MM-DD') === dayjs().format('YYYY-MM-DD');
+               const dateStr = dayDate.format('YYYY-MM-DD');
+               const isToday = dateStr === dayjs().format('YYYY-MM-DD');
+               const isSelected = selectedDate === dateStr;
                const hasEvent = events.some(e => {
                  if (e.type === 'birthday') {
                    return dayjs(e.date).month() === dayDate.month() && dayjs(e.date).date() === dayDate.date();
                  }
-                 return dayjs(e.date).format('YYYY-MM-DD') === dayDate.format('YYYY-MM-DD');
+                 return dayjs(e.date).format('YYYY-MM-DD') === dateStr;
                });
                
                days.push(
-                 <div key={i} className={`h-8 flex items-center justify-center text-[13px] font-bold rounded-lg cursor-pointer transition-all ${
-                   isToday ? 'bg-brand-teal text-white shadow-md' : 
-                   hasEvent ? 'text-brand-teal bg-white border border-brand-teal/10' : 'text-gray-400 hover:bg-white'
+                 <div 
+                   key={i} 
+                   onClick={() => setSelectedDate(isSelected ? null : dateStr)}
+                   className={`h-8 flex items-center justify-center text-[13px] font-bold rounded-lg cursor-pointer transition-all ${
+                   isSelected ? 'bg-brand-teal text-white shadow-md' :
+                   isToday ? 'bg-brand-light text-brand-teal border border-brand-teal shadow-sm' : 
+                   hasEvent ? 'text-brand-teal bg-white border border-brand-teal/20 shadow-sm hover:border-brand-teal/50' : 'text-gray-400 hover:bg-white hover:text-gray-700'
                  }`}>
                    {i}
                  </div>
