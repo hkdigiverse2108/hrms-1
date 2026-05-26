@@ -50,6 +50,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
   const { user } = useUser();
   const { checkPermission, isAdmin, permissions } = usePermissions();
   const [settings, setSettings] = useState<any>(null);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   useEffect(() => {
     fetchSettings();
@@ -65,6 +66,28 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       console.error("Error fetching sidebar settings:", err);
     }
   };
+
+  const fetchUnreadChatCount = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/unread-counts/${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const total = Object.values(data).reduce((sum, val) => sum + (val || 0), 0);
+        setUnreadChatCount(total);
+      }
+    } catch (err) {
+      console.error("Error fetching unread chat count:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchUnreadChatCount();
+      const interval = setInterval(fetchUnreadChatCount, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [user?.id]);
 
 
 
@@ -197,7 +220,18 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
 
     if (isAdmin || checkPermission('chat', 'canView')) {
-      menuItems.push(getItem(<Link href="/chat">Chat</Link>, "/chat", <MessagesSquare className="w-5 h-5" />));
+      menuItems.push(getItem(
+        <div className="flex items-center justify-between w-full">
+          <Link href="/chat">Chat</Link>
+          {unreadChatCount > 0 && (
+            <span className="bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-2 shrink-0">
+              {unreadChatCount}
+            </span>
+          )}
+        </div>,
+        "/chat",
+        <MessagesSquare className="w-5 h-5" />
+      ));
     }
 
     if (isAdmin || workManagementChildren.length > 0) {

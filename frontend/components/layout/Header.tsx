@@ -30,9 +30,28 @@ export function Header() {
   const { user, isLoading } = useUser();
   const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const prevUnreadChatCount = React.useRef(0);
+  const prevUnreadCountsRef = React.useRef<Record<string, number>>({});
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
+ 
+  const getFromNow = (dateStr: any) => {
+    if (!dateStr) return "";
+    
+    // Try parsing as ISO format first
+    let d = dayjs(dateStr);
+    if (d.isValid() && (typeof dateStr !== "string" || !dateStr.includes("-") || dateStr.indexOf("-") > 2)) {
+      return d.fromNow();
+    }
+    
+    // Try parsing as DD-MM-YYYY HH:mm format
+    d = dayjs(dateStr, "DD-MM-YYYY HH:mm");
+    if (d.isValid() && d.format() !== "Invalid Date") return d.fromNow();
+    
+    return dayjs(dateStr).fromNow();
+  };
  
   useEffect(() => {
     setMounted(true);
@@ -73,6 +92,182 @@ export function Header() {
       console.error("Error fetching notifications:", err);
     }
   };
+
+  const fetchUnreadChatCount = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/unread-counts/${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const total = Object.values(data).reduce((sum, val) => sum + (val || 0), 0);
+        
+        // Find which chatId increased
+        let increasedChatId = null;
+        for (const [id, count] of Object.entries(data)) {
+          const prevCount = prevUnreadCountsRef.current[id] || 0;
+          if ((count as number) > prevCount) {
+            increasedChatId = id;
+            break;
+          }
+        }
+        
+        // Trigger alert if message count increases and user is not on the chat page
+        if (total > prevUnreadChatCount.current && typeof window !== "undefined") {
+          const isChatPage = window.location.pathname.startsWith("/chat");
+          const isDnd = localStorage.getItem("globalDndEnabled") === "true";
+          
+          if (!isChatPage && !isDnd && increasedChatId) {
+            // Read specific preference
+            const prefs = JSON.parse(localStorage.getItem("chatNotificationPrefs") || "{}");
+            const globalMode = localStorage.getItem("globalDefaultMode") || "all";
+            
+            const chatPref = prefs[increasedChatId] || { mode: "default" };
+            const resolvedMode = chatPref.mode === "default" || !chatPref.mode ? globalMode : chatPref.mode;
+            
+            if (resolvedMode === "none") {
+              prevUnreadCountsRef.current = data;
+              prevUnreadChatCount.current = total;
+              setUnreadChatCount(total);
+              return;
+            }
+            
+            // Check for Mentions Only mode
+            if (resolvedMode === "mentions") {
+              let url = `${API_URL}/chat/messages/${user.id}/${increasedChatId}?group_id=${increasedChatId}`;
+              let msgRes = await fetch(url);
+              let messages = [];
+              if (msgRes.ok) {
+                messages = await msgRes.json();
+              }
+              if (messages.length === 0) {
+                url = `${API_URL}/chat/messages/${user.id}/${increasedChatId}`;
+                msgRes = await fetch(url);
+                if (msgRes.ok) {
+                  messages = await msgRes.json();
+                }
+              }
+              
+              if (messages.length > 0) {
+                const lastMsg = messages[messages.length - 1];
+                const isMention = (() => {
+                  if (!lastMsg.text) return false;
+                  const mentions = lastMsg.text.match(/@\w+/g);
+                  if (!mentions) return false;
+                  const firstName = user?.firstName?.toLowerCase() || "";
+                  const lastName = user?.lastName?.toLowerCase() || "";
+                  const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
+                  const strippedFullName = fullName.replace(/\s+/g, "");
+                  
+                  return mentions.some(m => {
+                    const mentionName = m.substring(1).toLowerCase();
+                    if (!mentionName) return false;
+                    return (
+                      (firstName && firstName === mentionName) ||
+                      (lastName && lastName === mentionName) ||
+                      (fullName && fullName.includes(mentionName)) ||
+                      (strippedFullName && strippedFullName === mentionName)
+                    );
+                  });
+                })();
+                
+                if (!isMention) {
+                  // Not a mention! Skip chime and push popup!
+                  prevUnreadCountsRef.current = data;
+                  prevUnreadChatCount.current = total;
+                  setUnreadChatCount(total);
+                  return;
+                }
+              }
+            }
+            
+            // 1. Play chime sound in the background
+            try {
+              const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+              const audioCtx = new AudioCtxClass();
+              const play = () => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                const globalSound = localStorage.getItem("globalDefaultSound") || "default";
+                if (globalSound === "bubble") {
+                  osc.type = "sine";
+                  osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                  osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.15);
+                  gain.gain.setValueAtTime(0.01, audioCtx.currentTime);
+                  gain.gain.exponentialRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
+                  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                  osc.start();
+                  osc.stop(audioCtx.currentTime + 0.15);
+                } else if (globalSound === "beep") {
+                  osc.type = "square";
+                  osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+                  osc.start();
+                  osc.stop(audioCtx.currentTime + 0.08);
+                } else if (globalSound !== "silent") {
+                  osc.type = "triangle";
+                  osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
+                  osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); 
+                  gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                  osc.start();
+                  osc.stop(audioCtx.currentTime + 0.3);
+                }
+              };
+              if (audioCtx.state === "suspended") {
+                audioCtx.resume().then(play);
+              } else {
+                play();
+              }
+            } catch (e) {
+              console.warn(e);
+            }
+
+            // 2. Trigger native browser push notification
+            if ("Notification" in window && Notification.permission === "granted") {
+              const notif = new Notification("New HRMS Chat Message", {
+                body: `You have new message(s) waiting on HRMS Chat.`,
+                icon: "/favicon.ico"
+              });
+              notif.onclick = () => {
+                window.focus();
+                router.push("/chat");
+              };
+            }
+          }
+        }
+
+        prevUnreadCountsRef.current = data;
+        prevUnreadChatCount.current = total;
+        setUnreadChatCount(total);
+      }
+    } catch (err) {
+      console.error("Error fetching unread chat count:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchUnreadChatCount();
+      const interval = setInterval(fetchUnreadChatCount, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [user?.id]);
+
+  // Dynamically update the browser tab title with the unread chat badge count (like Email / WhatsApp) app-wide
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const cleanTitle = document.title.replace(/^\(\d+\)\s*/, "");
+      if (unreadChatCount > 0) {
+        document.title = `(${unreadChatCount}) ${cleanTitle}`;
+      } else {
+        document.title = cleanTitle;
+      }
+    }
+  }, [unreadChatCount]);
 
   const markAsRead = async (id: string) => {
     try {
@@ -153,7 +348,7 @@ export function Header() {
                       <div className="flex flex-col gap-1 pl-2">
                         <div className="flex justify-between items-start">
                           <span className="font-semibold text-xs text-foreground">{n.title}</span>
-                          <span className="text-[10px] text-muted-foreground">{dayjs(n.created_at, "DD-MM-YYYY HH:mm").fromNow()}</span>
+                          <span className="text-[10px] text-muted-foreground">{getFromNow(n.created_at)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{n.message}</p>
                         
@@ -199,8 +394,13 @@ export function Header() {
           </PopoverContent>
         </Popover>
 
-        <Link href="/chat" className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors">
+        <Link href="/chat" className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">
           <MessageSquare className="w-4 h-4 text-muted-foreground" />
+          {unreadChatCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 text-white text-[9px] flex items-center justify-center rounded-full border-2 border-white font-bold animate-pulse">
+              {unreadChatCount > 9 ? '9+' : unreadChatCount}
+            </span>
+          )}
         </Link>
         
         <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
@@ -323,7 +523,7 @@ export function Header() {
                               {n.title}
                             </span>
                             <span className="text-[10px] text-muted-foreground whitespace-nowrap pt-0.5">
-                              {dayjs(n.created_at, "DD-MM-YYYY HH:mm").fromNow()}
+                              {getFromNow(n.created_at)}
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground mt-1 leading-relaxed break-words">{n.message}</p>

@@ -1931,7 +1931,7 @@ async def create_notification(db, notification: schemas.NotificationCreate):
     return notification_dict
 
 async def get_notifications_by_user(db, employee_id: str, skip: int = 0, limit: int = 50):
-    cursor = db.notifications.find({"employee_id": employee_id}).sort("created_at", -1).skip(skip).limit(limit)
+    cursor = db.notifications.find({"employee_id": employee_id}).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
