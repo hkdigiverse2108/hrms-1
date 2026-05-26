@@ -529,7 +529,7 @@ export default function EmployeeAttendanceListPage() {
               >
                 <div className="flex justify-between items-start mb-1">
                   <span className={`text-xs font-bold ${!d.currentMonth ? 'text-slate-300' : 'text-slate-600'}`}>{d.day}</span>
-                  {d.currentMonth && !isSunday && <span className="text-[9px] font-medium text-slate-400">{employees.length} Total</span>}
+                  {d.currentMonth && <span className="text-[9px] font-medium text-slate-400">{employees.length} Total</span>}
                 </div>
 
                 {isSunday ? (
