@@ -28,3 +28,4 @@ for line in content.splitlines():
 print(len(events))
 for e in sorted(events, key=lambda x: x['date'])[:10]:
     print(e)
+
