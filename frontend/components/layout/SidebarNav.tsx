@@ -21,6 +21,7 @@ import {
   IndianRupee,
   GraduationCap,
   Landmark,
+  Menu as MenuIcon,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -44,7 +45,7 @@ function getItem(
   } as MenuItem;
 }
 
-export function SidebarNav() {
+export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: boolean; toggleCollapse?: () => void }) {
   const pathname = usePathname();
   const { user } = useUser();
   const { checkPermission, isAdmin, permissions } = usePermissions();
@@ -246,23 +247,28 @@ export function SidebarNav() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Logo Area */}
-      <div className="h-20 flex items-center px-6 py-6 border-b border-sidebar-border shrink-0 mb-6">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-white rounded-xl shadow-sm border border-sidebar-border/50">
-            <ShieldHalf className="w-6 h-6 text-primary" strokeWidth={2.5} />
+      <div className={`h-20 flex items-center ${collapsed ? 'justify-center px-2' : 'justify-between px-6'} py-6 border-b border-sidebar-border shrink-0 mb-6`}>
+        {collapsed ? (
+          <div className="flex items-center justify-center gap-1 w-full">
+            <img src="/logo.png" alt="HK Icon" className="h-8 w-8 object-cover object-left shrink-0 rounded-lg" />
+            <button onClick={toggleCollapse} className="text-slate-600 hover:text-brand-teal p-0.5 hover:bg-slate-100 rounded transition-all shrink-0">
+              <MenuIcon className="w-4 h-4" />
+            </button>
           </div>
-          <div className="flex flex-col">
-            <div className="flex flex-col leading-tight">
-              <span className="text-foreground font-extrabold text-[15px] tracking-tight">HariKrushn</span>
-              <span className="text-primary font-bold text-[14px] -mt-1">DigiVerse LLP</span>
-            </div>
+        ) : (
+          <div className="flex items-center justify-between w-full gap-2">
+            <img src="/logo.png" alt="HariKrushn DigiVerse Logo" className="h-12 w-auto object-contain max-w-[160px]" />
+            <button onClick={toggleCollapse} className="text-slate-600 hover:text-brand-teal p-1 hover:bg-slate-100/50 rounded-md transition-all shrink-0">
+              <MenuIcon className="w-5 h-5" />
+            </button>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300 pb-4">
         <Menu
           mode="inline"
+          inlineCollapsed={collapsed}
           selectedKeys={getSelectedKeys()}
           defaultOpenKeys={getOpenKeys()}
           items={items}
