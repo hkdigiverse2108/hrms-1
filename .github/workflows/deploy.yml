@@ -27,4 +27,4 @@ jobs:
     - name: Deploy HRMS Python via SSH
       run: |
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@31.97.206.171 \
-        "cd /root/HRMS/live && rm -f frontend/.wrangler/deploy/config.json && git pull origin main && cd frontend && npm install && npm run build && cd .. && pm2 restart hrms"
+        "cd /root/HRMS/live && rm -f frontend/.wrangler/deploy/config.json && git pull origin main && source venv/bin/activate && pip install -r backend/requirements.txt && cd frontend && npm install && npm run build && cd .. && pm2 restart HRMS"
