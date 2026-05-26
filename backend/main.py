@@ -1019,6 +1019,36 @@ async def read_user_permissions(employee_id: str, db=Depends(get_db)):
 async def update_user_permissions(employee_id: str, permissions: schemas.UserPermissionUpdate, db=Depends(get_db)):
     return await crud.save_user_permissions(db, employee_id, permissions)
 
+# Permission Presets Routes
+@app.get("/permission-presets", response_model=List[schemas.PermissionPreset])
+async def read_permission_presets(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_permission_presets(db, skip, limit)
+
+@app.get("/permission-presets/{preset_id}", response_model=Optional[schemas.PermissionPreset])
+async def read_permission_preset(preset_id: str, db=Depends(get_db)):
+    preset = await crud.get_permission_preset(db, preset_id)
+    if not preset:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return preset
+
+@app.post("/permission-presets", response_model=schemas.PermissionPreset)
+async def create_permission_preset(preset: schemas.PermissionPresetCreate, db=Depends(get_db)):
+    return await crud.create_permission_preset(db, preset)
+
+@app.put("/permission-presets/{preset_id}", response_model=schemas.PermissionPreset)
+async def update_permission_preset(preset_id: str, preset: schemas.PermissionPresetUpdate, db=Depends(get_db)):
+    updated = await crud.update_permission_preset(db, preset_id, preset)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return updated
+
+@app.delete("/permission-presets/{preset_id}")
+async def delete_permission_preset(preset_id: str, db=Depends(get_db)):
+    deleted = await crud.delete_permission_preset(db, preset_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return {"message": "Preset deleted"}
+
 # Department Routes
 # (Using existing routes defined earlier in the file)
 

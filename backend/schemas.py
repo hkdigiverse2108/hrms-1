@@ -1288,6 +1288,22 @@ class UserPermissionUpdate(BaseModel):
     permissions: List[ModulePermission]
 
 class UserPermission(UserPermissionBase):
+    id: Optional[str] = None
+
+class PermissionPresetBase(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    permissions: List[ModulePermission]
+
+class PermissionPresetCreate(PermissionPresetBase):
+    pass
+
+class PermissionPresetUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    permissions: Optional[List[ModulePermission]] = None
+
+class PermissionPreset(PermissionPresetBase):
     id: str
     class Config:
         from_attributes = True

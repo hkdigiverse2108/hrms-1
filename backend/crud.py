@@ -3225,6 +3225,35 @@ async def save_user_permissions(db, employee_id: str, permissions_data: schemas.
     doc = await db.user_permissions.find_one({"employeeId": employee_id})
     return fix_id(doc)
 
+# Permission Presets CRUD
+async def get_permission_presets(db, skip: int = 0, limit: int = 100):
+    cursor = db.permission_presets.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def get_permission_preset(db, preset_id: str):
+    doc = await db.permission_presets.find_one({"_id": ObjectId(preset_id)})
+    if doc:
+        return fix_id(doc)
+    return None
+
+async def create_permission_preset(db, preset: schemas.PermissionPresetCreate):
+    doc = preset.dict()
+    result = await db.permission_presets.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return fix_id(doc)
+
+async def update_permission_preset(db, preset_id: str, preset_update: schemas.PermissionPresetUpdate):
+    update_data = preset_update.dict(exclude_unset=True)
+    if update_data:
+        await db.permission_presets.update_one({"_id": ObjectId(preset_id)}, {"$set": update_data})
+    doc = await db.permission_presets.find_one({"_id": ObjectId(preset_id)})
+    return fix_id(doc)
+
+async def delete_permission_preset(db, preset_id: str):
+    result = await db.permission_presets.delete_one({"_id": ObjectId(preset_id)})
+    return result.deleted_count > 0
+
 async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
     doc = recovery.dict()
     doc['created_at'] = get_now().isoformat()

@@ -110,6 +110,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   const [permissions, setPermissions] = useState<ModulePermission[]>([])
   const [employee, setEmployee] = useState<any>(null)
   const [employees, setEmployees] = useState<any[]>([])
+  const [presets, setPresets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -128,6 +129,12 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
       const listRes = await fetch(`${API_URL}/employees`)
       if (listRes.ok) {
         setEmployees(await listRes.json())
+      }
+
+      // Fetch Presets
+      const presetsRes = await fetch(`${API_URL}/permission-presets`)
+      if (presetsRes.ok) {
+        setPresets(await presetsRes.json())
       }
 
       // Fetch Current Employee Details
@@ -197,6 +204,31 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
       }
       return p
     }))
+  }
+
+  const applyPreset = (presetId: string | 'none' | 'full') => {
+    let newPerms = DEFAULT_MODULES.map(m => ({ ...m, canAdd: false, canEdit: false, canDelete: false, canView: false }));
+    
+    if (presetId === 'full') {
+      newPerms = newPerms.map(p => ({ ...p, canView: true, canAdd: true, canEdit: true, canDelete: true }));
+      toast.success(`Full Access preset applied! (Don't forget to save)`);
+    } else if (presetId === 'none') {
+      toast.success(`Cleared all permissions! (Don't forget to save)`);
+    } else {
+      const preset = presets.find(p => p.id === presetId);
+      if (preset && preset.permissions) {
+        newPerms = newPerms.map(p => {
+          const presetPerm = preset.permissions.find((pp: any) => pp.moduleName === p.moduleName);
+          if (presetPerm) {
+            return { ...p, canView: presetPerm.canView, canAdd: presetPerm.canAdd, canEdit: presetPerm.canEdit, canDelete: presetPerm.canDelete };
+          }
+          return p;
+        });
+        toast.success(`${preset.name} preset applied! (Don't forget to save)`);
+      }
+    }
+    
+    setPermissions(newPerms);
   }
 
   const handleSave = async () => {
@@ -310,6 +342,15 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
           </div>
 
           <div className="flex-1 p-8 flex flex-col overflow-hidden">
+            <div className="mb-4 flex items-center gap-2 overflow-x-auto custom-scrollbar pb-2">
+               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mr-2 shrink-0">Quick Presets:</span>
+               {presets.map(preset => (
+                 <Button key={preset.id} variant="outline" size="sm" className="h-8 text-xs shrink-0" onClick={() => applyPreset(preset.id)}>{preset.name}</Button>
+               ))}
+               <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 bg-brand-orange/10 text-brand-orange border-brand-orange/20 hover:bg-brand-orange/20" onClick={() => applyPreset('full')}>Full Access</Button>
+               <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => applyPreset('none')}>Clear All</Button>
+            </div>
+
             <div className="mb-6 flex items-center justify-between">
               <div className="relative max-w-md w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
