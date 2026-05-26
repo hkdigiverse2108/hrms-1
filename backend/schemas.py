@@ -489,6 +489,7 @@ class ApplicationBase(BaseModel):
     jobTitle: Optional[str] = None
     skills: Optional[str] = None
     source: Optional[str] = None
+    reference: Optional[str] = None
     interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
@@ -506,6 +507,7 @@ class ApplicationUpdate(BaseModel):
     jobTitle: Optional[str] = None
     skills: Optional[str] = None
     source: Optional[str] = None
+    reference: Optional[str] = None
     resume: Optional[str] = None
     interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None

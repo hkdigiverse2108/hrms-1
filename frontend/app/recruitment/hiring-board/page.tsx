@@ -60,6 +60,7 @@ interface Application {
   appliedDate: string
   jobTitle: string
   resume?: string
+  reference?: string
   interviewDate?: string
   interviewTime?: string
   interviewerName?: string
@@ -115,6 +116,7 @@ export default function HiringBoardPage() {
     status: 'new',
     appliedDate: new Date().toISOString().split('T')[0],
     jobTitle: '',
+    reference: '',
     interviewDate: '',
     interviewTime: '',
     interviewerName: '',
@@ -170,6 +172,7 @@ export default function HiringBoardPage() {
       status: app.status || 'new',
       appliedDate: app.appliedDate || new Date().toISOString().split('T')[0],
       jobTitle: app.jobTitle || '',
+      reference: app.reference || '',
       interviewDate: app.interviewDate || '',
       interviewTime: app.interviewTime || '',
       interviewerName: app.interviewerName || '',
@@ -292,6 +295,7 @@ export default function HiringBoardPage() {
           status: 'new',
           appliedDate: new Date().toISOString().split('T')[0],
           jobTitle: '',
+          reference: '',
           interviewDate: '',
           interviewTime: '',
           interviewerName: '',
@@ -365,6 +369,7 @@ export default function HiringBoardPage() {
                   status: 'new',
                   appliedDate: new Date().toISOString().split('T')[0],
                   jobTitle: '',
+                  reference: '',
                   interviewDate: '',
                   interviewTime: '',
                   interviewerName: '',
@@ -493,6 +498,12 @@ export default function HiringBoardPage() {
 
                               <CardContent className="p-3 pt-1 space-y-2">
                                 <div className="space-y-1.5">
+                                  {app.reference && (
+                                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 mb-1">
+                                      <span className="text-[8px] text-muted-foreground uppercase font-bold tracking-wider">Ref:</span>
+                                      <span className="truncate">{app.reference}</span>
+                                    </div>
+                                  )}
                                   {app.interviewDate && (
                                     <div className="px-2 py-1.5 rounded-lg bg-slate-50 border border-slate-100/50 space-y-1">
                                       <div className="flex items-center justify-between text-[9px] font-bold text-brand-teal uppercase tracking-tighter">
@@ -595,6 +606,7 @@ export default function HiringBoardPage() {
                                           status: 'interview', // Force interview status
                                           appliedDate: app.appliedDate || new Date().toISOString().split('T')[0],
                                           jobTitle: app.jobTitle || '',
+                                          reference: app.reference || '',
                                           interviewDate: app.interviewDate || '',
                                           interviewTime: app.interviewTime || '',
                                           interviewerName: app.interviewerName || '',
@@ -710,6 +722,17 @@ export default function HiringBoardPage() {
                   )}
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reference" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Reference / Referred By</Label>
+              <Input 
+                id="reference" 
+                placeholder="e.g. Employee Name, Website, Friend"
+                value={formData.reference}
+                onChange={(e) => setFormData({...formData, reference: e.target.value})}
+                className="h-11"
+              />
             </div>
 
             {isSchedulingMode && (

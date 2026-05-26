@@ -115,6 +115,7 @@ export interface Application {
   appliedDate: string
   resume?: string
   jobTitle?: string
+  reference?: string
   interviewDate?: string
   interviewTime?: string
   interviewerName?: string

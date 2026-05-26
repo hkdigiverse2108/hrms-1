@@ -283,6 +283,17 @@ export default function ApplicationsPage() {
                   </div>
                 </div>
 
+                {selectedApp.reference && (
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reference / Referred By</Label>
+                    <div className="pt-1">
+                      <div className="text-sm font-bold text-slate-700 bg-white p-2.5 rounded-lg border border-slate-100">
+                        {selectedApp.reference}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Quick Actions</Label>
                   <div className="grid grid-cols-2 gap-3 pt-1">
