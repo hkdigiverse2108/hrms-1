@@ -247,6 +247,7 @@ class AttendanceBase(BaseModel):
     breaks: List[Break] = []
     punches: List[PunchLog] = []
     remarks: Optional[str] = None
+    isLate: Optional[bool] = False
  
 class Attendance(AttendanceBase):
     id: str
@@ -264,6 +265,7 @@ class AttendanceUpdate(BaseModel):
     workHours: Optional[str] = None
     punches: Optional[List[PunchLog]] = None
     remarks: Optional[str] = None
+    isLate: Optional[bool] = None
  
 class PunchRequest(BaseModel):
     employeeId: str
@@ -322,6 +324,7 @@ class DashboardStats(BaseModel):
     pendingLeaves: int
     upcomingBirthdays: int
     upcomingAnniversaries: int
+    lateToday: int
     id: str
 
 class AnnouncementBase(BaseModel):

@@ -161,6 +161,51 @@ async def get_announcements(db, skip: int = 0, limit: int = 100):
 
 async def get_dashboard_stats(db):
     doc = await db.dashboard_stats.find_one()
+    if not doc:
+        doc = {
+            "totalEmployees": 0,
+            "presentToday": 0,
+            "onLeave": 0,
+            "newJoinees": 0,
+            "pendingLeaves": 0,
+            "upcomingBirthdays": 0,
+            "upcomingAnniversaries": 0,
+            "lateToday": 0
+        }
+        
+    total_employees = await db.employees.count_documents({"status": "active"})
+    
+    today = get_now()
+    today_str = today.strftime("%Y-%m-%d")
+    today_dt_naive = datetime.strptime(today_str, "%Y-%m-%d")
+    today_dt_aware = today_dt_naive.replace(tzinfo=IST)
+    
+    present_today = await db.attendance.count_documents({
+        "date": {"$in": [today_dt_naive, today_dt_aware]},
+        "status": {"$in": ["Logged", "Active", "On Break"]}
+    })
+    
+    on_leave = await db.attendance.count_documents({
+        "date": {"$in": [today_dt_naive, today_dt_aware]},
+        "status": "Leave"
+    })
+    
+    pending_leaves = await db.leave_requests.count_documents({
+        "status": {"$in": ["Pending", "pending", "Awaiting Approval"]}
+    })
+    
+    late_today = await db.remarks.count_documents({
+        "date": {"$in": [today_dt_naive, today_dt_aware]},
+        "type": "Late Punch-in",
+        "isDeleted": {"$nin": [True, "true", "True"]}
+    })
+    
+    doc["totalEmployees"] = total_employees
+    doc["presentToday"] = present_today
+    doc["onLeave"] = on_leave
+    doc["pendingLeaves"] = pending_leaves
+    doc["lateToday"] = late_today
+    
     return fix_id(doc)
 
 async def get_payroll(db, skip: int = 0, limit: int = 100):
@@ -1109,6 +1154,28 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
             # Late: starts 15-45 mins after shift start
             total_start_mins = sh * 60 + sm + random.randint(15, 45)
             in_hour, in_min = divmod(total_start_mins, 60)
+            
+            # Create a late punch-in remark automatically for bulk generated records
+            try:
+                buffer_mins = sys_settings.get("lateBufferMins", 10)
+                limit_mins = sh * 60 + sm + buffer_mins
+                limit_h, limit_m = divmod(limit_mins, 60)
+                limit_str = f"{str(limit_h).zfill(2)}:{str(limit_m).zfill(2)}"
+                
+                remark_data = {
+                    "employeeId": employee_id,
+                    "employeeName": employee["name"],
+                    "role": employee.get("designation", "Staff"),
+                    "avatar": employee.get("profilePhoto", ""),
+                    "type": "Late Punch-in",
+                    "details": f"Late Punch-in detected at {str(in_hour).zfill(2)}:{str(in_min).zfill(2)}. Shift starts at {office_start} with a {buffer_mins}-minute buffer (Limit: {limit_str}).",
+                    "addedBy": "System",
+                    "date": date_dt_naive,
+                    "isDeleted": False
+                }
+                await db.remarks.insert_one(remark_data)
+            except Exception as e:
+                print(f"Error creating bulk late remark: {e}")
         else:
             # On-time: starts 30 mins before to 5 mins after shift start
             total_start_mins = sh * 60 + sm + random.randint(-30, 5)
@@ -1139,7 +1206,8 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
             "workHours": work_hours,
             "accumulatedWorkSeconds": total_min * 60,
             "breaks": [],
-            "punches": [{"punchIn": check_in, "punchOut": check_out}]
+            "punches": [{"punchIn": check_in, "punchOut": check_out}],
+            "isLate": is_late
         }
         
         if date_str in half_day_leaves:
@@ -1245,6 +1313,47 @@ async def punch_in(db, employee_id: str):
         "date": {"$in": [today_dt_naive, today_dt_aware]}
     })
 
+    # Pre-calculate late punch status for the first actual punch of the day
+    is_late_punch = False
+    late_remark_data = None
+    try:
+        sys_settings = await get_system_settings(db)
+        start_time_str = employee.get("startTime") or sys_settings.get("officeStartTime", "09:30")
+        buffer_mins = sys_settings.get("lateBufferMins", 10)
+        
+        # Robust time parsing supporting both 24-hour ("09:30") and 12-hour AM/PM ("09:30 AM") formats
+        try:
+            start_time_obj = datetime.strptime(start_time_str.strip(), "%H:%M")
+        except ValueError:
+            try:
+                start_time_obj = datetime.strptime(start_time_str.strip(), "%I:%M %p")
+            except ValueError:
+                # Fallback if both formats fail
+                office_start = sys_settings.get("officeStartTime", "09:30")
+                try:
+                    start_time_obj = datetime.strptime(office_start.strip(), "%H:%M")
+                except ValueError:
+                    start_time_obj = datetime.strptime(office_start.strip(), "%I:%M %p")
+                    
+        limit_time_obj = start_time_obj + timedelta(minutes=buffer_mins)
+        current_time_str = today.strftime("%H:%M")
+        current_time_obj = datetime.strptime(current_time_str, "%H:%M")
+        
+        if current_time_obj > limit_time_obj:
+            is_late_punch = True
+            late_remark_data = {
+                "employeeId": employee_id,
+                "employeeName": employee["name"],
+                "role": employee.get("designation", "Staff"),
+                "avatar": employee.get("profilePhoto", ""),
+                "type": "Late Punch-in",
+                "details": f"Late Punch-in detected at {current_time_str}. Shift starts at {start_time_str} with a {buffer_mins}-minute buffer (Limit: {limit_time_obj.strftime('%H:%M')}).",
+                "addedBy": "System",
+                "date": today_dt_naive
+            }
+    except Exception as e:
+        print(f"Error computing late punch-in status: {e}")
+
     if existing_record:
         # If already active or on break, just return the record
         if existing_record.get("status") in ["Active", "On Break"] and existing_record.get("checkOut") is None:
@@ -1260,6 +1369,12 @@ async def punch_in(db, employee_id: str):
         # If the existing checkIn is a placeholder or empty, set it to the actual first punch-in time!
         if existing_record.get("checkIn") in [None, "--", "--:--", "", "-"]:
             set_values["checkIn"] = now_time_str
+            set_values["isLate"] = is_late_punch
+            if is_late_punch and late_remark_data:
+                try:
+                    await db.remarks.insert_one(late_remark_data)
+                except Exception as e_rem:
+                    print(f"Error inserting late remark for existing record: {e_rem}")
             
         if half_day_type:
             remark_str = f"On Leave: {half_day_type}"
@@ -1291,35 +1406,16 @@ async def punch_in(db, employee_id: str):
         "workHours": None,
         "accumulatedWorkSeconds": 0,
         "punches": [{"punchIn": now_time_str, "punchOut": None}],
-        "remarks": f"On Leave: {half_day_type}" if half_day_type else "-"
+        "remarks": f"On Leave: {half_day_type}" if half_day_type else "-",
+        "isLate": is_late_punch
     }
     
-    # Check for late punch-in (using system settings) - only for first punch of the day
-    try:
-        sys_settings = await get_system_settings(db)
-        start_time_str = employee.get("startTime") or sys_settings.get("officeStartTime", "09:30")
-        buffer_mins = sys_settings.get("lateBufferMins", 10)
-        
-        start_time_obj = datetime.strptime(start_time_str, "%H:%M")
-        limit_time_obj = start_time_obj + timedelta(minutes=buffer_mins)
-        
-        current_time_str = today.strftime("%H:%M")
-        current_time_obj = datetime.strptime(current_time_str, "%H:%M")
-        
-        if current_time_obj > limit_time_obj:
-            remark_data = {
-                "employeeId": employee_id,
-                "employeeName": employee["name"],
-                "role": employee.get("designation", "Staff"),
-                "avatar": employee.get("profilePhoto", ""),
-                "type": "Late Punch-in",
-                "details": f"Late Punch-in detected at {current_time_str}. Shift starts at {start_time_str} with a {buffer_mins}-minute buffer (Limit: {limit_time_obj.strftime('%H:%M')}).",
-                "addedBy": "System",
-                "date": today_dt_naive
-            }
-            await db.remarks.insert_one(remark_data)
-    except Exception as e:
-        print(f"Error processing late remark: {e}")
+    # If late, insert the remark
+    if is_late_punch and late_remark_data:
+        try:
+            await db.remarks.insert_one(late_remark_data)
+        except Exception as e:
+            print(f"Error processing late remark: {e}")
     
     result = await db.attendance.insert_one(attendance_data)
     attendance_data["id"] = str(result.inserted_id)

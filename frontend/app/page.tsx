@@ -542,7 +542,7 @@ function AdminView({ user, leaves, employees, interns, allAttendance }: { user: 
         />
         <StatCard 
           title="Late Today" 
-          value={lateCount.toString().padStart(2, '0')} 
+          value={lateCount.toString()} 
           trend="Punctuality" 
           trendLabel="late arrivals" 
           icon={<AlertCircle className="w-5 h-5 text-amber-500" />} 
