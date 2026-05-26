@@ -2798,11 +2798,34 @@ async def set_typing_status(db, chat_id: str, user_id: str, is_typing: bool):
 async def get_typing_users(db, chat_id: str, current_user_id: str):
     # Get users typing in this chat in the last 10 seconds
     threshold = get_now() - timedelta(seconds=10)
-    cursor = db.typing.find({
-        "chatId": chat_id, 
-        "userId": {"$ne": current_user_id},
-        "timestamp": {"$gt": threshold}
-    })
+    
+    # Check if it's a group chat or personal chat
+    is_group = False
+    if chat_id.startswith("gen-"):
+        is_group = True
+    elif len(chat_id) == 24:
+        try:
+            group = await db.chat_groups.find_one({"_id": ObjectId(chat_id)})
+            if group:
+                is_group = True
+        except:
+            pass
+            
+    if is_group:
+        query = {
+            "chatId": chat_id, 
+            "userId": {"$ne": current_user_id},
+            "timestamp": {"$gt": threshold}
+        }
+    else:
+        # Personal chat: check if the other user (chat_id) is typing to the current user (current_user_id)
+        query = {
+            "chatId": current_user_id,
+            "userId": chat_id,
+            "timestamp": {"$gt": threshold}
+        }
+        
+    cursor = db.typing.find(query)
     typing_entries = await cursor.to_list(length=100)
     
     user_ids = [entry["userId"] for entry in typing_entries]

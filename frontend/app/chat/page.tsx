@@ -232,16 +232,20 @@ export default function ChatPage() {
   const typingTimeoutRef = useRef<any>(null);
 
 
-  const scrollToBottom = () => {
-    if (scrollRef.current && shouldScrollToBottom.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  const scrollToBottom = useCallback((force = false) => {
+    if (scrollRef.current && (shouldScrollToBottom.current || force)) {
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 100);
       shouldScrollToBottom.current = false;
     }
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [currentMessages]);
+  }, [currentMessages, typingUsers, scrollToBottom]);
 
   const fetchEmployees = async () => {
     try {
@@ -279,9 +283,18 @@ export default function ChatPage() {
         fetchChatSummaries();
         fetchSavedMessages();
         fetchEmployees();
-        fetchTypingStatus();
       }, 5000);
       return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user && selectedChat) {
+      fetchTypingStatus();
+      const typingInterval = setInterval(() => {
+        fetchTypingStatus();
+      }, 1500);
+      return () => clearInterval(typingInterval);
     }
   }, [user, selectedChat]);
 
@@ -414,6 +427,7 @@ export default function ChatPage() {
   const handleSelectChat = (chat: any) => {
     if (!chat) return;
     setSelectedChat(chat);
+    shouldScrollToBottom.current = true;
     // Force immediate local clear
     const chatId = chat.id || chat.employeeId;
     if (chatId) {
@@ -980,7 +994,9 @@ export default function ChatPage() {
           lastMessage: summary?.lastMessage || "Click to start chatting",
           time: summary?.timestamp ? dayjs(summary.timestamp).format("hh:mm A") : "",
           timestamp: summary?.timestamp || 0,
-          avatar: emp.profilePhoto,
+          avatar: emp.profilePhoto 
+            ? (emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`)
+            : null,
           type: "personal"
         };
       })
@@ -991,6 +1007,17 @@ export default function ChatPage() {
         return timeB - timeA;
       });
   }, [employees, user?.id, chatSummaries]);
+
+  // Auto-select the most recent active conversation on page load
+  useEffect(() => {
+    if (!selectedChat && chats.length > 0) {
+      // chats is already sorted by timestamp descending, so chats[0] is the most recent
+      const mostRecentChat = chats.find(c => c.timestamp) || chats[0];
+      if (mostRecentChat) {
+        handleSelectChat(mostRecentChat);
+      }
+    }
+  }, [chats, selectedChat]);
 
   const filteredChats = chats.filter((c: any) => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -2019,6 +2046,29 @@ export default function ChatPage() {
                 </React.Fragment>
                 );
               })}
+
+              {/* Typing indicator bubble */}
+              {typingUsers.length > 0 && typingUsers.filter(name => name !== user?.name).length > 0 && (
+                <div className="flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 mt-4">
+                  <Avatar className="w-8 h-8 border ring-1 ring-border shadow-2xs shrink-0 rounded-full overflow-hidden">
+                    <AvatarFallback className="bg-brand-light text-brand-teal font-extrabold text-[10px] uppercase">
+                      {typingUsers[0][0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="bg-gray-100/80 px-4 py-2 rounded-2xl rounded-tl-xs shadow-2xs flex items-center gap-1.5">
+                      <span className="text-xs text-slate-500 font-bold">
+                        {typingUsers.filter(name => name !== user?.name).join(", ")} typing
+                      </span>
+                      <span className="flex gap-0.5 items-center pt-1">
+                        <span className="h-1 w-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="h-1 w-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="h-1 w-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Chat Input */}
@@ -2372,7 +2422,9 @@ export default function ChatPage() {
                       id: emp.id || emp.employeeId,
                       name: emp.name,
                       status: "Online",
-                      avatar: emp.profilePhoto,
+                      avatar: emp.profilePhoto 
+                        ? (emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`)
+                        : null,
                       type: "personal"
                     });
                     setShowNewChat(false);
@@ -2381,7 +2433,11 @@ export default function ChatPage() {
                   className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-gray-100"
                 >
                   <Avatar className="w-10 h-10 border border-border">
-                    {emp.profilePhoto && <AvatarImage src={emp.profilePhoto} />}
+                    {emp.profilePhoto && (
+                      <AvatarImage 
+                        src={emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`} 
+                      />
+                    )}
                     <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
                       {emp.name[0]}
                     </AvatarFallback>
