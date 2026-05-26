@@ -23,6 +23,7 @@ import {
   MoreVertical, 
   Paperclip, 
   Smile, 
+  AtSign,
   Send,
   CheckCheck,
   UserPlus,
@@ -49,6 +50,7 @@ import {
   Reply,
   Forward,
   Copy,
+  Bell,
   BellOff,
   Archive,
   Link as LinkIcon,
@@ -222,6 +224,202 @@ export default function ChatPage() {
     options: ["", ""], 
     isMultiple: false 
   });
+
+  const [mutedChats, setMutedChats] = useState<string[]>([]);
+  const [chatNotificationPrefs, setChatNotificationPrefs] = useState<Record<string, { mode: string; sound: string }>>({});
+  const [desktopAlertsEnabled, setDesktopAlertsEnabled] = useState(false);
+  const [globalDndEnabled, setGlobalDndEnabled] = useState(false);
+  const [globalDefaultMode, setGlobalDefaultMode] = useState("all");
+  const [globalDefaultSound, setGlobalDefaultSound] = useState("default");
+
+  const [showTagPicker, setShowTagPicker] = useState(false);
+  const [tagSearchQuery, setTagSearchQuery] = useState("");
+
+  const filteredEmployees = useMemo(() => {
+    const q = tagSearchQuery.toLowerCase().trim();
+    if (!q) return employees;
+    return employees.filter(emp => {
+      const name = (emp.name || `${emp.firstName} ${emp.lastName}`).toLowerCase();
+      const designation = (emp.designation || "").toLowerCase();
+      return name.includes(q) || designation.includes(q);
+    });
+  }, [employees, tagSearchQuery]);
+
+  const handleInputChange = (val: string) => {
+    setMessage(val);
+    handleTyping();
+
+    // Check if user is typing a mention
+    const lastAtIdx = val.lastIndexOf("@");
+    if (lastAtIdx !== -1 && lastAtIdx >= val.length - 20) {
+      const textAfterAt = val.slice(lastAtIdx + 1);
+      if (!textAfterAt.includes(" ")) {
+        setShowTagPicker(true);
+        setTagSearchQuery(textAfterAt);
+        return;
+      }
+    }
+    setShowTagPicker(false);
+  };
+
+  const handleTagSelect = (emp: any) => {
+    const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+    const formattedTag = `@${empName} `;
+    
+    const lastAtIdx = message.lastIndexOf("@");
+    if (lastAtIdx !== -1 && lastAtIdx >= message.length - 25) {
+      setMessage(message.slice(0, lastAtIdx) + formattedTag);
+    } else {
+      setMessage(prev => prev + formattedTag);
+    }
+    setShowTagPicker(false);
+    setTagSearchQuery("");
+  };
+
+  useEffect(() => {
+    const savedMuted = localStorage.getItem("mutedChats");
+    if (savedMuted) {
+      try { setMutedChats(JSON.parse(savedMuted)); } catch (e) { console.error(e); }
+    }
+    const savedPrefs = localStorage.getItem("chatNotificationPrefs");
+    if (savedPrefs) {
+      try { setChatNotificationPrefs(JSON.parse(savedPrefs)); } catch (e) { console.error(e); }
+    }
+    const savedAlerts = localStorage.getItem("desktopAlertsEnabled");
+    if (savedAlerts === "true" && typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "granted") {
+        setDesktopAlertsEnabled(true);
+      }
+    }
+    const savedDnd = localStorage.getItem("globalDndEnabled");
+    if (savedDnd) setGlobalDndEnabled(savedDnd === "true");
+    const savedGlobalMode = localStorage.getItem("globalDefaultMode");
+    if (savedGlobalMode) setGlobalDefaultMode(savedGlobalMode);
+    const savedGlobalSound = localStorage.getItem("globalDefaultSound");
+    if (savedGlobalSound) setGlobalDefaultSound(savedGlobalSound);
+  }, []);
+
+  // Dynamic tab title update for unread messages
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const totalUnread = Object.values(unreadCounts).reduce((sum, val) => sum + (val || 0), 0);
+      if (totalUnread > 0) {
+        document.title = `(${totalUnread}) HRMS Chat`;
+      } else {
+        document.title = "HRMS Chat";
+      }
+    }
+  }, [unreadCounts]);
+
+  const toggleMuteChat = (chatId: string) => {
+    const next = mutedChats.includes(chatId)
+      ? mutedChats.filter(id => id !== chatId)
+      : [...mutedChats, chatId];
+    setMutedChats(next);
+    localStorage.setItem("mutedChats", JSON.stringify(next));
+  };
+
+  const toggleDesktopAlerts = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      alert("System notifications are not supported in this browser.");
+      return;
+    }
+
+    if (desktopAlertsEnabled) {
+      setDesktopAlertsEnabled(false);
+      localStorage.setItem("desktopAlertsEnabled", "false");
+    } else {
+      const permission = await Notification.requestPermission();
+      if (permission === "granted") {
+        setDesktopAlertsEnabled(true);
+        localStorage.setItem("desktopAlertsEnabled", "true");
+        new Notification("HRMS Chat", {
+          body: "Desktop alerts successfully enabled! You will now receive notifications when a new message arrives.",
+          icon: "/favicon.ico"
+        });
+      } else {
+        alert("Permission denied. Please enable notifications in your browser settings to receive alerts.");
+      }
+    }
+  };
+
+  const toggleGlobalDnd = () => {
+    const next = !globalDndEnabled;
+    setGlobalDndEnabled(next);
+    localStorage.setItem("globalDndEnabled", next ? "true" : "false");
+  };
+
+  const updateGlobalDefaultMode = (val: string) => {
+    setGlobalDefaultMode(val);
+    localStorage.setItem("globalDefaultMode", val);
+  };
+
+  const updateGlobalDefaultSound = (val: string) => {
+    setGlobalDefaultSound(val);
+    localStorage.setItem("globalDefaultSound", val);
+  };
+
+  const updateNotificationPref = (chatId: string, key: "mode" | "sound", value: string) => {
+    const current = chatNotificationPrefs[chatId] || { mode: "all", sound: "default" };
+    const next = {
+      ...chatNotificationPrefs,
+      [chatId]: {
+        ...current,
+        [key]: value
+      }
+    };
+    setChatNotificationPrefs(next);
+    localStorage.setItem("chatNotificationPrefs", JSON.stringify(next));
+  };
+
+  const playTestSound = (sound: string) => {
+    if (sound === "silent") return;
+    try {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioCtxClass();
+      
+      const play = () => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        if (sound === "bubble") {
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.15);
+          gain.gain.setValueAtTime(0.01, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.15);
+        } else if (sound === "beep") {
+          osc.type = "square";
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.08);
+        } else {
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
+          osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); 
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.3);
+        }
+      };
+
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume().then(play).catch(e => console.error(e));
+      } else {
+        play();
+      }
+    } catch (e) {
+      console.warn("AudioContext block caught:", e);
+    }
+  };
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -387,6 +585,16 @@ export default function ChatPage() {
     }
   };
 
+  // Background polling for unread counts (updates tab title and UI in real-time even when tab is open in background)
+  useEffect(() => {
+    if (!user) return;
+    fetchUnreadCounts();
+    const interval = setInterval(() => {
+      fetchUnreadCounts();
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [user]);
+
   const fetchSavedMessages = async () => {
     if (!user) return;
     try {
@@ -441,7 +649,7 @@ export default function ChatPage() {
   };
 
   const fetchMessages = React.useCallback(async () => {
-    if (!selectedChat || !user) return;
+    if (!selectedChat || !user || !user.id) return;
     try {
       const url = (selectedChat.type === 'group' || selectedChat.type === 'general')
         ? `${API_URL}/chat/messages/${user.id}/${selectedChat.id}?group_id=${selectedChat.id}`
@@ -455,7 +663,58 @@ export default function ChatPage() {
           ...m,
           isMe: m.senderId === user.id
         }));
-        setCurrentMessages(marked);
+
+        // Play sound and trigger desktop alerts on new incoming messages from others
+        setCurrentMessages(prev => {
+          if (prev.length > 0 && marked.length > prev.length) {
+            const lastMsg = marked[marked.length - 1];
+            const chatId = selectedChat.id || selectedChat.employeeId;
+            const isMuted = mutedChats.includes(chatId);
+            
+            if (!lastMsg.isMe && !isMuted && !globalDndEnabled) {
+              const pref = chatNotificationPrefs[chatId] || { mode: globalDefaultMode, sound: globalDefaultSound };
+              const resolvedMode = pref.mode === "default" || !pref.mode ? globalDefaultMode : pref.mode;
+              const resolvedSound = pref.sound === "default" || !pref.sound ? globalDefaultSound : pref.sound;
+              
+              const isMention = (() => {
+                if (!lastMsg.text) return false;
+                const mentions = lastMsg.text.match(/@\w+/g);
+                if (!mentions) return false;
+                const firstName = user?.firstName?.toLowerCase() || "";
+                const lastName = user?.lastName?.toLowerCase() || "";
+                const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
+                const strippedFullName = fullName.replace(/\s+/g, "");
+                
+                return mentions.some(m => {
+                  const mentionName = m.substring(1).toLowerCase();
+                  if (!mentionName) return false;
+                  return (
+                    (firstName && firstName === mentionName) ||
+                    (lastName && lastName === mentionName) ||
+                    (fullName && fullName.includes(mentionName)) ||
+                    (strippedFullName && strippedFullName === mentionName)
+                  );
+                });
+              })();
+              
+              if (resolvedMode === "all" || (resolvedMode === "mentions" && isMention)) {
+                // 1. Play chime sound
+                playTestSound(resolvedSound);
+
+                // 2. Trigger browser desktop system notification if document is unfocused / minimized
+                const isTabInactive = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
+                if (isTabInactive && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                  const senderName = selectedChat.name || lastMsg.sender || "Colleague";
+                  new Notification(`Message from ${senderName}`, {
+                    body: lastMsg.text || "Sent an attachment",
+                    icon: selectedChat.avatar || "/favicon.ico"
+                  });
+                }
+              }
+            }
+          }
+          return marked;
+        });
         
         // If there are unread messages from others, mark them seen
         const hasUnread = marked.some(m => !m.isMe && (!m.seenBy || !m.seenBy.includes(user.id)));
@@ -466,10 +725,10 @@ export default function ChatPage() {
     } catch (err) {
       console.error("Error fetching messages:", err);
     }
-  }, [selectedChat, user]);
+  }, [selectedChat, user, mutedChats, chatNotificationPrefs, globalDndEnabled, globalDefaultMode, globalDefaultSound]);
 
   const fetchGroups = useCallback(async () => {
-    if (!user) return;
+    if (!user || !user.id) return;
     try {
       const res = await fetch(`${API_URL}/chat/groups/${user.id}`);
       if (res.ok) {
@@ -592,21 +851,52 @@ export default function ChatPage() {
     }
   };
 
-  const renderMessageText = (text: string) => {
+  const renderMessageText = (text: string, isMeBubble: boolean = false) => {
     if (!text) return "";
     
-    // First, handle @mentions
-    const parts = text.split(/(@\w+)/g);
+    const namePatterns = employees.map(emp => {
+      const name = emp.name || `${emp.firstName} ${emp.lastName}`;
+      return name.trim();
+    }).filter(Boolean)
+      .sort((a, b) => b.length - a.length)
+      .map(name => name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+
+    const mentionRegex = namePatterns.length > 0
+      ? new RegExp(`(@(?:${namePatterns.join('|')})\\b|@\\w+)`, 'gi')
+      : /(@\w+)/g;
+
+    const parts = text.split(mentionRegex);
     const withMentions = parts.map((part, i) => {
       if (part.startsWith("@")) {
         const name = part.substring(1);
-        const isMe = user?.name?.toLowerCase().includes(name.toLowerCase());
+        const isMe = (() => {
+          const firstName = user?.firstName?.toLowerCase() || "";
+          const lastName = user?.lastName?.toLowerCase() || "";
+          const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
+          const strippedFullName = fullName.replace(/\s+/g, "");
+          const mentionName = name.toLowerCase();
+          return (
+            (firstName && firstName === mentionName) ||
+            (lastName && lastName === mentionName) ||
+            (fullName && fullName.includes(mentionName)) ||
+            (strippedFullName && strippedFullName === mentionName)
+          );
+        })();
+
+        // Two unified color palettes: Gold/Yellow for 'You', Blue/Cyan for 'Others'
+        let tagColorClass = "";
+        if (isMeBubble) {
+          tagColorClass = isMe ? "text-[#fef08a] font-extrabold" : "text-[#ccfbf1] font-extrabold";
+        } else {
+          tagColorClass = isMe ? "text-[#d97706]" : "text-[#0ea5e9]";
+        }
+
         return (
           <span 
             key={`mention-${i}`} 
             className={cn(
-              "px-1.5 py-0.5 rounded-md font-bold text-[13px] transition-all cursor-pointer inline-block",
-              isMe ? "bg-amber-100 text-amber-700 hover:bg-amber-200" : "bg-brand-teal/10 text-brand-teal hover:bg-brand-teal/20"
+              "text-[13px] transition-all cursor-pointer inline-block mr-1 font-bold hover:underline",
+              tagColorClass
             )}
           >
             {part}
@@ -1037,13 +1327,14 @@ export default function ChatPage() {
 
   const totalPersonalUnread = useMemo(() => {
     return Object.entries(unreadCounts).reduce((acc, [id, count]) => {
-      // If id is not in chatGroups, it's personal
-      if (!chatGroups.some(g => g.id === id)) {
+      const isGroup = chatGroups.some(g => g.id === id);
+      const isGeneral = chatChannels.some(c => c.id === id) || id.startsWith("gen-");
+      if (!isGroup && !isGeneral) {
         return acc + (count as number);
       }
       return acc;
     }, 0);
-  }, [unreadCounts, chatGroups]);
+  }, [unreadCounts, chatGroups, chatChannels]);
 
   const totalGroupsUnread = useMemo(() => {
     return Object.entries(unreadCounts).reduce((acc, [id, count]) => {
@@ -1074,6 +1365,99 @@ export default function ChatPage() {
             <div className="flex items-center justify-between">
               <h1 className="text-xl font-bold text-foreground">Messages</h1>
               <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className={cn(
+                        "h-8 w-8 rounded-full transition-colors",
+                        globalDndEnabled ? "text-rose-500 hover:text-rose-600" : "text-brand-teal hover:text-brand-teal-600"
+                      )}
+                      title="Global Notification Settings"
+                    >
+                      {globalDndEnabled ? (
+                        <BellOff className="w-5 h-5" />
+                      ) : (
+                        <Bell className="w-5 h-5" />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-5 rounded-xl shadow-lg border border-border bg-white" align="start">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between border-b border-border pb-3">
+                        <h4 className="font-bold text-slate-800 text-[14px]">Global Notification Settings</h4>
+                        <span className="text-[9px] bg-brand-teal/10 text-brand-teal font-extrabold uppercase px-2 py-0.5 rounded-full">
+                          App-Wide
+                        </span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {/* Global Desktop Alerts Toggle */}
+                        <div className="flex items-center justify-between pb-1">
+                          <div className="space-y-0.5">
+                            <label className="text-xs font-bold text-slate-700 block">Desktop Push Alerts</label>
+                            <span className="text-[10px] text-slate-400 font-medium">Show OS notifications when site is inactive</span>
+                          </div>
+                          <Checkbox 
+                            checked={desktopAlertsEnabled}
+                            onCheckedChange={toggleDesktopAlerts}
+                            className="border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                          />
+                        </div>
+
+                        {/* Do Not Disturb Toggle */}
+                        <div className="flex items-center justify-between pb-1">
+                          <div className="space-y-0.5">
+                            <label className="text-xs font-bold text-rose-600 block">Do Not Disturb (DND)</label>
+                            <span className="text-[10px] text-slate-400 font-medium">Mute all app alerts temporarily</span>
+                          </div>
+                          <Checkbox 
+                            checked={globalDndEnabled}
+                            onCheckedChange={toggleGlobalDnd}
+                            className="border-slate-300 data-[state=checked]:bg-rose-500 data-[state=checked]:border-rose-500"
+                          />
+                        </div>
+
+                        {!globalDndEnabled && (
+                          <>
+                            <div className="space-y-1.5 pt-1">
+                              <label className="text-xs font-bold text-slate-700 block">Default Alert Mode</label>
+                              <select 
+                                value={globalDefaultMode}
+                                onChange={(e) => updateGlobalDefaultMode(e.target.value)}
+                                className="w-full h-9 rounded-lg border border-slate-200 bg-white text-xs px-2.5 text-slate-700 outline-none focus:border-brand-teal focus:ring-1 focus:ring-brand-teal transition-all font-semibold"
+                              >
+                                <option value="all">All Messages</option>
+                                <option value="mentions">@ Mentions Only</option>
+                                <option value="none">Muted</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1.5 pt-1">
+                              <label className="text-xs font-bold text-slate-700 block">Default Chime Sound</label>
+                              <select 
+                                value={globalDefaultSound}
+                                onChange={(e) => {
+                                  const sound = e.target.value;
+                                  updateGlobalDefaultSound(sound);
+                                  playTestSound(sound);
+                                }}
+                                className="w-full h-9 rounded-lg border border-slate-200 bg-white text-xs px-2.5 text-slate-700 outline-none focus:border-brand-teal focus:ring-1 focus:ring-brand-teal transition-all font-semibold"
+                              >
+                                <option value="default">🎶 Default Chime</option>
+                                <option value="beep">🔔 Retro Beep</option>
+                                <option value="bubble">🫧 Bubble Pop</option>
+                                <option value="silent">🔇 Silent (Vibrate Only)</option>
+                              </select>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
                 <Button 
                   variant="ghost" 
                   size="icon" 
@@ -1518,54 +1902,63 @@ export default function ChatPage() {
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
-                <div className="relative shrink-0">
-                  <Avatar className="w-11 h-11 border border-border">
-                    {selectedChat.avatar ? (
-                      <AvatarImage src={selectedChat.avatar} />
-                    ) : (
-                      <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs uppercase">
-                        {selectedChat.name[0]}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  {selectedChat.status === "Online" && (
-                    <span className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white"></span>
-                  )}
-                </div>
-                <div>
-                  <h2 className="font-bold text-slate-800">{selectedChat.name}</h2>
-                  {typingUsers.length > 0 ? (
-                    <p className="text-[11px] font-bold text-brand-teal animate-pulse">
-                      {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
-                    </p>
-                  ) : selectedChat.type === 'group' ? (
-                    <div 
-                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-full pr-2 transition-colors py-0.5"
-                      onClick={() => setShowGroupMembers(true)}
-                    >
-                      <div className="flex -space-x-2 overflow-hidden">
-                        {selectedChat.members?.slice(0, 3).map((memberId: string) => {
-                          const member = employees.find((e: any) => e.id === memberId);
-                          return (
-                            <Avatar key={memberId} className="w-5 h-5 border-2 border-white ring-1 ring-border shrink-0">
-                              <AvatarImage src={member?.profilePhoto} />
-                              <AvatarFallback className="text-[8px] bg-brand-light text-brand-teal font-bold">
-                                {member?.name?.[0] || "?"}
-                              </AvatarFallback>
-                            </Avatar>
-                          );
-                        })}
-                      </div>
-                      <p className="text-[11px] font-bold text-emerald-600">
-                        {selectedChat.members?.length > 3 ? `+${selectedChat.members.length - 3} others` : `${selectedChat.members?.length || 0} Members`}
-                      </p>
+                {(selectedChat.type === 'general' || selectedChat.id?.startsWith("gen-")) ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400 font-semibold text-2xl select-none">#</span>
+                    <h2 className="font-bold text-slate-800 text-lg">{selectedChat.name.toLowerCase()}</h2>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative shrink-0">
+                      <Avatar className="w-11 h-11 border border-border">
+                        {selectedChat.avatar ? (
+                          <AvatarImage src={selectedChat.avatar} />
+                        ) : (
+                          <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs uppercase">
+                            {selectedChat.name[0]}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      {selectedChat.status === "Online" && (
+                        <span className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white"></span>
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-[11px] font-semibold text-emerald-600">
-                      {selectedChat.status}
-                    </p>
-                  )}
-                </div>
+                    <div>
+                      <h2 className="font-bold text-slate-800">{selectedChat.name}</h2>
+                      {typingUsers.length > 0 ? (
+                        <p className="text-[11px] font-bold text-brand-teal animate-pulse">
+                          {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
+                        </p>
+                      ) : selectedChat.type === 'group' ? (
+                        <div 
+                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-full pr-2 transition-colors py-0.5"
+                          onClick={() => setShowGroupMembers(true)}
+                        >
+                          <div className="flex -space-x-2 overflow-hidden">
+                            {selectedChat.members?.slice(0, 3).map((memberId: string) => {
+                              const member = employees.find((e: any) => e.id === memberId);
+                              return (
+                                <Avatar key={memberId} className="w-5 h-5 border-2 border-white ring-1 ring-border shrink-0">
+                                  <AvatarImage src={member?.profilePhoto} />
+                                  <AvatarFallback className="text-[8px] bg-brand-light text-brand-teal font-bold">
+                                    {member?.name?.[0] || "?"}
+                                  </AvatarFallback>
+                                </Avatar>
+                              );
+                            })}
+                          </div>
+                          <p className="text-[11px] font-bold text-emerald-600">
+                            {selectedChat.members?.length > 3 ? `+${selectedChat.members.length - 3} others` : `${selectedChat.members?.length || 0} Members`}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] font-semibold text-emerald-600">
+                          {selectedChat.status}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex items-center gap-1">
@@ -1935,7 +2328,7 @@ export default function ChatPage() {
                                 );
                               })()}
 
-                              {msg.text !== `Poll: ${msg.poll?.question}` && renderMessageText(msg.text)}
+                              {msg.text !== `Poll: ${msg.poll?.question}` && renderMessageText(msg.text, msg.isMe)}
                             </>
                           )}
                           {msg.isEdited && <span className="ml-2 text-[8px] opacity-60 italic">(edited)</span>}
@@ -2124,10 +2517,7 @@ export default function ChatPage() {
                 </Button>
                 <Input 
                   value={message}
-                  onChange={(e) => {
-                    setMessage(e.target.value);
-                    handleTyping();
-                  }}
+                  onChange={(e) => handleInputChange(e.target.value)}
                   placeholder={`Type your message to ${selectedChat.name}...`}
                   className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-sm placeholder:text-muted-foreground h-11"
                 />
@@ -2172,6 +2562,68 @@ export default function ChatPage() {
                       </Button>
                     </>
                   )}
+                  
+                  {/* Tagging / Mention Popover */}
+                  <div className="relative">
+                    <Popover open={showTagPicker} onOpenChange={setShowTagPicker}>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="icon" 
+                          className={cn("text-muted-foreground hover:bg-white rounded-full h-9 w-9", showTagPicker && "bg-brand-teal/10 text-brand-teal")}
+                          onClick={() => {
+                            if (!showTagPicker) {
+                              if (!message.endsWith("@")) {
+                                setMessage(prev => prev + (prev.endsWith(" ") || prev === "" ? "@" : " @"));
+                              }
+                              setTagSearchQuery("");
+                              setShowTagPicker(true);
+                            } else {
+                              setShowTagPicker(false);
+                            }
+                          }}
+                          title="Tag Someone"
+                        >
+                          <AtSign className="w-5 h-5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent side="top" align="end" className="p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 mb-4 max-h-64 overflow-y-auto z-[100]">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1.5 border-b border-slate-50 mb-1">
+                          Tag Colleague
+                        </div>
+                        {filteredEmployees.length === 0 ? (
+                          <div className="text-xs text-muted-foreground text-center py-4">No colleagues found</div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {filteredEmployees.map((emp) => {
+                              const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                              const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                              return (
+                                <button
+                                  key={emp.id}
+                                  type="button"
+                                  onClick={() => handleTagSelect(emp)}
+                                  className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-50 rounded-xl text-left transition-all"
+                                >
+                                  <Avatar className="w-7 h-7 shrink-0">
+                                    <AvatarImage src={emp.profilePhoto} />
+                                    <AvatarFallback className="bg-brand-teal/10 text-brand-teal font-bold text-[10px]">{initials}</AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold text-slate-700 truncate">{empName}</p>
+                                    <p className="text-[9px] text-slate-400 font-medium truncate uppercase">{emp.designation || 'Employee'}</p>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Emoji Popover */}
                   <div className="relative">
                     <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
                       <PopoverTrigger asChild>

@@ -691,29 +691,43 @@ async def get_unread_counts(user_id: str, db=Depends(get_db)):
     # Aggregated counts for both personal and group chats
     unread_counts = {}
     
-    # 1. Personal Chats: messages where receiverId == user_id and seenBy does not contain user_id
-    cursor_personal = db.messages.aggregate([
-        {"$match": {"receiverId": user_id, "senderId": {"$ne": user_id}, "seenBy": {"$ne": user_id}}},
+    # Support both string and ObjectId user ID types to prevent database type mismatch bugs
+    user_id_obj = ObjectId(user_id) if len(user_id) == 24 else None
+    user_ids = [user_id]
+    if user_id_obj:
+        user_ids.append(user_id_obj)
+    
+    # 1. Personal Chats: messages where receiverId == user_id (string or Obj) and seenBy does not contain user_id
+    cursor_personal = db.messages._collection.aggregate([
+        {"$match": {
+            "$or": [{"receiverId": user_id}, {"receiverId": user_id_obj}],
+            "senderId": {"$nin": user_ids},
+            "seenBy": {"$nin": user_ids}
+        }},
         {"$group": {"_id": "$senderId", "count": {"$sum": 1}}}
     ])
     personal_results = await cursor_personal.to_list(length=1000)
     for r in personal_results:
-        unread_counts[r["_id"]] = r["count"]
+        unread_counts[str(r["_id"])] = r["count"]
         
     # 2. Group Chats: messages where groupId is present and seenBy does not contain user_id
-    # We need to only count groups the user is actually in
     user_groups = await crud.get_chat_groups(db, user_id)
     group_ids = [g["id"] for g in user_groups]
-    # Add general channels
-    group_ids.extend(["gen-announcements", "gen-general", "gen-tech", "gen-hr"])
+    channels = await crud.get_chat_channels(db)
+    channel_ids = [c["id"] for c in channels]
+    group_ids.extend(channel_ids)
     
-    cursor_groups = db.messages.aggregate([
-        {"$match": {"groupId": {"$in": group_ids}, "senderId": {"$ne": user_id}, "seenBy": {"$ne": user_id}}},
+    cursor_groups = db.messages._collection.aggregate([
+        {"$match": {
+            "groupId": {"$in": group_ids},
+            "senderId": {"$nin": user_ids},
+            "seenBy": {"$nin": user_ids}
+        }},
         {"$group": {"_id": "$groupId", "count": {"$sum": 1}}}
     ])
     group_results = await cursor_groups.to_list(length=1000)
     for r in group_results:
-        unread_counts[r["_id"]] = r["count"]
+        unread_counts[str(r["_id"])] = r["count"]
         
     return unread_counts
 
