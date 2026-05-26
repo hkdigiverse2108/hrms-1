@@ -8,6 +8,7 @@ import os
 import uuid
 from bson import ObjectId
 from database import get_db
+import holidays as pyholidays
 
 
 app = FastAPI(title="HRMS API")
@@ -461,6 +462,67 @@ async def update_holiday(holiday_id: str, holiday: schemas.HolidayUpdate, db=Dep
 async def delete_holiday(holiday_id: str, db=Depends(get_db)):
     await crud.delete_holiday(db, holiday_id)
     return {"message": "Holiday deleted"}
+import urllib.request
+
+GOOGLE_ICS_MAP = {
+    "IN": "en.indian#holiday@group.v.calendar.google.com",
+    "US": "en.usa#holiday@group.v.calendar.google.com",
+    "GB": "en.uk#holiday@group.v.calendar.google.com",
+    "AU": "en.australian#holiday@group.v.calendar.google.com",
+    "CA": "en.canadian#holiday@group.v.calendar.google.com"
+}
+
+@app.get("/holidays/fetch-external")
+async def fetch_external_holidays(country: str = "IN", year: int = 2026):
+    try:
+        fetched = []
+        if country in GOOGLE_ICS_MAP:
+            calendar_id = GOOGLE_ICS_MAP[country]
+            url = f"https://calendar.google.com/calendar/ical/{calendar_id.replace('#', '%23').replace('@', '%40')}/public/basic.ics"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as response:
+                content = response.read().decode('utf-8')
+            
+            current_event = {}
+            for line in content.splitlines():
+                if line.startswith('BEGIN:VEVENT'):
+                    current_event = {}
+                elif line.startswith('DTSTART;VALUE=DATE:'):
+                    date_str = line.split(':')[1]
+                    if date_str.startswith(str(year)):
+                        current_event['date'] = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+                elif line.startswith('SUMMARY:'):
+                    current_event['name'] = line.split(':', 1)[1]
+                elif line.startswith('END:VEVENT'):
+                    if 'date' in current_event and 'name' in current_event:
+                        # Avoid duplicates on the exact same date and name
+                        if not any(f['date'] == current_event['date'] and f['name'] == current_event['name'] for f in fetched):
+                            fetched.append({
+                                "date": current_event['date'],
+                                "name": current_event['name'],
+                                "type": "National",
+                                "company": ""
+                            })
+        else:
+            # Fallback to python holidays package
+            country_holidays = pyholidays.country_holidays(country, years=year)
+            for date, name in country_holidays.items():
+                fetched.append({
+                    "date": date.strftime("%Y-%m-%d"),
+                    "name": name,
+                    "type": "National",
+                    "company": ""
+                })
+        
+        # Sort by date
+        fetched.sort(key=lambda x: x["date"])
+        return fetched
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error fetching holidays: {str(e)}")
+
+@app.post("/holidays/bulk")
+async def create_holidays_bulk(payload: schemas.HolidayBulkCreate, db=Depends(get_db)):
+    return await crud.create_holidays_bulk(db, payload)
 
 @app.get("/kpi-records", response_model=List[schemas.KPI])
 async def read_kpi_records(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_kpi_records(db, skip, limit)
@@ -517,7 +579,22 @@ async def delete_penalty_type(penalty_id: str, db=Depends(get_db)):
 
 # Event Endpoints
 @app.get("/events", response_model=List[schemas.Event])
-async def read_events(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_events(db, skip, limit)
+async def read_events(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    events = await crud.get_events(db, skip, limit)
+    holidays = await crud.get_holidays(db, 0, 1000)
+    for h in holidays:
+        title = h["name"] if "Holiday" in h["name"] else f"{h['name']} (Holiday)"
+        events.append({
+            "id": h["id"],
+            "title": title,
+            "description": f"{h.get('type', 'Public')} Holiday",
+            "date": h["date"],
+            "time": "All Day",
+            "type": "Holiday"
+        })
+    # Sort by date
+    events.sort(key=lambda x: x.get("date", x.date if hasattr(x, 'date') else ""))
+    return events
 @app.post("/events", response_model=schemas.Event)
 async def create_event(event: schemas.EventCreate, db=Depends(get_db)): return await crud.create_event(db, event)
 @app.put("/events/{event_id}", response_model=schemas.Event)

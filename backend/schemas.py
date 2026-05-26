@@ -605,6 +605,9 @@ class HolidayBase(BaseModel):
 class HolidayCreate(HolidayBase):
     pass
 
+class HolidayBulkCreate(BaseModel):
+    holidays: List[HolidayCreate]
+
 class HolidayUpdate(BaseModel):
     name: Optional[str] = None
     date: Optional[RobustDate] = None

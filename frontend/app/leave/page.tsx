@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, Plus, Sun, Thermometer, Clock, MoreHorizontal, PartyPopper, Church, Briefcase, Flag, Gift, ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, Eye, Download, Search, RotateCcw, UploadCloud, ImageIcon, X, Paperclip, Check } from "lucide-react";
+import { CalendarIcon, Plus, Sun, Thermometer, Clock, MoreHorizontal, PartyPopper, Church, Briefcase, Flag, Gift, ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, Eye, Download, Search, RotateCcw, UploadCloud, ImageIcon, X, Paperclip, Check, Globe } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
 
 import { TablePagination } from "@/components/common/TablePagination";
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -141,6 +142,12 @@ export default function LeavePage() {
   });
   const [editingHolidayId, setEditingHolidayId] = useState<string | null>(null);
 
+  const [isFetchHolidaysDialogOpen, setIsFetchHolidaysDialogOpen] = useState(false);
+  const [fetchYear, setFetchYear] = useState("2026");
+  const [fetchCountry, setFetchCountry] = useState("IN");
+  const [fetchedHolidays, setFetchedHolidays] = useState<any[]>([]);
+  const [selectedFetchedHolidays, setSelectedFetchedHolidays] = useState<Set<string>>(new Set());
+  const [isFetchingHolidays, setIsFetchingHolidays] = useState(false);
 
   const calculateLeaveDays = (start: any, end: any) => {
     if (!start || !end) return 0;
@@ -498,6 +505,50 @@ export default function LeavePage() {
       }
     } catch (err) {
       toast.error(editingHolidayId ? "Failed to update holiday" : "Failed to add holiday");
+    }
+  };
+
+  const handleFetchExternalHolidays = async () => {
+    setIsFetchingHolidays(true);
+    try {
+      const res = await fetch(`${API_URL}/holidays/fetch-external?year=${fetchYear}&country=${fetchCountry}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFetchedHolidays(data);
+        const newSet = new Set<string>();
+        data.forEach((h: any) => newSet.add(h.date + '-' + h.name));
+        setSelectedFetchedHolidays(newSet);
+      } else {
+        toast.error("Failed to fetch holidays");
+      }
+    } catch (err) {
+      toast.error("Error fetching holidays");
+    } finally {
+      setIsFetchingHolidays(false);
+    }
+  };
+
+  const handleSaveFetchedHolidays = async () => {
+    const toSave = fetchedHolidays.filter(h => selectedFetchedHolidays.has(h.date + '-' + h.name));
+    if (toSave.length === 0) {
+      toast.error("No holidays selected");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/holidays/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ holidays: toSave })
+      });
+      if (res.ok) {
+        toast.success(`Successfully added ${toSave.length} holidays`);
+        setIsFetchHolidaysDialogOpen(false);
+        fetchHolidays();
+      } else {
+        toast.error("Failed to save holidays");
+      }
+    } catch (err) {
+      toast.error("Error saving holidays");
     }
   };
 
@@ -1521,6 +1572,114 @@ export default function LeavePage() {
                 </Select>
 
                 {canAddLeave && (
+                  <>
+                  <Dialog open={isFetchHolidaysDialogOpen} onOpenChange={setIsFetchHolidaysDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="h-9 bg-brand-orange hover:bg-brand-orange/90 text-white font-medium mr-2" onClick={() => {
+                        setFetchedHolidays([]);
+                        setSelectedFetchedHolidays(new Set());
+                      }}>
+                        <Globe className="w-4 h-4 mr-2" />
+                        Auto-Fetch
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[500px] max-h-[80vh] flex flex-col">
+                      <DialogHeader>
+                        <DialogTitle>Auto-Fetch External Holidays</DialogTitle>
+                        <DialogDescription>Fetch holidays for a specific country and year.</DialogDescription>
+                      </DialogHeader>
+                      <div className="flex gap-2 py-4 border-b">
+                        <Select value={fetchCountry} onValueChange={setFetchCountry}>
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Country Code" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="IN">India (IN)</SelectItem>
+                            <SelectItem value="US">United States (US)</SelectItem>
+                            <SelectItem value="GB">United Kingdom (GB)</SelectItem>
+                            <SelectItem value="AU">Australia (AU)</SelectItem>
+                            <SelectItem value="CA">Canada (CA)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select value={fetchYear} onValueChange={setFetchYear}>
+                          <SelectTrigger className="w-[100px]">
+                            <SelectValue placeholder="Year" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="2024">2024</SelectItem>
+                            <SelectItem value="2025">2025</SelectItem>
+                            <SelectItem value="2026">2026</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button onClick={handleFetchExternalHolidays} disabled={isFetchingHolidays} className="bg-slate-800 text-white">
+                          {isFetchingHolidays ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
+                        </Button>
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto py-2 max-h-[300px]">
+                        {fetchedHolidays.length > 0 ? (
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center px-1 pb-2">
+                              <span className="text-sm font-semibold">{fetchedHolidays.length} Holidays found</span>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  if (selectedFetchedHolidays.size === fetchedHolidays.length) {
+                                    setSelectedFetchedHolidays(new Set());
+                                  } else {
+                                    const all = new Set<string>();
+                                    fetchedHolidays.forEach((h: any) => all.add(h.date + '-' + h.name));
+                                    setSelectedFetchedHolidays(all);
+                                  }
+                                }}
+                              >
+                                {selectedFetchedHolidays.size === fetchedHolidays.length ? "Deselect All" : "Select All"}
+                              </Button>
+                            </div>
+                            {fetchedHolidays.map((h, i) => {
+                              const key = h.date + '-' + h.name;
+                              const isSelected = selectedFetchedHolidays.has(key);
+                              return (
+                                <div key={i} className="flex items-center space-x-3 bg-slate-50 p-2 rounded-md border border-slate-100">
+                                  <Checkbox 
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) => {
+                                      const newSet = new Set(selectedFetchedHolidays);
+                                      if (checked) newSet.add(key);
+                                      else newSet.delete(key);
+                                      setSelectedFetchedHolidays(newSet);
+                                    }}
+                                  />
+                                  <div className="flex flex-col flex-1">
+                                    <span className="text-sm font-semibold">{h.name}</span>
+                                    <span className="text-xs text-slate-500">{dayjs(h.date).format("MMM DD, YYYY")} - {h.type}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-slate-400 text-sm">
+                            Click Fetch to load holidays
+                          </div>
+                        )}
+                      </div>
+
+                      <DialogFooter className="pt-4 border-t">
+                        <Button variant="outline" onClick={() => setIsFetchHolidaysDialogOpen(false)}>Cancel</Button>
+                        <Button 
+                          className="bg-brand-teal hover:bg-brand-teal-light text-white" 
+                          onClick={handleSaveFetchedHolidays}
+                          disabled={selectedFetchedHolidays.size === 0}
+                        >
+                          Save Selected ({selectedFetchedHolidays.size})
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+
                   <Dialog open={isHolidayDialogOpen} onOpenChange={setIsHolidayDialogOpen}>
                     <DialogTrigger asChild>
                       <Button className="h-9 bg-brand-teal hover:bg-brand-teal-light text-white font-medium" onClick={() => {
@@ -1577,6 +1736,7 @@ export default function LeavePage() {
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
+                  </>
                 )}
               </div>
             </div>
@@ -1665,7 +1825,7 @@ export default function LeavePage() {
       
       {/* Calendar Dialog */}
       <Dialog open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-        <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[90vh]">
+        <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[90vh] [&>button]:hidden">
           <DialogHeader className="sr-only">
             <DialogTitle>Leave Calendar</DialogTitle>
             <DialogDescription>Visualize your planned time off and public holidays on a calendar view.</DialogDescription>
@@ -1771,6 +1931,13 @@ export default function LeavePage() {
                     </div>
                   );
                 }
+                
+                // Add empty slots for next month to keep grid height static (6 weeks = 42 cells)
+                const remainingSlots = 42 - days.length;
+                for (let i = 0; i < remainingSlots; i++) {
+                  days.push(<div key={`next-${i}`} className="aspect-square"></div>);
+                }
+                
                 return days;
               })()}
             </div>

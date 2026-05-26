@@ -881,6 +881,13 @@ async def delete_expense_claim(db, claim_id: str): return await delete_item(db, 
 
 async def get_holidays(db, skip: int = 0, limit: int = 100): return await get_items(db, "holidays", skip, limit)
 async def create_holiday(db, holiday: schemas.HolidayCreate): return await create_item(db, "holidays", holiday.dict())
+async def create_holidays_bulk(db, payload: schemas.HolidayBulkCreate):
+    holidays_data = [h.dict() for h in payload.holidays]
+    if not holidays_data:
+        return {"inserted": 0}
+    # using insert_many directly from Motor on our timestamped db
+    result = await db.holidays.insert_many(holidays_data)
+    return {"inserted": len(result.inserted_ids)}
 async def update_holiday(db, holiday_id: str, update: schemas.HolidayUpdate): return await update_item(db, "holidays", holiday_id, update.dict(exclude_unset=True))
 async def delete_holiday(db, holiday_id: str): return await delete_item(db, "holidays", holiday_id)
 
