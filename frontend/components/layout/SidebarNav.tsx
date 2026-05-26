@@ -177,7 +177,7 @@ export function SidebarNav() {
       menuItems.push(getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, workspaceChildren));
     }
     
-    if (isAdmin || checkPermission('remarks', 'canView')) {
+    if (user) {
       menuItems.push(getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />));
     }
 

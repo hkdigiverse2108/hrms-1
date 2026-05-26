@@ -87,11 +87,11 @@ export default function RemarksPage() {
 
   const isHR = user?.role?.toLowerCase() === 'hr';
   
-  const canViewRemarks = isAdmin || isHR || checkPermission('remarks', 'canView');
+  const canViewRemarks = !!user;
+  const canManageRemarks = isAdmin || isHR;
   const canAddRemarks = isAdmin || isHR || checkPermission('remarks', 'canAdd');
   const canEditRemarks = isAdmin || isHR || checkPermission('remarks', 'canEdit');
   const canDeleteRemarks = isAdmin || isHR || checkPermission('remarks', 'canDelete');
-  const canManageRemarks = canViewRemarks;
 
   useEffect(() => {
     if (!permissionsLoading) {
@@ -120,6 +120,35 @@ export default function RemarksPage() {
     details: "Language rule violation. Penalty amount of ₹10 applied.",
     date: new Date().toISOString().split('T')[0]
   });
+
+  // Calculate leaderboard of remarks per employee (all active remarks)
+  const leaderboard = React.useMemo(() => {
+    const counts: { [key: string]: { name: string; avatar: string; role: string; count: number; totalAmount: number } } = {};
+    
+    remarks.forEach(r => {
+      if (r.isDeleted) return;
+      const empId = r.employeeId;
+      if (!empId) return;
+      
+      const penaltyAmount = r.amount || getPenaltyAmount(r.type);
+      
+      if (!counts[empId]) {
+        counts[empId] = {
+          name: r.employeeName || "Unknown",
+          avatar: r.avatar || "",
+          role: r.role || "Staff",
+          count: 0,
+          totalAmount: 0
+        };
+      }
+      counts[empId].count += 1;
+      counts[empId].totalAmount += penaltyAmount;
+    });
+    
+    return Object.values(counts)
+      .sort((a, b) => b.count - a.count || b.totalAmount - a.totalAmount)
+      .slice(0, 5); // Get top 5
+  }, [remarks, penaltyTypes]);
 
   useEffect(() => {
     fetchData();
@@ -569,6 +598,70 @@ export default function RemarksPage() {
 
       <div className="space-y-6">
 
+      {/* Remarks Leaderboard */}
+      {leaderboard.length > 0 && (
+        <div className="bg-gradient-to-br from-teal-50/60 via-white to-slate-50 border border-slate-200/80 rounded-xl p-5 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-2">
+            <div>
+              <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-brand-teal animate-pulse"></span>
+                Remarks Leaderboard
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Public statistics showing top remarks and active penalty counts across the company.</p>
+            </div>
+            <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-100 shadow-2xs text-[11px] font-bold text-slate-500 uppercase tracking-wider self-start md:self-auto">
+              🏆 Top Penalty Leaderboard
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {leaderboard.map((item, idx) => {
+              const rankColors = [
+                "bg-amber-500/10 text-amber-700 border-amber-500/20", // 1st
+                "bg-slate-400/10 text-slate-700 border-slate-400/20", // 2nd
+                "bg-orange-500/10 text-orange-700 border-orange-500/20", // 3rd
+                "bg-slate-100 text-slate-600 border-slate-200", // 4th
+                "bg-slate-100 text-slate-600 border-slate-200"  // 5th
+              ];
+              const rankBadges = ["🥇 1st", "🥈 2nd", "🥉 3rd", "4th", "5th"];
+              
+              return (
+                <div key={idx} className="bg-white border border-slate-200/60 rounded-xl p-4 flex flex-col items-center text-center shadow-2xs hover:shadow-md hover:border-brand-teal/20 transition-all duration-300 group relative overflow-hidden">
+                  <div className="absolute top-2 left-2 z-10">
+                    <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${rankColors[idx]}`}>
+                      {rankBadges[idx]}
+                    </span>
+                  </div>
+                  
+                  <div className="relative mt-3">
+                    <Avatar className="w-16 h-16 border-2 border-slate-100 rounded-full group-hover:scale-105 transition-transform duration-300 overflow-hidden shadow-sm">
+                      <AvatarImage src={item.avatar} className="object-cover" />
+                      <AvatarFallback className="bg-brand-light text-brand-teal text-lg font-extrabold">
+                        {item.name?.split(' ').map((n:any) => n[0]).join('')}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+                  
+                  <div className="font-extrabold text-slate-800 text-[14px] mt-3 leading-snug truncate w-full group-hover:text-brand-teal transition-colors duration-200">{item.name}</div>
+                  <div className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5 truncate w-full">{item.role}</div>
+                  
+                  <div className="mt-4 flex items-center justify-between w-full pt-3 border-t border-slate-100 text-xs">
+                    <div className="text-left">
+                      <span className="text-[9px] text-muted-foreground uppercase font-extrabold tracking-wider block">Remarks</span>
+                      <span className="font-black text-slate-800 text-sm">{item.count}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] text-muted-foreground uppercase font-extrabold tracking-wider block">Penalties</span>
+                      <span className="font-black text-red-600 text-sm">₹{item.totalAmount}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Edit Modal */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="sm:max-w-[550px]">
@@ -669,15 +762,17 @@ export default function RemarksPage() {
         <div className="p-4 sm:p-6 border-b border-border flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            <div className="relative w-full sm:w-[250px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by employee name..." 
-                className="pl-9 bg-gray-50/50" 
-              />
-            </div>
+            {canManageRemarks && (
+              <div className="relative w-full sm:w-[250px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by employee name..." 
+                  className="pl-9 bg-gray-50/50" 
+                />
+              </div>
+            )}
 
             {canManageRemarks && (
               <div className="w-full sm:w-auto">
