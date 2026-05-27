@@ -414,7 +414,7 @@ export default function ChatPage() {
         if (scrollRef.current) {
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-      }, 100);
+      }, 50);
       shouldScrollToBottom.current = false;
     }
   }, []);
@@ -422,6 +422,18 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [currentMessages, typingUsers, scrollToBottom]);
+
+  // Force scroll to bottom whenever a new chat is opened
+  useEffect(() => {
+    if (selectedChat) {
+      shouldScrollToBottom.current = true;
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 200);
+    }
+  }, [selectedChat?.id]);
 
   const fetchEmployees = async () => {
     try {
@@ -629,6 +641,7 @@ export default function ChatPage() {
   const handleSelectChat = (chat: any) => {
     if (!chat) return;
     setSelectedChat(chat);
+    setCurrentMessages([]);  // Clear stale messages immediately on chat switch
     shouldScrollToBottom.current = true;
     // Force immediate local clear
     const chatId = chat.id || chat.employeeId;
@@ -710,6 +723,19 @@ export default function ChatPage() {
           }
           return marked;
         });
+
+        // After initial load (prev was empty), always scroll to the very bottom
+        setCurrentMessages(prev => {
+          if (prev.length === 0) {
+            shouldScrollToBottom.current = true;
+            setTimeout(() => {
+              if (scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+              }
+            }, 100);
+          }
+          return prev;
+        });
         
         // If there are unread messages from others, mark them seen
         const hasUnread = marked.some((m: any) => !m.isMe && (!m.seenBy || !m.seenBy.includes(user.id)));
@@ -757,7 +783,8 @@ export default function ChatPage() {
 
     isSendingRef.current = true;
 
-    const optimisticText = message || (pendingFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : ""));
+    const isImageFile = pendingFile && /\.(jpg|jpeg|png|gif|webp)$/i.test(pendingFile.name);
+    const optimisticText = message || (pendingFile && !isImageFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : ""));
     const tempId = `temp-${Date.now()}`;
 
     let payload: any = {
@@ -788,6 +815,12 @@ export default function ChatPage() {
       replyToId: replyingTo?.id,
       replyToText: replyingTo?.text,
       _optimistic: true,
+      // Show image preview instantly using blob URL before upload finishes
+      ...(isImageFile ? {
+        attachmentName: pendingFile.name,
+        attachmentUrl: URL.createObjectURL(pendingFile),
+        _blobUrl: true,
+      } : {}),
     };
     shouldScrollToBottom.current = true;
     setCurrentMessages(prev => [...prev, optimisticMessage]);
@@ -1860,20 +1893,31 @@ export default function ChatPage() {
                                   {renderMessageText(msg.text)}
                                 </div>
                                 {msg.attachmentUrl && (
-                                  <div className="mt-3 p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
-                                    <div className="flex items-center gap-2 overflow-hidden">
-                                      <FileIcon className="w-4 h-4 text-slate-400 shrink-0" />
-                                      <span className="text-[12px] font-bold text-slate-600 truncate">{msg.attachmentName}</span>
+                                  /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName || "") ? (
+                                    <div className="mt-3 rounded-lg overflow-hidden border border-black/10">
+                                      <img 
+                                        src={msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`}
+                                        alt={msg.attachmentName} 
+                                        className="max-w-full max-h-[200px] object-contain bg-black/5 cursor-pointer hover:opacity-90 transition-opacity"
+                                        onClick={() => handleDownload(msg.attachmentUrl, msg.attachmentName)}
+                                      />
                                     </div>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-8 w-8 rounded-lg text-brand-teal hover:bg-white"
-                                      onClick={() => handleDownload(msg.attachmentUrl, msg.attachmentName)}
-                                    >
-                                      <Download className="w-4 h-4" />
-                                    </Button>
-                                  </div>
+                                  ) : (
+                                    <div className="mt-3 p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                                      <div className="flex items-center gap-2 overflow-hidden">
+                                        <FileIcon className="w-4 h-4 text-slate-400 shrink-0" />
+                                        <span className="text-[12px] font-bold text-slate-600 truncate">{msg.attachmentName}</span>
+                                      </div>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 rounded-lg text-brand-teal hover:bg-white"
+                                        onClick={() => handleDownload(msg.attachmentUrl, msg.attachmentName)}
+                                      >
+                                        <Download className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  )
                                 )}
                               </div>
                             </div>
@@ -2192,29 +2236,44 @@ export default function ChatPage() {
                                 </div>
                               )}
                               {msg.attachmentName && !msg.isVoice && (
-                                <div className={cn(
-                                  "flex items-center gap-3 p-3 rounded-xl mb-2 border",
-                                  msg.isMe ? "bg-white/10 border-white/20" : "bg-gray-50 border-border"
-                                )}>
+                                /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) ? (
+                                  <div className="mb-2 rounded-xl overflow-hidden border border-black/10">
+                                    <img 
+                                      src={
+                                        msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
+                                        msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
+                                        `${API_URL}${msg.attachmentUrl}`
+                                      }
+                                      alt={msg.attachmentName} 
+                                      className="max-w-[280px] sm:max-w-[360px] max-h-[300px] w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                      onClick={() => !msg._blobUrl && handleDownload(msg.attachmentUrl, msg.attachmentName)}
+                                    />
+                                  </div>
+                                ) : (
                                   <div className={cn(
-                                    "p-2 rounded-lg",
-                                    msg.isMe ? "bg-white/20" : "bg-brand-teal/10"
+                                    "flex items-center gap-3 p-3 rounded-xl mb-2 border",
+                                    msg.isMe ? "bg-white/10 border-white/20" : "bg-gray-50 border-border"
                                   )}>
-                                    <FileIcon className={cn("w-5 h-5", msg.isMe ? "text-white" : "text-brand-teal")} />
+                                    <div className={cn(
+                                      "p-2 rounded-lg",
+                                      msg.isMe ? "bg-white/20" : "bg-brand-teal/10"
+                                    )}>
+                                      <FileIcon className={cn("w-5 h-5", msg.isMe ? "text-white" : "text-brand-teal")} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-bold text-xs truncate">{msg.attachmentName}</p>
+                                      <p className="text-[10px] opacity-70">Click to download</p>
+                                    </div>
+                                    <Button 
+                                      size="icon" 
+                                      variant="ghost" 
+                                      className={cn("h-8 w-8 rounded-full", msg.isMe ? "hover:bg-white/20 text-white" : "hover:bg-brand-teal/10 text-brand-teal")}
+                                      onClick={() => handleDownload(msg.attachmentUrl, msg.attachmentName)}
+                                    >
+                                      <Download className="w-4 h-4" />
+                                    </Button>
                                   </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-bold text-xs truncate">{msg.attachmentName}</p>
-                                    <p className="text-[10px] opacity-70">Click to download</p>
-                                  </div>
-                                  <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className={cn("h-8 w-8 rounded-full", msg.isMe ? "hover:bg-white/20 text-white" : "hover:bg-brand-teal/10 text-brand-teal")}
-                                    onClick={() => handleDownload(msg.attachmentUrl, msg.attachmentName)}
-                                  >
-                                    <Download className="w-4 h-4" />
-                                  </Button>
-                                </div>
+                                )
                               )}
 
                               {msg.isVoice && (
@@ -2347,7 +2406,7 @@ export default function ChatPage() {
                                 );
                               })()}
 
-                              {msg.text !== `Poll: ${msg.poll?.question}` && renderMessageText(msg.text, msg.isMe)}
+                              {msg.text !== `Poll: ${msg.poll?.question}` && !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName || "")) && renderMessageText(msg.text, msg.isMe)}
                             </>
                           )}
                           {msg.isEdited && <span className="ml-2 text-[8px] opacity-60 italic">(edited)</span>}
@@ -2537,6 +2596,21 @@ export default function ChatPage() {
                 <Input 
                   value={message}
                   onChange={(e) => handleInputChange(e.target.value)}
+                  onPaste={(e) => {
+                    const items = e.clipboardData?.items;
+                    if (items) {
+                      for (let i = 0; i < items.length; i++) {
+                        if (items[i].type.indexOf('image') !== -1) {
+                          const file = items[i].getAsFile();
+                          if (file) {
+                            setPendingFile(file);
+                            e.preventDefault();
+                            break;
+                          }
+                        }
+                      }
+                    }
+                  }}
                   placeholder={`Type your message to ${selectedChat.name}...`}
                   className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-sm placeholder:text-muted-foreground h-11"
                 />
