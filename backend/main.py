@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -9,6 +9,7 @@ import uuid
 from bson import ObjectId
 from database import get_db
 import holidays as pyholidays
+from websocket import manager as ws_manager
 
 
 app = FastAPI(title="HRMS API")
@@ -760,7 +761,35 @@ async def delete_chat_group(group_id: str, db=Depends(get_db)):
 
 @app.post("/chat/messages", response_model=schemas.ChatMessage)
 async def create_chat_message(message: schemas.ChatMessageCreate, db=Depends(get_db)):
-    return await crud.create_message(db, message)
+    saved_msg = await crud.create_message(db, message)
+    
+    # Broadcast to active clients in real-time
+    try:
+        group_id = saved_msg.get("groupId")
+        if group_id:
+            # Group or general channel message
+            is_group = await db.chat_groups.find_one({"_id": ObjectId(group_id)}) if len(group_id) == 24 else None
+            
+            member_ids = []
+            if is_group:
+                member_ids = [str(m) for m in is_group.get("members", [])]
+            else:
+                # General channel: broadcast to all active employees
+                employees = await db.employees.find().to_list(length=1000)
+                member_ids = [str(emp["_id"]) for emp in employees]
+                
+            await ws_manager.broadcast_to_group(member_ids, "new_message", saved_msg)
+        else:
+            # Personal message: broadcast to both receiver and sender
+            receiver_id = saved_msg.get("receiverId")
+            sender_id = saved_msg.get("senderId")
+            recipients = [receiver_id, sender_id]
+            await ws_manager.broadcast_to_group(recipients, "new_message", saved_msg)
+    except Exception as e:
+        import logging
+        logging.getLogger("websocket").warning(f"Error broadcasting new message: {e}")
+        
+    return saved_msg
 
 @app.put("/chat/messages/{message_id}", response_model=schemas.ChatMessage)
 async def update_chat_message(message_id: str, update: schemas.ChatMessageUpdate, db=Depends(get_db)):
@@ -777,6 +806,40 @@ async def delete_chat_message(message_id: str, db=Depends(get_db)):
 @app.post("/chat/mark-seen/{sender_id}/{receiver_id}")
 async def mark_messages_as_seen(sender_id: str, receiver_id: str, db=Depends(get_db)):
     await crud.mark_messages_as_seen(db, sender_id, receiver_id)
+    
+    # Broadcast seen event to active clients in real-time
+    try:
+        is_group = await db.chat_groups.find_one({"_id": ObjectId(sender_id)}) if len(sender_id) == 24 else None
+        is_channel = await db.chat_channels.find_one({"_id": ObjectId(sender_id)}) if len(sender_id) == 24 else None
+        
+        event_data = {
+            "chatId": sender_id,
+            "userId": receiver_id
+        }
+        
+        if is_group or is_channel or sender_id.startswith("gen-"):
+            # Group or General channel
+            member_ids = []
+            if is_group:
+                member_ids = [str(m) for m in is_group.get("members", [])]
+            else:
+                # General channel
+                employees = await db.employees.find().to_list(length=1000)
+                member_ids = [str(emp["_id"]) for emp in employees]
+            # Filter out the reader themselves
+            recipients = [m for m in member_ids if m != receiver_id]
+            await ws_manager.broadcast_to_group(recipients, "messages_seen", event_data)
+        else:
+            # Personal chat: send to the other user (sender_id)
+            personal_event_data = {
+                "chatId": receiver_id, # From the other user's perspective, this chat is with receiver_id
+                "userId": receiver_id
+            }
+            await ws_manager.send_personal_message(sender_id, "messages_seen", personal_event_data)
+    except Exception as e:
+        import logging
+        logging.getLogger("websocket").warning(f"Error broadcasting messages_seen event: {e}")
+        
     return {"message": "Messages marked as seen"}
 
 @app.get("/chat/unread-counts/{user_id}")
@@ -910,6 +973,57 @@ async def set_typing_status(chat_id: str, user_id: str, is_typing: bool, db=Depe
 async def get_typing_status(chat_id: str, user_id: str, db=Depends(get_db)):
     typing_users = await crud.get_typing_users(db, chat_id, user_id)
     return {"typingUsers": typing_users}
+
+@app.websocket("/chat/ws/{user_id}")
+async def chat_websocket_endpoint(websocket: WebSocket, user_id: str):
+    await ws_manager.connect(user_id, websocket)
+    try:
+        while True:
+            # Await client-sent JSON messages
+            data = await websocket.receive_json()
+            if isinstance(data, dict):
+                msg_type = data.get("type")
+                if msg_type == "typing":
+                    chat_id = data.get("chatId")
+                    is_typing = data.get("isTyping", False)
+                    if chat_id:
+                        event_data = {
+                            "chatId": chat_id,
+                            "userId": user_id,
+                            "isTyping": is_typing
+                        }
+                        # Find recipient list
+                        is_group = await database.db.chat_groups.find_one({"_id": ObjectId(chat_id)}) if len(chat_id) == 24 else None
+                        is_channel = await database.db.chat_channels.find_one({"_id": ObjectId(chat_id)}) if len(chat_id) == 24 else None
+                        
+                        if is_group or is_channel or chat_id.startswith("gen-"):
+                            # Broadcast to group members
+                            member_ids = []
+                            if is_group:
+                                # Convert ObjectId members to strings
+                                member_ids = [str(m) for m in is_group.get("members", [])]
+                            else:
+                                # General channel: broadcast to all active employees
+                                employees = await database.db.employees.find().to_list(length=1000)
+                                member_ids = [str(emp["_id"]) for emp in employees]
+                            
+                            # Filter out the typing user themselves to avoid echo
+                            recipients = [m for m in member_ids if m != user_id]
+                            await ws_manager.broadcast_to_group(recipients, "typing_status", event_data)
+                        else:
+                            # Personal chat: send directly to the recipient (which is chat_id)
+                            personal_event_data = {
+                                "chatId": user_id,
+                                "userId": user_id,
+                                "isTyping": is_typing
+                            }
+                            await ws_manager.send_personal_message(chat_id, "typing_status", personal_event_data)
+    except WebSocketDisconnect:
+        ws_manager.disconnect(user_id)
+    except Exception as e:
+        import logging
+        logging.getLogger("websocket").warning(f"WebSocket error for user {user_id}: {e}")
+        ws_manager.disconnect(user_id)
 
 # Employee Document Endpoints
 @app.post("/employee-documents", response_model=schemas.EmployeeDocument)
@@ -1108,6 +1222,41 @@ async def read_employee_time_recoveries(employee_id: str, db=Depends(get_db)):
 @app.put('/time-recovery/{recovery_id}/status', response_model=schemas.TimeRecovery)
 async def update_time_recovery_status(recovery_id: str, status: str, db=Depends(get_db)):
     return await crud.update_time_recovery_status(db, recovery_id, status)
+
+# Invoice Endpoints
+@app.post("/invoices", response_model=schemas.Invoice)
+async def create_invoice(invoice: schemas.InvoiceCreate, db=Depends(get_db)):
+    return await crud.create_invoice(db, invoice)
+
+@app.get("/invoices", response_model=List[schemas.Invoice])
+async def read_invoices(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_invoices(db, skip=skip, limit=limit)
+
+@app.get("/invoices/next-number")
+async def get_next_number(db=Depends(get_db)):
+    next_num = await crud.get_next_invoice_number(db)
+    return {"nextInvoiceNumber": next_num}
+
+@app.get("/invoices/{invoice_id}", response_model=schemas.Invoice)
+async def read_invoice(invoice_id: str, db=Depends(get_db)):
+    db_invoice = await crud.get_invoice(db, invoice_id)
+    if db_invoice is None:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return db_invoice
+
+@app.put("/invoices/{invoice_id}", response_model=schemas.Invoice)
+async def update_invoice(invoice_id: str, invoice_update: schemas.InvoiceUpdate, db=Depends(get_db)):
+    updated = await crud.update_invoice(db, invoice_id, invoice_update)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return updated
+
+@app.delete("/invoices/{invoice_id}")
+async def delete_invoice(invoice_id: str, db=Depends(get_db)):
+    success = await crud.delete_invoice(db, invoice_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"message": "Invoice deleted successfully"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))

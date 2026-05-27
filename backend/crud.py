@@ -3478,3 +3478,60 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
             print(f"Correction logic error: {e}")
     return fix_id(doc)
 
+# Invoice CRUD
+async def create_invoice(db, invoice: schemas.InvoiceCreate):
+    invoice_dict = invoice.dict()
+    invoice_dict["timestamp"] = get_now().isoformat()
+    result = await db.invoices.insert_one(invoice_dict)
+    invoice_dict["id"] = str(result.inserted_id)
+    if "_id" in invoice_dict:
+        invoice_dict.pop("_id")
+    return invoice_dict
+
+async def get_invoices(db, skip: int = 0, limit: int = 100):
+    cursor = db.invoices.find().sort("timestamp", -1).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def get_invoice(db, invoice_id: str):
+    row = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
+    return fix_id(row) if row else None
+
+async def update_invoice(db, invoice_id: str, invoice_update: schemas.InvoiceUpdate):
+    update_data = invoice_update.dict(exclude_unset=True)
+    await db.invoices.update_one({"_id": ObjectId(invoice_id)}, {"$set": update_data})
+    updated_doc = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
+    return fix_id(updated_doc) if updated_doc else None
+
+async def delete_invoice(db, invoice_id: str):
+    await db.invoices.delete_one({"_id": ObjectId(invoice_id)})
+    return True
+
+async def get_next_invoice_number(db):
+    import re
+    from datetime import datetime
+    current_year = datetime.now().year
+    
+    cursor = db.invoices.find()
+    invoices = await cursor.to_list(length=1000)
+    
+    max_num = 0
+    for inv in invoices:
+        num_str = inv.get("invoiceNumber", "")
+        # Match standard format with year: INV-2026-0001
+        match = re.match(r'^INV-(\d{4})-(\d+)$', num_str)
+        if match:
+            try:
+                year = int(match.group(1))
+                num = int(match.group(2))
+                # Increment sequence within the current calendar year
+                if year == current_year:
+                    if num > max_num:
+                        max_num = num
+            except ValueError:
+                pass
+                
+    next_num = max_num + 1
+    return f"INV-{current_year}-{next_num:03d}"
+
+

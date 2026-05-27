@@ -454,7 +454,7 @@ export default function EmployeeListPage() {
         </div>
 
         {/* Pagination Setup */}
-        <TablePagination totalItems={filteredEmployees.length} itemsPerPage={filteredEmployees.length} currentPage={1} itemName="employees" />
+        <TablePagination totalItems={filteredEmployees.length} itemsPerPage={filteredEmployees.length} currentPage={1} onPageChange={() => {}} itemName="employees" />
       </div>
 
       <EmployeeModal 

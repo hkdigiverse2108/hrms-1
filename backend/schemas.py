@@ -1103,6 +1103,7 @@ class ChatMessageBase(BaseModel):
     isMe: Optional[bool] = None # Helper for frontend
     sender: Optional[str] = None # Resolved sender name
     timestamp: Optional[str] = None
+    tempId: Optional[str] = None
     isEdited: bool = False
     isSeen: bool = False
     replyToId: Optional[str] = None
@@ -1326,3 +1327,52 @@ class TimeRecoveryCreate(TimeRecoveryBase):
 
 class TimeRecovery(TimeRecoveryBase):   
     id: str
+
+class InvoiceLineItem(BaseModel):
+    description: str
+    subDescription: Optional[str] = None
+    rate: float
+    amount: float
+
+class InvoiceBase(BaseModel):
+    clientName: str
+    clientAddress: Optional[str] = None
+    clientEmail: Optional[str] = None
+    clientPhone: Optional[str] = None
+    clientDepartment: Optional[str] = None
+    invoiceNumber: str
+    issueDate: str
+    dueDate: str
+    lineItems: List[InvoiceLineItem]
+    discount: float = 0.0
+    tax: float = 0.0
+    subtotal: float
+    total: float
+    notes: Optional[str] = None
+    status: str = "Pending"  # Pending, Paid, Overdue
+
+class InvoiceCreate(InvoiceBase):
+    pass
+
+class InvoiceUpdate(BaseModel):
+    clientName: Optional[str] = None
+    clientAddress: Optional[str] = None
+    clientEmail: Optional[str] = None
+    clientPhone: Optional[str] = None
+    clientDepartment: Optional[str] = None
+    invoiceNumber: Optional[str] = None
+    issueDate: Optional[str] = None
+    dueDate: Optional[str] = None
+    lineItems: Optional[List[InvoiceLineItem]] = None
+    discount: Optional[float] = None
+    tax: Optional[float] = None
+    subtotal: Optional[float] = None
+    total: Optional[float] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+
+class Invoice(InvoiceBase):
+    id: str
+    timestamp: str
+    class Config:
+        from_attributes = True

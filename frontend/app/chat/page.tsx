@@ -218,6 +218,14 @@ export default function ChatPage() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [isWsConnected, setIsWsConnected] = useState(false);
+  const selectedChatRef = useRef<any>(null);
+
+  useEffect(() => {
+    selectedChatRef.current = selectedChat;
+  }, [selectedChat]);
+
   const [showCreatePoll, setShowCreatePoll] = useState(false);
   const [pollData, setPollData] = useState({ 
     question: "", 
@@ -466,23 +474,12 @@ export default function ChatPage() {
       fetchChannels();
       fetchSavedMessages();
       fetchEmployees();
-      const interval = setInterval(() => {
-        fetchUnreadCounts();
-        fetchChatSummaries();
-        fetchSavedMessages();
-        fetchEmployees();
-      }, 5000);
-      return () => clearInterval(interval);
     }
   }, [user]);
 
   useEffect(() => {
     if (user && selectedChat) {
       fetchTypingStatus();
-      const typingInterval = setInterval(() => {
-        fetchTypingStatus();
-      }, 1500);
-      return () => clearInterval(typingInterval);
     }
   }, [user, selectedChat]);
 
@@ -575,14 +572,10 @@ export default function ChatPage() {
     }
   };
 
-  // Background polling for unread counts (updates tab title and UI in real-time even when tab is open in background)
+  // Initially fetch unread counts on user changes
   useEffect(() => {
     if (!user) return;
     fetchUnreadCounts();
-    const interval = setInterval(() => {
-      fetchUnreadCounts();
-    }, 3500);
-    return () => clearInterval(interval);
   }, [user]);
 
   const fetchSavedMessages = async () => {
@@ -766,15 +759,198 @@ export default function ChatPage() {
       fetchMessages();
       fetchGroups();
       fetchChatFiles();
-      const interval = setInterval(() => {
-        fetchMessages();
-        fetchGroups();
-      }, 3000);
-      return () => clearInterval(interval);
     } else if (user) {
       fetchGroups();
     }
   }, [selectedChat, user, fetchMessages, fetchGroups]);
+
+  // Main WebSocket Connection and Listener lifecycle hook
+  useEffect(() => {
+    if (!user || !user.id) return;
+
+    let reconnectTimeout: any;
+    let reconnectAttempts = 0;
+    
+    const connectWebSocket = () => {
+      const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsHost = window.location.hostname || "127.0.0.1";
+      const wsUrl = `${wsProtocol}//${wsHost}:8000/chat/ws/${user.id}`;
+      
+      console.log("Connecting to Chat WebSocket...", wsUrl);
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log("Chat WebSocket Connected successfully.");
+        setIsWsConnected(true);
+        reconnectAttempts = 0;
+      };
+
+      ws.onclose = (event) => {
+        console.log("Chat WebSocket disconnected.", event.reason);
+        setIsWsConnected(false);
+        wsRef.current = null;
+        
+        // Auto-reconnect with exponential backoff capped at 3 seconds
+        if (reconnectAttempts < 10) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 3000);
+          console.log(`Reconnecting to Chat WebSocket in ${delay}ms...`);
+          reconnectTimeout = setTimeout(() => {
+            reconnectAttempts++;
+            connectWebSocket();
+          }, delay);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error("Chat WebSocket error encountered:", err);
+        ws.close();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          const { event: eventType, data } = payload;
+          console.log("WebSocket event received:", eventType, data);
+
+          if (eventType === "new_message") {
+            const activeChat = selectedChatRef.current;
+            const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
+            
+            const isGroupMsg = data.groupId !== null;
+            const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
+            
+            if (activeChatId === messageChatId) {
+              // Append to active chat messages
+              setCurrentMessages((prev) => {
+                // Deduplicate message if optimistic UI already rendered it
+                if (prev.some((m) => m.id === data.id || (data.tempId && (m.tempId === data.tempId || m.id === data.tempId)))) {
+                  return prev.map(m => (m.tempId === data.tempId || m.id === data.tempId || m.id === data.id) ? { ...data, isMe: data.senderId === user.id } : m);
+                }
+                return [...prev, { ...data, isMe: data.senderId === user.id }];
+              });
+              
+              // Automatically clear seen status since user is actively viewing this chat
+              fetch(`${API_URL}/chat/mark-seen/${messageChatId}/${user.id}`, { method: 'POST' });
+            } else {
+              // Not viewing this chat: increment unread count in state!
+              setUnreadCounts((prev) => {
+                const next = { ...prev };
+                next[messageChatId] = (next[messageChatId] || 0) + 1;
+                return next;
+              });
+              
+              // Play alert chime and trigger system push notification if enabled
+              const isMuted = mutedChats.includes(messageChatId);
+              if (!data.isMe && !isMuted && !globalDndEnabled) {
+                const pref = chatNotificationPrefs[messageChatId] || { mode: globalDefaultMode, sound: globalDefaultSound };
+                const resolvedMode = pref.mode === "default" || !pref.mode ? globalDefaultMode : pref.mode;
+                const resolvedSound = pref.sound === "default" || !pref.sound ? globalDefaultSound : pref.sound;
+                
+                const isMention = (() => {
+                  if (!data.text) return false;
+                  const mentions = data.text.match(/@\w+/g);
+                  if (!mentions) return false;
+                  const firstName = user?.firstName?.toLowerCase() || "";
+                  const lastName = user?.lastName?.toLowerCase() || "";
+                  const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
+                  const strippedFullName = fullName.replace(/\s+/g, "");
+                  
+                  return mentions.some((m: string) => {
+                    const mentionName = m.substring(1).toLowerCase();
+                    if (!mentionName) return false;
+                    return (
+                      (firstName && firstName === mentionName) ||
+                      (lastName && lastName === mentionName) ||
+                      (fullName && fullName.includes(mentionName)) ||
+                      (strippedFullName && strippedFullName === mentionName)
+                    );
+                  });
+                })();
+                
+                const isPersonal = !data.groupId;
+                if (resolvedMode === "all" || (resolvedMode === "mentions" && (isMention || isPersonal))) {
+                  playTestSound(resolvedSound);
+                  
+                  const isTabInactive = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
+                  if (isTabInactive && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                    const senderName = data.sender || "Colleague";
+                    const body = data.text || "Sent an attachment";
+                    const title = isGroupMsg ? `💬 ${senderName} (Group Chat)` : `💬 ${senderName}`;
+                    new Notification(title, {
+                      body,
+                      icon: "/favicon.ico"
+                    });
+                  }
+                }
+              }
+            }
+            
+            // Live refresh lists
+            fetchChatSummaries();
+            fetchGroups();
+            fetchChannels();
+          } 
+          
+          else if (eventType === "typing_status") {
+            const activeChat = selectedChatRef.current;
+            const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
+            const { chatId: eventChatId, userId: typingUserId, isTyping } = data;
+            
+            if (activeChatId === eventChatId) {
+              setTypingUsers((prev) => {
+                const empName = employees.find(e => e.id === typingUserId || e._id === typingUserId)?.name || "Someone";
+                if (isTyping) {
+                  if (prev.includes(empName)) return prev;
+                  return [...prev, empName];
+                } else {
+                  return prev.filter(name => name !== empName);
+                }
+              });
+            }
+          }
+          
+          else if (eventType === "messages_seen") {
+            const { chatId: seenChatId, userId: readerUserId } = data;
+            const activeChat = selectedChatRef.current;
+            const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
+            
+            if (activeChatId === seenChatId) {
+              setCurrentMessages((prev) => 
+                prev.map((msg) => {
+                  if (msg.senderId === user.id) {
+                    const seenBy = msg.seenBy || [];
+                    if (!seenBy.includes(readerUserId)) {
+                      return { ...msg, seenBy: [...seenBy, readerUserId] };
+                    }
+                  }
+                  return msg;
+                })
+              );
+            }
+            setUnreadCounts((prev) => {
+              const next = { ...prev };
+              if (readerUserId === user.id) {
+                delete next[seenChatId];
+              }
+              return next;
+            });
+          }
+        } catch (e) {
+          console.error("Error parsing WebSocket message:", e);
+        }
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      clearTimeout(reconnectTimeout);
+    };
+  }, [user, employees, mutedChats, chatNotificationPrefs, globalDndEnabled, globalDefaultMode, globalDefaultSound]);
 
   const handleSendMessage = async (extraData: any = null) => {
     // Prevent double-send on rapid taps
@@ -792,7 +968,8 @@ export default function ChatPage() {
       receiverId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : selectedChat.id,
       groupId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? selectedChat.id : null,
       text: optimisticText,
-      type: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : "personal"
+      type: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : "personal",
+      tempId: tempId
     };
 
     if (extraData) {
@@ -1219,14 +1396,32 @@ export default function ChatPage() {
   // Typing logic
   const handleTyping = () => {
     if (!user || !selectedChat) return;
+    const chatId = selectedChat.id || selectedChat.employeeId;
+    if (!chatId) return;
     
-    // Notify server we are typing
-    fetch(`${API_URL}/chat/typing?chat_id=${selectedChat.id}&user_id=${user.id}&is_typing=true`, { method: 'POST' });
+    // Notify server we are typing via WebSocket if connected, with fallback to standard REST
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "typing",
+        chatId: chatId,
+        isTyping: true
+      }));
+    } else {
+      fetch(`${API_URL}/chat/typing?chat_id=${chatId}&user_id=${user.id}&is_typing=true`, { method: 'POST' });
+    }
     
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     
     typingTimeoutRef.current = setTimeout(() => {
-      fetch(`${API_URL}/chat/typing?chat_id=${selectedChat.id}&user_id=${user.id}&is_typing=false`, { method: 'POST' });
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: "typing",
+          chatId: chatId,
+          isTyping: false
+        }));
+      } else {
+        fetch(`${API_URL}/chat/typing?chat_id=${chatId}&user_id=${user.id}&is_typing=false`, { method: 'POST' });
+      }
     }, 3000);
   };
 
