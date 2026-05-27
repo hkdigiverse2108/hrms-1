@@ -437,7 +437,7 @@ export default function ChatPage() {
         if (scrollRef.current) {
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-      }, 100);
+      }, 50);
       shouldScrollToBottom.current = false;
     }
   }, []);
@@ -445,6 +445,18 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [currentMessages, typingUsers, scrollToBottom]);
+
+  // Force scroll to bottom whenever a new chat is opened
+  useEffect(() => {
+    if (selectedChat) {
+      shouldScrollToBottom.current = true;
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 200);
+    }
+  }, [selectedChat?.id]);
 
   const fetchEmployees = async () => {
     try {
@@ -636,6 +648,7 @@ export default function ChatPage() {
   const handleSelectChat = (chat: any) => {
     if (!chat) return;
     setSelectedChat(chat);
+    setCurrentMessages([]);  // Clear stale messages immediately on chat switch
     shouldScrollToBottom.current = true;
     // Force immediate local clear
     const chatId = chat.id || chat.employeeId;
@@ -715,6 +728,19 @@ export default function ChatPage() {
             }
           }
           return marked;
+        });
+
+        // After initial load (prev was empty), always scroll to the very bottom
+        setCurrentMessages(prev => {
+          if (prev.length === 0) {
+            shouldScrollToBottom.current = true;
+            setTimeout(() => {
+              if (scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+              }
+            }, 100);
+          }
+          return prev;
         });
         
         // If there are unread messages from others, mark them seen
