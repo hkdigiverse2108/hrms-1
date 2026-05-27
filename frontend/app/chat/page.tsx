@@ -2557,6 +2557,21 @@ export default function ChatPage() {
                 <Input 
                   value={message}
                   onChange={(e) => handleInputChange(e.target.value)}
+                  onPaste={(e) => {
+                    const items = e.clipboardData?.items;
+                    if (items) {
+                      for (let i = 0; i < items.length; i++) {
+                        if (items[i].type.indexOf('image') !== -1) {
+                          const file = items[i].getAsFile();
+                          if (file) {
+                            setPendingFile(file);
+                            e.preventDefault();
+                            break;
+                          }
+                        }
+                      }
+                    }
+                  }}
                   placeholder={`Type your message to ${selectedChat.name}...`}
                   className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-sm placeholder:text-muted-foreground h-11"
                 />
