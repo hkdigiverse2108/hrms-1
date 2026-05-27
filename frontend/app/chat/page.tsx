@@ -428,6 +428,7 @@ export default function ChatPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
   const typingTimeoutRef = useRef<any>(null);
+  const isSendingRef = useRef(false);
 
 
   const scrollToBottom = useCallback((force = false) => {
@@ -756,13 +757,20 @@ export default function ChatPage() {
   }, [selectedChat, user, fetchMessages, fetchGroups]);
 
   const handleSendMessage = async (extraData: any = null) => {
+    // Prevent double-send on rapid taps
+    if (isSendingRef.current) return;
     if (!extraData && (!message.trim() && !pendingFile) || !selectedChat || !user) return;
+
+    isSendingRef.current = true;
+
+    const optimisticText = message || (pendingFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : ""));
+    const tempId = `temp-${Date.now()}`;
 
     let payload: any = {
       senderId: user.id,
       receiverId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : selectedChat.id,
       groupId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? selectedChat.id : null,
-      text: message || (pendingFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : "")),
+      text: optimisticText,
       type: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : "personal"
     };
 
@@ -775,15 +783,36 @@ export default function ChatPage() {
       payload.replyToText = replyingTo.text;
     }
 
-    if (pendingFile) {
-      if (pendingFile.size > 512 * 1024 * 1024) {
+    // --- Optimistic UI: show message instantly before server responds ---
+    const optimisticMessage: any = {
+      id: tempId,
+      text: optimisticText,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      sender: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      senderId: user.id,
+      isMe: true,
+      replyToId: replyingTo?.id,
+      replyToText: replyingTo?.text,
+      _optimistic: true,
+    };
+    shouldScrollToBottom.current = true;
+    setCurrentMessages(prev => [...prev, optimisticMessage]);
+    // Clear input fields immediately so the user gets instant feedback
+    setMessage("");
+    setReplyingTo(null);
+    const capturedFile = pendingFile;
+    setPendingFile(null);
+
+    if (capturedFile) {
+      if (capturedFile.size > 512 * 1024 * 1024) {
         alert("File size cannot exceed 512 MB");
-        setPendingFile(null);
+        setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
+        isSendingRef.current = false;
         return;
       }
       // Real upload to backend
       const formData = new FormData();
-      formData.append('file', pendingFile);
+      formData.append('file', capturedFile);
       
       try {
         const uploadRes = await fetch(`${API_URL}/chat/upload`, {
@@ -796,11 +825,15 @@ export default function ChatPage() {
           payload.attachmentName = uploadData.filename;
         } else {
           alert("Failed to upload file. Please try again.");
+          setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
+          isSendingRef.current = false;
           return;
         }
       } catch (err) {
         console.error("Upload error:", err);
         alert("An error occurred during upload.");
+        setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
+        isSendingRef.current = false;
         return;
       }
     }
@@ -814,14 +847,20 @@ export default function ChatPage() {
 
       if (res.ok) {
         const newMessage = await res.json();
-        shouldScrollToBottom.current = true;
-        setCurrentMessages(prev => [...prev, { ...newMessage, isMe: true }]);
-        setMessage("");
-        setReplyingTo(null);
-        setPendingFile(null);
+        // Replace the optimistic placeholder with the confirmed server message
+        setCurrentMessages(prev =>
+          prev.map(m => m.id === tempId ? { ...newMessage, isMe: true } : m)
+        );
+      } else {
+        // Remove the optimistic message if the server rejected it
+        setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
       }
     } catch (err) {
       console.error("Error sending message:", err);
+      // Remove the optimistic message on network error
+      setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
+    } finally {
+      isSendingRef.current = false;
     }
   };
 
