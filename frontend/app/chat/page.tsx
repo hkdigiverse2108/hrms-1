@@ -227,7 +227,7 @@ export default function ChatPage() {
 
   const [mutedChats, setMutedChats] = useState<string[]>([]);
   const [chatNotificationPrefs, setChatNotificationPrefs] = useState<Record<string, { mode: string; sound: string }>>({});
-  const [desktopAlertsEnabled, setDesktopAlertsEnabled] = useState(false);
+
   const [globalDndEnabled, setGlobalDndEnabled] = useState(false);
   const [globalDefaultMode, setGlobalDefaultMode] = useState("all");
   const [globalDefaultSound, setGlobalDefaultSound] = useState("default");
@@ -285,16 +285,15 @@ export default function ChatPage() {
     if (savedPrefs) {
       try { setChatNotificationPrefs(JSON.parse(savedPrefs)); } catch (e) { console.error(e); }
     }
-    const savedAlerts = localStorage.getItem("desktopAlertsEnabled");
-    if (savedAlerts === "true" && typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "granted") {
-        setDesktopAlertsEnabled(true);
-      }
+    // Auto-request notification permission so desktop alerts always work (blocked only by DND)
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
     }
     const savedDnd = localStorage.getItem("globalDndEnabled");
     if (savedDnd) setGlobalDndEnabled(savedDnd === "true");
     const savedGlobalMode = localStorage.getItem("globalDefaultMode");
-    if (savedGlobalMode) setGlobalDefaultMode(savedGlobalMode);
+    if (savedGlobalMode && savedGlobalMode !== "none") setGlobalDefaultMode(savedGlobalMode);
+    else if (savedGlobalMode === "none") { setGlobalDefaultMode("all"); localStorage.setItem("globalDefaultMode", "all"); }
     const savedGlobalSound = localStorage.getItem("globalDefaultSound");
     if (savedGlobalSound) setGlobalDefaultSound(savedGlobalSound);
   }, []);
@@ -319,29 +318,7 @@ export default function ChatPage() {
     localStorage.setItem("mutedChats", JSON.stringify(next));
   };
 
-  const toggleDesktopAlerts = async () => {
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      alert("System notifications are not supported in this browser.");
-      return;
-    }
 
-    if (desktopAlertsEnabled) {
-      setDesktopAlertsEnabled(false);
-      localStorage.setItem("desktopAlertsEnabled", "false");
-    } else {
-      const permission = await Notification.requestPermission();
-      if (permission === "granted") {
-        setDesktopAlertsEnabled(true);
-        localStorage.setItem("desktopAlertsEnabled", "true");
-        new Notification("HRMS Chat", {
-          body: "Desktop alerts successfully enabled! You will now receive notifications when a new message arrives.",
-          icon: "/favicon.ico"
-        });
-      } else {
-        alert("Permission denied. Please enable notifications in your browser settings to receive alerts.");
-      }
-    }
-  };
 
   const toggleGlobalDnd = () => {
     const next = !globalDndEnabled;
@@ -633,6 +610,22 @@ export default function ChatPage() {
     }
   };
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (selectedChat) {
+        const chatId = selectedChat.id || selectedChat.employeeId;
+        localStorage.setItem("activeChatId", chatId);
+      } else {
+        localStorage.removeItem("activeChatId");
+      }
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("activeChatId");
+      }
+    };
+  }, [selectedChat]);
+
   const handleSelectChat = (chat: any) => {
     if (!chat) return;
     setSelectedChat(chat);
@@ -686,7 +679,7 @@ export default function ChatPage() {
                 const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
                 const strippedFullName = fullName.replace(/\s+/g, "");
                 
-                return mentions.some(m => {
+                return mentions.some((m: string) => {
                   const mentionName = m.substring(1).toLowerCase();
                   if (!mentionName) return false;
                   return (
@@ -698,7 +691,8 @@ export default function ChatPage() {
                 });
               })();
               
-              if (resolvedMode === "all" || (resolvedMode === "mentions" && isMention)) {
+              const isPersonal = !lastMsg.groupId;
+              if (resolvedMode === "all" || (resolvedMode === "mentions" && (isMention || isPersonal))) {
                 // 1. Play chime sound
                 playTestSound(resolvedSound);
 
@@ -718,7 +712,7 @@ export default function ChatPage() {
         });
         
         // If there are unread messages from others, mark them seen
-        const hasUnread = marked.some(m => !m.isMe && (!m.seenBy || !m.seenBy.includes(user.id)));
+        const hasUnread = marked.some((m: any) => !m.isMe && (!m.seenBy || !m.seenBy.includes(user.id)));
         if (hasUnread) {
           markAsSeen();
         }
@@ -1366,18 +1360,18 @@ export default function ChatPage() {
 
   const totalPersonalUnread = useMemo(() => {
     return Object.entries(unreadCounts).reduce((acc, [id, count]) => {
-      const isGroup = chatGroups.some(g => g.id === id);
-      const isGeneral = chatChannels.some(c => c.id === id) || id.startsWith("gen-");
-      if (!isGroup && !isGeneral) {
+      const isPersonal = chats.some(c => c.id === id);
+      if (isPersonal) {
         return acc + (count as number);
       }
       return acc;
     }, 0);
-  }, [unreadCounts, chatGroups, chatChannels]);
+  }, [unreadCounts, chats]);
 
   const totalGroupsUnread = useMemo(() => {
     return Object.entries(unreadCounts).reduce((acc, [id, count]) => {
-      if (chatGroups.some(g => g.id === id)) {
+      const isGroup = chatGroups.some(g => g.id === id);
+      if (isGroup) {
         return acc + (count as number);
       }
       return acc;
@@ -1386,7 +1380,8 @@ export default function ChatPage() {
 
   const totalGeneralUnread = useMemo(() => {
     return Object.entries(unreadCounts).reduce((acc, [id, count]) => {
-      if (chatChannels.some(c => c.id === id)) {
+      const isGeneral = chatChannels.some(c => c.id === id);
+      if (isGeneral) {
         return acc + (count as number);
       }
       return acc;
@@ -1432,19 +1427,6 @@ export default function ChatPage() {
                       </div>
 
                       <div className="space-y-3">
-                        {/* Global Desktop Alerts Toggle */}
-                        <div className="flex items-center justify-between pb-1">
-                          <div className="space-y-0.5">
-                            <label className="text-xs font-bold text-slate-700 block">Desktop Push Alerts</label>
-                            <span className="text-[10px] text-slate-400 font-medium">Show OS notifications when site is inactive</span>
-                          </div>
-                          <Checkbox 
-                            checked={desktopAlertsEnabled}
-                            onCheckedChange={toggleDesktopAlerts}
-                            className="border-slate-300 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
-                          />
-                        </div>
-
                         {/* Do Not Disturb Toggle */}
                         <div className="flex items-center justify-between pb-1">
                           <div className="space-y-0.5">
@@ -1469,27 +1451,9 @@ export default function ChatPage() {
                               >
                                 <option value="all">All Messages</option>
                                 <option value="mentions">@ Mentions Only</option>
-                                <option value="none">Muted</option>
                               </select>
                             </div>
 
-                            <div className="space-y-1.5 pt-1">
-                              <label className="text-xs font-bold text-slate-700 block">Default Chime Sound</label>
-                              <select 
-                                value={globalDefaultSound}
-                                onChange={(e) => {
-                                  const sound = e.target.value;
-                                  updateGlobalDefaultSound(sound);
-                                  playTestSound(sound);
-                                }}
-                                className="w-full h-9 rounded-lg border border-slate-200 bg-white text-xs px-2.5 text-slate-700 outline-none focus:border-brand-teal focus:ring-1 focus:ring-brand-teal transition-all font-semibold"
-                              >
-                                <option value="default">🎶 Default Chime</option>
-                                <option value="beep">🔔 Retro Beep</option>
-                                <option value="bubble">🫧 Bubble Pop</option>
-                                <option value="silent">🔇 Silent (Vibrate Only)</option>
-                              </select>
-                            </div>
                           </>
                         )}
                       </div>
@@ -1630,7 +1594,7 @@ export default function ChatPage() {
                     key={group.id}
                     onClick={() => handleSelectChat({ ...group, type: 'group' })}
                     className={cn(
-                      "flex items-center gap-4 p-4 cursor-pointer transition-all border-b border-border/50 hover:bg-gray-50",
+                      "flex items-center gap-4 p-4 cursor-pointer transition-all border-b border-border/50 hover:bg-gray-50 group",
                       selectedChat?.id === group.id && "bg-brand-teal/5 border-l-4 border-l-brand-teal"
                     )}
                   >
@@ -1650,41 +1614,42 @@ export default function ChatPage() {
                         <h3 className="font-bold text-[14px] text-foreground truncate">{group.name}</h3>
                         <span className="text-[10px] font-semibold text-muted-foreground">{group.lastMessageTime}</span>
                       </div>
-                    <div className="flex items-center gap-2">
-                      {unreadCounts[group.id] > 0 ? (
-                        <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
-                          {unreadCounts[group.id]}
-                        </Badge>
-                      ) : (
-                         <div className="w-2 h-2 rounded-full bg-slate-200 shrink-0" />
-                      )}
-                      {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-white shrink-0">
-                              <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem className="gap-2" onClick={(e) => { 
-                              e.stopPropagation(); 
-                              setNewGroupName(group.name);
-                              setSelectedGroupMembers(group.members);
-                              setIsEditingGroup(true);
-                              setShowCreateGroup(true);
-                              setSelectedChat({ ...group, type: 'group' });
-                            }}>
-                              <Pencil className="w-4 h-4 text-brand-teal" /> Edit Group
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="gap-2 text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }}>
-                              <Trash2 className="w-4 h-4" /> Delete Group
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[12px] text-muted-foreground truncate flex-1">
+                          {group.lastMessage || "No messages yet"}
+                        </p>
+                        {unreadCounts[group.id] > 0 && (
+                          <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
+                            {unreadCounts[group.id]}
+                          </Badge>
+                        )}
+                        {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-white shrink-0">
+                                <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem className="gap-2" onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setNewGroupName(group.name);
+                                setSelectedGroupMembers(group.members);
+                                setIsEditingGroup(true);
+                                setShowCreateGroup(true);
+                                setSelectedChat({ ...group, type: 'group' });
+                              }}>
+                                <Pencil className="w-4 h-4 text-brand-teal" /> Edit Group
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="gap-2 text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }}>
+                                <Trash2 className="w-4 h-4" /> Delete Group
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
                     </div>
-                  </div>
                   </div>
                 ))
               ) : (
@@ -1705,53 +1670,68 @@ export default function ChatPage() {
                   </Button>
                 </div>
               )}
-              <div className="p-4 space-y-2">
-                {chatChannels.map((channel) => (
+              {chatChannels.length > 0 ? (
+                chatChannels.map((channel: any) => (
                   <div 
                     key={channel.id}
-                    onClick={() => handleSelectChat(channel)}
+                    onClick={() => handleSelectChat({ ...channel, type: 'general' })}
                     className={cn(
-                      "flex items-center gap-4 p-4 cursor-pointer transition-all border border-border/40 rounded-2xl hover:bg-white hover:shadow-md hover:border-brand-teal/20 group/channel",
-                      selectedChat?.id === channel.id && "bg-brand-teal/5 border-brand-teal/30 shadow-sm"
+                      "flex items-center gap-4 p-4 cursor-pointer transition-all border-b border-border/50 hover:bg-gray-50 group",
+                      selectedChat?.id === channel.id && "bg-brand-teal/5 border-l-4 border-l-brand-teal"
                     )}
                   >
-                    <div className="w-12 h-12 bg-brand-teal/5 rounded-2xl flex items-center justify-center shrink-0 border border-brand-teal/10">
-                      <Hash className="w-6 h-6 text-brand-teal" />
+                    <div className="relative">
+                      <Avatar className="w-12 h-12 border-2 border-white shadow-sm ring-1 ring-border">
+                        {channel.avatar ? (
+                          <AvatarImage src={channel.avatar} />
+                        ) : (
+                          <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
+                            <Hash className="w-5 h-5 text-brand-teal" />
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-[14px] text-foreground">{channel.name}</h3>
-                      <p className="text-[12px] text-muted-foreground truncate">{channel.description}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {unreadCounts[channel.id] > 0 ? (
-                        <Badge className="bg-brand-teal text-white text-[10px] h-5 min-w-5 px-1.5 flex items-center justify-center rounded-full border-none">
-                          {unreadCounts[channel.id]}
-                        </Badge>
-                      ) : (
-                        <div className="w-2 h-2 rounded-full bg-slate-200" />
-                      )}
-                      {(user?.role === "Admin" || user?.role === "HR") && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full opacity-0 group-hover/channel:opacity-100 transition-opacity">
-                              <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem className="gap-2" onClick={(e) => { e.stopPropagation(); setEditingChannel(channel); }}>
-                              <Pencil className="w-4 h-4" /> Edit Channel
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="gap-2 text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteChannel(channel.id); }}>
-                              <Trash2 className="w-4 h-4" /> Delete Channel
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="font-bold text-[14px] text-foreground truncate">{channel.name}</h3>
+                        <span className="text-[10px] font-semibold text-muted-foreground">{channel.lastMessageTime}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[12px] text-muted-foreground truncate flex-1">
+                          {channel.lastMessage || channel.description}
+                        </p>
+                        {unreadCounts[channel.id] > 0 && (
+                          <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
+                            {unreadCounts[channel.id]}
+                          </Badge>
+                        )}
+                        {(user?.role === "Admin" || user?.role === "HR") && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-white shrink-0">
+                                <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem className="gap-2" onClick={(e) => { e.stopPropagation(); setEditingChannel(channel); }}>
+                                <Pencil className="w-4 h-4 text-brand-teal" /> Edit Channel
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="gap-2 text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteChannel(channel.id); }}>
+                                <Trash2 className="w-4 h-4" /> Delete Channel
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-muted-foreground">
+                  <p className="text-sm">No channels available.</p>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="Saved" className="m-0 h-full">

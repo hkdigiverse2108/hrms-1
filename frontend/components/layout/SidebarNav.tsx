@@ -72,7 +72,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     try {
       const res = await fetch(`${API_URL}/chat/unread-counts/${user.id}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as Record<string, number>;
         const total = Object.values(data).reduce((sum, val) => sum + (val || 0), 0);
         setUnreadChatCount(total);
       }
@@ -221,14 +221,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
 
     if (isAdmin || checkPermission('chat', 'canView')) {
       menuItems.push(getItem(
-        <div className="flex items-center justify-between w-full">
-          <Link href="/chat">Chat</Link>
-          {unreadChatCount > 0 && (
-            <span className="bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-2 shrink-0">
-              {unreadChatCount}
-            </span>
-          )}
-        </div>,
+        <Link href="/chat">Chat</Link>,
         "/chat",
         <MessagesSquare className="w-5 h-5" />
       ));

@@ -1101,6 +1101,7 @@ class ChatMessageBase(BaseModel):
     text: str
     type: str = "personal" # personal, group
     isMe: Optional[bool] = None # Helper for frontend
+    sender: Optional[str] = None # Resolved sender name
     timestamp: Optional[str] = None
     isEdited: bool = False
     isSeen: bool = False
@@ -1163,6 +1164,8 @@ class ChatChannelUpdate(BaseModel):
 
 class ChatChannel(ChatChannelBase):
     id: str
+    lastMessage: Optional[str] = None
+    lastMessageTime: Optional[str] = None
 
 # Employee Document Schemas
 class EmployeeDocumentBase(BaseModel):

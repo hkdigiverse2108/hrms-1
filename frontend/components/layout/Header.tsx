@@ -26,6 +26,30 @@ dayjs.extend(relativeTime);
 const { Header: AntHeader } = Layout;
  
 export function Header() {
+  const audioCtxRef = React.useRef<any>(null);
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (!audioCtxRef.current) {
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtxClass) {
+          audioCtxRef.current = new AudioCtxClass();
+        }
+      }
+      if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+    };
+    if (typeof window !== "undefined") {
+      document.addEventListener("click", unlockAudio);
+      document.addEventListener("keydown", unlockAudio);
+      return () => {
+        document.removeEventListener("click", unlockAudio);
+        document.removeEventListener("keydown", unlockAudio);
+      };
+    }
+  }, []);
+
   const router = useRouter();
   const { user, isLoading } = useUser();
   const [mounted, setMounted] = useState(false);
@@ -98,7 +122,7 @@ export function Header() {
     try {
       const res = await fetch(`${API_URL}/chat/unread-counts/${user.id}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as Record<string, number>;
         const total = Object.values(data).reduce((sum, val) => sum + (val || 0), 0);
         
         // Find which chatId increased
@@ -115,8 +139,11 @@ export function Header() {
         if (total > prevUnreadChatCount.current && typeof window !== "undefined") {
           const isChatPage = window.location.pathname.startsWith("/chat");
           const isDnd = localStorage.getItem("globalDndEnabled") === "true";
+          const activeChatId = localStorage.getItem("activeChatId");
+          const isTabActive = typeof document !== "undefined" && document.hasFocus();
+          const isUserViewingThisChat = isChatPage && isTabActive && activeChatId === increasedChatId;
           
-          if (!isChatPage && !isDnd && increasedChatId) {
+          if (!isUserViewingThisChat && !isDnd && increasedChatId) {
             // Read specific preference
             const prefs = JSON.parse(localStorage.getItem("chatNotificationPrefs") || "{}");
             const globalMode = localStorage.getItem("globalDefaultMode") || "all";
@@ -133,57 +160,69 @@ export function Header() {
             
             // Check for Mentions Only mode
             if (resolvedMode === "mentions") {
-              let url = `${API_URL}/chat/messages/${user.id}/${increasedChatId}?group_id=${increasedChatId}`;
-              let msgRes = await fetch(url);
-              let messages = [];
-              if (msgRes.ok) {
-                messages = await msgRes.json();
-              }
-              if (messages.length === 0) {
-                url = `${API_URL}/chat/messages/${user.id}/${increasedChatId}`;
-                msgRes = await fetch(url);
+              try {
+                let url = `${API_URL}/chat/messages/${user.id}/${increasedChatId}?group_id=${increasedChatId}`;
+                let msgRes = await fetch(url);
+                let messages = [];
                 if (msgRes.ok) {
                   messages = await msgRes.json();
                 }
-              }
-              
-              if (messages.length > 0) {
-                const lastMsg = messages[messages.length - 1];
-                const isMention = (() => {
-                  if (!lastMsg.text) return false;
-                  const mentions = lastMsg.text.match(/@\w+/g);
-                  if (!mentions) return false;
-                  const firstName = user?.firstName?.toLowerCase() || "";
-                  const lastName = user?.lastName?.toLowerCase() || "";
-                  const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
-                  const strippedFullName = fullName.replace(/\s+/g, "");
-                  
-                  return mentions.some(m => {
-                    const mentionName = m.substring(1).toLowerCase();
-                    if (!mentionName) return false;
-                    return (
-                      (firstName && firstName === mentionName) ||
-                      (lastName && lastName === mentionName) ||
-                      (fullName && fullName.includes(mentionName)) ||
-                      (strippedFullName && strippedFullName === mentionName)
-                    );
-                  });
-                })();
-                
-                if (!isMention) {
-                  // Not a mention! Skip chime and push popup!
-                  prevUnreadCountsRef.current = data;
-                  prevUnreadChatCount.current = total;
-                  setUnreadChatCount(total);
-                  return;
+                if (messages.length === 0) {
+                  url = `${API_URL}/chat/messages/${user.id}/${increasedChatId}`;
+                  msgRes = await fetch(url);
+                  if (msgRes.ok) {
+                    messages = await msgRes.json();
+                  }
                 }
+                
+                if (messages.length > 0) {
+                  const lastMsg = messages[messages.length - 1];
+                  const isMention = (() => {
+                    if (!lastMsg.text) return false;
+                    const mentions = lastMsg.text.match(/@\w+/g);
+                    if (!mentions) return false;
+                    const firstName = user?.firstName?.toLowerCase() || "";
+                    const lastName = user?.lastName?.toLowerCase() || "";
+                    const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
+                    const strippedFullName = fullName.replace(/\s+/g, "");
+                    
+                    return mentions.some((m: string) => {
+                      const mentionName = m.substring(1).toLowerCase();
+                      if (!mentionName) return false;
+                      if (mentionName === "everyone") return true;
+                      return (
+                        (firstName && firstName === mentionName) ||
+                        (lastName && lastName === mentionName) ||
+                        (fullName && fullName.includes(mentionName)) ||
+                        (strippedFullName && strippedFullName === mentionName)
+                      );
+                    });
+                  })();
+                  
+                  const isPersonal = !lastMsg.groupId;
+                  if (!isMention && !isPersonal) {
+                    // Not a mention and it's a group/general chat! Skip chime and push popup!
+                    prevUnreadCountsRef.current = data;
+                    prevUnreadChatCount.current = total;
+                    setUnreadChatCount(total);
+                    return;
+                  }
+                }
+              } catch (err) {
+                console.error("Error fetching message in mentions mode:", err);
               }
             }
             
             // 1. Play chime sound in the background
             try {
-              const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-              const audioCtx = new AudioCtxClass();
+              let audioCtx = audioCtxRef.current;
+              if (!audioCtx) {
+                const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+                if (AudioCtxClass) {
+                  audioCtx = new AudioCtxClass();
+                  audioCtxRef.current = audioCtx;
+                }
+              }
               const play = () => {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -218,7 +257,7 @@ export function Header() {
                 }
               };
               if (audioCtx.state === "suspended") {
-                audioCtx.resume().then(play);
+                audioCtx.resume().then(play).catch(() => play());
               } else {
                 play();
               }
@@ -228,14 +267,41 @@ export function Header() {
 
             // 2. Trigger native browser push notification
             if ("Notification" in window && Notification.permission === "granted") {
-              const notif = new Notification("New HRMS Chat Message", {
-                body: `You have new message(s) waiting on HRMS Chat.`,
-                icon: "/favicon.ico"
-              });
-              notif.onclick = () => {
-                window.focus();
-                router.push("/chat");
-              };
+              // Fetch the last message for a rich notification body
+              try {
+                let msgUrl = `${API_URL}/chat/messages/${user.id}/${increasedChatId}?group_id=${increasedChatId}`;
+                let msgRes = await fetch(msgUrl);
+                let msgs = [];
+                if (msgRes.ok) {
+                  msgs = await msgRes.json();
+                }
+                if (msgs.length === 0) {
+                  msgUrl = `${API_URL}/chat/messages/${user.id}/${increasedChatId}`;
+                  msgRes = await fetch(msgUrl);
+                  if (msgRes.ok) {
+                    msgs = await msgRes.json();
+                  }
+                }
+
+                if (msgs.length > 0) {
+                  const lastMsg = msgs[msgs.length - 1];
+                  const senderName = lastMsg.sender || "Colleague";
+                  const body = lastMsg.text || "Sent an attachment";
+                  const title = lastMsg.type === "group" || lastMsg.groupId ? `💬 ${senderName} (Group Chat)` : `💬 ${senderName}`;
+                  const notif = new Notification(title, {
+                    body,
+                    icon: "/favicon.ico",
+                  });
+                  notif.onclick = () => { window.focus(); router.push("/chat"); };
+                }
+              } catch {
+                // fallback generic notification
+                const notif = new Notification("New HRMS Chat Message", {
+                  body: "You have a new message.",
+                  icon: "/favicon.ico",
+                });
+                notif.onclick = () => { window.focus(); router.push("/chat"); };
+              }
             }
           }
         }

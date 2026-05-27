@@ -2532,6 +2532,13 @@ async def create_message(db, message: schemas.ChatMessageCreate):
     message_dict["id"] = str(result.inserted_id)
     if "_id" in message_dict:
         message_dict.pop("_id")
+    if "senderId" in message_dict:
+        try:
+            emp = await db.employees.find_one({"_id": ObjectId(message_dict["senderId"])})
+            if emp:
+                message_dict["sender"] = emp.get("name", "Colleague")
+        except:
+            pass
     return message_dict
 
 async def create_chat_group(db, group: schemas.ChatGroupCreate):
@@ -2557,7 +2564,25 @@ async def get_chat_groups(db, user_id: str):
     # Get groups where user is a member
     cursor = db.chat_groups.find({"members": user_id}).sort("timestamp", -1)
     rows = await cursor.to_list(length=100)
-    return [fix_id(row) for row in rows]
+    
+    fixed_rows = []
+    for row in rows:
+        fixed = fix_id(row)
+        last_msg = await db.messages.find_one({"groupId": fixed["id"]}, sort=[("timestamp", -1)])
+        if last_msg:
+            fixed["lastMessage"] = last_msg.get("text", "")
+            try:
+                from datetime import datetime
+                t_str = last_msg["timestamp"].replace("Z", "+00:00")
+                dt = datetime.fromisoformat(t_str)
+                fixed["lastMessageTime"] = dt.strftime("%I:%M %p").lstrip("0")
+            except:
+                fixed["lastMessageTime"] = last_msg.get("timestamp", "")
+        else:
+            fixed["lastMessage"] = ""
+            fixed["lastMessageTime"] = ""
+        fixed_rows.append(fixed)
+    return fixed_rows
 
 async def get_messages(db, sender_id: str = None, receiver_id: str = None, group_id: str = None):
     if group_id:
@@ -2571,7 +2596,23 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
         }
     cursor = db.messages.find(query).sort("timestamp", 1)
     rows = await cursor.to_list(length=1000)
-    return [fix_id(row) for row in rows]
+    
+    # Pre-fetch all active employees to avoid N+1 database queries
+    try:
+        employees_cursor = db.employees.find()
+        employees_list = await employees_cursor.to_list(length=1000)
+        employee_cache = {str(emp["_id"]): emp.get("name", "Colleague") for emp in employees_list}
+    except:
+        employee_cache = {}
+
+    fixed_rows = []
+    for row in rows:
+        fixed = fix_id(row)
+        if "senderId" in fixed:
+            sender_id_str = fixed["senderId"]
+            fixed["sender"] = employee_cache.get(sender_id_str, "Colleague")
+        fixed_rows.append(fixed)
+    return fixed_rows
 
 async def update_message(db, message_id: str, text: str):
     await db.messages.update_one(
@@ -2586,19 +2627,30 @@ async def delete_message(db, message_id: str):
     return True
 
 async def mark_messages_as_seen(db, other_id: str, user_id: str):
-    # If other_id is a group, mark all messages in that group as seen by this user
     is_group = await db.chat_groups.find_one({"_id": ObjectId(other_id)}) if len(other_id) == 24 else None
+    is_channel = await db.chat_channels.find_one({"_id": ObjectId(other_id)}) if len(other_id) == 24 else None
     
-    if is_group or other_id.startswith("gen-"):
+    other_id_obj = ObjectId(other_id) if len(other_id) == 24 else None
+    user_id_obj = ObjectId(user_id) if len(user_id) == 24 else None
+    
+    user_ids = [user_id]
+    if user_id_obj:
+        user_ids.append(user_id_obj)
+        
+    other_ids = [other_id]
+    if other_id_obj:
+        other_ids.append(other_id_obj)
+        
+    if is_group or is_channel or other_id.startswith("gen-"):
         # Group or General channel
         await db.messages.update_many(
-            {"groupId": other_id, "seenBy": {"$ne": user_id}},
+            {"groupId": {"$in": other_ids}, "seenBy": {"$nin": user_ids}},
             {"$push": {"seenBy": user_id}}
         )
     else:
         # Personal chat
         await db.messages.update_many(
-            {"senderId": other_id, "receiverId": user_id, "seenBy": {"$ne": user_id}},
+            {"senderId": {"$in": other_ids}, "receiverId": {"$in": user_ids}, "seenBy": {"$nin": user_ids}},
             {"$set": {"isSeen": True}, "$push": {"seenBy": user_id}}
         )
     return True
@@ -2661,7 +2713,25 @@ async def get_chat_channels(db):
             await db.chat_channels.insert_one(d)
         cursor = db.chat_channels.find()
         rows = await cursor.to_list(length=100)
-    return [fix_id(row) for row in rows]
+        
+    fixed_rows = []
+    for row in rows:
+        fixed = fix_id(row)
+        last_msg = await db.messages.find_one({"groupId": fixed["id"]}, sort=[("timestamp", -1)])
+        if last_msg:
+            fixed["lastMessage"] = last_msg.get("text", "")
+            try:
+                from datetime import datetime
+                t_str = last_msg["timestamp"].replace("Z", "+00:00")
+                dt = datetime.fromisoformat(t_str)
+                fixed["lastMessageTime"] = dt.strftime("%I:%M %p").lstrip("0")
+            except:
+                fixed["lastMessageTime"] = last_msg.get("timestamp", "")
+        else:
+            fixed["lastMessage"] = fixed.get("description", "")
+            fixed["lastMessageTime"] = ""
+        fixed_rows.append(fixed)
+    return fixed_rows
 
 async def create_chat_channel(db, channel: schemas.ChatChannelCreate):
     channel_dict = channel.dict()

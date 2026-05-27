@@ -810,9 +810,19 @@ async def get_unread_counts(user_id: str, db=Depends(get_db)):
     channel_ids = [c["id"] for c in channels]
     group_ids.extend(channel_ids)
     
+    # Ensure query_group_ids contains both string and ObjectId formats for every group ID to prevent Mongo type mismatch bugs
+    query_group_ids = []
+    for g_id in group_ids:
+        query_group_ids.append(g_id)
+        if len(g_id) == 24:
+            try:
+                query_group_ids.append(ObjectId(g_id))
+            except:
+                pass
+    
     cursor_groups = db.messages._collection.aggregate([
         {"$match": {
-            "groupId": {"$in": group_ids},
+            "groupId": {"$in": query_group_ids},
             "senderId": {"$nin": user_ids},
             "seenBy": {"$nin": user_ids}
         }},
