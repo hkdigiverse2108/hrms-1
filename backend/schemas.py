@@ -1333,6 +1333,8 @@ class InvoiceLineItem(BaseModel):
     subDescription: Optional[str] = None
     rate: float
     amount: float
+    qty: Optional[float] = None
+    discount: Optional[float] = None
 
 class InvoiceBase(BaseModel):
     clientName: str
@@ -1340,6 +1342,7 @@ class InvoiceBase(BaseModel):
     clientEmail: Optional[str] = None
     clientPhone: Optional[str] = None
     clientDepartment: Optional[str] = None
+    clientGstin: Optional[str] = None
     invoiceNumber: str
     issueDate: str
     dueDate: str
@@ -1360,6 +1363,7 @@ class InvoiceUpdate(BaseModel):
     clientEmail: Optional[str] = None
     clientPhone: Optional[str] = None
     clientDepartment: Optional[str] = None
+    clientGstin: Optional[str] = None
     invoiceNumber: Optional[str] = None
     issueDate: Optional[str] = None
     dueDate: Optional[str] = None

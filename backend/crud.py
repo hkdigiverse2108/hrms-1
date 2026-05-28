@@ -3509,8 +3509,6 @@ async def delete_invoice(db, invoice_id: str):
 
 async def get_next_invoice_number(db):
     import re
-    from datetime import datetime
-    current_year = datetime.now().year
     
     cursor = db.invoices.find()
     invoices = await cursor.to_list(length=1000)
@@ -3518,20 +3516,18 @@ async def get_next_invoice_number(db):
     max_num = 0
     for inv in invoices:
         num_str = inv.get("invoiceNumber", "")
-        # Match standard format with year: INV-2026-0001
-        match = re.match(r'^INV-(\d{4})-(\d+)$', num_str)
-        if match:
+        # ONLY match the new INV-XXX format (e.g. INV-001) to start fresh from INV-001!
+        match_simple = re.match(r'^INV-(\d+)$', num_str)
+        
+        if match_simple:
             try:
-                year = int(match.group(1))
-                num = int(match.group(2))
-                # Increment sequence within the current calendar year
-                if year == current_year:
-                    if num > max_num:
-                        max_num = num
+                num = int(match_simple.group(1))
+                if num > max_num:
+                    max_num = num
             except ValueError:
                 pass
                 
     next_num = max_num + 1
-    return f"INV-{current_year}-{next_num:03d}"
+    return f"INV-{next_num:03d}"
 
 

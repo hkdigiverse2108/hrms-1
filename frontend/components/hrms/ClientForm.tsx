@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 export interface ClientFormData {
   name: string;
   companyName: string;
-  email: string;
+  email?: string;
   phone: string;
   address: string;
   department: string;
@@ -131,12 +131,12 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
               <Input id="companyName" placeholder="e.g. Acme Corp" value={formData.companyName} onChange={(e) => handleChange("companyName", e.target.value)} required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-xs font-bold uppercase text-slate-500">Email Address</Label>
-              <Input id="email" type="email" placeholder="client@example.com" value={formData.email} onChange={(e) => handleChange("email", e.target.value)} required />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="phone" className="text-xs font-bold uppercase text-slate-500">Phone Number</Label>
               <Input id="phone" placeholder="+91 00000 00000" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-xs font-bold uppercase text-slate-500">Email Address (Optional)</Label>
+              <Input id="email" type="email" placeholder="e.g. client@example.com" value={formData.email || ""} onChange={(e) => handleChange("email", e.target.value)} />
             </div>
           </div>
 

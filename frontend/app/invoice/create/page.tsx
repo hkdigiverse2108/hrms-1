@@ -22,8 +22,9 @@ import dayjs from "dayjs";
 interface LineItem {
   id: number;
   description: string;
-  subDescription: string;
   rate: string;
+  qty: string;
+  discount: string;
   amount: number;
 }
 
@@ -34,17 +35,22 @@ export default function CreateInvoicePage() {
   const [clientAddress, setClientAddress] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
+  const [clientGstin, setClientGstin] = useState("");
   const [clientDepartment, setClientDepartment] = useState("Billing Department");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [issueDate, setIssueDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [discount, setDiscount] = useState("0");
-  const [tax, setTax] = useState("0");
-  const [notes, setNotes] = useState("Payment is due within 14 days of the invoice date. A late fee of 1.5% per month will be applied to all overdue balances.");
+  const [cgst, setCgst] = useState("9");
+  const [sgst, setSgst] = useState("9");
+  const [isCgstEditable, setIsCgstEditable] = useState(false);
+  const [isSgstEditable, setIsSgstEditable] = useState(false);
+  const [isRoundedTotalEditable, setIsRoundedTotalEditable] = useState(false);
+  const [roundedTotalInput, setRoundedTotalInput] = useState("");
+  const [notes, setNotes] = useState("1. Payment is due within 3 days of the invoice date.\n2. Late payments may incur additional charges.\n3. All disputes are subject to Gujarat Jurisdiction.");
 
   const [items, setItems] = useState<LineItem[]>([
-    { id: 1, description: "Website Redesign & Development", subDescription: "Complete overhaul of corporate website including UI/UX design, frontend development, and CMS integration.", rate: "12000.00", amount: 12000.00 },
-    { id: 2, description: "", subDescription: "", rate: "0.00", amount: 0.00 }
+    { id: 1, description: "", rate: "", qty: "", discount: "", amount: 0.00 }
   ]);
 
   const [clients, setClients] = useState<any[]>([]);
@@ -55,8 +61,8 @@ export default function CreateInvoicePage() {
   useEffect(() => {
     generateInvoiceNumber();
     const today = dayjs();
-    setIssueDate(today.format("MMM DD, YYYY"));
-    setDueDate(today.add(14, "day").format("MMM DD, YYYY"));
+    setIssueDate(today.format("YYYY-MM-DD"));
+    setDueDate(today.add(3, "day").format("YYYY-MM-DD"));
     fetchClients();
   }, []);
 
@@ -81,20 +87,18 @@ export default function CreateInvoicePage() {
         const data = await res.json();
         setInvoiceNumber(data.nextInvoiceNumber);
       } else {
-        const random = Math.floor(1000 + Math.random() * 9000);
-        const currentYear = dayjs().year();
-        setInvoiceNumber(`INV-${currentYear}-${random}`);
+        const random = Math.floor(100 + Math.random() * 900);
+        setInvoiceNumber(`INV-${random}`);
       }
     } catch (err) {
       console.error("Error fetching next invoice number:", err);
-      const random = Math.floor(1000 + Math.random() * 9000);
-      const currentYear = dayjs().year();
-      setInvoiceNumber(`INV-${currentYear}-${random}`);
+      const random = Math.floor(100 + Math.random() * 900);
+      setInvoiceNumber(`INV-${random}`);
     }
   };
 
   const addItem = () => {
-    setItems([...items, { id: Date.now(), description: "", subDescription: "", rate: "0.00", amount: 0.00 }]);
+    setItems([...items, { id: Date.now(), description: "", rate: "0.00", qty: "1", discount: "0", amount: 0.00 }]);
   };
 
   const removeItem = (id: number) => {
@@ -107,9 +111,10 @@ export default function CreateInvoicePage() {
     setItems(items.map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
-        if (field === "rate") {
-          const rateVal = parseFloat(value) || 0.0;
-          updated.amount = rateVal;
+        if (field === "rate" || field === "qty") {
+          const qtyVal = parseFloat(field === "qty" ? value : item.qty) || 0.0;
+          const rateVal = parseFloat(field === "rate" ? value : item.rate) || 0.0;
+          updated.amount = qtyVal * rateVal;
         }
         return updated;
       }
@@ -118,17 +123,108 @@ export default function CreateInvoicePage() {
   };
 
   const subtotal = items.reduce((acc, item) => acc + item.amount, 0);
-  const discountRate = parseFloat(discount) || 0;
-  const taxRate = parseFloat(tax) || 0;
+  const cgstRate = parseFloat(cgst) || 0;
+  const sgstRate = parseFloat(sgst) || 0;
+  const taxRate = cgstRate + sgstRate;
   
-  const discountAmount = subtotal * (discountRate / 100);
-  const taxableAmount = subtotal - discountAmount;
-  const taxAmount = taxableAmount * (taxRate / 100);
-  const totalDue = taxableAmount + taxAmount;
+  const totalDiscountAmount = items.reduce((acc, item) => {
+    const pct = parseFloat(item.discount) || 0;
+    return acc + (item.amount * (pct / 100));
+  }, 0);
+  const taxableAmount = subtotal - totalDiscountAmount;
+  const cgstAmount = taxableAmount * (cgstRate / 100);
+  const sgstAmount = taxableAmount * (sgstRate / 100);
+  const taxAmount = cgstAmount + sgstAmount;
+  const actualTotal = taxableAmount + taxAmount;
+
+  // Calculate roundOff and totalDue based on roundedTotalInput
+  const roundedTotal = roundedTotalInput !== "" ? (parseFloat(roundedTotalInput) || 0) : Math.round(actualTotal);
+  const roundOff = roundedTotal - actualTotal;
+  const totalDue = roundedTotal;
+
+  // Sync rounded total input with actualTotal on initialization or changes
+  useEffect(() => {
+    setRoundedTotalInput(Math.round(actualTotal).toFixed(2));
+  }, [actualTotal]);
+
+  const updateNotesDays = (currentNotes: string, days: number) => {
+    const regex = /within \d+ days?/i;
+    if (regex.test(currentNotes)) {
+      return currentNotes.replace(regex, `within ${days} ${days === 1 ? 'day' : 'days'}`);
+    }
+    return currentNotes;
+  };
+
+  const handleIssueDateChange = (newIssueDate: string) => {
+    setIssueDate(newIssueDate);
+    if (newIssueDate && dueDate) {
+      const diff = dayjs(dueDate).diff(dayjs(issueDate), "day");
+      const preservedDiff = diff >= 0 ? diff : 3;
+      const newDueDate = dayjs(newIssueDate).add(preservedDiff, "day").format("YYYY-MM-DD");
+      setDueDate(newDueDate);
+      
+      // Update notes with the preserved difference
+      setNotes(prev => updateNotesDays(prev, preservedDiff));
+    }
+  };
+
+  const handleDueDateChange = (newDueDate: string) => {
+    setDueDate(newDueDate);
+    if (issueDate && newDueDate) {
+      const diff = dayjs(newDueDate).diff(dayjs(issueDate), "day");
+      if (diff >= 0) {
+        setNotes(prev => updateNotesDays(prev, diff));
+      }
+    }
+  };
+
+  const handleNotesChange = (newNotes: string) => {
+    setNotes(newNotes);
+    
+    // Parse for "within X days" or "within X day"
+    const match = newNotes.match(/within (\d+) days?/i);
+    if (match && issueDate) {
+      const days = parseInt(match[1], 10);
+      if (!isNaN(days)) {
+        const newDueDate = dayjs(issueDate).add(days, "day").format("YYYY-MM-DD");
+        setDueDate(newDueDate);
+      }
+    }
+  };
 
   const handleSubmit = async () => {
     if (!clientName.trim()) {
-      toast.error("Please enter a client name");
+      toast.error("Please select or enter a client name");
+      return;
+    }
+
+    if (!clientAddress.trim()) {
+      toast.error("Please enter client address");
+      return;
+    }
+
+    if (!clientDepartment.trim()) {
+      toast.error("Please enter client department");
+      return;
+    }
+
+    if (!clientPhone.trim()) {
+      toast.error("Please enter client phone number");
+      return;
+    }
+
+    if (!clientGstin.trim()) {
+      toast.error("Please enter client GSTIN");
+      return;
+    }
+
+    if (!issueDate) {
+      toast.error("Please select a date of issue");
+      return;
+    }
+
+    if (!dueDate) {
+      toast.error("Please select a due date");
       return;
     }
 
@@ -142,19 +238,26 @@ export default function CreateInvoicePage() {
       const payload = {
         clientName,
         clientAddress: clientAddress || null,
-        clientEmail: clientEmail || null,
+        clientEmail: clientEmail.trim() || null,
+        clientGstin: clientGstin.trim() || null,
         clientPhone: clientPhone || null,
         clientDepartment: clientDepartment || null,
         invoiceNumber,
-        issueDate,
-        dueDate,
-        lineItems: items.map(item => ({
-          description: item.description,
-          subDescription: item.subDescription || null,
-          rate: parseFloat(item.rate) || 0.0,
-          amount: item.amount
-        })),
-        discount: discountRate,
+        issueDate: dayjs(issueDate).format("MMM DD, YYYY"),
+        dueDate: dayjs(dueDate).format("MMM DD, YYYY"),
+        lineItems: items.map(item => {
+          const pct = parseFloat(item.discount) || 0.0;
+          const itemDiscountAmt = item.amount * (pct / 100);
+          
+          return {
+            description: item.description,
+            rate: parseFloat(item.rate) || 0.0,
+            amount: item.amount,
+            qty: parseFloat(item.qty) || 1.0,
+            discount: itemDiscountAmt
+          };
+        }),
+        discount: 0,
         tax: taxRate,
         subtotal,
         total: totalDue,
@@ -236,7 +339,7 @@ export default function CreateInvoicePage() {
                 <Input 
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
-                  placeholder="Type custom client name..." 
+                  placeholder="e.g. Acme Corporation" 
                   className="bg-white border-border h-11 font-medium" 
                 />
               </div>
@@ -258,6 +361,7 @@ export default function CreateInvoicePage() {
                         setClientName("");
                         setClientAddress("");
                         setClientEmail("");
+                        setClientGstin("");
                         setClientPhone("");
                         setClientDepartment("");
                       } else {
@@ -265,12 +369,24 @@ export default function CreateInvoicePage() {
                         const found = clients.find(c => (c.companyName || c.name) === val);
                         if (found) {
                           setClientAddress(found.address || "");
-                          setClientEmail(found.email || "");
+                          if (found.email) {
+                            if (found.email.includes('@')) {
+                              setClientEmail(found.email);
+                              setClientGstin("");
+                            } else {
+                              setClientGstin(found.email);
+                              setClientEmail("");
+                            }
+                          } else {
+                            setClientEmail("");
+                            setClientGstin("");
+                          }
                           setClientPhone(found.phone || "");
                           setClientDepartment(found.department || "Billing Department");
                         } else {
                           setClientAddress("");
                           setClientEmail("");
+                          setClientGstin("");
                           setClientPhone("");
                           setClientDepartment("");
                         }
@@ -300,16 +416,7 @@ export default function CreateInvoicePage() {
                   <Input 
                     value={clientAddress}
                     onChange={(e) => setClientAddress(e.target.value)}
-                    placeholder="Enter client address..." 
-                    className="bg-white border-border h-11 font-medium text-slate-700" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Client Email</label>
-                  <Input 
-                    value={clientEmail}
-                    onChange={(e) => setClientEmail(e.target.value)}
-                    placeholder="Enter client email..." 
+                    placeholder="Enter client address" 
                     className="bg-white border-border h-11 font-medium text-slate-700" 
                   />
                 </div>
@@ -318,16 +425,25 @@ export default function CreateInvoicePage() {
                   <Input 
                     value={clientDepartment}
                     onChange={(e) => setClientDepartment(e.target.value)}
-                    placeholder="e.g. Billing Department" 
+                    placeholder="e.g. Finance & Accounts" 
                     className="bg-white border-border h-11 font-medium text-slate-700" 
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Client Phone (Optional)</label>
+                  <label className="text-sm font-semibold text-foreground">Client Phone</label>
                   <Input 
                     value={clientPhone}
                     onChange={(e) => setClientPhone(e.target.value)}
-                    placeholder="Enter client phone number..." 
+                    placeholder="Enter client phone number" 
+                    className="bg-white border-border h-11 font-medium text-slate-700" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Client GSTIN</label>
+                  <Input 
+                    value={clientGstin}
+                    onChange={(e) => setClientGstin(e.target.value)}
+                    placeholder="Enter client GSTIN" 
                     className="bg-white border-border h-11 font-medium text-slate-700" 
                   />
                 </div>
@@ -335,38 +451,27 @@ export default function CreateInvoicePage() {
             )}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Invoice Number</label>
-              <div className="flex gap-2">
-                <Input value={invoiceNumber} className="bg-gray-50 flex-1 font-bold text-slate-700 h-11" readOnly />
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  onClick={generateInvoiceNumber}
-                  className="shrink-0 h-11 w-11 bg-white shadow-sm border-border"
-                >
-                  <RefreshCw className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              </div>
+              <Input value={invoiceNumber} className="bg-gray-50 w-full font-bold text-slate-700 h-11" readOnly />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Date of Issue</label>
               <div className="relative">
-                <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input 
+                  type="date"
                   value={issueDate}
-                  onChange={(e) => setIssueDate(e.target.value)}
-                  className="bg-white pr-10 h-11 font-medium" 
+                  onChange={(e) => handleIssueDateChange(e.target.value)}
+                  className="bg-white h-11 font-medium cursor-pointer" 
                 />
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Due Date</label>
               <div className="relative">
-                <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input 
+                  type="date"
                   value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  placeholder="Select due date..." 
-                  className="bg-white pr-10 h-11 font-medium" 
+                  onChange={(e) => handleDueDateChange(e.target.value)}
+                  className="bg-white h-11 font-medium cursor-pointer" 
                 />
               </div>
             </div>
@@ -380,35 +485,48 @@ export default function CreateInvoicePage() {
           </div>
           <div className="p-6 space-y-6">
             <div className="hidden md:grid grid-cols-12 gap-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
-              <div className="col-span-8">Item Description</div>
-              <div className="col-span-2">Rate (₹)</div>
+              <div className="col-span-5">Item Description</div>
+              <div className="col-span-1 text-center">Qty</div>
+              <div className="col-span-2 text-center">Rate (₹)</div>
+              <div className="col-span-2 text-center">Disc. (%)</div>
               <div className="col-span-2 text-right pr-12">Amount</div>
             </div>
 
             {items.map((item) => (
               <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start relative">
-                <div className="col-span-12 md:col-span-8 space-y-2">
+                <div className="col-span-12 md:col-span-5">
                   <Input 
-                    placeholder="Item name / title" 
+                    placeholder="Enter product/service name" 
                     value={item.description}
                     onChange={(e) => updateItemField(item.id, "description", e.target.value)}
                     className="bg-white font-bold border-border text-slate-700" 
                   />
-                  <Textarea 
-                    placeholder="Add description details (optional)" 
-                    value={item.subDescription}
-                    onChange={(e) => updateItemField(item.id, "subDescription", e.target.value)}
-                    className="bg-white text-xs resize-none h-16 min-h-[60px] border-border text-slate-500 font-medium" 
+                </div>
+                <div className="col-span-6 md:col-span-1">
+                  <Input 
+                    value={item.qty}
+                    onChange={(e) => updateItemField(item.id, "qty", e.target.value)}
+                    placeholder="0"
+                    className="bg-white font-bold border-border text-center text-slate-700" 
                   />
                 </div>
                 <div className="col-span-6 md:col-span-2">
                   <Input 
                     value={item.rate}
                     onChange={(e) => updateItemField(item.id, "rate", e.target.value)}
+                    placeholder="0.00"
                     className="bg-white font-bold border-border text-center text-slate-700" 
                   />
                 </div>
-                <div className="col-span-6 md:col-span-2 flex items-center justify-between gap-4">
+                <div className="col-span-6 md:col-span-2">
+                  <Input 
+                    value={item.discount}
+                    onChange={(e) => updateItemField(item.id, "discount", e.target.value)}
+                    placeholder="0.00"
+                    className="bg-white font-bold border-border text-center text-slate-700" 
+                  />
+                </div>
+                <div className="col-span-12 md:col-span-2 flex items-center justify-between gap-4">
                   <div className="flex-1 text-right font-extrabold text-slate-800 pt-2.5">
                     ₹ {item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </div>
@@ -442,8 +560,8 @@ export default function CreateInvoicePage() {
                 <label className="text-sm font-semibold text-foreground">Notes / Terms</label>
                 <Textarea 
                   value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Payment is due within 14 days..." 
+                  onChange={(e) => handleNotesChange(e.target.value)}
+                  placeholder="Enter custom terms, payment instructions, bank details, or additional notes here..." 
                   className="h-32 resize-none bg-white border-border text-sm leading-relaxed font-medium text-slate-600" 
                 />
               </div>
@@ -455,25 +573,95 @@ export default function CreateInvoicePage() {
                     <span className="text-slate-800 font-extrabold">₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground font-semibold">Discount (%)</span>
-                    <div className="w-24">
-                      <Input 
-                        value={discount}
-                        onChange={(e) => setDiscount(e.target.value)}
-                        className="bg-white h-9 text-right font-extrabold text-slate-700" 
-                      />
+                    <span className="text-muted-foreground font-semibold">Total Discount</span>
+                    <span className="text-slate-800 font-extrabold">₹ {totalDiscountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground font-semibold">CGST (%)</span>
+                    <div>
+                      {isCgstEditable ? (
+                        <div className="w-24">
+                          <Input 
+                            value={cgst}
+                            onChange={(e) => setCgst(e.target.value)}
+                            onBlur={() => setIsCgstEditable(false)}
+                            autoFocus
+                            className="bg-white h-9 text-right font-extrabold text-slate-700" 
+                          />
+                        </div>
+                      ) : (
+                        <span 
+                          onClick={() => setIsCgstEditable(true)}
+                          className="text-slate-800 font-extrabold cursor-pointer hover:text-brand-teal transition-colors select-none"
+                        >
+                          {cgst}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground font-semibold">Tax (%)</span>
-                    <div className="w-24">
-                      <Input 
-                        value={tax}
-                        onChange={(e) => setTax(e.target.value)}
-                        className="bg-white h-9 text-right font-extrabold text-slate-700" 
-                      />
+                    <span className="text-muted-foreground font-semibold">SGST (%)</span>
+                    <div>
+                      {isSgstEditable ? (
+                        <div className="w-24">
+                          <Input 
+                            value={sgst}
+                            onChange={(e) => setSgst(e.target.value)}
+                            onBlur={() => setIsSgstEditable(false)}
+                            autoFocus
+                            className="bg-white h-9 text-right font-extrabold text-slate-700" 
+                          />
+                        </div>
+                      ) : (
+                        <span 
+                          onClick={() => setIsSgstEditable(true)}
+                          className="text-slate-800 font-extrabold cursor-pointer hover:text-brand-teal transition-colors select-none"
+                        >
+                          {sgst}
+                        </span>
+                      )}
                     </div>
                   </div>
+                  {/* Actual Total */}
+                  <div className="flex items-center justify-between text-sm border-t border-dashed border-border pt-3 mt-1">
+                    <span className="text-muted-foreground font-semibold">Actual Total</span>
+                    <span className="text-slate-800 font-extrabold">₹ {actualTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+
+                  {/* Rounded Total Input */}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground font-semibold">Rounded Total (₹)</span>
+                    <div>
+                      {isRoundedTotalEditable ? (
+                        <div className="w-28">
+                          <Input 
+                            value={roundedTotalInput}
+                            onChange={(e) => setRoundedTotalInput(e.target.value)}
+                            onBlur={() => setIsRoundedTotalEditable(false)}
+                            autoFocus
+                            placeholder="0.00"
+                            className="bg-white h-9 text-right font-extrabold text-slate-700" 
+                          />
+                        </div>
+                      ) : (
+                        <span 
+                          onClick={() => setIsRoundedTotalEditable(true)}
+                          className="text-slate-800 font-extrabold cursor-pointer hover:text-brand-teal transition-colors select-none"
+                        >
+                          ₹ {(parseFloat(roundedTotalInput) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Calculated Round Off */}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground font-semibold">Calculated Round Off</span>
+                    <span className="text-slate-800 font-extrabold">
+                      {roundOff >= 0 ? "+" : ""}₹ {roundOff.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  
                   <div className="pt-4 mt-2 border-t border-border flex items-center justify-between">
                     <span className="text-foreground font-extrabold uppercase text-[11px] tracking-wider">Total Due</span>
                     <span className="text-brand-teal font-black text-xl">₹ {totalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
