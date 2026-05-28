@@ -94,8 +94,7 @@ function SinglePayslip({
   onMarkAsPaid,
   onUpdate,
   onDelete,
-  payslipNumber,
-  gstOption
+  payslipNumber
 }: { 
   record: any, 
   employee: any, 
@@ -104,12 +103,9 @@ function SinglePayslip({
   onMarkAsPaid?: (record: any) => void,
   onUpdate?: (record: any) => void,
   onDelete?: (id: string) => void,
-  payslipNumber?: string,
-  gstOption?: string
+  payslipNumber?: string
 }) {
-  const cgst = gstOption === 'with-gst' ? ((record.netSalary || 0) * 0.09) : 0;
-  const sgst = gstOption === 'with-gst' ? ((record.netSalary || 0) * 0.09) : 0;
-  const totalWithGst = (record.netSalary || 0) + cgst + sgst;
+  const totalSalary = record.netSalary || 0;
   return (
     <div 
       className="payslip-card bg-white p-12 mb-8 last:mb-0 break-after-page max-w-4xl mx-auto relative border-0 shadow-none"
@@ -156,7 +152,7 @@ function SinglePayslip({
         <div className="space-y-1">
           <p className="text-[15px] text-slate-700 font-normal">Total Amount :</p>
           <p className="text-[17px] font-bold text-slate-900 text-black">
-            ₹{totalWithGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            ₹{totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </p>
         </div>
       </div>
@@ -209,22 +205,10 @@ function SinglePayslip({
               <span className="text-[16px] font-medium text-slate-900 tabular-nums text-right">-{record.deductions?.toLocaleString()}</span>
             </div>
           ) : null}
-          {gstOption === 'with-gst' && (
-            <>
-              <div className="flex justify-between items-center text-slate-700 border-t border-gray-200 pt-3">
-                <span className="text-[16px] text-slate-700 font-medium">Add: CGST @ 9%</span>
-                <span className="text-[16px] font-medium text-slate-900 tabular-nums text-right">₹{cgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between items-center text-slate-700">
-                <span className="text-[16px] text-slate-700 font-medium">Add: SGST @ 9%</span>
-                <span className="text-[16px] font-medium text-slate-900 tabular-nums text-right">₹{sgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
-            </>
-          )}
         </div>
         <div className="flex justify-end items-center gap-20 py-6">
-          <span className="text-[16px] font-medium text-slate-700">{gstOption === 'with-gst' ? 'Total Salary (with GST)' : 'Total Salary'}</span>
-          <span className="text-[17px] font-bold text-slate-900 text-black">₹{totalWithGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          <span className="text-[16px] font-medium text-slate-700">Total Salary</span>
+          <span className="text-[17px] font-bold text-slate-900 text-black">₹{totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
       </div>
     </div>
@@ -239,7 +223,6 @@ function PayslipContent() {
   const [records, setRecords] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isDownloading, setIsDownloading] = useState(false)
-  const [gstOption, setGstOption] = useState<string>('without-gst')
 
   // Auth roles logic - fallback to localStorage synchronously to prevent flicker/race condition
   const { user } = useUser()
@@ -711,17 +694,6 @@ function PayslipContent() {
               </SelectContent>
             </Select>
           </div>
-          <div className="w-[140px]">
-            <Select value={gstOption} onValueChange={setGstOption}>
-              <SelectTrigger className="bg-slate-50 border-slate-200">
-                <SelectValue placeholder="GST Option" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="without-gst">Without GST</SelectItem>
-                <SelectItem value="with-gst">With GST</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
 
         <div className="flex gap-2 w-full md:w-auto">
@@ -780,7 +752,6 @@ function PayslipContent() {
               onUpdate={handleUpdate}
               onDelete={handleDelete}
               payslipNumber={getPayslipNumber(record, allPayrolls)}
-              gstOption={gstOption}
             />
           ))}
         </div>
