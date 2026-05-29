@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Request, 
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
+from contextlib import asynccontextmanager
 import crud, schemas, database
 import uvicorn
 import os
@@ -11,13 +12,11 @@ from database import get_db
 import holidays as pyholidays
 from websocket import manager as ws_manager
 
-
-app = FastAPI(title="HRMS API")
-
 import asyncio
 
-@app.on_event("startup")
-async def startup_migration():
+@asynccontextmanager
+async def lifespan(app):
+    # --- Startup ---
     try:
         import sys
         from pathlib import Path
@@ -39,6 +38,11 @@ async def startup_migration():
             print(f"Seeded employee_id counter at {count}")
     except Exception as e:
         print(f"Error seeding employee counter: {e}")
+    
+    yield
+    # --- Shutdown (nothing needed for now) ---
+
+app = FastAPI(title="HRMS API", lifespan=lifespan)
 
 # CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
 _default_origins = "http://localhost:3535,http://127.0.0.1:3535"
