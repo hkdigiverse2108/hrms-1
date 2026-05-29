@@ -112,7 +112,10 @@ def run_app():
 
     # Platform specific flags
     is_windows = os.name == 'nt'
-    creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if is_windows else 0
+    # Platform-specific Popen kwargs (creationflags is Windows-only)
+    platform_popen_kwargs = {}
+    if is_windows:
+        platform_popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
 
     # 1. Start Backend
     python_exe = get_venv_python()
@@ -209,7 +212,7 @@ def run_app():
             backend_cmd,
             cwd=str(backend_dir),
             env=backend_env,
-            creationflags=creation_flags,
+            **platform_popen_kwargs,
         )
 
     def start_frontend():
@@ -218,7 +221,7 @@ def run_app():
             cwd=str(frontend_dir),
             shell=True,
             env=frontend_env,
-            creationflags=creation_flags,
+            **platform_popen_kwargs,
         )
 
     processes["backend"]  = start_backend()
