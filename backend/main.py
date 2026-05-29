@@ -123,7 +123,7 @@ async def upload_chat_file(file: UploadFile = File(...)):
 async def login(login_data: schemas.LoginRequest, db=Depends(get_db)):
     user = await crud.authenticate_user(db, login_data)
     if not user:
-        return {"message": "Invalid credentials", "user": None}
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     return {"message": "Login successful", "user": user}
 
 # Employee Endpoints
