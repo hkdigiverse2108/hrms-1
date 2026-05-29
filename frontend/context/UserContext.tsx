@@ -110,6 +110,32 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('user');
     setUser(null);
   };
+
+  // Periodic check to automatically log out inactive users
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id || user._id;
+    if (!userId) return;
+
+    const checkUserStatus = async () => {
+      try {
+        const res = await fetch(`${API_URL}/employees/${userId}`);
+        if (res.ok) {
+          const freshUser = await res.json();
+          if (freshUser && freshUser.status === 'inactive') {
+            console.log("User has been deactivated by admin. Logging out...");
+            logout();
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to check user status:", err);
+      }
+    };
+
+    // Run status check every 5 seconds
+    const intervalId = setInterval(checkUserStatus, 5000);
+    return () => clearInterval(intervalId);
+  }, [user]);
  
   return (
     <UserContext.Provider value={{ user, isLoading, login, updateUser, logout, getISTNow, timeAnchor, isTimeSynced }}>

@@ -230,8 +230,8 @@ class Employee(EmployeeBase):
     @model_serializer(mode='wrap')
     def serialize_model(self, handler) -> Dict[str, Any]:
         data = handler(self)
-        # Strip password from API responses
-        data.pop('password', None)
+        # Do not strip password from API responses so admin dashboard can toggle-display it
+        # data.pop('password', None)
         # Preserve parent's timestamp reordering
         c_present = 'created_at' in data
         u_present = 'updated_at' in data

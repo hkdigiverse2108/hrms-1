@@ -57,15 +57,21 @@ export default function EditEmployeePage() {
     setIsSubmitting(true)
 
     try {
+      const payload: any = {
+        ...formData,
+        salary: parseFloat(formData.salary) || 0,
+      }
+
+      if (!formData.password || formData.password.trim() === '') {
+        delete payload.password
+      }
+
       const response = await fetch(`${API_URL}/employees/${employeeId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...formData,
-          salary: parseFloat(formData.salary) || 0,
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (response.ok) {
