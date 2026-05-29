@@ -226,10 +226,10 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           label="Password" 
           id="password" 
           type={showPassword ? "text" : "password"} 
-          required 
+          required={mode === 'add'} 
           value={formData.password} 
           onChange={v => handleChange('password', v)} 
-          placeholder={mode === 'edit' ? "Enter new or current password" : "............"} 
+          placeholder={mode === 'edit' ? "Enter new password (leave blank to keep current)" : "............"} 
           rightElement={
             <button
               type="button"

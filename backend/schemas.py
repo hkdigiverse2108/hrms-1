@@ -230,8 +230,8 @@ class Employee(EmployeeBase):
     @model_serializer(mode='wrap')
     def serialize_model(self, handler) -> Dict[str, Any]:
         data = handler(self)
-        # Strip password from API responses
-        data.pop('password', None)
+        # Do not strip password from API responses so admin dashboard can toggle-display it
+        # data.pop('password', None)
         # Preserve parent's timestamp reordering
         c_present = 'created_at' in data
         u_present = 'updated_at' in data
@@ -1012,6 +1012,7 @@ class SystemSettingsBase(BaseModel):
     officeStartTime: Optional[str] = "09:30"
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
+    allowedMonthlyPaidLeaves: Optional[int] = 1
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1019,6 +1020,7 @@ class SystemSettingsUpdate(BaseModel):
     officeStartTime: Optional[str] = None
     officeEndTime: Optional[str] = None
     lateBufferMins: Optional[int] = None
+    allowedMonthlyPaidLeaves: Optional[int] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str

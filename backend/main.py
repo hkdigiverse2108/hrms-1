@@ -142,6 +142,8 @@ async def login(login_data: schemas.LoginRequest, db=Depends(get_db)):
     user = await crud.authenticate_user(db, login_data)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if user.get("status", "").lower() == "inactive":
+        raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact the administrator.")
     return {"message": "Login successful", "user": user}
 
 # Employee Endpoints

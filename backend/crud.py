@@ -2421,7 +2421,8 @@ async def get_system_settings(db):
             "latePunchDeductionEnabled": True,
             "officeStartTime": "09:30",
             "officeEndTime": "18:30",
-            "lateBufferMins": 10
+            "lateBufferMins": 10,
+            "allowedMonthlyPaidLeaves": 1
         }
         result = await db.system_settings.insert_one(default_settings)
         settings = await db.system_settings.find_one({"_id": result.inserted_id})

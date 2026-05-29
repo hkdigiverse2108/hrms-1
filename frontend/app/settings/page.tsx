@@ -17,8 +17,10 @@ import {
   Loader2,
   Building2,
   Clock,
-  Timer
+  Timer,
+  Save
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -117,6 +119,33 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveAllSettings = async () => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          officeStartTime: settings?.officeStartTime || "09:30",
+          officeEndTime: settings?.officeEndTime || "18:30",
+          lateBufferMins: settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10,
+          allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1
+        })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+        toast.success("Settings saved successfully!");
+      } else {
+        toast.error("Failed to save settings.");
+      }
+    } catch (err) {
+      console.error("Error saving settings:", err);
+      toast.error("An error occurred while saving settings.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const roles = [
     {
       id: "Admin",
@@ -146,13 +175,28 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto px-4 md:px-0">
       <PageHeader 
         title="Settings" 
         description="Manage your account preferences, system security, and module access."
-      />
+      >
+        {isAdmin && (
+          <Button 
+            onClick={handleSaveAllSettings}
+            disabled={isUpdating}
+            className="bg-brand-teal hover:bg-brand-teal-light text-white px-5 py-2.5 font-bold shadow-md flex items-center gap-2 transition-all active:scale-95 text-sm"
+          >
+            {isUpdating ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save Settings
+          </Button>
+        )}
+      </PageHeader>
 
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="space-y-6">
           {/* Access Control Card */}
           {isAdmin && (
             <Card className="p-6 border-border shadow-sm">
@@ -231,7 +275,6 @@ export default function SettingsPage() {
                       className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
                       value={settings?.officeStartTime || "09:30"}
                       onChange={(e) => setSettings({...settings, officeStartTime: e.target.value})}
-                      onBlur={(e) => handleUpdateShiftSettings('officeStartTime', e.target.value)}
                       disabled={isUpdating || user?.role !== 'Admin'}
                     />
                     <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">AM</div>
@@ -246,7 +289,6 @@ export default function SettingsPage() {
                       className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
                       value={settings?.officeEndTime || "18:30"}
                       onChange={(e) => setSettings({...settings, officeEndTime: e.target.value})}
-                      onBlur={(e) => handleUpdateShiftSettings('officeEndTime', e.target.value)}
                       disabled={isUpdating || user?.role !== 'Admin'}
                     />
                     <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">PM</div>
@@ -265,9 +307,8 @@ export default function SettingsPage() {
                       <input 
                         type="number" 
                         className="w-20 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
-                        value={settings?.lateBufferMins || 10}
-                        onChange={(e) => setSettings({...settings, lateBufferMins: parseInt(e.target.value)})}
-                        onBlur={(e) => handleUpdateShiftSettings('lateBufferMins', parseInt(e.target.value))}
+                        value={settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10}
+                        onChange={(e) => setSettings({...settings, lateBufferMins: parseInt(e.target.value) || 0})}
                         disabled={isUpdating || user?.role !== 'Admin'}
                       />
                       <span className="text-xs text-muted-foreground font-medium">minutes</span>
@@ -280,6 +321,49 @@ export default function SettingsPage() {
               </div>
             </div>
           </Card>
+
+          {/* Leave Configuration Card */}
+          {isAdmin && (
+            <Card className="p-6 border-border shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-brand-light rounded-lg">
+                  <ShieldAlert className="w-5 h-5 text-brand-teal" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-foreground">Leave Configuration</h3>
+                  <p className="text-xs text-muted-foreground">Define allowances and rules for monthly leaves.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Free Leaves per Month (No Salary Cut)</Label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="number" 
+                        className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                        value={settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1}
+                        onChange={(e) => setSettings({...settings, allowedMonthlyPaidLeaves: parseInt(e.target.value) || 0})}
+                        disabled={isUpdating || user?.role !== 'Admin'}
+                        min={0}
+                      />
+                      <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">DAYS</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl border border-amber-100 bg-amber-50/30">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Monthly leaves up to <span className="font-bold text-foreground">{settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1}</span> day(s) are given <span className="text-brand-teal font-bold">free by the company (no salary cut)</span>. Any extra monthly leaves will be automatically treated as <span className="text-amber-600 font-bold">Unpaid Leave (salary cut)</span>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+            </Card>
+          )}
 
 
 
