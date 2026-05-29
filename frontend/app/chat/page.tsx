@@ -773,8 +773,9 @@ export default function ChatPage() {
     
     const connectWebSocket = () => {
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsHost = window.location.hostname || "127.0.0.1";
-      const wsUrl = `${wsProtocol}//${wsHost}:8000/chat/ws/${user.id}`;
+      const wsHost = process.env.NEXT_PUBLIC_BACKEND_HOST || window.location.hostname || "127.0.0.1";
+      const wsPort = process.env.NEXT_PUBLIC_BACKEND_PORT || "8000";
+      const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/chat/ws/${user.id}`;
       
       console.log("Connecting to Chat WebSocket...", wsUrl);
       const ws = new WebSocket(wsUrl);
