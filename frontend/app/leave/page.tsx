@@ -133,6 +133,7 @@ export default function LeavePage() {
   // Holiday Form State
   const [holidays, setHolidays] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
+  const [sysSettings, setSysSettings] = useState<any>(null);
   const [isHolidayDialogOpen, setIsHolidayDialogOpen] = useState(false);
   const [holidayForm, setHolidayForm] = useState({
     name: "",
@@ -175,9 +176,20 @@ export default function LeavePage() {
       fetchLeaves();
       fetchHolidays();
       fetchCompanies();
+      fetchSysSettings();
     }
   }, [user?.id]);
 
+  const fetchSysSettings = async () => {
+    try {
+      const res = await fetch(`${API_URL}/system-settings`);
+      if (res.ok) {
+        setSysSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching system settings:", err);
+    }
+  };
 
   const fetchCompanies = async () => {
     try {
@@ -282,7 +294,10 @@ export default function LeavePage() {
       setIsSubmitting(false);
       return;
     }
-    const leaveTypeLabel = leaveType === 'other' ? 'Other' : leaveType.charAt(0).toUpperCase() + leaveType.slice(1) + " Leave";
+    const leaveTypeLabel = 
+      leaveType === 'annual' ? 'Monthly Leave' : 
+      leaveType === 'other' ? 'Other' : 
+      leaveType.charAt(0).toUpperCase() + leaveType.slice(1) + " Leave";
     const leaveRequest = {
       type: leaveTypeLabel,
       start_date: startDate.format("DD-MM-YYYY"),
@@ -334,7 +349,12 @@ export default function LeavePage() {
 
   const handleEdit = (item: any) => {
     setEditingId(item.id);
-    setLeaveType(item.type.toLowerCase().split(' ')[0]); // 'Annual Leave' -> 'annual'
+    const typeLower = item.type.toLowerCase();
+    if (typeLower.includes('monthly') || typeLower.includes('annual')) {
+      setLeaveType('annual');
+    } else {
+      setLeaveType(typeLower.split(' ')[0]);
+    }
     setStartDate(dayjs(item.start_date, "DD-MM-YYYY"));
     setEndDate(dayjs(item.end_date, "DD-MM-YYYY"));
     setReason(item.reason);
@@ -586,7 +606,7 @@ export default function LeavePage() {
   };
 
   const getTypeIcon = (type: string) => {
-    if (type.includes("Annual")) return Sun;
+    if (type.includes("Annual") || type.includes("Monthly")) return Sun;
     if (type.includes("Sick")) return Thermometer;
     if (type.includes("Casual")) return Briefcase;
     return Clock;
@@ -603,18 +623,18 @@ export default function LeavePage() {
   // Filter leaves for the current logged-in employee to calculate stats
   const myLeaves = leaves.filter(l => l.employee_id === user?.id);
 
-  // 1. Annual Leave Calculations (strictly matching 'annual')
+  // 1. Monthly Leave Calculations (matching 'annual' or 'monthly')
   const annualApproved = myLeaves
     .filter(l => {
       const t = (l.type || '').toLowerCase();
-      return (t.includes('annual') || t === 'annual') && l.status === 'Approved';
+      return (t.includes('annual') || t.includes('monthly') || t === 'annual' || t === 'monthly') && l.status === 'Approved';
     })
     .reduce((sum, l) => sum + parseDuration(l.duration), 0);
 
   const annualPending = myLeaves
     .filter(l => {
       const t = (l.type || '').toLowerCase();
-      return (t.includes('annual') || t === 'annual') && l.status === 'Pending';
+      return (t.includes('annual') || t.includes('monthly') || t === 'annual' || t === 'monthly') && l.status === 'Pending';
     })
     .reduce((sum, l) => sum + parseDuration(l.duration), 0);
 
@@ -622,7 +642,7 @@ export default function LeavePage() {
     .filter(l => {
       const t = (l.type || '').toLowerCase();
       const isCurrentMonth = l.start_date ? dayjs(l.start_date, "DD-MM-YYYY").isSame(dayjs(), 'month') : false;
-      return (t.includes('annual') || t === 'annual') && l.status === 'Approved' && isCurrentMonth;
+      return (t.includes('annual') || t.includes('monthly') || t === 'annual' || t === 'monthly') && l.status === 'Approved' && isCurrentMonth;
     })
     .reduce((sum, l) => sum + parseDuration(l.duration), 0);
 
@@ -699,14 +719,14 @@ export default function LeavePage() {
   const otherApproved = myLeaves
     .filter(l => {
       const t = (l.type || '').toLowerCase();
-      return !t.includes('annual') && !t.includes('sick') && !t.includes('casual') && !t.includes('unpaid') && l.status === 'Approved';
+      return !t.includes('annual') && !t.includes('monthly') && !t.includes('sick') && !t.includes('casual') && !t.includes('unpaid') && l.status === 'Approved';
     })
     .reduce((sum, l) => sum + parseDuration(l.duration), 0);
 
   const otherPending = myLeaves
     .filter(l => {
       const t = (l.type || '').toLowerCase();
-      return !t.includes('annual') && !t.includes('sick') && !t.includes('casual') && !t.includes('unpaid') && l.status === 'Pending';
+      return !t.includes('annual') && !t.includes('monthly') && !t.includes('sick') && !t.includes('casual') && !t.includes('unpaid') && l.status === 'Pending';
     })
     .reduce((sum, l) => sum + parseDuration(l.duration), 0);
 
@@ -714,7 +734,7 @@ export default function LeavePage() {
     .filter(l => {
       const t = (l.type || '').toLowerCase();
       const isCurrentMonth = l.start_date ? dayjs(l.start_date, "DD-MM-YYYY").isSame(dayjs(), 'month') : false;
-      return !t.includes('annual') && !t.includes('sick') && !t.includes('casual') && !t.includes('unpaid') && l.status === 'Approved' && isCurrentMonth;
+      return !t.includes('annual') && !t.includes('monthly') && !t.includes('sick') && !t.includes('casual') && !t.includes('unpaid') && l.status === 'Approved' && isCurrentMonth;
     })
     .reduce((sum, l) => sum + parseDuration(l.duration), 0);
 
@@ -782,14 +802,20 @@ export default function LeavePage() {
                     <SelectValue placeholder="Select leave type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="annual">Annual Leave</SelectItem>
+                    <SelectItem value="annual">Monthly Leave</SelectItem>
                     <SelectItem value="sick">Sick Leave</SelectItem>
                     <SelectItem value="casual">Casual Leave</SelectItem>
                     <SelectItem value="unpaid">Unpaid Leave</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Balance: 9 Days Available</p>
+                 <p className="text-xs text-muted-foreground">
+                  {leaveType === "annual" ? (
+                    `Free Leave Allowance: ${sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1} Free Day(s) per Month (Remaining: ${Math.max(0, (sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1) - annualCurrentMonth)} Day(s))`
+                  ) : (
+                    "Balance: 9 Days Available"
+                  )}
+                </p>
               </div>
 
                 <div className="space-y-2 flex flex-col">
@@ -830,15 +856,6 @@ export default function LeavePage() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-
-              <div className="bg-brand-light rounded-lg p-3 flex gap-3 border border-brand-teal/20 mt-4">
-                <CalendarIcon className="w-5 h-5 text-brand-teal shrink-0 mt-0.5" />
-                <p className="text-sm font-medium text-brand-teal">
-                  {calculateLeaveDays(startDate, endDate)} days will be deducted from your balance.<br />
-                  <span className="font-normal">(Excludes Sundays & Public Holidays)</span>
-                </p>
               </div>
 
               <div className="space-y-2 pt-2">
@@ -1016,10 +1033,10 @@ export default function LeavePage() {
 
       {/* Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Annual Leave Card */}
+        {/* Monthly Leave Card */}
         <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
           <div className="flex justify-between items-start mb-4">
-            <span className="font-medium text-xs text-slate-700">Annual Leave</span>
+            <span className="font-medium text-xs text-slate-700">Monthly Leave</span>
             <div className="p-1 bg-brand-light rounded-md">
               <Sun className="w-3.5 h-3.5 text-brand-teal" />
             </div>
@@ -1030,14 +1047,22 @@ export default function LeavePage() {
               <span className="text-[11px] text-muted-foreground">Days Taken ({dayjs().format('MMMM')})</span>
             </div>
           </div>
-          <div className="flex justify-between text-xs pt-3 border-t border-border">
+          <div className="flex justify-between text-xs pt-3 border-t border-border gap-2">
             <div>
               <div className="text-muted-foreground mb-0.5">Pending</div>
               <div className="font-medium">{annualPending} Day{annualPending !== 1 ? 's' : ''}</div>
             </div>
+            <div className="text-center">
+              <div className="text-muted-foreground mb-0.5">Free Allowance</div>
+              <div className="font-medium">
+                {sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1} Free Day{(sysSettings?.allowedMonthlyPaidLeaves !== 1) ? 's' : ''}
+              </div>
+            </div>
             <div className="text-right">
-              <div className="text-muted-foreground mb-0.5">Overall Total</div>
-              <div className="font-semibold text-slate-700">{annualApproved} Day{annualApproved !== 1 ? 's' : ''}</div>
+              <div className="text-muted-foreground mb-0.5">Unpaid ({dayjs().format('MMM')})</div>
+              <div className="font-semibold text-amber-600">
+                {Math.max(0, annualCurrentMonth - (sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1))} Day(s)
+              </div>
             </div>
           </div>
         </div>
@@ -1158,7 +1183,7 @@ export default function LeavePage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Leave Types</SelectItem>
-                <SelectItem value="annual">Annual Leave</SelectItem>
+                <SelectItem value="annual">Monthly Leave</SelectItem>
                 <SelectItem value="sick">Sick Leave</SelectItem>
                 <SelectItem value="casual">Casual Leave</SelectItem>
                 <SelectItem value="unpaid">Unpaid Leave</SelectItem>
