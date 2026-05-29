@@ -151,7 +151,7 @@ async def get_system_time():
     }
 
 @app.get("/employees", response_model=List[schemas.Employee])
-async def read_employees(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_employees(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_employees(db, skip=skip, limit=limit)
 
 @app.get("/employees/{employee_id}", response_model=schemas.Employee)
@@ -179,7 +179,7 @@ async def delete_employee(employee_id: str, db=Depends(get_db)):
 
 # Attendance Endpoints
 @app.get("/attendance", response_model=List[schemas.Attendance])
-async def read_attendance(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_attendance(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_attendance(db, skip=skip, limit=limit)
 
 @app.get("/attendance/status/{employee_id}")
@@ -265,11 +265,11 @@ async def break_out(employee_id: str, db=Depends(get_db)):
 
 # Leave Endpoints
 @app.get("/leaves", response_model=List[schemas.LeaveRequest])
-async def read_leave_requests(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_leave_requests(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_all_leave_requests(db, skip=skip, limit=limit)
 
 @app.get("/leaves/employee/{employee_id}", response_model=List[schemas.LeaveRequest])
-async def read_user_leave_requests(employee_id: str, skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_user_leave_requests(employee_id: str, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_user_leave_requests(db, employee_id, skip=skip, limit=limit)
 
 @app.post("/leaves", response_model=schemas.LeaveRequest)
@@ -303,7 +303,7 @@ async def delete_leave_request(leave_id: str, db=Depends(get_db)):
 
 # Announcement Endpoints
 @app.get("/announcements", response_model=List[schemas.Announcement])
-async def read_announcements(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_announcements(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_announcements(db, skip=skip, limit=limit)
 
 # Dashboard Endpoints
@@ -313,7 +313,7 @@ async def read_dashboard_stats(db=Depends(get_db)):
 
 # Payroll Endpoints
 @app.get("/payroll", response_model=List[schemas.Payroll])
-async def read_payroll(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_payroll(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_payroll(db, skip=skip, limit=limit)
 
 @app.post("/payroll/process")
@@ -333,7 +333,7 @@ async def update_payroll(payroll_id: str, request: dict, db=Depends(get_db)):
     return res
 
 @app.get("/salary-structures", response_model=List[schemas.SalaryStructure])
-async def read_salary_structures(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_salary_structures(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_salary_structures(db, skip=skip, limit=limit)
 
 @app.get("/salary-structures/{employee_id}", response_model=schemas.SalaryStructure)
@@ -370,7 +370,7 @@ async def mark_all_notifications_read(employee_id: str, db=Depends(get_db)):
 
 # Department Endpoints
 @app.get("/departments", response_model=List[schemas.Department])
-async def read_departments(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_departments(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_departments(db, skip=skip, limit=limit)
 
 @app.post("/departments", response_model=schemas.Department)
@@ -388,7 +388,7 @@ async def delete_department(department_id: str, db=Depends(get_db)):
 
 # Designation Endpoints
 @app.get("/designations", response_model=List[schemas.Designation])
-async def read_designations(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_designations(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_designations(db, skip=skip, limit=limit)
 
 @app.post("/designations", response_model=schemas.Designation)
@@ -406,24 +406,24 @@ async def delete_designation(designation_id: str, db=Depends(get_db)):
 
 # Configuration Endpoints (Companies, Roles, Relations)
 @app.get("/companies", response_model=List[schemas.Company])
-async def read_companies(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_companies(db, skip, limit)
+async def read_companies(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_companies(db, skip, limit)
 @app.post("/companies", response_model=schemas.Company)
 async def create_company(company: schemas.CompanyCreate, db=Depends(get_db)): return await crud.create_company(db, company)
 
 @app.get("/roles", response_model=List[schemas.Role])
-async def read_roles(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_roles(db, skip, limit)
+async def read_roles(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_roles(db, skip, limit)
 @app.post("/roles", response_model=schemas.Role)
 async def create_role(role: schemas.RoleCreate, db=Depends(get_db)): return await crud.create_role(db, role)
 
 @app.get("/relations", response_model=List[schemas.Relation])
-async def read_relations(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_relations(db, skip, limit)
+async def read_relations(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_relations(db, skip, limit)
 @app.post("/relations", response_model=schemas.Relation)
 async def create_relation(relation: schemas.RelationCreate, db=Depends(get_db)): return await crud.create_relation(db, relation)
 
 
 # Recruitment Endpoints
 @app.get("/job-openings", response_model=List[schemas.JobOpening])
-async def read_job_openings(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_job_openings(db, skip, limit)
+async def read_job_openings(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_job_openings(db, skip, limit)
 @app.post("/job-openings", response_model=schemas.JobOpening)
 async def create_job_opening(job: schemas.JobOpeningCreate, db=Depends(get_db)): return await crud.create_job_opening(db, job)
 @app.put("/job-openings/{job_id}", response_model=schemas.JobOpening)
@@ -435,7 +435,7 @@ async def delete_job_opening(job_id: str, db=Depends(get_db)):
     return {"message": "Job opening deleted successfully"}
 
 @app.get("/applications", response_model=List[schemas.Application])
-async def read_applications(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_applications(db, skip, limit)
+async def read_applications(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_applications(db, skip, limit)
 @app.post("/applications", response_model=schemas.Application)
 async def create_application(app: schemas.ApplicationCreate, db=Depends(get_db)): return await crud.create_application(db, app)
 @app.put("/applications/{app_id}", response_model=schemas.Application)
@@ -451,13 +451,13 @@ async def read_application_logs(app_id: str, db=Depends(get_db)):
     return await crud.get_application_logs(db, app_id)
 
 @app.get("/interns", response_model=List[schemas.Intern])
-async def read_interns(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_interns(db, skip, limit)
+async def read_interns(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_interns(db, skip, limit)
 @app.post("/interns", response_model=schemas.Intern)
 async def create_intern(intern: schemas.InternCreate, db=Depends(get_db)): return await crud.create_intern(db, intern)
 
 # Asset & Expense Endpoints
 @app.get("/assets", response_model=List[schemas.Asset])
-async def read_assets(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_assets(db, skip, limit)
+async def read_assets(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_assets(db, skip, limit)
 @app.post("/assets", response_model=schemas.Asset)
 async def create_asset(asset: schemas.AssetCreate, db=Depends(get_db)): return await crud.create_asset(db, asset)
 @app.put("/assets/{asset_id}", response_model=schemas.Asset)
@@ -468,13 +468,13 @@ async def delete_asset(asset_id: str, db=Depends(get_db)):
     return {"message": "Asset deleted successfully"}
 
 @app.get("/expense-claims", response_model=List[schemas.ExpenseClaim])
-async def read_expense_claims(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_expense_claims(db, skip, limit)
+async def read_expense_claims(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_expense_claims(db, skip, limit)
 @app.post("/expense-claims", response_model=schemas.ExpenseClaim)
 async def create_expense_claim(claim: schemas.ExpenseClaimCreate, db=Depends(get_db)): return await crud.create_expense_claim(db, claim)
 
 # Holiday & Performance Endpoints
 @app.get("/holidays", response_model=List[schemas.Holiday])
-async def read_holidays(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_holidays(db, skip, limit)
+async def read_holidays(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_holidays(db, skip, limit)
 @app.post("/holidays", response_model=schemas.Holiday)
 async def create_holiday(holiday: schemas.HolidayCreate, db=Depends(get_db)): return await crud.create_holiday(db, holiday)
 @app.put("/holidays/{holiday_id}", response_model=schemas.Holiday)
@@ -546,12 +546,12 @@ async def create_holidays_bulk(payload: schemas.HolidayBulkCreate, db=Depends(ge
     return await crud.create_holidays_bulk(db, payload)
 
 @app.get("/kpi-records", response_model=List[schemas.KPI])
-async def read_kpi_records(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_kpi_records(db, skip, limit)
+async def read_kpi_records(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_kpi_records(db, skip, limit)
 @app.post("/kpi-records", response_model=schemas.KPI)
 async def create_kpi_record(kpi: schemas.KPICreate, db=Depends(get_db)): return await crud.create_kpi_record(db, kpi)
 
 @app.get("/reviews", response_model=List[schemas.Review])
-async def read_reviews(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_reviews(db, skip, limit)
+async def read_reviews(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_reviews(db, skip, limit)
 @app.post("/reviews", response_model=schemas.Review)
 async def create_review(review: schemas.ReviewCreate, db=Depends(get_db)): return await crud.create_review(db, review)
 @app.put("/reviews/{review_id}", response_model=schemas.Review)
@@ -560,7 +560,7 @@ async def update_review(review_id: str, update: schemas.ReviewUpdate, db=Depends
 async def delete_review(review_id: str, db=Depends(get_db)): return await crud.delete_review(db, review_id)
 
 @app.get("/remarks", response_model=List[schemas.Remark])
-async def read_remarks(skip: int = 0, limit: int = 100, db=Depends(get_db)): return await crud.get_remarks(db, skip, limit)
+async def read_remarks(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_remarks(db, skip, limit)
 @app.post("/remarks", response_model=schemas.Remark)
 async def create_remark(remark: schemas.RemarkCreate, db=Depends(get_db)): return await crud.create_remark(db, remark)
 @app.put("/remarks/{remark_id}", response_model=schemas.Remark)
@@ -582,7 +582,7 @@ async def permanently_delete_remark(remark_id: str, db=Depends(get_db)):
 
 # Penalty Type Endpoints
 @app.get("/penalty-types", response_model=List[schemas.PenaltyType])
-async def read_penalty_types(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_penalty_types(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_penalty_types(db, skip=skip, limit=limit)
 
 @app.post("/penalty-types", response_model=schemas.PenaltyType)
@@ -600,7 +600,7 @@ async def delete_penalty_type(penalty_id: str, db=Depends(get_db)):
 
 # Event Endpoints
 @app.get("/events", response_model=List[schemas.Event])
-async def read_events(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_events(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     events = await crud.get_events(db, skip, limit)
     holidays = await crud.get_holidays(db, 0, 1000)
     for h in holidays:
@@ -632,7 +632,7 @@ async def delete_event(event_id: str, db=Depends(get_db)): return await crud.del
 
 # Client Endpoints
 @app.get("/clients", response_model=List[schemas.Client])
-async def read_clients(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_clients(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_clients(db, skip=skip, limit=limit)
 
 @app.post("/clients", response_model=schemas.Client)
@@ -652,7 +652,7 @@ async def delete_client(client_id: str, db=Depends(get_db)):
 
 # Project Endpoints
 @app.get("/projects", response_model=List[schemas.Project])
-async def read_projects(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_projects(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_projects(db, userId=userId, role=role, skip=skip, limit=limit)
 
 @app.post("/projects", response_model=schemas.Project)
@@ -672,7 +672,7 @@ async def delete_project(project_id: str, db=Depends(get_db)):
 
 # WM Task Endpoints
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
-async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)
 
 @app.post("/wm-tasks", response_model=schemas.WMTask)
@@ -1104,7 +1104,7 @@ async def save_seating_arrangement(payload: dict, db=Depends(get_db)):
 
 # Sales Lead Endpoints
 @app.get("/leads", response_model=List[schemas.Lead])
-async def read_leads(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_leads(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_leads(db, skip=skip, limit=limit)
 
 @app.post("/leads", response_model=schemas.Lead)
@@ -1186,7 +1186,7 @@ async def update_user_permissions(employee_id: str, permissions: schemas.UserPer
 
 # Permission Presets Routes
 @app.get("/permission-presets", response_model=List[schemas.PermissionPreset])
-async def read_permission_presets(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_permission_presets(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_permission_presets(db, skip, limit)
 
 @app.get("/permission-presets/{preset_id}", response_model=Optional[schemas.PermissionPreset])
@@ -1223,7 +1223,7 @@ async def create_time_recovery(recovery: schemas.TimeRecoveryCreate, db=Depends(
     return await crud.create_time_recovery(db, recovery)
 
 @app.get('/time-recovery', response_model=List[schemas.TimeRecovery])
-async def read_time_recoveries(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_time_recoveries(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_time_recoveries(db, skip=skip, limit=limit)
 
 @app.get('/time-recovery/employee/{employee_id}', response_model=List[schemas.TimeRecovery])
@@ -1240,7 +1240,7 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db=Depends(get_db)):
     return await crud.create_invoice(db, invoice)
 
 @app.get("/invoices", response_model=List[schemas.Invoice])
-async def read_invoices(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_invoices(db, skip=skip, limit=limit)
 
 @app.get("/invoices/next-number")
