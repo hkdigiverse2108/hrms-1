@@ -272,6 +272,14 @@ export default function LeavePage() {
   };
 
   const handleRequestSubmit = async () => {
+    if (leaveType === "annual") {
+      const allowed = sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1;
+      if (annualCurrentMonth >= allowed) {
+        toast.error("You have reached your limit of free monthly leaves. You cannot request more monthly leaves.");
+        return;
+      }
+    }
+
     if (!reason.trim()) {
       toast.error("Please provide a reason for your leave.");
       return;
@@ -809,13 +817,17 @@ export default function LeavePage() {
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
-                 <p className="text-xs text-muted-foreground">
-                  {leaveType === "annual" ? (
-                    `Free Leave Allowance: ${sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1} Free Day(s) per Month (Remaining: ${Math.max(0, (sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1) - annualCurrentMonth)} Day(s))`
-                  ) : (
-                    "Balance: 9 Days Available"
-                  )}
-                </p>
+                 {leaveType === "annual" && (
+                   <p className="text-xs text-muted-foreground">
+                    {(sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1) - annualCurrentMonth <= 0 ? (
+                      <span className="text-rose-500 font-semibold flex items-center gap-1 animate-in fade-in duration-200">
+                        ❌ Free leaves limit reached ({sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1} Day(s) Taken). You cannot request more monthly leaves.
+                      </span>
+                    ) : (
+                      `Free Leave Allowance: ${sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1} Free Day(s) per Month (Remaining: ${Math.max(0, (sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1) - annualCurrentMonth)} Day(s))`
+                    )}
+                   </p>
+                 )}
               </div>
 
                 <div className="space-y-2 flex flex-col">
@@ -1017,8 +1029,8 @@ export default function LeavePage() {
               {!isViewOnly && (
                 <Button 
                   onClick={handleRequestSubmit} 
-                  disabled={isSubmitting}
-                  className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium"
+                  disabled={isSubmitting || (leaveType === "annual" && annualCurrentMonth >= (sysSettings?.allowedMonthlyPaidLeaves !== undefined ? sysSettings.allowedMonthlyPaidLeaves : 1))}
+                  className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   {editingId ? 'Update Request' : 'Submit Request'}
@@ -1087,8 +1099,8 @@ export default function LeavePage() {
               <div className="font-medium">{sickPending} Day{sickPending !== 1 ? 's' : ''}</div>
             </div>
             <div className="text-right">
-              <div className="text-muted-foreground mb-0.5">Overall Total</div>
-              <div className="font-semibold text-slate-700">{sickApproved} Day{sickApproved !== 1 ? 's' : ''}</div>
+              <div className="text-muted-foreground mb-0.5">Overall</div>
+              <div className="font-semibold text-amber-600">{sickApproved} Day{sickApproved !== 1 ? 's' : ''}</div>
             </div>
           </div>
         </div>
@@ -1113,8 +1125,8 @@ export default function LeavePage() {
               <div className="font-medium">{casualPending} Day{casualPending !== 1 ? 's' : ''}</div>
             </div>
             <div className="text-right">
-              <div className="text-muted-foreground mb-0.5">Overall Total</div>
-              <div className="font-semibold text-slate-700">{casualApproved} Day{casualApproved !== 1 ? 's' : ''}</div>
+              <div className="text-muted-foreground mb-0.5">Overall</div>
+              <div className="font-semibold text-amber-600">{casualApproved} Day{casualApproved !== 1 ? 's' : ''}</div>
             </div>
           </div>
         </div>
@@ -1139,8 +1151,8 @@ export default function LeavePage() {
               <div className="font-medium">{unpaidPending} Day{unpaidPending !== 1 ? 's' : ''}</div>
             </div>
             <div className="text-right">
-              <div className="text-muted-foreground mb-0.5">Overall Total</div>
-              <div className="font-semibold text-slate-700">{unpaidApproved} Day{unpaidApproved !== 1 ? 's' : ''}</div>
+              <div className="text-muted-foreground mb-0.5">Overall</div>
+              <div className="font-semibold text-amber-600">{unpaidApproved} Day{unpaidApproved !== 1 ? 's' : ''}</div>
             </div>
           </div>
         </div>
@@ -1165,8 +1177,8 @@ export default function LeavePage() {
               <div className="font-medium">{otherPending} Day{otherPending !== 1 ? 's' : ''}</div>
             </div>
             <div className="text-right">
-              <div className="text-muted-foreground mb-0.5">Overall Total</div>
-              <div className="font-semibold text-slate-700">{otherApproved} Day{otherApproved !== 1 ? 's' : ''}</div>
+              <div className="text-muted-foreground mb-0.5">Overall</div>
+              <div className="font-semibold text-amber-600">{otherApproved} Day{otherApproved !== 1 ? 's' : ''}</div>
             </div>
           </div>
         </div>
@@ -1211,7 +1223,7 @@ export default function LeavePage() {
           <div className="space-y-2">
             <Label className="text-sm font-medium">Date Range</Label>
             <DatePicker.RangePicker 
-              className="w-full h-10 bg-gray-50/50" 
+              className="w-full h-10 border border-brand-teal/20 hover:border-brand-teal/40 bg-brand-light/30 rounded-lg transition-colors focus-within:border-brand-teal focus-within:ring-1 focus-within:ring-brand-teal" 
               format="DD-MM-YYYY"
               value={filterDateRange}
               onChange={(dates) => setFilterDateRange(dates)}
