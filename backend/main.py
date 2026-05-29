@@ -599,8 +599,15 @@ async def read_events(skip: int = 0, limit: int = 100, db=Depends(get_db)):
             "time": "All Day",
             "type": "Holiday"
         })
-    # Sort by date
-    events.sort(key=lambda x: x.get("date", x.date if hasattr(x, 'date') else ""))
+    # Sort by date — normalize mixed types (datetime, date, str, None) to comparable strings
+    def _sort_key(x):
+        d = x.get("date") if isinstance(x, dict) else getattr(x, "date", None)
+        if d is None:
+            return ""
+        if hasattr(d, "isoformat"):
+            return d.isoformat()
+        return str(d)
+    events.sort(key=_sort_key)
     return events
 @app.post("/events", response_model=schemas.Event)
 async def create_event(event: schemas.EventCreate, db=Depends(get_db)): return await crud.create_event(db, event)
