@@ -28,6 +28,17 @@ async def startup_migration():
         asyncio.create_task(migrate_database())
     except Exception as e:
         print(f"Error starting background migration: {e}")
+    
+    # Seed the employee_id counter if it doesn't exist yet
+    try:
+        from database import db
+        existing_counter = await db.counters.find_one({"_id": "employee_id"})
+        if not existing_counter:
+            count = await db.employees.count_documents({})
+            await db.counters.insert_one({"_id": "employee_id", "seq": count})
+            print(f"Seeded employee_id counter at {count}")
+    except Exception as e:
+        print(f"Error seeding employee counter: {e}")
 
 # CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
 _default_origins = "http://localhost:3535,http://127.0.0.1:3535"

@@ -672,9 +672,14 @@ async def run_payroll_processing(db, month: str, year: int):
     return payroll_results
 
 async def create_employee(db, employee: schemas.EmployeeCreate):
-    # Calculate sequential employeeId
-    count = await db.employees.count_documents({})
-    next_id = f"EMP{str(count + 1).zfill(3)}"
+    # Atomic counter to prevent duplicate IDs under concurrent requests
+    counter = await db.counters.find_one_and_update(
+        {"_id": "employee_id"},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True
+    )
+    next_id = f"EMP{str(counter['seq']).zfill(3)}"
     
     # Calculate full name
     name = f"{employee.firstName} {employee.lastName}"
