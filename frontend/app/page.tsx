@@ -455,6 +455,8 @@ export default function DashboardPage() {
  
       {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} />}
 
+      {isHR && <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />}
+
       {(isEmployee || isHR || userRole === "team leader") && (
         <EmployeeView 
           user={user} 
