@@ -453,7 +453,7 @@ export default function DashboardPage() {
         )}
       </PageHeader>
  
-      {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} />}
+      {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />}
 
       {isHR && <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />}
 
@@ -490,12 +490,12 @@ export default function DashboardPage() {
   );
 }
  
-function AdminView({ user, leaves, employees, interns, allAttendance }: { user: any, leaves: any[], employees: any[], interns: any[], allAttendance: any[] }) {
+function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow }: { user: any, leaves: any[], employees: any[], interns: any[], allAttendance: any[], getISTNow: () => Date }) {
 
-  const todayStr = dayjs().format('YYYY-MM-DD');
+  const todayStr = dayjs(getISTNow()).format('YYYY-MM-DD');
   const todayAttendance = allAttendance?.filter(a => a.date === todayStr) || [];
   
-  const last7Days = Array.from({length: 7}).map((_, i) => dayjs().subtract(6 - i, 'day').format('YYYY-MM-DD'));
+  const last7Days = Array.from({length: 7}).map((_, i) => dayjs(getISTNow()).subtract(6 - i, 'day').format('YYYY-MM-DD'));
   const chartData = last7Days.map(date => {
     const dayAttendance = allAttendance?.filter(a => a.date === date) || [];
     const present = dayAttendance.length;
