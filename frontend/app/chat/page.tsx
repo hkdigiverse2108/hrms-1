@@ -664,8 +664,11 @@ export default function ChatPage() {
           isMe: m.senderId === user.id
         }));
 
-        // Play sound and trigger desktop alerts on new incoming messages from others
+        // Play sound, trigger desktop alerts, and handle scroll — all in one state update
         setCurrentMessages(prev => {
+          const isInitialLoad = prev.length === 0;
+
+          // Notification logic: only when we already had messages and new ones arrived
           if (prev.length > 0 && marked.length > prev.length) {
             const lastMsg = marked[marked.length - 1];
             const chatId = selectedChat.id || selectedChat.employeeId;
@@ -714,12 +717,9 @@ export default function ChatPage() {
               }
             }
           }
-          return marked;
-        });
 
-        // After initial load (prev was empty), always scroll to the very bottom
-        setCurrentMessages(prev => {
-          if (prev.length === 0) {
+          // Scroll-to-bottom on initial load
+          if (isInitialLoad && marked.length > 0) {
             shouldScrollToBottom.current = true;
             setTimeout(() => {
               if (scrollRef.current) {
@@ -727,7 +727,8 @@ export default function ChatPage() {
               }
             }, 100);
           }
-          return prev;
+
+          return marked;
         });
         
         // If there are unread messages from others, mark them seen
@@ -773,8 +774,9 @@ export default function ChatPage() {
     
     const connectWebSocket = () => {
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsHost = window.location.hostname || "127.0.0.1";
-      const wsUrl = `${wsProtocol}//${wsHost}:8000/chat/ws/${user.id}`;
+      const wsHost = process.env.NEXT_PUBLIC_BACKEND_HOST || window.location.hostname || "127.0.0.1";
+      const wsPort = process.env.NEXT_PUBLIC_BACKEND_PORT || "8000";
+      const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/chat/ws/${user.id}`;
       
       console.log("Connecting to Chat WebSocket...", wsUrl);
       const ws = new WebSocket(wsUrl);

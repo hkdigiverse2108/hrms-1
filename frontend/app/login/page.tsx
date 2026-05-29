@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
  
@@ -138,18 +138,7 @@ export default function LoginPage() {
               </div>
             </div>
  
-            <div className="flex items-center">
-              <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setRememberMe(!rememberMe)}>
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${rememberMe ? 'bg-brand-teal border-brand-teal' : 'border-gray-300 group-hover:border-brand-teal'}`}>
-                  {rememberMe && (
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </div>
-                <span className="text-sm text-foreground">Remember me</span>
-              </div>
-            </div>
+
  
             <Button 
               type="submit" 
