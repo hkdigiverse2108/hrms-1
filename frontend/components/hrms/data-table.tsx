@@ -59,20 +59,24 @@ export function DataTable<T extends { id: string }>({
 
   return (
     <div className="space-y-4">
-      {searchKey && (
+      {(searchKey || extraFilters) && (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4 pt-2">
-          <div className="relative w-full max-w-sm group">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-teal transition-colors" />
-            <Input
-              placeholder={searchPlaceholder}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
-                setCurrentPage(1)
-              }}
-              className="pl-10 h-10 border-slate-200 focus-visible:ring-brand-teal rounded-xl bg-slate-50/50"
-            />
-          </div>
+          {searchKey ? (
+            <div className="relative w-full max-w-sm group">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-teal transition-colors" />
+              <Input
+                placeholder={searchPlaceholder}
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="pl-10 h-10 border-slate-200 focus-visible:ring-brand-teal rounded-xl bg-slate-50/50"
+              />
+            </div>
+          ) : (
+            <div className="flex-1" />
+          )}
           {extraFilters && (
             <div className="flex items-center gap-3 flex-1 justify-end">
               {extraFilters}

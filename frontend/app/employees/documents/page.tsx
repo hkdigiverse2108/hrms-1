@@ -20,10 +20,14 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { useRouter } from 'next/navigation'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
+import { useUser } from '@/hooks/useUser'
 
 export default function EmployeeDocumentsPage() {
   const router = useRouter()
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
+  const { user } = useUser()
+  const isHR = user?.role?.toLowerCase() === 'hr';
+  const isAdminOrHR = isAdmin || isHR;
   const { data, refresh } = useApi()
   const employees = data?.employees || []
   const documents = data?.employeeDocuments || []
@@ -190,6 +194,11 @@ export default function EmployeeDocumentsPage() {
   const [filterEmployee, setFilterEmployee] = useState<string>('all')
 
   const filteredDocuments = documents.filter((doc: any) => {
+    if (!isAdminOrHR) {
+      if (doc.employeeId !== user?.id && doc.employeeId !== user?.employeeId) {
+        return false
+      }
+    }
     const matchesType = filterType === 'all' || doc.documentName?.includes(filterType)
     const matchesEmployee = filterEmployee === 'all' || doc.employeeId === filterEmployee
     return matchesType && matchesEmployee
@@ -207,7 +216,20 @@ export default function EmployeeDocumentsPage() {
     <div className="space-y-6">
       <PageHeader title="Employee Documents" description="Manage and track official documents, certifications, and identification for all employees.">
         {(isAdmin || checkPermission('employee-documents', 'canAdd')) && (
-          <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={() => { setEditingId(null); setModalOpen(true); }}>
+          <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={() => {
+            setEditingId(null);
+            setFormData({
+              employeeId: !isAdminOrHR ? (user?.id || '') : '',
+              employeeName: !isAdminOrHR ? (user?.name || '') : '',
+              documentName: '',
+              fileName: '',
+              fileUrl: '',
+              uploadDate: new Date().toISOString().split('T')[0],
+              isReceived: 'Yes',
+              isOtherSelected: false
+            });
+            setModalOpen(true);
+          }}>
             <Plus className="mr-2 h-4 w-4" />
             Upload Document
           </Button>
@@ -219,23 +241,25 @@ export default function EmployeeDocumentsPage() {
           data={filteredDocuments}
           columns={columns}
           actions={actions}
-          searchKey="employeeName"
+          searchKey={isAdminOrHR ? "employeeName" : undefined}
           searchPlaceholder="Search by employee name..."
           extraFilters={
             <>
-              <div className="w-48">
-                <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                  <SelectTrigger className="h-9 border-slate-200 bg-slate-50/30 text-xs font-semibold">
-                    <SelectValue placeholder="All Employees" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Employees</SelectItem>
-                    {employees.map((emp: any) => (
-                      <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {isAdminOrHR && (
+                <div className="w-48">
+                  <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                    <SelectTrigger className="h-9 border-slate-200 bg-slate-50/30 text-xs font-semibold">
+                      <SelectValue placeholder="All Employees" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Employees</SelectItem>
+                      {employees.map((emp: any) => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="w-48">
                 <Select value={filterType} onValueChange={setFilterType}>
@@ -263,19 +287,21 @@ export default function EmployeeDocumentsPage() {
 
           <div className="grid grid-cols-2 gap-6 py-4">
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Select Employee</Label>
-                <Select value={formData.employeeId} onValueChange={(val) => setFormData({...formData, employeeId: val})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose employee..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(employees as any[])?.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {isAdminOrHR && (
+                <div className="space-y-2">
+                  <Label>Select Employee</Label>
+                  <Select value={formData.employeeId} onValueChange={(val) => setFormData({...formData, employeeId: val})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose employee..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(employees as any[])?.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Document Type</Label>
