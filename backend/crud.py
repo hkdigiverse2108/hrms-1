@@ -7,33 +7,59 @@ import pytz
 
 import time
 import urllib.request
+import threading
 
 IST = pytz.timezone('Asia/Kolkata')
 _real_time_anchor = None
 _mono_anchor = None
+_sync_lock = threading.Lock()
+_sync_thread_started = False
+
+def _sync_time_from_network():
+    """Fetch real time from Google in a background thread (non-blocking)."""
+    global _real_time_anchor, _mono_anchor
+    try:
+        req = urllib.request.Request('http://www.google.com', method='HEAD')
+        with urllib.request.urlopen(req, timeout=3) as response:
+            date_str = response.headers.get('Date')
+            dt = datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %Z')
+            with _sync_lock:
+                _real_time_anchor = dt.replace(tzinfo=timezone.utc).astimezone(IST)
+                _mono_anchor = time.monotonic()
+    except Exception:
+        # Silently fall back to system time if network unavailable
+        pass
+
+def _start_sync_thread():
+    """Start a daemon thread that syncs time every 30 minutes."""
+    global _sync_thread_started
+    if _sync_thread_started:
+        return
+    _sync_thread_started = True
+    
+    def _loop():
+        while True:
+            _sync_time_from_network()
+            time.sleep(1800)  # Re-sync every 30 minutes
+    
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
 
 def get_now():
     global _real_time_anchor, _mono_anchor
     
-    # Refresh every 10 minutes to prevent drift, or if first time
-    if _real_time_anchor is None or (time.monotonic() - _mono_anchor) > 600:
-        try:
-            # Fetch real time from a reliable source (Google)
-            req = urllib.request.Request('http://www.google.com', method='HEAD')
-            with urllib.request.urlopen(req, timeout=2) as response:
-                date_str = response.headers.get('Date')
-                # Format: Wed, 13 May 2026 07:37:30 GMT
-                dt = datetime.strptime(date_str, '%a, %d %b %Y %H:%M:%S %Z')
-                _real_time_anchor = dt.replace(tzinfo=timezone.utc).astimezone(IST)
-                _mono_anchor = time.monotonic()
-        except:
-            # Fallback to system time if internet is unavailable
-            if _real_time_anchor is None:
-                return datetime.now(IST)
+    # Start the background sync thread on first call
+    if not _sync_thread_started:
+        _start_sync_thread()
+        # Give the first sync a moment to complete
+        time.sleep(0.1)
     
-    # Calculate current real time based on elapsed monotonic time
-    elapsed = time.monotonic() - _mono_anchor
-    return _real_time_anchor + timedelta(seconds=elapsed)
+    with _sync_lock:
+        if _real_time_anchor is None:
+            # Sync hasn't completed yet — use system time
+            return datetime.now(IST)
+        elapsed = time.monotonic() - _mono_anchor
+        return _real_time_anchor + timedelta(seconds=elapsed)
 
 def parse_datetime(date_val, time_str):
     if not time_str:
