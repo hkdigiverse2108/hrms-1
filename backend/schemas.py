@@ -227,6 +227,22 @@ class EmployeeUpdate(BaseModel):
 class Employee(EmployeeBase):
     id: str
 
+    @model_serializer(mode='wrap')
+    def serialize_model(self, handler) -> Dict[str, Any]:
+        data = handler(self)
+        # Strip password from API responses
+        data.pop('password', None)
+        # Preserve parent's timestamp reordering
+        c_present = 'created_at' in data
+        u_present = 'updated_at' in data
+        c_val = data.pop('created_at', None)
+        u_val = data.pop('updated_at', None)
+        if c_present:
+            data['created_at'] = c_val
+        if u_present:
+            data['updated_at'] = u_val
+        return data
+
 class Break(BaseModel):
     startTime: str
     endTime: Optional[str] = None
