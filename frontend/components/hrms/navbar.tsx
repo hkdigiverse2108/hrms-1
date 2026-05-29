@@ -143,6 +143,8 @@ export function HRMSNavbar() {
                     onClick={() => {
                       if (n.type === 'leave' && n.reference_id) {
                         router.push(`/employees/leave?id=${n.reference_id}`);
+                      } else if (n.type === 'document') {
+                        router.push('/employees/documents');
                       }
                       markAsRead(n.id);
                     }}
@@ -163,6 +165,8 @@ export function HRMSNavbar() {
                           onClick={() => {
                             if (n.type === 'leave' && n.reference_id) {
                               router.push(`/employees/leave?id=${n.reference_id}`);
+                            } else if (n.type === 'document') {
+                              router.push('/employees/documents');
                             }
                             markAsRead(n.id);
                           }}
@@ -315,6 +319,8 @@ export function HRMSNavbar() {
                       iconBg = "bg-amber-50 text-amber-600";
                     } else if (n.type === 'attendance') {
                       iconBg = "bg-emerald-50 text-emerald-600";
+                    } else if (n.type === 'document') {
+                      iconBg = "bg-indigo-50 text-indigo-600";
                     }
 
                     return (
@@ -345,7 +351,10 @@ export function HRMSNavbar() {
                                 setIsNotificationsModalOpen(false);
                                 if (n.type === 'leave') {
                                   router.push(user?.role === 'Employee' ? '/leave' : '/employees/leave');
+                                } else if (n.type === 'document') {
+                                  router.push('/employees/documents');
                                 }
+                                markAsRead(n.id);
                               }}
                               className="h-7 px-2.5 text-[10px] font-bold border-brand-teal text-brand-teal hover:bg-brand-light"
                             >

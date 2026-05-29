@@ -7,13 +7,15 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { FileText, Download, Printer, Save, RefreshCw, ChevronLeft, Layout, FileType, User, Calendar, Briefcase, IndianRupee, Edit3, Loader2 } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { FileText, Download, Printer, Save, RefreshCw, ChevronLeft, Layout, FileType, User, Calendar, Briefcase, IndianRupee, Edit3, Loader2, Send } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import dayjs from 'dayjs'
+import { API_URL } from '@/lib/config'
 
 const DOCUMENT_TEMPLATES = [
   {
@@ -66,6 +68,22 @@ export default function DocumentGeneratorPage() {
   
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [selectedEmployee, setSelectedEmployee] = useState<string>('')
+  const [requestId, setRequestId] = useState<string>('')
+
+  // Parse query parameters for pre-filling employee and template fields
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const empId = params.get('employeeId')
+      const tempId = params.get('template')
+      const reqId = params.get('requestId')
+      
+      if (empId) setSelectedEmployee(empId)
+      if (tempId) setSelectedTemplate(tempId)
+      if (reqId) setRequestId(reqId)
+    }
+  }, [employees])
+
   const [extraFields, setExtraFields] = useState<any>({
     stipend: '10,000',
     startDate: dayjs().format('YYYY-MM-DD'),
@@ -87,6 +105,16 @@ export default function DocumentGeneratorPage() {
     probationPeriod: '3 Months',
     reportingTo: 'HR Manager',
   })
+
+  // Auto-generate preview when prefilled variables are fully loaded
+  useEffect(() => {
+    if (selectedEmployee && selectedTemplate && extraFields.name && employees.length > 0) {
+      const timer = setTimeout(() => {
+        generatePreview()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [selectedEmployee, selectedTemplate, extraFields.name, employees])
   
   // Sync fields when employee is selected
   useEffect(() => {
@@ -121,6 +149,7 @@ export default function DocumentGeneratorPage() {
   const [previewContent, setPreviewContent] = useState<string>('')
   const previewRef = useRef<HTMLDivElement>(null)
   const [isEditing, setIsEditing] = useState(false)
+  const [includeAcceptance, setIncludeAcceptance] = useState(false)
 
   const templateData = DOCUMENT_TEMPLATES.find(t => t.id === selectedTemplate)
 
@@ -335,11 +364,14 @@ export default function DocumentGeneratorPage() {
             </div>
 
             <div style="color: black; font-size: 14px; margin-bottom: 0px;">
+              ${includeAcceptance ? `
               <p style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">Acceptance by Candidate</p>
               <p style="text-align: justify; line-height: 1.5; margin-bottom: 16px;">
-                I, ______________________, accept the offer for the position of ______________________ at HK DigiVerse & IT Consultancy Pvt Ltd. and agree to abide by the company policies and terms mentioned above.
+                I, ______________________, accept the offer for the position of ______________________ at HK DigiVerse &amp; IT Consultancy Pvt Ltd. and agree to abide by the company policies and terms mentioned above.
               </p>
-              <p style="font-weight: bold; margin: 0;">Candidate Signature: ______________________</p>
+              <p style="font-weight: bold; margin-bottom: 5px;">Candidate Signature: ______________________</p>
+              <p style="font-weight: bold; margin: 0;">Date: ______________________</p>
+              ` : ''}
             </div>
           </div>
 
@@ -875,7 +907,7 @@ export default function DocumentGeneratorPage() {
       clone.style.position = 'relative'
       clone.style.transform = 'none'
 
-      const scale = 2
+      const scale = 1.5
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: nodeWidth * scale,
@@ -918,8 +950,10 @@ export default function DocumentGeneratorPage() {
         pdf.link(relX * pdfWidth, relY * pdfHeight, (linkRect.width / nodeWidth) * pdfWidth, (linkRect.height / nodeHeight) * pdfHeight, { url: link.href })
       })
 
-      const employeeName = currentEmployee ? `${currentEmployee.firstName} ${currentEmployee.lastName}`.replace(/\s+/g, '_') : 'Employee'
-      const filename = `${selectedTemplate.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('_')}_${employeeName}.pdf`
+      const rawName = extraFields.name || (currentEmployee ? `${currentEmployee.firstName} ${currentEmployee.lastName}` : 'Employee')
+      const employeeName = rawName.trim().replace(/\s+/g, '_')
+      const templateLabel = selectedTemplate.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('_')
+      const filename = `${templateLabel}_${employeeName}.pdf`
       
       pdf.save(filename)
       toast.success('Downloaded successfully!')
@@ -928,6 +962,220 @@ export default function DocumentGeneratorPage() {
       toast.error('Download failed. Try printing instead.')
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  const [isSending, setIsSending] = useState(false)
+
+  const handleSendLetterToEmployee = async () => {
+    if (!selectedTemplate || !selectedEmployee) {
+      toast.error('Please select a template and an employee')
+      return
+    }
+    if (selectedEmployee === 'manual') {
+      toast.error('Cannot send a document to a manually entered recipient. Please select an employee.')
+      return
+    }
+
+    setIsSending(true)
+    try {
+      const node = document.querySelector('.document-preview') as HTMLElement
+      if (!node) {
+        toast.error('Please generate a preview first')
+        setIsSending(false)
+        return
+      }
+
+      const domtoimage = (window as any).domtoimage
+      const { jsPDF } = (window as any).jspdf
+
+      if (!domtoimage || !jsPDF) {
+        toast.error('Libraries not loaded yet. Please wait a second.')
+        setIsSending(false)
+        return
+      }
+
+      // 1. Create a clean clone for capture to prevent "dirty DOM" artifacts
+      const rect = node.getBoundingClientRect()
+      const nodeWidth = rect.width || 800
+      const nodeHeight = rect.height || 1131
+      
+      const clone = node.cloneNode(true) as HTMLElement
+      
+      // 2. Setup a temporary isolated container for the clone
+      const container = document.createElement('div')
+      container.style.position = 'fixed'
+      container.style.left = '-10000px'
+      container.style.top = '0'
+      container.style.width = `${nodeWidth}px`
+      container.style.height = `${nodeHeight}px`
+      container.style.overflow = 'hidden'
+      container.style.background = 'white'
+      container.appendChild(clone)
+      document.body.appendChild(container)
+
+      // Ensure the clone has proper dimensions in the isolated container
+      clone.style.width = `${nodeWidth}px`
+      clone.style.height = `${nodeHeight}px`
+      clone.style.margin = '0'
+      clone.style.padding = '0'
+      clone.style.position = 'relative'
+      clone.style.transform = 'none'
+
+      const scale = 1.5
+      const dataUrl = await domtoimage.toPng(clone, {
+        bgcolor: '#ffffff',
+        width: nodeWidth * scale,
+        height: nodeHeight * scale,
+        cacheBust: true,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          width: `${nodeWidth}px`,
+          height: `${nodeHeight}px`,
+        }
+      })
+
+      // 3. Cleanup the temporary container immediately
+      document.body.removeChild(container)
+
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = (nodeHeight * pdfWidth) / nodeWidth
+      
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      let heightLeft = pdfHeight
+      let position = 0
+      
+      pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+      heightLeft -= pageHeight
+      
+      while (heightLeft > 1) {
+        position -= pageHeight
+        pdf.addPage()
+        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, pdfHeight)
+        heightLeft -= pageHeight
+      }
+      
+      // 4. Map links from the ORIGINAL node
+      node.querySelectorAll('a').forEach(link => {
+        const linkRect = link.getBoundingClientRect()
+        const relX = (linkRect.left - rect.left) / nodeWidth
+        const relY = (linkRect.top - rect.top) / nodeHeight
+        pdf.link(relX * pdfWidth, relY * pdfHeight, (linkRect.width / nodeWidth) * pdfWidth, (linkRect.height / nodeHeight) * pdfHeight, { url: link.href })
+      })
+
+      const rawName = extraFields.name || (currentEmployee ? `${currentEmployee.firstName} ${currentEmployee.lastName}` : 'Employee')
+      const employeeName = rawName.trim().replace(/\s+/g, '_')
+      const templateLabel = selectedTemplate.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('_')
+      const filename = `${templateLabel}_${employeeName}.pdf`
+      
+      // Get PDF Blob
+      const pdfBlob = pdf.output('blob')
+      const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' })
+      
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', pdfFile)
+      
+      // Upload PDF to server
+      const uploadRes = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: formDataUpload
+      })
+      
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload generated PDF')
+      }
+      
+      const uploadData = await uploadRes.json()
+      const absoluteUrl = uploadData.url.startsWith('http') 
+        ? uploadData.url 
+        : `${API_URL}${uploadData.url}`
+        
+      let matchedRequest = null
+      
+      if (requestId) {
+        // Fetch specific request by ID
+        const requestsRes = await fetch(`${API_URL}/document-requests`)
+        if (requestsRes.ok) {
+          const requests = await requestsRes.json()
+          matchedRequest = requests.find((r: any) => r.id === requestId)
+        }
+      }
+      
+      if (!matchedRequest) {
+        // Fetch employee requests to see if there is any pending request for this template
+        const requestsRes = await fetch(`${API_URL}/document-requests?employeeId=${selectedEmployee}`)
+        if (requestsRes.ok) {
+          const requests = await requestsRes.json()
+          matchedRequest = requests.find((r: any) => 
+            r.documentType === templateData?.name && 
+            r.status !== 'Sent'
+          )
+        }
+      }
+      
+      if (matchedRequest) {
+        // Update the existing request to 'Sent'
+        const updateRes = await fetch(`${API_URL}/document-requests/${matchedRequest.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'Sent',
+            fileName: filename,
+            fileUrl: absoluteUrl,
+            sentDate: new Date().toISOString().split('T')[0]
+          })
+        })
+        
+        if (updateRes.ok) {
+          toast.success('Generated document sent successfully!')
+        } else {
+          throw new Error('Failed to update request status')
+        }
+      } else {
+        // Create a new request directly marked as 'Sent'
+        const empDisplayName = currentEmployee ? `${currentEmployee.firstName} ${currentEmployee.lastName}` : 'Employee'
+        const createRes = await fetch(`${API_URL}/document-requests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employeeId: selectedEmployee,
+            employeeName: empDisplayName,
+            documentType: templateData?.name || 'Official Letter',
+            reason: 'Generated via built-in Document Generator',
+            status: 'Sent',
+            requestDate: new Date().toISOString().split('T')[0],
+            fileName: filename,
+            fileUrl: absoluteUrl,
+            sentDate: new Date().toISOString().split('T')[0]
+          })
+        })
+        
+        if (createRes.ok) {
+          // Notify the employee
+          await fetch(`${API_URL}/notifications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              employee_id: selectedEmployee,
+              title: 'Your Document is Ready',
+              message: `Your ${templateData?.name || 'Official Letter'} has been generated and sent to you. You can download it from the Official Letters section.`,
+              type: 'document',
+              is_read: false
+            })
+          })
+          toast.success('Generated document sent to employee successfully!')
+        } else {
+          throw new Error('Failed to create and send document')
+        }
+      }
+      
+    } catch (error) {
+      console.error('Send PDF Error:', error)
+      toast.error('Failed to send document to employee.')
+    } finally {
+      setIsSending(false)
     }
   }
 
@@ -1157,6 +1405,19 @@ export default function DocumentGeneratorPage() {
                   ))}
                 </div>
 
+                {selectedTemplate === 'employee-offer-letter' && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <Checkbox
+                      id="include-acceptance"
+                      checked={includeAcceptance}
+                      onCheckedChange={(checked) => setIncludeAcceptance(checked === true)}
+                    />
+                    <Label htmlFor="include-acceptance" className="text-sm font-semibold text-slate-700 cursor-pointer">
+                      Include Acceptance by Candidate
+                    </Label>
+                  </div>
+                )}
+
                 <Button 
                   className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold h-12 shadow-lg shadow-brand-teal/20"
                   onClick={generatePreview}
@@ -1213,6 +1474,19 @@ export default function DocumentGeneratorPage() {
                     <><Download className="w-4 h-4" />Download PDF</>
                   )}
                 </Button>
+                {selectedEmployee !== 'manual' && (
+                  <Button 
+                    className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold gap-2 px-6 h-9 rounded-lg shadow-sm"
+                    disabled={!previewContent || isDownloading || isSending}
+                    onClick={handleSendLetterToEmployee}
+                  >
+                    {isSending ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" />Sending...</>
+                    ) : (
+                      <><Send className="w-4 h-4" />Send to Employee</>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
 
