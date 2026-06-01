@@ -394,6 +394,22 @@ function PayslipContent() {
     generate()
   }
 
+  const handleWhatsAppShare = () => {
+    if (records.length !== 1) return
+    const record = records[0]
+    const employee = employees.find(e => e.id === record.employeeId)
+    const phone = employee?.phone || ""
+    const cleanedPhone = phone.replace(/[^0-9]/g, "")
+    const formattedPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone
+
+    const totalSalary = record.netSalary || 0
+    const text = `Dear *${record.employeeName}*,\n\nYour payslip for *${record.month} ${record.year}* has been successfully generated.\n*\n\nPlease check the HR portal to download it.\n\nBest regards,\n*HR Department*`
+
+    const encodedText = encodeURIComponent(text)
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`
+    window.open(whatsappUrl, "_blank")
+  }
+
   const handleUpdate = (record: any) => {
     setFormData(record)
     setIsEditing(true)
@@ -538,14 +554,6 @@ function PayslipContent() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => {
-          setSelectedEmpId(record.employeeId)
-          setSelectedMonth(record.month)
-          setSelectedYear(String(record.year))
-        }}>
-          <Eye className="mr-2 h-4 w-4" />
-          View Detailed
-        </DropdownMenuItem>
         {isAdminOrHR && (
           <>
             {record.status !== 'paid' && (
@@ -652,11 +660,11 @@ function PayslipContent() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Selection Bar - Always Visible */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-        <div className="flex flex-wrap gap-3 flex-1 w-full md:w-auto">
-          <div className="min-w-[200px] flex-1">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-5 rounded-2xl border border-slate-200 shadow-sm w-full">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
+          <div className="w-full sm:w-[220px]">
             <Select value={selectedEmpId} onValueChange={setSelectedEmpId} disabled={!isAdminOrHR}>
-              <SelectTrigger className="bg-slate-50 border-slate-200">
+              <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
                 <SelectValue placeholder="Select Employee" />
               </SelectTrigger>
               <SelectContent>
@@ -670,9 +678,9 @@ function PayslipContent() {
               </SelectContent>
             </Select>
           </div>
-          <div className="w-[140px]">
+          <div className="w-full sm:w-[130px]">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="bg-slate-50 border-slate-200">
+              <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
                 <SelectValue placeholder="Month" />
               </SelectTrigger>
               <SelectContent>
@@ -682,9 +690,9 @@ function PayslipContent() {
               </SelectContent>
             </Select>
           </div>
-          <div className="w-[100px]">
+          <div className="w-full sm:w-[100px]">
             <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="bg-slate-50 border-slate-200">
+              <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
                 <SelectValue placeholder="Year" />
               </SelectTrigger>
               <SelectContent>
@@ -696,28 +704,41 @@ function PayslipContent() {
           </div>
         </div>
 
-        <div className="flex gap-2 w-full md:w-auto">
+        <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full xl:w-auto">
           {isAdminOrHR && (
             <Button variant="outline" onClick={handleManualGenerate} className="flex-1 md:flex-none border-slate-300">
               <PlusCircle className="mr-2 h-4 w-4" />
               Manual Generate
             </Button>
           )}
-          <Button variant="outline" onClick={() => window.print()} className="flex-1 md:flex-none border-slate-300">
-            <Printer className="mr-2 h-4 w-4" />
-            Print
+          <Button variant="outline" onClick={() => window.print()} className="flex-1 md:flex-none border-slate-300" size="icon">
+            <Printer className="h-4 w-4" />
           </Button>
           <Button 
+            variant="outline"
             onClick={handleDownloadPDF} 
             disabled={isDownloading || records.length === 0}
-            className="flex-1 md:flex-none bg-brand-teal hover:bg-brand-teal/90 shadow-md min-w-[140px]"
+            className="flex-1 md:flex-none border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+            size="icon"
           >
             {isDownloading ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</>
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <><Download className="mr-2 h-4 w-4" />Download PDF</>
+              <Download className="h-4 w-4" />
             )}
           </Button>
+          {records.length === 1 && (
+            <Button 
+              variant="outline" 
+              onClick={handleWhatsAppShare} 
+              className="flex-1 md:flex-none border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 font-semibold"
+              size="icon"
+            >
+              <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.96 9.96 0 001.333 4.982L2 22l5.202-1.362a9.923 9.923 0 004.804 1.233h.004c5.505 0 9.99-4.478 9.99-9.984A9.97 9.97 0 0012.012 2zm5.787 14.417c-.319.896-1.6 1.637-2.207 1.762-.562.115-1.3.208-3.791-.823-3.187-1.316-5.215-4.57-5.374-4.781-.159-.21-1.29-1.718-1.29-3.278 0-1.56.815-2.327 1.106-2.627.291-.3.636-.375.848-.375.213 0 .425.002.61.011.196.009.46-.073.72.553.273.66.936 2.278 1.018 2.443.082.165.137.357.027.576-.11.22-.248.481-.375.626-.129.145-.262.303-.11.564.152.261.677 1.115 1.453 1.808.998.892 1.839 1.168 2.103 1.3.264.132.417.11.573-.072.155-.183.67-.783.848-1.05.178-.266.357-.22.61-.128.252.091 1.602.755 1.875.892.272.137.454.206.522.32.068.115.068.665-.251 1.561z"/>
+              </svg>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -737,6 +758,11 @@ function PayslipContent() {
             searchKey="employeeName"
             searchPlaceholder="Search employee..."
             actions={renderActions}
+            onRowClick={(record) => {
+              setSelectedEmpId(record.employeeId)
+              setSelectedMonth(record.month)
+              setSelectedYear(String(record.year))
+            }}
           />
         </div>
       ) : (

@@ -28,6 +28,7 @@ interface DataTableProps<T> {
   pageSize?: number
   extraFilters?: React.ReactNode
   isLoading?: boolean
+  onRowClick?: (item: T) => void
 }
 
 export function DataTable<T extends { id: string }>({
@@ -38,6 +39,7 @@ export function DataTable<T extends { id: string }>({
   actions,
   pageSize = 10,
   extraFilters,
+  onRowClick,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -109,7 +111,11 @@ export function DataTable<T extends { id: string }>({
               </TableRow>
             ) : (
               paginatedData.map((item, idx) => (
-                <TableRow key={item.id} className={`group transition-colors hover:bg-brand-teal/[0.02] border-slate-100 ${idx % 2 === 0 ? 'bg-transparent' : 'bg-slate-50/30'}`}>
+                <TableRow
+                  key={item.id}
+                  onClick={() => onRowClick && onRowClick(item)}
+                  className={`group transition-colors hover:bg-brand-teal/[0.02] border-slate-100 ${idx % 2 === 0 ? 'bg-transparent' : 'bg-slate-50/30'} ${onRowClick ? 'cursor-pointer' : ''}`}
+                >
                   {columns.map((column) => (
                     <TableCell key={String(column.key)} className="py-4 px-6">
                       {column.render
@@ -117,7 +123,14 @@ export function DataTable<T extends { id: string }>({
                         : <span className="text-slate-600 font-semibold">{String(item[column.key as keyof T] ?? '')}</span>}
                     </TableCell>
                   ))}
-                  {actions && <TableCell className="py-4 px-6 text-right">{actions(item)}</TableCell>}
+                  {actions && (
+                    <TableCell
+                      className="py-4 px-6 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {actions(item)}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}
