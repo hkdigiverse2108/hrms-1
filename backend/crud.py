@@ -122,7 +122,7 @@ async def get_employee(db, employee_id: str):
     try:
         doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
         return fix_id(doc)
-    except:
+    except Exception:
         return None
 
 async def update_employee(db, employee_id: str, employee_update: schemas.EmployeeUpdate):
@@ -257,7 +257,7 @@ async def get_salary_structure_by_employee(db, employee_id: str):
             doc = await db.salary_structures.find_one({"employeeId": emp.get("employeeId")})
             if doc:
                 return fix_id(doc)
-    except:
+    except Exception:
         pass
     return None
 
@@ -319,7 +319,7 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
             date_parts = r["date"].split(" ")
             r_month = date_parts[0]
             r_year = int(date_parts[-1])
-        except:
+        except Exception:
             r_month = month or "Unknown"
             r_year = year or 2026
 
@@ -1182,7 +1182,7 @@ async def generate_bulk_attendance(db, employee_id: str, month: str, year: int):
         try:
             sh, sm = map(int, office_start.split(':'))
             eh, em = map(int, office_end.split(':'))
-        except:
+        except Exception:
             sh, sm = 9, 30
             eh, em = 18, 30
 
@@ -1758,7 +1758,7 @@ async def get_all_leave_requests(db, skip: int = 0, limit: int = 100):
                 employee = await db.employees.find_one({"_id": ObjectId(approved_by_id)})
                 if employee:
                     leave["approved_by_photo"] = employee.get("profilePhoto") or None
-            except:
+            except Exception:
                 pass
     return leaves
 
@@ -1773,7 +1773,7 @@ async def get_user_leave_requests(db, employee_id: str, skip: int = 0, limit: in
                 employee = await db.employees.find_one({"_id": ObjectId(approved_by_id)})
                 if employee:
                     leave["approved_by_photo"] = employee.get("profilePhoto") or None
-            except:
+            except Exception:
                 pass
     return leaves
 
@@ -2063,7 +2063,7 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                     for pid in project_ids:
                         try:
                             project_ids_as_obj.append(ObjectId(pid))
-                        except:
+                        except Exception:
                             pass
                     
                     if project_ids_as_obj:
@@ -2322,7 +2322,7 @@ async def create_lead(db, lead: schemas.LeadCreate):
 async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
     try:
         oid = ObjectId(lead_id)
-    except:
+    except Exception:
         return None
         
     update_data = lead_update.dict(exclude_unset=True)
@@ -2358,7 +2358,7 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
                                 else:
                                     ld = datetime.strptime(str(ld_str), fmt)
                                 break
-                            except: continue
+                            except Exception: continue
                         
                         if ld:
                             month_name = ld.strftime("%B")
@@ -2367,7 +2367,7 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
                             await recalculate_sales_target(db, str(emp["_id"]), month_name, ld.year, "Monthly")
                             # Recalculate Weekly
                             await recalculate_sales_target(db, str(emp["_id"]), month_name, ld.year, "Weekly", week_num)
-                    except: pass
+                    except Exception: pass
         
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
@@ -2376,7 +2376,7 @@ async def delete_lead(db, lead_id: str):
     try:
         result = await db.leads.delete_one({"_id": ObjectId(lead_id)})
         return result.deleted_count > 0
-    except:
+    except Exception:
         return False
 
 async def add_lead_follow_up(db, lead_id: str, follow_up: schemas.FollowUp, performedBy: str = "Unknown", userName: str = "Unknown User"):
@@ -2569,7 +2569,7 @@ async def create_message(db, message: schemas.ChatMessageCreate):
             emp = await db.employees.find_one({"_id": ObjectId(message_dict["senderId"])})
             if emp:
                 message_dict["sender"] = emp.get("name", "Colleague")
-        except:
+        except Exception:
             pass
     return message_dict
 
@@ -2608,7 +2608,7 @@ async def get_chat_groups(db, user_id: str):
                 t_str = last_msg["timestamp"].replace("Z", "+00:00")
                 dt = datetime.fromisoformat(t_str)
                 fixed["lastMessageTime"] = dt.strftime("%I:%M %p").lstrip("0")
-            except:
+            except Exception:
                 fixed["lastMessageTime"] = last_msg.get("timestamp", "")
         else:
             fixed["lastMessage"] = ""
@@ -2634,7 +2634,7 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
         employees_cursor = db.employees.find()
         employees_list = await employees_cursor.to_list(length=1000)
         employee_cache = {str(emp["_id"]): emp.get("name", "Colleague") for emp in employees_list}
-    except:
+    except Exception:
         employee_cache = {}
 
     fixed_rows = []
@@ -2757,7 +2757,7 @@ async def get_chat_channels(db):
                 t_str = last_msg["timestamp"].replace("Z", "+00:00")
                 dt = datetime.fromisoformat(t_str)
                 fixed["lastMessageTime"] = dt.strftime("%I:%M %p").lstrip("0")
-            except:
+            except Exception:
                 fixed["lastMessageTime"] = last_msg.get("timestamp", "")
         else:
             fixed["lastMessage"] = fixed.get("description", "")
@@ -2917,7 +2917,7 @@ async def get_typing_users(db, chat_id: str, current_user_id: str):
             group = await db.chat_groups.find_one({"_id": ObjectId(chat_id)})
             if group:
                 is_group = True
-        except:
+        except Exception:
             pass
             
     if is_group:
@@ -3217,7 +3217,7 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
                         try:
                             ld = datetime.strptime(str(lead_date_str), fmt)
                             break
-                        except: continue
+                        except Exception: continue
                 
                 if not ld: continue
                 
@@ -3414,7 +3414,7 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                         h, r = divmod(diff.total_seconds(), 3600)
                         m, _ = divmod(r, 60)
                         attn_record['workHours'] = f"{int(h)}h {int(m)}m"
-                    except: pass
+                    except Exception: pass
                 
                 await db.attendance.update_one(
                     {'_id': attn_record['_id']},
@@ -3452,7 +3452,7 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                             if diff < min_diff:
                                 min_diff = diff
                                 best_break = b
-                        except: continue
+                        except Exception: continue
                     
                     if best_break:
                         print(f"DEBUG: Best match found in record {attn['_id']} with {min_diff} mins diff")
@@ -3477,7 +3477,7 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                                     "duration": str(int((t2 - t1).total_seconds() / 60))
                                 })
                                 updated = True
-                        except: pass
+                        except Exception: pass
 
                     if updated:
                         await apply_updates(attn, breaks)
