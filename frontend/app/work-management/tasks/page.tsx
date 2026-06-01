@@ -431,6 +431,7 @@ export default function TasksPage() {
                     <th className="px-4 py-3 min-w-[120px]">Assignee</th>
                     <th className="px-4 py-3 min-w-[120px]">Department</th>
                     <th className="px-4 py-3 min-w-[120px]">Stage</th>
+                    <th className="px-4 py-3 min-w-[125px]">Created Date</th>
                     <th className="px-4 py-3">Posting Date</th>
                     <th className="px-4 py-3">Posting Day</th>
                     <th className="px-4 py-3">Reel/Post</th>
@@ -464,6 +465,7 @@ export default function TasksPage() {
                         { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
                         { key: 'department', type: 'select', options: ['Development', 'Graphics', 'Marketing'].map(d => ({ value: d, label: d })), minWidth: '120px' },
                         { key: 'status', type: 'select', options: STAGES.map(s => ({ value: s.id, label: s.label })), minWidth: '120px' },
+                        { key: 'createdDate', type: 'readonly', minWidth: '125px' },
                         { key: 'postingDate', type: 'date' },
                         { key: 'postingDay', type: 'readonly' },
                         { key: 'reelPost', type: 'select', options: ['Post', 'Reel', 'Video'].map(v => ({ value: v, label: v })) },
@@ -563,21 +565,19 @@ export default function TasksPage() {
                           {canEditTask && (
                             <button 
                               onClick={() => { setEditingTask(task); setModalOpen(true); }} 
-                              className="flex items-center gap-1 px-2 py-1 hover:bg-slate-100 rounded text-blue-600 transition-colors"
+                              className="p-1.5 hover:bg-slate-100 rounded-md text-blue-600 transition-colors"
                               title="Edit Task"
                             >
                               <Pencil className="w-3.5 h-3.5" />
-                              <span className="text-[10px] font-bold">Edit</span>
                             </button>
                           )}
                           {canDeleteTask && (
                             <button 
                               onClick={() => handleDelete(task.id)} 
-                              className="flex items-center gap-1 px-2 py-1 hover:bg-red-50 rounded text-red-500 transition-colors"
+                              className="p-1.5 hover:bg-red-50 rounded-md text-red-500 transition-colors"
                               title="Delete Task"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                              <span className="text-[10px] font-bold">Delete</span>
                             </button>
                           )}
                         </div>
@@ -693,6 +693,15 @@ export default function TasksPage() {
                                             {task.assignedToName || (employees.find(e => e.id === task.assignedToId) ? `${employees.find(e => e.id === task.assignedToId).firstName} ${employees.find(e => e.id === task.assignedToId).lastName}` : "Unassigned")}
                                           </span>
                                         </div>
+
+                                        {task.createdDate && (
+                                          <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0">
+                                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                                            <span className="text-[11px] font-bold text-slate-600 truncate">
+                                              {task.createdDate}
+                                            </span>
+                                          </div>
+                                        )}
 
                                         {employees.find(e => e.id === task.assignedToId)?.department && (
                                           <div className="px-2 py-0.5 bg-brand-teal/5 text-brand-teal border border-brand-teal/10 rounded-md text-[9px] font-extrabold uppercase tracking-tighter">
