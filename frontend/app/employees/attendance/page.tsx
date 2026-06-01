@@ -749,6 +749,7 @@ export default function EmployeeAttendanceListPage() {
                   <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Employee</th>
                   <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
                   <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Day</th>
+                  <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Current Status</th>
                   <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Check In</th>
                   <th className="px-4 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Check Out</th>
@@ -831,6 +832,14 @@ export default function EmployeeAttendanceListPage() {
                       ? "bg-emerald-50 text-emerald-600 border-emerald-100" 
                       : (statusLabel === "Leave" ? "bg-sky-50 text-sky-600 border-sky-100" : "bg-rose-50 text-rose-600 border-rose-100");
 
+                    const lastBreak = record.breaks && record.breaks.length > 0 ? record.breaks[record.breaks.length - 1] : null;
+                    const isOnBreak = lastBreak && !lastBreak.endTime;
+                    const currentStatus = record.checkOut 
+                      ? "punch-out" 
+                      : (isOnBreak 
+                          ? "break-in" 
+                          : (lastBreak?.endTime ? "break-out" : (record.checkIn && record.checkIn !== "--" && record.checkIn !== "--:--" ? "punch-in" : "absent")));
+
                     return (
                       <tr key={idx} className="hover:bg-slate-50 transition-colors group">
                         <td className="px-4 py-4">
@@ -852,6 +861,7 @@ export default function EmployeeAttendanceListPage() {
                           {isToday ? `Today, ${dayjs(record.date).format("MMM D")}` : dayjs(record.date).format("MMM D, YYYY")}
                         </td>
                         <td className="px-4 py-4 text-slate-600 font-medium">{day}</td>
+                        <td className="px-4 py-4 text-slate-500 font-medium">{currentStatus}</td>
                         <td className="px-4 py-4">
                           <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${statusClass} whitespace-nowrap uppercase tracking-wider`}>
                             {statusLabel}
