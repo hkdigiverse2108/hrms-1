@@ -2384,10 +2384,13 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
         if project:
             task_dict["projectName"] = project.get("title")
     
-    if not task_dict.get("assignedToName") and task_dict.get("assignedToId"):
+    if task_dict.get("assignedToId"):
         employee = await db.employees.find_one({"_id": ObjectId(task_dict["assignedToId"])})
         if employee:
-            task_dict["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+            if not task_dict.get("assignedToName"):
+                task_dict["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+            if not task_dict.get("department"):
+                task_dict["department"] = employee.get("department")
 
     if not task_dict.get("createdDate"):
         task_dict["createdDate"] = get_now().strftime("%Y-%m-%d")
@@ -2415,10 +2418,13 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
             if project:
                 update_data["projectName"] = project.get("title")
         
-        if update_data.get("assignedToId") and not update_data.get("assignedToName"):
+        if update_data.get("assignedToId"):
             employee = await db.employees.find_one({"_id": ObjectId(update_data["assignedToId"])})
             if employee:
-                update_data["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+                if not update_data.get("assignedToName"):
+                    update_data["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+                if not update_data.get("department"):
+                    update_data["department"] = employee.get("department")
                 
         await db.wm_tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
         
@@ -2546,13 +2552,31 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
     if update_data:
         # If status changed to 'Client Won', set closedDate if not provided
         old_lead = await db.leads.find_one({"_id": oid})
+        if not old_lead:
+            return None
+            
         if update_data.get("status") == "Client Won" and not update_data.get("closedDate"):
             update_data["closedDate"] = get_now().strftime("%Y-%m-%d")
             
         await db.leads.update_one({"_id": oid}, {"$set": update_data})
         
-        # Log the update
-        await log_activity(db, "Lead Updated", performedBy, userName, f"Lead details were updated. Status: {update_data.get('status', 'Unchanged')}", leadId=lead_id)
+        # Log the update with detailed changes
+        changes = []
+        ALLOWED_LOG_FIELDS = ["company", "contact", "email", "phone", "expectedIncome", "status", "priority", "source", "date", "remarks", "assignedTo"]
+        for key, new_val in update_data.items():
+            if key not in ALLOWED_LOG_FIELDS:
+                continue
+            old_val = old_lead.get(key)
+            if old_val != new_val:
+                display_key = key.replace("_", " ").title()
+                if key == "expectedIncome":
+                    changes.append(f"{display_key} changed from ₹{old_val or 0} to ₹{new_val}")
+                else:
+                    changes.append(f"{display_key} changed from '{old_val or 'None'}' to '{new_val}'")
+                    
+        if changes:
+            details = "; ".join(changes)
+            await log_activity(db, "Lead Updated", performedBy, userName, details, leadId=lead_id)
         
         # Trigger recalculation if status is Client Won or assignedTo changed
         if update_data.get("status") == "Client Won" or "assignedTo" in update_data:
@@ -2659,7 +2683,12 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
     if client_id:
         query["clientId"] = client_id
     if date:
-        query["date"] = date
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d")
+            dt_val = datetime(parsed_date.year, parsed_date.month, parsed_date.day)
+            query["date"] = {"$in": [date, parsed_date, dt_val]}
+        except Exception:
+            query["date"] = date
     cursor = db.marketing_daily_reports.find(query).sort("date", -1)
     reports = []
     async for doc in cursor:
@@ -3377,7 +3406,12 @@ async def get_employee_daily_reports(db, employee_id: str = None, department: st
     if department:
         query["department"] = department
     if date:
-        query["date"] = date
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d")
+            dt_val = datetime(parsed_date.year, parsed_date.month, parsed_date.day)
+            query["date"] = {"$in": [date, parsed_date, dt_val]}
+        except Exception:
+            query["date"] = date
     
     cursor = db.employee_daily_reports.find(query).sort("date", -1)
     reports = []

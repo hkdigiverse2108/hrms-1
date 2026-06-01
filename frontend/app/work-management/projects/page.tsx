@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProjectForm, ProjectFormData } from "@/components/hrms/ProjectForm";
@@ -15,6 +15,7 @@ import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function ProjectsPage() {
   const { user } = useUser();
@@ -33,6 +34,9 @@ export default function ProjectsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDept, setSelectedDept] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [selectedPriority, setSelectedPriority] = useState("all");
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -162,7 +166,12 @@ export default function ProjectsPage() {
     const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           p.department?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    
+    const matchesDept = selectedDept === "all" || p.department?.toLowerCase() === selectedDept.toLowerCase();
+    const matchesStatus = selectedStatus === "all" || p.status?.toLowerCase() === selectedStatus.toLowerCase();
+    const matchesPriority = selectedPriority === "all" || p.priority?.toLowerCase() === selectedPriority.toLowerCase();
+
+    return matchesSearch && matchesDept && matchesStatus && matchesPriority;
   });
 
   if (permissionsLoading) {
@@ -217,15 +226,69 @@ export default function ProjectsPage() {
         isLoading={isLoadingLogs}
       />
       
-      <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
+        <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input 
             placeholder="Search projects..." 
-            className="pl-10"
+            className="pl-10 h-10"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <Select value={selectedDept} onValueChange={setSelectedDept}>
+            <SelectTrigger className="w-[160px] h-10 font-medium">
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              <SelectItem value="Development">Development</SelectItem>
+              <SelectItem value="Graphics">Graphics</SelectItem>
+              <SelectItem value="Marketing">Marketing</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+            <SelectTrigger className="w-[140px] h-10 font-medium">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="planning">Planning</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="on-hold">On Hold</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedPriority} onValueChange={setSelectedPriority}>
+            <SelectTrigger className="w-[140px] h-10 font-medium">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priority</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {(selectedDept !== "all" || selectedStatus !== "all" || selectedPriority !== "all" || searchTerm !== "") && (
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                setSelectedDept("all");
+                setSelectedStatus("all");
+                setSelectedPriority("all");
+                setSearchTerm("");
+              }}
+              className="text-xs text-muted-foreground hover:text-rose-600 font-bold h-10 px-3"
+            >
+              Clear Filters
+            </Button>
+          )}
         </div>
       </div>
 

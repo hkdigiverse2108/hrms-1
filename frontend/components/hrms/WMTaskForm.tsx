@@ -13,6 +13,7 @@ export interface WMTaskFormData {
   description: string;
   projectId: string;
   assignedToId: string;
+  department?: string;
   dueDate: string;
   status: string;
   priority: string;
@@ -40,6 +41,7 @@ const defaultFormData: WMTaskFormData = {
   description: "",
   projectId: "",
   assignedToId: "",
+  department: "",
   dueDate: new Date().toISOString().split('T')[0],
   status: "todo",
   priority: "medium",
@@ -107,9 +109,37 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         newData.postingDay = day;
       }
       
+      // Auto-set department when employee is selected
+      if (field === "assignedToId" && value) {
+        const emp = employees.find(e => e.id === value);
+        if (emp && emp.department) {
+          newData.department = emp.department;
+        }
+      }
+
+      // Reset project and assignee if they mismatch the newly selected department
+      if (field === "department" && value) {
+        const currentProject = projects.find(p => p.id === prev.projectId);
+        if (currentProject && currentProject.department?.toLowerCase() !== value.toLowerCase()) {
+          newData.projectId = "";
+        }
+        const currentEmployee = employees.find(e => e.id === prev.assignedToId);
+        if (currentEmployee && currentEmployee.department?.toLowerCase() !== value.toLowerCase()) {
+          newData.assignedToId = "";
+        }
+      }
+      
       return newData;
     });
   };
+
+  const filteredProjects = formData.department
+    ? projects.filter(p => p.department?.toLowerCase() === formData.department.toLowerCase())
+    : projects;
+
+  const filteredEmployees = formData.department
+    ? employees.filter(e => e.department?.toLowerCase() === formData.department.toLowerCase())
+    : employees;
 
   const selectedProject = projects.find(p => p.id === formData.projectId);
   const isGraphicsProject = selectedProject?.department?.toLowerCase() === "graphics" || userDepartment?.toLowerCase() === "graphics";
@@ -132,7 +162,23 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="department">Department</Label>
+          <Select 
+            value={formData.department ?? ""} 
+            onValueChange={(v) => handleChange("department", v)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Development">Development</SelectItem>
+              <SelectItem value="Graphics">Graphics</SelectItem>
+              <SelectItem value="Marketing">Marketing</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-2">
           <Label htmlFor="projectId">Project</Label>
           <Select 
@@ -144,7 +190,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
               <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Project"} />
             </SelectTrigger>
             <SelectContent>
-              {projects.map((p) => (
+              {filteredProjects.map((p) => (
                 <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
               ))}
             </SelectContent>
@@ -161,7 +207,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
               <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Employee"} />
             </SelectTrigger>
             <SelectContent>
-              {employees.map((e) => (
+              {filteredEmployees.map((e) => (
                 <SelectItem key={e.id} value={e.id}>{e.firstName} {e.lastName}</SelectItem>
               ))}
             </SelectContent>

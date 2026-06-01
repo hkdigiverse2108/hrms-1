@@ -885,6 +885,7 @@ class WMTaskBase(BaseModel):
     projectName: Optional[str] = None
     assignedToId: str # Employee ID
     assignedToName: Optional[str] = None
+    department: Optional[str] = None
     dueDate: Optional[RobustDate] = None
     status: Optional[str] = "todo" # todo, in-progress, review, completed
     priority: Optional[str] = "medium" # low, medium, high, urgent
@@ -919,6 +920,7 @@ class WMTaskUpdate(BaseModel):
     projectName: Optional[str] = None
     assignedToId: Optional[str] = None
     assignedToName: Optional[str] = None
+    department: Optional[str] = None
     dueDate: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None

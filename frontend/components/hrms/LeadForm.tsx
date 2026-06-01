@@ -156,7 +156,7 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
               <SelectValue placeholder="Select employee" />
             </SelectTrigger>
             <SelectContent>
-              {employees.map(emp => (
+              {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
                 <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
               ))}
             </SelectContent>
