@@ -43,7 +43,5 @@ watchfiles==1.1.1
 websockets==15.0
 
 # MongoDB BSON
-bson>=0.5.10
-
-# External Holidays
+# (removed standalone bson package as it conflicts with pymongo)
 holidays==0.44.0

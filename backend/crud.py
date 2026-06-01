@@ -1070,6 +1070,48 @@ async def create_holidays_bulk(db, payload: schemas.HolidayBulkCreate):
     holidays_data = [h.dict() for h in payload.holidays]
     if not holidays_data:
         return {"inserted": 0}
+        
+    # Find the years of the holidays being inserted
+    years = set()
+    for h_data in holidays_data:
+        date_val = h_data.get("date")
+        if isinstance(date_val, datetime):
+            years.add(date_val.year)
+        elif isinstance(date_val, date):
+            years.add(date_val.year)
+        elif isinstance(date_val, str):
+            try:
+                # Basic parsing assuming it starts with year like YYYY-MM-DD
+                years.add(int(date_val[:4]))
+            except ValueError:
+                pass
+                
+    # Delete existing National public holidays for these years to prevent duplicates
+    for year in years:
+        year_str = str(year)
+        
+        # 1. Delete if date is stored as datetime
+        await db.holidays.delete_many({
+            "type": "National",
+            "$or": [
+                {"company": ""},
+                {"company": None},
+                {"company": {"$exists": False}}
+            ],
+            "date": {"$gte": datetime(year, 1, 1), "$lte": datetime(year, 12, 31, 23, 59, 59)}
+        })
+        
+        # 2. Delete if date is stored as string
+        await db.holidays.delete_many({
+            "type": "National",
+            "$or": [
+                {"company": ""},
+                {"company": None},
+                {"company": {"$exists": False}}
+            ],
+            "date": {"$type": "string", "$regex": f"^{year_str}"}
+        })
+        
     # using insert_many directly from Motor on our timestamped db
     result = await db.holidays.insert_many(holidays_data)
     return {"inserted": len(result.inserted_ids)}
@@ -1157,30 +1199,12 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
     if not user:
         return None
         
-    password_match = False
-    password_needs_migration = False
-    
-    # Check if the stored password looks like a bcrypt hash (starts with $2b$)
     stored_password = user.get("password", "")
-    if stored_password.startswith("$2b$"):
-        password_match = auth.verify_password(login_data.password, stored_password)
-    else:
-        # Fallback to plaintext for existing users
-        password_match = (stored_password == login_data.password)
-        if password_match:
-            password_needs_migration = True
+    password_match = (stored_password == login_data.password)
             
     if password_match:
         user_id = str(user["_id"])
         
-        # Migrate password to bcrypt if it was plaintext
-        if password_needs_migration:
-            hashed_password = auth.get_password_hash(login_data.password)
-            await db.employees.update_one(
-                {"_id": ObjectId(user_id)},
-                {"$set": {"password": hashed_password}}
-            )
-            
         user_fixed = fix_id(user)
         
         # Fetch permissions
