@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, Calendar } from "lucide-react";
 import { API_URL } from "@/lib/config";
 
 export interface WMTaskFormData {
@@ -18,6 +18,7 @@ export interface WMTaskFormData {
   status: string;
   priority: string;
   remarks?: string;
+  createdDate?: string;
   
   // Graphics fields
   postingDate?: string;
@@ -142,7 +143,10 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
     : employees;
 
   const selectedProject = projects.find(p => p.id === formData.projectId);
-  const isGraphicsProject = selectedProject?.department?.toLowerCase() === "graphics" || userDepartment?.toLowerCase() === "graphics";
+  const isGraphicsProject = 
+    selectedProject?.department?.toLowerCase() === "graphics" || 
+    userDepartment?.toLowerCase() === "graphics" || 
+    formData.department?.toLowerCase() === "graphics";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,6 +155,12 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 py-4">
+      {formData.createdDate && (
+        <div className="text-[11px] text-slate-500 font-bold bg-slate-50 border border-slate-100 rounded-lg p-2.5 px-3 inline-flex items-center gap-2">
+          <Calendar className="w-3.5 h-3.5 text-brand-teal" />
+          <span>TASK CREATED DATE: <span className="text-slate-800 font-extrabold">{formData.createdDate}</span></span>
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="title">Task Title</Label>
         <Input

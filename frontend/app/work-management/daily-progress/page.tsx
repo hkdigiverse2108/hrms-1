@@ -21,6 +21,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ActivityLogDialog } from '@/components/common/ActivityLogDialog'
 
@@ -51,6 +58,8 @@ export default function DailyProgressPage() {
   const [reportLogs, setReportLogs] = useState<any[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
   const [logFilter, setLogFilter] = useState<{reportId?: string, employeeName?: string}>({})
+  const [selectedDeptFilter, setSelectedDeptFilter] = useState('all')
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('all')
 
   const isAdmin = user?.role?.toLowerCase() === 'admin'
   const isTeamLeader = user?.role === 'Team Leader'
@@ -66,7 +75,12 @@ export default function DailyProgressPage() {
       filteredEmployees = filteredEmployees.filter(e => e.id === user?.id)
     }
 
-    return filteredEmployees.map(emp => {
+    // Filter by department (only for admin)
+    if (isAdmin && selectedDeptFilter !== 'all') {
+      filteredEmployees = filteredEmployees.filter(e => e.department?.toLowerCase() === selectedDeptFilter.toLowerCase())
+    }
+
+    const mapped = filteredEmployees.map(emp => {
       const report = allReports.find((r: any) => r.employeeId === emp.id && r.date === selectedDate)
       return {
         id: emp.id,
@@ -79,7 +93,14 @@ export default function DailyProgressPage() {
         note: report?.note || ''
       }
     })
-  }, [employees, allReports, selectedDate, user, isAdmin, isTeamLeader])
+
+    // Filter by verification status
+    if (selectedStatusFilter !== 'all') {
+      return mapped.filter(item => item.status?.toLowerCase() === selectedStatusFilter.toLowerCase())
+    }
+
+    return mapped
+  }, [employees, allReports, selectedDate, user, isAdmin, isTeamLeader, selectedDeptFilter, selectedStatusFilter])
 
   const handleStatusUpdate = async (emp: any, newStatus: string) => {
     setIsSubmitting(true)
@@ -327,6 +348,34 @@ export default function DailyProgressPage() {
           actions={actions}
           searchKey="employeeName"
           searchPlaceholder="Filter employees..."
+          extraFilters={
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <Select value={selectedDeptFilter} onValueChange={setSelectedDeptFilter}>
+                  <SelectTrigger className="h-9 w-[150px] text-xs font-semibold bg-white border border-slate-200">
+                    <SelectValue placeholder="All Departments" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Departments</SelectItem>
+                    {Array.from(new Set(employees.map((e: any) => e.department).filter(Boolean))).map((dept: any) => (
+                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
+                <SelectTrigger className="h-9 w-[160px] text-xs font-semibold bg-white border border-slate-200">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="Approved">Approved</SelectItem>
+                  <SelectItem value="Rejected">Rejected</SelectItem>
+                  <SelectItem value="Pending Verification">Pending Verification</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          }
         />
       </div>
 
