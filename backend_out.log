@@ -1,0 +1,108 @@
+
+> my-project@0.1.0 dev
+> next dev -H 127.0.0.1 -p 3550
+
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://127.0.0.1:3550
+- Network:       http://127.0.0.1:3550
+✓ Ready in 589ms
+Creating turbopack project { dir: 'd:\\hrms-1\\frontend', testMode: true }
+INFO:     Started server process [19604]
+INFO:     Waiting for application startup.
+
+Failed to proxy http://127.0.0.1:8000/employees/69ef0a4c11ab517b772b88cb Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Failed to proxy http://127.0.0.1:8000/chat/unread-counts/69eeffae3733750b1fd1fec5 Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Failed to proxy http://127.0.0.1:8000/chat/unread-counts/69ef0a4c11ab517b772b88cb Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Failed to proxy http://127.0.0.1:8000/employees/69eeffae3733750b1fd1fec5 Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Failed to proxy http://127.0.0.1:8000/chat/unread-counts/69eeffae3733750b1fd1fec5 Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Failed to proxy http://127.0.0.1:8000/chat/unread-counts/69ef0a4c11ab517b772b88cb Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:8000) {
+  errno: -4078,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8000
+}

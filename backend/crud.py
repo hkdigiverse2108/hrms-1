@@ -2978,6 +2978,85 @@ async def delete_employee_document(db, doc_id: str):
     result = await db.employee_documents.delete_one({"_id": ObjectId(doc_id)})
     return result.deleted_count > 0
 
+# Document Request CRUD
+async def create_document_request(db, request: schemas.DocumentRequestCreate):
+    req_dict = request.dict()
+    result = await db.document_requests.insert_one(req_dict)
+    req_dict["id"] = str(result.inserted_id)
+    if "_id" in req_dict:
+        req_dict.pop("_id")
+    # Log activity
+    await log_task_activity(db, None, "Document Requested", req_dict["employeeId"], req_dict["employeeName"], f"Requested letter: {req_dict['documentType']}")
+    
+    # Notify all Admins and HR
+    try:
+        admins_and_hr = await db.employees.find({
+            "role": {"$regex": "^(Admin|HR)$", "$options": "i"}
+        }).to_list(length=100)
+        for staff in admins_and_hr:
+            staff_id = str(staff["_id"])
+            if staff_id == req_dict["employeeId"]:
+                continue
+            await db.notifications.insert_one({
+                "employee_id": staff_id,
+                "title": "New Document Request",
+                "message": f"{req_dict['employeeName']} has requested a {req_dict['documentType']}. Reason: {req_dict.get('reason', 'Not specified')}",
+                "type": "document",
+                "reference_id": req_dict["id"],
+                "is_read": False,
+                "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+            })
+    except Exception as e:
+        print(f"Error creating notifications for document request: {e}")
+    
+    return req_dict
+
+async def get_document_requests(db, employee_id: str = None):
+    query = {}
+    if employee_id:
+        query["employeeId"] = employee_id
+    cursor = db.document_requests.find(query).sort("requestDate", -1)
+    reqs = []
+    async for req in cursor:
+        reqs.append(fix_id(req))
+    return reqs
+
+async def update_document_request(db, req_id: str, req_update: schemas.DocumentRequestUpdate):
+    update_data = req_update.dict(exclude_unset=True)
+    
+    # Fetch the existing request before updating
+    existing_req = await db.document_requests.find_one({"_id": ObjectId(req_id)})
+    
+    if not update_data:
+        return fix_id(existing_req) if existing_req else None
+    
+    await db.document_requests.update_one({"_id": ObjectId(req_id)}, {"$set": update_data})
+    req = await db.document_requests.find_one({"_id": ObjectId(req_id)})
+    
+    # Notify the employee when their document has been sent
+    if update_data.get("status") == "Sent" and existing_req:
+        try:
+            employee_id = existing_req.get("employeeId", "")
+            doc_type = existing_req.get("documentType", "document")
+            if employee_id:
+                await db.notifications.insert_one({
+                    "employee_id": employee_id,
+                    "title": "Your Document is Ready",
+                    "message": f"Your requested {doc_type} has been generated and sent to you. You can download it from the Official Letters section.",
+                    "type": "document",
+                    "reference_id": req_id,
+                    "is_read": False,
+                    "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+                })
+        except Exception as e:
+            print(f"Error creating notification for document sent: {e}")
+    
+    return fix_id(req)
+
+async def delete_document_request(db, req_id: str):
+    result = await db.document_requests.delete_one({"_id": ObjectId(req_id)})
+    return result.deleted_count > 0
+
 # Employee Daily Report CRUD
 async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
     employee = await get_employee(db, employee_id)

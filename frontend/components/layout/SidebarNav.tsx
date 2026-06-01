@@ -17,6 +17,7 @@ import {
   MessagesSquare,
   Star,
   FileText,
+  Files,
   Briefcase,
   IndianRupee,
   GraduationCap,
@@ -133,11 +134,13 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('leave-requests', 'canView')) {
       employeeChildren.push(getItem(<Link href="/employees/leave">Leave Requests</Link>, "/employees/leave"));
     }
+
+    const documentsChildren: MenuItem[] = [];
     if (isAdmin || checkPermission('employee-documents', 'canView')) {
-      employeeChildren.push(getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"));
+      documentsChildren.push(getItem(<Link href="/employees/documents">Employee Documents</Link>, "/employees/documents"));
     }
     if (isAdmin || checkPermission('document-generator', 'canView')) {
-      employeeChildren.push(getItem(<Link href="/employees/documents/generate">Document Generator</Link>, "/employees/documents/generate"));
+      documentsChildren.push(getItem(<Link href="/employees/documents/generate">Document Generator</Link>, "/employees/documents/generate"));
     }
 
     const payrollChildren: MenuItem[] = [];
@@ -168,6 +171,10 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
 
     if (isAdmin || employeeChildren.length > 0) {
       menuItems.push(getItem("Employees", "employees-sub", <Users className="w-5 h-5" />, employeeChildren));
+    }
+
+    if (isAdmin || documentsChildren.length > 0) {
+      menuItems.push(getItem("Documents", "documents-sub", <Files className="w-5 h-5" />, documentsChildren));
     }
 
     if (isAdmin || payrollChildren.length > 0) {
@@ -262,6 +269,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
   };
 
   const getOpenKeys = () => {
+    if (pathname.startsWith("/employees/documents")) return ["documents-sub"];
     if (pathname.startsWith("/employees")) return ["employees-sub"];
     if (pathname.startsWith("/workspace")) return ["workspace"];
     if (pathname.startsWith("/invoice")) return ["invoice"];

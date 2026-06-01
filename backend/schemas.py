@@ -1196,8 +1196,11 @@ class EmployeeDocumentBase(BaseModel):
     fileUrl: str
     uploadDate: RobustDate
     expiryDate: Optional[RobustDate] = None
-    status: str = "Active" # Active, Expired, Revoked
+    status: str = "Rejected" # Accepted, Rejected, Returned to Employee
     remarks: Optional[str] = None
+    softCopySubmitted: Optional[str] = "No"
+    hardCopySubmitted: Optional[str] = "No"
+    adminAcceptance: Optional[str] = "Pending"
 
 class EmployeeDocumentCreate(EmployeeDocumentBase):
     pass
@@ -1208,8 +1211,37 @@ class EmployeeDocumentUpdate(BaseModel):
     expiryDate: Optional[RobustDate] = None
     status: Optional[str] = None
     remarks: Optional[str] = None
+    softCopySubmitted: Optional[str] = None
+    hardCopySubmitted: Optional[str] = None
+    adminAcceptance: Optional[str] = None
 
 class EmployeeDocument(EmployeeDocumentBase):
+    id: str
+
+# Document Request Schemas
+class DocumentRequestBase(BaseModel):
+    employeeId: str
+    employeeName: str
+    documentType: str
+    reason: Optional[str] = None
+    status: str = "Pending" # Pending, Approved, Rejected, Generated, Sent
+    requestDate: RobustDate
+    fileName: Optional[str] = None
+    fileUrl: Optional[str] = None
+    generatedDate: Optional[RobustDate] = None
+    sentDate: Optional[RobustDate] = None
+
+class DocumentRequestCreate(DocumentRequestBase):
+    pass
+
+class DocumentRequestUpdate(BaseModel):
+    status: Optional[str] = None
+    fileName: Optional[str] = None
+    fileUrl: Optional[str] = None
+    generatedDate: Optional[RobustDate] = None
+    sentDate: Optional[RobustDate] = None
+
+class DocumentRequest(DocumentRequestBase):
     id: str
 
 # Employee Daily Progress/Report Schemas

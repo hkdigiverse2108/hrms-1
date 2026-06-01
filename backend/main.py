@@ -366,6 +366,10 @@ async def create_bonus_deduction(item: schemas.BonusDeductionCreate, db=Depends(
 async def read_notifications(employee_id: str, db=Depends(get_db)):
     return await crud.get_notifications_by_user(db, employee_id)
 
+@app.post("/notifications", response_model=schemas.Notification)
+async def create_notification(notification: schemas.NotificationCreate, db=Depends(get_db)):
+    return await crud.create_notification(db, notification)
+
 @app.put("/notifications/{notification_id}/read", response_model=schemas.Notification)
 async def mark_notification_read(notification_id: str, db=Depends(get_db)):
     return await crud.mark_notification_as_read(db, notification_id)
@@ -1064,6 +1068,29 @@ async def delete_employee_document(doc_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"message": "Document deleted successfully"}
+
+# Document Request Endpoints
+@app.post("/document-requests", response_model=schemas.DocumentRequest)
+async def create_document_request(request: schemas.DocumentRequestCreate, db=Depends(get_db)):
+    return await crud.create_document_request(db, request)
+
+@app.get("/document-requests", response_model=List[schemas.DocumentRequest])
+async def read_document_requests(employeeId: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_document_requests(db, employee_id=employeeId)
+
+@app.put("/document-requests/{req_id}", response_model=schemas.DocumentRequest)
+async def update_document_request(req_id: str, req_update: schemas.DocumentRequestUpdate, db=Depends(get_db)):
+    updated = await crud.update_document_request(db, req_id, req_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return updated
+
+@app.delete("/document-requests/{req_id}")
+async def delete_document_request(req_id: str, db=Depends(get_db)):
+    success = await crud.delete_document_request(db, req_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return {"message": "Request deleted successfully"}
 
 # Employee Daily Report Endpoints
 @app.post("/employee-daily-reports", response_model=schemas.EmployeeDailyReport)
