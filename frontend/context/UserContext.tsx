@@ -22,6 +22,31 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [timeAnchor, setTimeAnchor] = useState({ real: 0, mono: 0 });
   const [isTimeSynced, setIsTimeSynced] = useState(false);
+  
+  // Setup global fetch interceptor to inject Authorization header
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const [resource, config] = args;
+      
+      if (typeof resource === 'string' && resource.startsWith(API_URL)) {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const newConfig = { ...config } as RequestInit;
+          newConfig.headers = {
+            ...newConfig.headers,
+            'Authorization': `Bearer ${token}`
+          };
+          args[1] = newConfig;
+        }
+      }
+      return originalFetch(...args);
+    };
+    
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
  
   useEffect(() => {
     const syncTime = async () => {
@@ -62,8 +87,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         if (userId) {
           const fetchUrl = `${API_URL}/employees/${userId}`;
           console.log("Syncing user data from:", fetchUrl);
+          const token = localStorage.getItem('token');
+          const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
           // Fetch fresh user data to get updated permissions
-          fetch(fetchUrl)
+          fetch(fetchUrl, { headers })
             .then(res => {
               if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
               return res.json();
@@ -71,7 +98,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             .then(freshUser => {
               if (freshUser && !freshUser.detail) {
                 // Fetch permissions separately
-                fetch(`${API_URL}/user-permissions/${userId}`)
+                fetch(`${API_URL}/user-permissions/${userId}`, { headers })
                   .then(pRes => pRes.ok ? pRes.json() : { permissions: [] })
                   .then(pData => {
                     const updatedUser = { 
@@ -93,8 +120,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, []);
  
-  const login = (userData: User) => {
+  const login = (userData: User & { token?: string }) => {
     localStorage.setItem('user', JSON.stringify(userData));
+    if (userData.token) {
+      localStorage.setItem('token', userData.token);
+    }
     setUser(userData);
   };
  
@@ -108,6 +138,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
  
   const logout = () => {
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
     setUser(null);
   };
 
@@ -119,7 +150,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     const checkUserStatus = async () => {
       try {
-        const res = await fetch(`${API_URL}/employees/${userId}`);
+        const token = localStorage.getItem('token');
+        const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch(`${API_URL}/employees/${userId}`, { headers });
         if (res.ok) {
           const freshUser = await res.json();
           if (freshUser && freshUser.status === 'inactive') {

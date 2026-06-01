@@ -2,6 +2,7 @@ from bson import ObjectId
 from datetime import datetime, timedelta, timezone, date
 from typing import List, Optional, Dict
 import schemas
+import auth
 import calendar
 import pytz
 
@@ -102,6 +103,24 @@ def fix_id(doc):
         return new_doc
     return doc
 
+async def archive_and_delete_many(db, collection_name: str, query: dict):
+    docs = await db[collection_name].find(query).to_list(length=None)
+    if docs:
+        now = get_now()
+        for doc in docs:
+            doc["archived_at"] = now
+        archive_collection = f"archive_{collection_name}"
+        await db[archive_collection].insert_many(docs)
+    await db[collection_name].delete_many(query)
+
+async def archive_and_delete_one(db, collection_name: str, query: dict):
+    doc = await db[collection_name].find_one(query)
+    if doc:
+        doc["archived_at"] = get_now()
+        archive_collection = f"archive_{collection_name}"
+        await db[archive_collection].insert_one(doc)
+    await db[collection_name].delete_one(query)
+
 async def delete_employee(db, employee_id: str):
     existing = await db.employees.find_one({"_id": ObjectId(employee_id)})
     if existing:
@@ -115,7 +134,24 @@ async def delete_employee(db, employee_id: str):
                     os.remove(old_photo_path)
                 except Exception as e:
                     print(f"Error removing deleted employee's photo: {e}")
-    await db.employees.delete_one({"_id": ObjectId(employee_id)})
+    # Cascade deletes for employee
+    await archive_and_delete_many(db, "attendance", {"employeeId": employee_id})
+    await archive_and_delete_many(db, "leave_requests", {"employee_id": employee_id})
+    await archive_and_delete_many(db, "payroll", {"employeeId": employee_id})
+    await archive_and_delete_many(db, "salary_structures", {"employeeId": employee_id})
+    await archive_and_delete_many(db, "employee_daily_reports", {"employeeId": employee_id})
+    await archive_and_delete_many(db, "notifications", {"employeeId": employee_id})
+    await archive_and_delete_many(db, "remarks", {"employeeId": employee_id})
+    await archive_and_delete_many(db, "bonus_deductions", {"employeeId": employee_id})
+    await archive_and_delete_many(db, "sales_targets", {"employeeId": employee_id})
+    
+    # Unassign tasks
+    await db.wm_tasks.update_many(
+        {"assignedToId": employee_id},
+        {"$set": {"assignedToId": None, "assignedToName": "Unassigned"}}
+    )
+
+    await archive_and_delete_one(db, "employees", {"_id": ObjectId(employee_id)})
     return True
 
 async def get_employee(db, employee_id: str):
@@ -233,6 +269,124 @@ async def get_dashboard_stats(db):
     doc["lateToday"] = late_today
     
     return fix_id(doc)
+
+async def get_analytics_overview(db, months: int = 6):
+    today = get_now()
+    
+    # Department Distribution
+    dept_pipeline = [
+        {"$match": {"status": "active"}},
+        {"$group": {"_id": "$department", "employees": {"$sum": 1}}}
+    ]
+    dept_data = await db.employees.aggregate(dept_pipeline).to_list(length=100)
+    department_distribution = [{"name": d["_id"] or "Unknown", "employees": d["employees"]} for d in dept_data if d["_id"]]
+
+    # Leave Distribution
+    leave_pipeline = [
+        {"$group": {"_id": "$type", "value": {"$sum": 1}}}
+    ]
+    leave_data = await db.leave_requests.aggregate(leave_pipeline).to_list(length=100)
+    leave_distribution = [{"name": l["_id"] or "Other", "value": l["value"]} for l in leave_data]
+    
+    # Add colors to leave distribution for charts
+    colors = ['#3b82f6', '#ef4444', '#f59e0b', '#6b7280', '#10b981', '#8b5cf6']
+    for i, l in enumerate(leave_distribution):
+        l["color"] = colors[i % len(colors)]
+
+    # Performance Distribution
+    perf_pipeline = [
+        {"$group": {"_id": "$rating", "count": {"$sum": 1}}}
+    ]
+    perf_data = await db.kpi_records.aggregate(perf_pipeline).to_list(length=100)
+    # Map back to capitalize
+    perf_map = {p["_id"].capitalize() if p["_id"] else "Unknown": p["count"] for p in perf_data}
+    performance_distribution = [
+        {"rating": r, "count": perf_map.get(r, 0)} 
+        for r in ["Excellent", "Good", "Average", "Poor"]
+    ]
+
+    # Time-based trends (Attendance & Hiring)
+    attendance_trend = []
+    hiring_trend = []
+    
+    for i in range(months - 1, -1, -1):
+        target_date = today - timedelta(days=30*i)
+        month_name = target_date.strftime("%b")
+        year = target_date.year
+        month_num = target_date.month
+        
+        # Start and end of that month
+        start_dt = datetime(year, month_num, 1)
+        if month_num == 12:
+            end_dt = datetime(year + 1, 1, 1)
+        else:
+            end_dt = datetime(year, month_num + 1, 1)
+            
+        # Make them timezone aware based on IST like the rest of the app
+        start_dt = IST.localize(start_dt)
+        end_dt = IST.localize(end_dt)
+            
+        # Attendance Trend
+        present = await db.attendance.count_documents({
+            "date": {"$gte": start_dt, "$lt": end_dt},
+            "status": {"$in": ["Logged", "Active", "On Break", "Present"]}
+        })
+        absent = await db.attendance.count_documents({
+            "date": {"$gte": start_dt, "$lt": end_dt},
+            "status": "Absent"
+        })
+        late = await db.attendance.count_documents({
+            "date": {"$gte": start_dt, "$lt": end_dt},
+            "isLate": True
+        })
+        attendance_trend.append({
+            "month": month_name,
+            "present": present,
+            "absent": absent,
+            "late": late
+        })
+        
+        # Hiring Trend
+        hires = await db.employees.count_documents({
+            "joinDate": {"$gte": start_dt, "$lt": end_dt}
+        })
+        # Simplified exits (employees who are inactive and updated in that month)
+        exits = await db.employees.count_documents({
+            "status": "inactive",
+            "updated_at": {"$gte": start_dt, "$lt": end_dt}
+        })
+        hiring_trend.append({
+            "month": month_name,
+            "hires": hires,
+            "exits": exits
+        })
+
+    # Summary Stats
+    total_employees = await db.employees.count_documents({"status": "active"})
+    total_attendance = sum([t["present"] + t["absent"] for t in attendance_trend])
+    avg_attendance = (sum([t["present"] for t in attendance_trend]) / total_attendance * 100) if total_attendance > 0 else 0
+    
+    total_perf_scores = await db.kpi_records.aggregate([{"$group": {"_id": None, "avg": {"$avg": "$score"}}}]).to_list(length=1)
+    avg_perf = total_perf_scores[0]["avg"] if total_perf_scores else 0
+    # Normalize score from 0-100 to 0-5
+    avg_perf_5 = round(avg_perf / 20, 1) if avg_perf else 0.0
+
+    total_exits = sum([t["exits"] for t in hiring_trend])
+    attrition = round((total_exits / total_employees * 100), 1) if total_employees > 0 else 0
+
+    return {
+        "departmentDistribution": department_distribution,
+        "attendanceTrend": attendance_trend,
+        "leaveDistribution": leave_distribution,
+        "hiringTrend": hiring_trend,
+        "performanceDistribution": performance_distribution,
+        "summaryStats": {
+            "totalEmployees": total_employees,
+            "avgAttendanceRate": round(avg_attendance),
+            "avgPerformanceScore": avg_perf_5,
+            "attritionRate": attrition
+        }
+    }
 
 async def get_payroll(db, skip: int = 0, limit: int = 100):
     cursor = db.payroll.find().skip(skip).limit(limit)
@@ -1000,8 +1154,33 @@ async def delete_event(db, event_id: str): return await delete_item(db, "events"
 
 async def authenticate_user(db, login_data: schemas.LoginRequest):
     user = await db.employees.find_one({"email": login_data.email})
-    if user and user.get("password") == login_data.password:
+    if not user:
+        return None
+        
+    password_match = False
+    password_needs_migration = False
+    
+    # Check if the stored password looks like a bcrypt hash (starts with $2b$)
+    stored_password = user.get("password", "")
+    if stored_password.startswith("$2b$"):
+        password_match = auth.verify_password(login_data.password, stored_password)
+    else:
+        # Fallback to plaintext for existing users
+        password_match = (stored_password == login_data.password)
+        if password_match:
+            password_needs_migration = True
+            
+    if password_match:
         user_id = str(user["_id"])
+        
+        # Migrate password to bcrypt if it was plaintext
+        if password_needs_migration:
+            hashed_password = auth.get_password_hash(login_data.password)
+            await db.employees.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": {"password": hashed_password}}
+            )
+            
         user_fixed = fix_id(user)
         
         # Fetch permissions
@@ -1010,6 +1189,14 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
             user_fixed["permissions"] = fix_id(permissions_doc).get("permissions", [])
         else:
             user_fixed["permissions"] = []
+            
+        # Generate JWT token
+        token = auth.create_access_token(data={"sub": user_id})
+        
+        # The frontend expects {user: ...} right now, we'll wrap it in main.py
+        # Actually main.py returns {"message": "...", "user": user}
+        # Let's add token to the returned object
+        user_fixed["token"] = token
             
         return user_fixed
     return None
@@ -2031,10 +2218,31 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
 
 async def delete_client(db, client_id: str):
     client = await db.clients.find_one({"_id": ObjectId(client_id)})
-    result = await db.clients.delete_one({"_id": ObjectId(client_id)})
-    if result.deleted_count > 0 and client:
+    
+    if client:
+        # Cascade deletes
+        projects = await db.projects.find({"clientId": client_id}).to_list(length=1000)
+        for p in projects:
+            project_id = str(p["_id"])
+            await archive_and_delete_many(db, "wm_tasks", {"projectId": project_id})
+            await archive_and_delete_many(db, "task_logs", {"projectId": project_id})
+            
+        await archive_and_delete_many(db, "projects", {"clientId": client_id})
+        await archive_and_delete_many(db, "marketing_daily_reports", {"clientId": client_id})
+        await archive_and_delete_many(db, "marketing_monthly_reports", {"clientId": client_id})
+        await archive_and_delete_many(db, "task_logs", {"clientId": client_id})
+        
+        company_name = client.get("companyName", "")
+        if company_name:
+            await db.leads.update_many(
+                {"company": company_name},
+                {"$set": {"company": f"[Deleted] {company_name}"}}
+            )
+
+    await archive_and_delete_one(db, "clients", {"_id": ObjectId(client_id)})
+    if client:
         await log_activity(db, "Deleted", "Admin", "N/A", f"Client '{client.get('companyName')}' was deleted.", clientId=client_id)
-    return result.deleted_count > 0
+    return True
 
 # Project CRUD
 async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
@@ -2133,10 +2341,16 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
 
 async def delete_project(db, project_id: str):
     project = await db.projects.find_one({"_id": ObjectId(project_id)})
-    result = await db.projects.delete_one({"_id": ObjectId(project_id)})
-    if result.deleted_count > 0 and project:
+    
+    if project:
+        # Cascade deletes
+        await archive_and_delete_many(db, "wm_tasks", {"projectId": project_id})
+        await archive_and_delete_many(db, "task_logs", {"projectId": project_id})
+        
+    await archive_and_delete_one(db, "projects", {"_id": ObjectId(project_id)})
+    if project:
         await log_activity(db, "Deleted", "Admin", "N/A", f"Project '{project.get('title')}' was deleted.", projectId=project_id)
-    return result.deleted_count > 0
+    return True
 
 # Work Management Task CRUD
 async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):

@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from contextlib import asynccontextmanager
-import crud, schemas, database
+import crud, schemas, database, auth
 import uvicorn
 import os
 import uuid
@@ -69,6 +69,35 @@ if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+from fastapi import Request
+from jose import jwt
+
+EXEMPT_PATHS = ["/login", "/time", "/", "/docs", "/openapi.json", "/redoc"]
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+        
+    path = request.url.path
+    if path in EXEMPT_PATHS or path.startswith("/uploads") or path.startswith("/chat/upload") or path.startswith("/ws") or path.startswith("/socket.io"):
+        return await call_next(request)
+        
+    authorization = request.headers.get("Authorization")
+    if not authorization or not authorization.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"detail": "Could not validate credentials"})
+        
+    token = authorization.split(" ")[1]
+    try:
+        payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
+        request.state.user_id = payload.get("sub")
+    except Exception as e:
+        print(f"Auth error: {e}")
+        return JSONResponse(status_code=401, content={"detail": "Could not validate credentials"})
+        
+    response = await call_next(request)
+    return response
 
 @app.get("/")
 async def root():
@@ -144,7 +173,9 @@ async def login(login_data: schemas.LoginRequest, db=Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if user.get("status", "").lower() == "inactive":
         raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact the administrator.")
-    return {"message": "Login successful", "user": user}
+    
+    token = user.pop("token", None)
+    return {"message": "Login successful", "user": user, "token": token}
 
 # Employee Endpoints
 @app.get("/time")
@@ -316,6 +347,10 @@ async def read_announcements(skip: int = 0, limit: int = 10000, db=Depends(get_d
 @app.get("/dashboard-stats", response_model=schemas.DashboardStats)
 async def read_dashboard_stats(db=Depends(get_db)):
     return await crud.get_dashboard_stats(db)
+
+@app.get("/analytics/overview", response_model=schemas.AnalyticsOverview)
+async def read_analytics_overview(months: int = 6, db=Depends(get_db)):
+    return await crud.get_analytics_overview(db, months=months)
 
 # Payroll Endpoints
 @app.get("/payroll", response_model=List[schemas.Payroll])
