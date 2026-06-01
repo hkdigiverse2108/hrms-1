@@ -71,6 +71,7 @@ export default function SalesPage() {
   const [pipelineDateFilter, setPipelineDateFilter] = useState("today");
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
+  const [inlineEditing, setInlineEditing] = useState<{ id: string, field: string } | null>(null);
   const [employees, setEmployees] = useState<any[]>([]);
   const [reportEmployeeFilter, setReportEmployeeFilter] = useState("all");
   const [reportDateFilter, setReportDateFilter] = useState(dayjs().format("YYYY-MM-DD"));
@@ -98,6 +99,8 @@ export default function SalesPage() {
     percentage: 0
   });
   const [isSlabDialogOpen, setIsSlabDialogOpen] = useState(false);
+  const [editingSlabId, setEditingSlabId] = useState<string | null>(null);
+  const [editSlabForm, setEditSlabForm] = useState({ minAmount: 0, maxAmount: 0, percentage: 0 });
 
   const fetchTargets = async () => {
     try {
@@ -196,6 +199,26 @@ export default function SalesPage() {
     }
   };
 
+  const handleUpdateSlab = async (id: string) => {
+    try {
+      const res = await fetch(`${API_URL}/incentive-slabs/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editSlabForm),
+      });
+
+      if (res.ok) {
+        toast.success("Slab updated successfully");
+        fetchIncentiveSlabs();
+      } else {
+        toast.error("Failed to update slab");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred");
+    }
+  };
+
   const fetchEmployees = async () => {
     try {
       const res = await fetch(`${API_URL}/employees`);
@@ -275,6 +298,31 @@ export default function SalesPage() {
       toast.error("Network error: Could not reach backend");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleInlineUpdate = async (leadId: string, field: string, value: any) => {
+    try {
+      const res = await fetch(`${API_URL}/leads/${leadId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [field]: value,
+          performedBy: user?.id,
+          userName: user?.name
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Lead updated successfully");
+        fetchLeads();
+      } else {
+        toast.error(`Update failed: ${res.status}`);
+      }
+    } catch (err) {
+      toast.error("Network error: Could not reach backend");
+    } finally {
+      setInlineEditing(null);
     }
   };
 
@@ -464,40 +512,47 @@ export default function SalesPage() {
             l.contact.toLowerCase().includes(searchTerm.toLowerCase()) ||
             l.remarks?.toLowerCase().includes(searchTerm.toLowerCase())
           ).map((lead) => {
-            const isEditing = editingRowId === lead.id;
             return (
               <tr 
                 key={lead.id} 
-                className={`hover:bg-slate-50/80 transition-colors group ${isEditing ? 'bg-slate-50' : ''}`}
-                onClick={() => {
-                  if (canEditSales && !isEditing) {
-                    setEditingRowId(lead.id);
-                    setEditFormData(lead);
-                  }
-                }}
+                className="hover:bg-slate-50/80 transition-colors group"
               >
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col flex-1">
-                      {isEditing ? (
+                      {inlineEditing?.id === lead.id && inlineEditing?.field === 'company' ? (
                         <Input 
+                          autoFocus
                           className="h-8 text-sm font-bold" 
-                          value={editFormData.company} 
-                          onChange={(e) => setEditFormData({...editFormData, company: e.target.value})} 
+                          defaultValue={lead.company} 
+                          onBlur={(e) => handleInlineUpdate(lead.id, 'company', e.target.value)} 
+                          onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'company', e.currentTarget.value)}
                         />
                       ) : (
-                        <span className="font-bold text-slate-800 text-sm">{lead.company}</span>
+                        <span 
+                          onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'company' })}
+                          className="font-bold text-slate-800 text-sm cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                        >
+                          {lead.company}
+                        </span>
                       )}
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
-                        <Calendar className="w-3 h-3" />
-                        {isEditing ? (
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium mt-1">
+                        <Calendar className="w-3 h-3 text-slate-400" />
+                        {inlineEditing?.id === lead.id && inlineEditing?.field === 'date' ? (
                           <Input 
+                            autoFocus
                             className="h-6 text-[10px] w-24 py-0" 
-                            value={editFormData.date} 
-                            onChange={(e) => setEditFormData({...editFormData, date: e.target.value})} 
+                            defaultValue={lead.date} 
+                            onBlur={(e) => handleInlineUpdate(lead.id, 'date', e.target.value)} 
+                            onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'date', e.currentTarget.value)}
                           />
                         ) : (
-                          <>Created: {lead.date}</>
+                          <span
+                            onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'date' })}
+                            className="cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                          >
+                            Created: {lead.date}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -505,67 +560,93 @@ export default function SalesPage() {
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex flex-col">
-                    {isEditing ? (
+                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'contact' ? (
                       <Input 
+                        autoFocus
                         className="h-8 text-[13px] font-bold" 
-                        value={editFormData.contact} 
-                        onChange={(e) => setEditFormData({...editFormData, contact: e.target.value})} 
+                        defaultValue={lead.contact} 
+                        onBlur={(e) => handleInlineUpdate(lead.id, 'contact', e.target.value)} 
+                        onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'contact', e.currentTarget.value)}
                       />
                     ) : (
-                      <span className="text-[13px] font-bold text-slate-700">{lead.contact}</span>
+                      <span 
+                        onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'contact' })}
+                        className="text-[13px] font-bold text-slate-700 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                      >
+                        {lead.contact}
+                      </span>
                     )}
-                    <div className="flex items-center gap-2 mt-1">
-                      {isEditing ? (
-                        <div className="flex flex-col gap-1 w-full">
-                          <div className="flex items-center gap-1">
-                            <Mail className="w-3 h-3 text-slate-400" />
-                            <Input 
-                              className="h-6 text-[10px] w-full py-0" 
-                              value={editFormData.email || ''} 
-                              onChange={(e) => setEditFormData({...editFormData, email: e.target.value})} 
-                              placeholder="Email"
-                            />
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-slate-400" />
-                            <Input 
-                              className="h-6 text-[10px] w-full py-0" 
-                              value={editFormData.phone || ''} 
-                              onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})} 
-                              placeholder="Phone"
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <a href={`mailto:${lead.email}`} className="text-slate-400 hover:text-brand-teal transition-colors">
-                            <Mail className="w-3 h-3" />
-                          </a>
-                          <a href={`tel:${lead.phone}`} className="text-slate-400 hover:text-brand-teal transition-colors">
-                            <Phone className="w-3 h-3" />
-                          </a>
-                        </>
-                      )}
+                    <div className="flex flex-col gap-1 mt-1">
+                      <div className="flex items-center gap-1">
+                        <Mail className="w-3 h-3 text-slate-400" />
+                        {inlineEditing?.id === lead.id && inlineEditing?.field === 'email' ? (
+                          <Input 
+                            autoFocus
+                            className="h-6 text-[10px] w-full py-0" 
+                            defaultValue={lead.email || ''} 
+                            onBlur={(e) => handleInlineUpdate(lead.id, 'email', e.target.value)} 
+                            onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'email', e.currentTarget.value)}
+                            placeholder="Email"
+                          />
+                        ) : (
+                          <span 
+                            onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'email' })}
+                            className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                          >
+                            {lead.email || 'Add email'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Phone className="w-3 h-3 text-slate-400" />
+                        {inlineEditing?.id === lead.id && inlineEditing?.field === 'phone' ? (
+                          <Input 
+                            autoFocus
+                            className="h-6 text-[10px] w-full py-0" 
+                            defaultValue={lead.phone || ''} 
+                            onBlur={(e) => handleInlineUpdate(lead.id, 'phone', e.target.value)} 
+                            onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'phone', e.currentTarget.value)}
+                            placeholder="Phone"
+                          />
+                        ) : (
+                          <span 
+                            onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'phone' })}
+                            className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                          >
+                            {lead.phone || 'Add phone'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  {isEditing ? (
+                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'source' ? (
                     <Input 
+                      autoFocus
                       className="h-8 text-[12px]" 
-                      value={editFormData.source} 
-                      onChange={(e) => setEditFormData({...editFormData, source: e.target.value})} 
+                      defaultValue={lead.source} 
+                      onBlur={(e) => handleInlineUpdate(lead.id, 'source', e.target.value)} 
+                      onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'source', e.currentTarget.value)}
                     />
                   ) : (
-                    <div className="flex items-center gap-1.5">
+                    <div 
+                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'source' })}
+                      className="flex items-center gap-1.5 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                    >
                       <div className="w-1.5 h-1.5 rounded-full bg-brand-teal/40" />
                       <span className="text-[12px] font-medium text-slate-600">{lead.source}</span>
                     </div>
                   )}
                 </td>
                 <td className="px-6 py-4">
-                  {isEditing ? (
-                    <Select value={editFormData.status} onValueChange={(val) => setEditFormData({...editFormData, status: val})}>
+                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'status' ? (
+                    <Select 
+                      defaultValue={lead.status} 
+                      onValueChange={(val) => handleInlineUpdate(lead.id, 'status', val)}
+                      defaultOpen={true}
+                      onOpenChange={(open) => !open && setInlineEditing(null)}
+                    >
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue />
                       </SelectTrigger>
@@ -578,114 +659,114 @@ export default function SalesPage() {
                       </SelectContent>
                     </Select>
                   ) : (
-                    getStatusBadge(lead.status)
+                    <div 
+                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'status' })}
+                      className="cursor-pointer"
+                    >
+                      {getStatusBadge(lead.status)}
+                    </div>
                   )}
                 </td>
                 <td className="px-6 py-4">
-                  {isEditing ? (
-                    <Select value={editFormData.assignedTo || ""} onValueChange={(val) => setEditFormData({...editFormData, assignedTo: val})}>
+                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'assignedTo' ? (
+                    <Select 
+                      defaultValue={lead.assignedTo || ""} 
+                      onValueChange={(val) => handleInlineUpdate(lead.id, 'assignedTo', val)}
+                      defaultOpen={true}
+                      onOpenChange={(open) => !open && setInlineEditing(null)}
+                    >
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="Select" />
                       </SelectTrigger>
                       <SelectContent>
-                        {employees.map(emp => (
+                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
                           <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   ) : (
-                    <span className="text-[12px] font-bold text-brand-teal">{lead.assignedTo || "--"}</span>
+                    <span 
+                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'assignedTo' })}
+                      className="text-[12px] font-bold text-brand-teal cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5"
+                    >
+                      {lead.assignedTo || "--"}
+                    </span>
                   )}
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex flex-col">
-                    {isEditing ? (
+                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'expectedIncome' ? (
                       <Input 
+                        autoFocus
                         className="h-8 text-sm font-bold" 
-                        value={editFormData.expectedIncome} 
-                        onChange={(e) => setEditFormData({...editFormData, expectedIncome: e.target.value})} 
+                        defaultValue={lead.expectedIncome} 
+                        onBlur={(e) => handleInlineUpdate(lead.id, 'expectedIncome', e.target.value)} 
+                        onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'expectedIncome', e.currentTarget.value)}
                       />
                     ) : (
-                      <span className="font-bold text-slate-900 text-sm">₹{lead.expectedIncome}</span>
+                      <span 
+                        onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'expectedIncome' })}
+                        className="font-bold text-slate-900 text-sm cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                      >
+                        ₹{lead.expectedIncome}
+                      </span>
                     )}
-                    {type === 'converted' && !isEditing && (
+                    {type === 'converted' && (
                       <span className="text-[10px] text-emerald-600 font-bold uppercase mt-0.5">Won on {lead.closedDate}</span>
                     )}
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  {isEditing ? (
+                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'remarks' ? (
                     <Input 
+                      autoFocus
                       className="h-8 text-[12px]" 
-                      value={editFormData.remarks} 
-                      onChange={(e) => setEditFormData({...editFormData, remarks: e.target.value})} 
+                      defaultValue={lead.remarks} 
+                      onBlur={(e) => handleInlineUpdate(lead.id, 'remarks', e.target.value)} 
+                      onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'remarks', e.currentTarget.value)}
                     />
                   ) : (
-                    <p className="text-[12px] text-slate-500 italic max-w-[120px] truncate" title={lead.remarks}>
+                    <p 
+                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'remarks' })}
+                      className="text-[12px] text-slate-500 italic max-w-[120px] truncate cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                      title={lead.remarks}
+                    >
                       "{lead.remarks || 'No remarks'}"
                     </p>
                   )}
                 </td>
                 <td className="px-6 py-4">
-                  {canEditSales && !isEditing && (
-                    <FollowUpDialog 
-                      lead={lead} 
-                      onUpdate={fetchLeads} 
-                      userId={user?.id} 
-                      userName={user?.name} 
-                    />
-                  )}
+                  <FollowUpDialog 
+                    lead={lead} 
+                    onUpdate={fetchLeads} 
+                    userId={user?.id} 
+                    userName={user?.name} 
+                  />
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex justify-end gap-2">
-                    {isEditing ? (
-                      <>
-                        <Button 
-                          size="sm" 
-                          className="h-8 px-3 bg-brand-teal hover:bg-brand-teal-light text-white text-[10px] font-bold"
-                          onClick={handleEditLead}
-                          disabled={isSubmitting}
-                        >
-                          {isSubmitting ? "..." : "Save"}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
+                          <MoreHorizontal className="w-4 h-4" />
                         </Button>
-                        <Button 
-                          variant="ghost"
-                          size="sm" 
-                          className="h-8 px-3 text-[10px] font-bold text-slate-500"
-                          onClick={() => {
-                            setEditingRowId(null);
-                            setEditFormData(null);
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-[180px]">
-                            <DropdownMenuItem onClick={() => fetchLeadLogs(lead)} className="cursor-pointer font-medium">
-                              <HistoryIcon className="w-4 h-4 mr-2 text-brand-teal" />
-                              View History
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[180px]">
+                        <DropdownMenuItem onClick={() => fetchLeadLogs(lead)} className="cursor-pointer font-medium">
+                          <HistoryIcon className="w-4 h-4 mr-2 text-brand-teal" />
+                          View History
+                        </DropdownMenuItem>
+                        {canDeleteSales && (
+                          <>
+                            <div className="h-px bg-slate-100 my-1" />
+                            <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete Lead
                             </DropdownMenuItem>
-                            {canDeleteSales && (
-                              <>
-                                <div className="h-px bg-slate-100 my-1" />
-                                <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  Delete Lead
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </>
-                    )}
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </td>
               </tr>
@@ -838,10 +919,6 @@ export default function SalesPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline" size="sm" className="h-9 border-slate-200 text-slate-600" onClick={fetchLeads}>
-              <Filter className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
           </div>
         </div>
 
@@ -897,7 +974,7 @@ export default function SalesPage() {
                               <SelectValue placeholder="Select Employee" />
                             </SelectTrigger>
                             <SelectContent>
-                              {employees.map(emp => (
+                              {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
                                 <SelectItem key={emp.id} value={emp.id}>{emp.name || emp.firstName}</SelectItem>
                               ))}
                             </SelectContent>
@@ -1009,9 +1086,45 @@ export default function SalesPage() {
                                 <div className="text-sm font-bold text-slate-700">₹{slab.minAmount.toLocaleString()} - ₹{slab.maxAmount.toLocaleString()}</div>
                                 <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
                               </div>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-rose-500" onClick={() => handleDeleteSlab(slab.id)}>
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 text-slate-300 hover:text-brand-teal"
+                                      onClick={() => setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage })}
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-sm">
+                                    <DialogHeader>
+                                      <DialogTitle>Edit Incentive Slab</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="space-y-4 py-4">
+                                      <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                          <Label className="text-[10px] uppercase font-black text-slate-400">Min Amount (₹)</Label>
+                                          <Input type="number" value={editSlabForm.minAmount} onChange={e => setEditSlabForm({...editSlabForm, minAmount: parseFloat(e.target.value) || 0})} />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                          <Label className="text-[10px] uppercase font-black text-slate-400">Max Amount (₹)</Label>
+                                          <Input type="number" value={editSlabForm.maxAmount} onChange={e => setEditSlabForm({...editSlabForm, maxAmount: parseFloat(e.target.value) || 0})} />
+                                        </div>
+                                      </div>
+                                      <div className="space-y-1.5">
+                                        <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
+                                        <Input type="number" step="0.1" value={editSlabForm.percentage} onChange={e => setEditSlabForm({...editSlabForm, percentage: parseFloat(e.target.value) || 0})} />
+                                      </div>
+                                      <Button className="w-full bg-brand-teal text-white font-bold" onClick={() => handleUpdateSlab(slab.id)}>Save Changes</Button>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-rose-500" onClick={() => handleDeleteSlab(slab.id)}>
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </div>
                           ))}
                           {incentiveSlabs.length === 0 && <div className="p-6 text-center text-xs text-slate-400 italic">No slabs configured</div>}
@@ -1128,38 +1241,6 @@ export default function SalesPage() {
                                     {canEditSales && (
                                       <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-1">
-                                          <Dialog>
-                                            <DialogTrigger asChild>
-                                              <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold text-brand-teal hover:text-brand-teal hover:bg-brand-teal/10">
-                                                Award
-                                              </Button>
-                                            </DialogTrigger>
-                                            <DialogContent className="max-w-sm">
-                                              <DialogHeader>
-                                                <DialogTitle className="text-sm">Award Performance Incentive</DialogTitle>
-                                              </DialogHeader>
-                                              <div className="space-y-4 py-4">
-                                                <div className="space-y-1.5">
-                                                  <Label className="text-[10px] uppercase font-black text-slate-400">Incentive Amount (₹)</Label>
-                                                  <Input 
-                                                    type="number" 
-                                                    defaultValue={earnedIncentive}
-                                                    className="h-10 text-sm font-bold"
-                                                    id={`incentive-${t.id}`}
-                                                  />
-                                                </div>
-                                                <Button 
-                                                  className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold"
-                                                  onClick={() => {
-                                                    const input = document.getElementById(`incentive-${t.id}`) as HTMLInputElement;
-                                                    handleAwardIncentive(t, parseFloat(input.value));
-                                                  }}
-                                                >
-                                                  Confirm Award
-                                                </Button>
-                                              </div>
-                                            </DialogContent>
-                                          </Dialog>
                                           {canDeleteSales && (
                                             <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-rose-500" onClick={async () => {
                                               if (confirm("Delete target?")) {
@@ -1202,7 +1283,7 @@ export default function SalesPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Employees</SelectItem>
-                        {employees.map(emp => (
+                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
                           <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
                         ))}
                       </SelectContent>

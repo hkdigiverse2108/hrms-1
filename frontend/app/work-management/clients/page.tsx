@@ -74,7 +74,7 @@ export default function ClientsPage() {
       const res = await fetch(`${API_URL}/employees`);
       if (res.ok) {
         const data = await res.json();
-        const excludedDepts = ["sales"];
+        const excludedDepts = ["sales", "admin", "hr"];
         const depts = Array.from(new Set(data.map((e: any) => e.department).filter(Boolean)))
           .filter((d: any) => !excludedDepts.includes(d.toLowerCase())) as string[];
         setDepartments(depts);

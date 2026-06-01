@@ -243,7 +243,8 @@ export default function TasksPage() {
     setEditingCell(null);
   };
 
-  const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)));
+  const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)))
+    .filter((d: any) => !["sales", "admin", "hr"].includes(d.toLowerCase()));
   const showTableView = selectedDepartment.toLowerCase() === "graphics" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "graphics");
 
   const filteredTasks = tasks.filter(t => {
@@ -428,6 +429,7 @@ export default function TasksPage() {
                     <th className="px-4 py-3 min-w-[200px]">Task Title</th>
                     <th className="px-4 py-3 min-w-[150px]">Project</th>
                     <th className="px-4 py-3 min-w-[120px]">Assignee</th>
+                    <th className="px-4 py-3 min-w-[120px]">Department</th>
                     <th className="px-4 py-3 min-w-[120px]">Stage</th>
                     <th className="px-4 py-3">Posting Date</th>
                     <th className="px-4 py-3">Posting Day</th>
@@ -460,6 +462,7 @@ export default function TasksPage() {
                         { key: 'title', type: 'text', minWidth: '200px' },
                         { key: 'projectId', labelKey: 'projectName', type: 'select', options: projects.map(p => ({ value: p.id, label: p.title })), minWidth: '150px' },
                         { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
+                        { key: 'department', type: 'select', options: ['Development', 'Graphics', 'Marketing'].map(d => ({ value: d, label: d })), minWidth: '120px' },
                         { key: 'status', type: 'select', options: STAGES.map(s => ({ value: s.id, label: s.label })), minWidth: '120px' },
                         { key: 'postingDate', type: 'date' },
                         { key: 'postingDay', type: 'readonly' },
@@ -515,6 +518,10 @@ export default function TasksPage() {
                               ) : col.key === 'projectId' || col.key === 'assignedToId' ? (
                                 <span className={`${col.key === 'projectId' ? 'text-brand-teal' : 'text-slate-600'} font-medium`}>
                                   {task[col.labelKey || col.key]}
+                                </span>
+                              ) : col.key === 'department' ? (
+                                <span className="font-extrabold text-brand-teal uppercase text-[9px] tracking-wider px-2 py-0.5 bg-brand-teal/5 border border-brand-teal/10 rounded-md">
+                                  {task[col.key] || "Unassigned"}
                                 </span>
                               ) : col.key === 'status' ? (
                                 <span className={`font-bold px-2 py-0.5 rounded text-[10px] uppercase ${STAGES.find(s => s.id === task.status)?.color}`}>
@@ -598,7 +605,20 @@ export default function TasksPage() {
                         {filteredTasks.filter(t => t.status === stage.id).length}
                       </span>
                     </div>
-                    <MoreHorizontal className="w-5 h-5 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" />
+                    <div className="flex items-center gap-1.5">
+                      {canAddTask && (
+                        <button 
+                          onClick={() => {
+                            setEditingTask({ status: stage.id });
+                            setModalOpen(true);
+                          }}
+                          className="p-1 hover:bg-slate-200/80 rounded-md text-slate-500 hover:text-slate-700 transition-colors"
+                          title={`Add task to ${stage.label}`}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   
                   <Droppable droppableId={stage.id}>
