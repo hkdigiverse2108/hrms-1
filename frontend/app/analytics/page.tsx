@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -18,59 +19,63 @@ import {
   Legend,
 } from 'recharts'
 import { Button } from '@/components/ui/button'
-import { Download } from 'lucide-react'
-import { exportToCSV } from "@/lib/export-utils";
-
-
-const departmentData = [
-  { name: 'Engineering', employees: 25 },
-  { name: 'Marketing', employees: 12 },
-  { name: 'Sales', employees: 18 },
-  { name: 'HR', employees: 8 },
-  { name: 'Finance', employees: 10 },
-  { name: 'Operations', employees: 15 },
-]
-
-const attendanceTrend = [
-  { month: 'Jan', present: 85, absent: 10, late: 5 },
-  { month: 'Feb', present: 88, absent: 8, late: 4 },
-  { month: 'Mar', present: 82, absent: 12, late: 6 },
-  { month: 'Apr', present: 90, absent: 6, late: 4 },
-  { month: 'May', present: 87, absent: 9, late: 4 },
-  { month: 'Jun', present: 91, absent: 5, late: 4 },
-]
-
-const leaveDistribution = [
-  { name: 'Annual', value: 45, color: '#3b82f6' },
-  { name: 'Sick', value: 25, color: '#ef4444' },
-  { name: 'Casual', value: 20, color: '#f59e0b' },
-  { name: 'Other', value: 10, color: '#6b7280' },
-]
-
-const hiringTrend = [
-  { month: 'Jan', hires: 3, exits: 1 },
-  { month: 'Feb', hires: 5, exits: 2 },
-  { month: 'Mar', hires: 4, exits: 1 },
-  { month: 'Apr', hires: 6, exits: 3 },
-  { month: 'May', hires: 4, exits: 2 },
-  { month: 'Jun', hires: 5, exits: 1 },
-]
-
-const performanceDistribution = [
-  { rating: 'Excellent', count: 25 },
-  { rating: 'Good', count: 35 },
-  { rating: 'Average', count: 20 },
-  { rating: 'Poor', count: 8 },
-]
+import { Download, Loader2 } from 'lucide-react'
+import { exportToCSV } from "@/lib/export-utils"
+import { API_URL } from '@/lib/config'
 
 export default function AnalyticsPage() {
+  const [data, setData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch(`${API_URL}/analytics/overview?months=6`, { headers })
+        if (!res.ok) throw new Error("Failed to fetch analytics data")
+        const json = await res.json()
+        setData(json)
+      } catch (err: any) {
+        console.error("Failed to load analytics", err)
+        setError(err.message)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (error || !data) {
+    return <div className="p-8 text-center text-red-500">Failed to load analytics data: {error}</div>
+  }
+
+  const handleExport = () => {
+    exportToCSV([
+      ...data.departmentDistribution,
+      ...data.attendanceTrend,
+      ...data.leaveDistribution,
+      ...data.hiringTrend,
+      ...data.performanceDistribution
+    ], 'analytics-summary')
+  }
+
   return (
     <>
       <PageHeader
         title="Analytics"
         description="Comprehensive reports and insights about your organization."
       >
-        <Button variant="outline" onClick={() => exportToCSV([...departmentData, ...attendanceTrend, ...leaveDistribution, ...hiringTrend, ...performanceDistribution], 'analytics-summary')}>
+        <Button variant="outline" onClick={handleExport}>
           <Download className="mr-2 h-4 w-4" />
           Export PDF
         </Button>
@@ -85,7 +90,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={departmentData}>
+              <BarChart data={data.departmentDistribution}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis />
@@ -105,7 +110,7 @@ export default function AnalyticsPage() {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={leaveDistribution}
+                  data={data.leaveDistribution}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -114,8 +119,8 @@ export default function AnalyticsPage() {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {leaveDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {data.leaveDistribution.map((entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={entry.color || '#8884d8'} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -131,7 +136,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={attendanceTrend}>
+              <LineChart data={data.attendanceTrend}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
@@ -152,7 +157,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={hiringTrend}>
+              <BarChart data={data.hiringTrend}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
@@ -172,7 +177,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={performanceDistribution} layout="vertical">
+              <BarChart data={data.performanceDistribution} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis dataKey="rating" type="category" width={80} />
@@ -189,7 +194,7 @@ export default function AnalyticsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-4xl font-bold text-primary">88</p>
+              <p className="text-4xl font-bold text-primary">{data.summaryStats?.totalEmployees || 0}</p>
               <p className="mt-2 text-sm text-muted-foreground">Total Employees</p>
             </div>
           </CardContent>
@@ -197,7 +202,7 @@ export default function AnalyticsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-4xl font-bold text-green-600">92%</p>
+              <p className="text-4xl font-bold text-green-600">{data.summaryStats?.avgAttendanceRate || 0}%</p>
               <p className="mt-2 text-sm text-muted-foreground">Avg. Attendance Rate</p>
             </div>
           </CardContent>
@@ -205,7 +210,7 @@ export default function AnalyticsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-4xl font-bold text-blue-600">4.2</p>
+              <p className="text-4xl font-bold text-blue-600">{data.summaryStats?.avgPerformanceScore || 0}</p>
               <p className="mt-2 text-sm text-muted-foreground">Avg. Performance Score</p>
             </div>
           </CardContent>
@@ -213,7 +218,7 @@ export default function AnalyticsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-4xl font-bold text-yellow-600">8%</p>
+              <p className="text-4xl font-bold text-yellow-600">{data.summaryStats?.attritionRate || 0}%</p>
               <p className="mt-2 text-sm text-muted-foreground">Attrition Rate</p>
             </div>
           </CardContent>

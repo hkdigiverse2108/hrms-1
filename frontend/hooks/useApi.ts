@@ -44,9 +44,19 @@ export function useApi() {
           { key: 'employeeDailyReports', url: '/employee-daily-reports' }
         ];
 
+        const token = localStorage.getItem('token');
+        const headers: HeadersInit = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const requests = endpoints.map(ep => 
-          fetch(`${API_URL}${ep.url}`, { mode: 'cors' })
+          fetch(`${API_URL}${ep.url}`, { mode: 'cors', headers })
             .then(res => {
+              if (res.status === 401) {
+                // Ignore 401s during mass fetch, let specific components handle it
+                return [];
+              }
               if (!res.ok) throw new Error(`Failed to fetch ${ep.key}`);
               return res.json();
             })

@@ -343,6 +343,14 @@ class DashboardStats(BaseModel):
     lateToday: int
     id: str
 
+class AnalyticsOverview(BaseModel):
+    departmentDistribution: List[Dict[str, Any]]
+    attendanceTrend: List[Dict[str, Any]]
+    leaveDistribution: List[Dict[str, Any]]
+    hiringTrend: List[Dict[str, Any]]
+    performanceDistribution: List[Dict[str, Any]]
+    summaryStats: Dict[str, Any]
+
 class AnnouncementBase(BaseModel):
     title: str
     content: str
@@ -717,6 +725,7 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     message: str
     user: Optional[Employee] = None
+    token: Optional[str] = None
 
 class EventBase(BaseModel):
     title: str
