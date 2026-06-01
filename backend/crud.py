@@ -1157,30 +1157,12 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
     if not user:
         return None
         
-    password_match = False
-    password_needs_migration = False
-    
-    # Check if the stored password looks like a bcrypt hash (starts with $2b$)
     stored_password = user.get("password", "")
-    if stored_password.startswith("$2b$"):
-        password_match = auth.verify_password(login_data.password, stored_password)
-    else:
-        # Fallback to plaintext for existing users
-        password_match = (stored_password == login_data.password)
-        if password_match:
-            password_needs_migration = True
+    password_match = (stored_password == login_data.password)
             
     if password_match:
         user_id = str(user["_id"])
         
-        # Migrate password to bcrypt if it was plaintext
-        if password_needs_migration:
-            hashed_password = auth.get_password_hash(login_data.password)
-            await db.employees.update_one(
-                {"_id": ObjectId(user_id)},
-                {"$set": {"password": hashed_password}}
-            )
-            
         user_fixed = fix_id(user)
         
         # Fetch permissions
