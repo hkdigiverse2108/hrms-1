@@ -1421,6 +1421,7 @@ class InvoiceBase(BaseModel):
     lineItems: List[InvoiceLineItem]
     discount: float = 0.0
     tax: float = 0.0
+    taxType: Optional[str] = "CGST+SGST"
     subtotal: float
     total: float
     notes: Optional[str] = None
