@@ -208,10 +208,14 @@ def run_app():
     processes = {}   # {"backend": Popen, "frontend": Popen}
 
     def start_backend():
+        log_path = os.path.join(os.path.dirname(__file__), "backend_errors.log")
+        log_file = open(log_path, "a", encoding="utf-8")
         return subprocess.Popen(
             backend_cmd,
             cwd=str(backend_dir),
             env=backend_env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
             **platform_popen_kwargs,
         )
 

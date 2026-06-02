@@ -30,33 +30,83 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Briefcase, Users, Clock, CheckCircle, MoreHorizontal, Eye, Pencil, Trash2, Loader2 } from 'lucide-react'
+import { Plus, Briefcase, Users, Clock, CheckCircle, MoreHorizontal, Eye, Pencil, Trash2, Loader2, Upload, FileText } from 'lucide-react'
 import type { JobOpening, Department } from '@/lib/types'
 import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
 import { usePermissions } from '@/hooks/usePermissions'
+import { useUser } from '@/hooks/useUser'
 
 export default function RecruitmentPage() {
   const router = useRouter()
+  const { user } = useUser()
   const { data, isLoading: apiLoading, refresh } = useApi()
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
   const [jobs, setJobs] = useState<JobOpening[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
+  // Referrals states
+  const [referrals, setReferrals] = useState<any[]>([])
+  const [referralsLoading, setReferralsLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'jobs' | 'referrals'>('jobs')
+  
+  // File upload state
+  const [uploadingResume, setUploadingResume] = useState(false)
+
+  const [referralModalOpen, setReferralModalOpen] = useState(false)
+  const [referralFormData, setReferralFormData] = useState({
+    candidateName: '',
+    phone: '',
+    jobTitle: 'General / Other',
+    resumeUrl: ''
+  })
+  
+  const [statusUpdateOpen, setStatusUpdateOpen] = useState(false)
+  const [statusFormData, setStatusFormData] = useState({
+    id: '',
+    status: 'Pending',
+    notes: ''
+  })
+
   useEffect(() => {
     if (!permissionsLoading) {
-      if (!isAdmin && !checkPermission('hirings', 'canView')) {
+      if (!user) {
         router.push('/')
       }
     }
-  }, [permissionsLoading, isAdmin, router, checkPermission])
+  }, [permissionsLoading, user, router])
 
   useEffect(() => {
     if (data?.jobOpenings) setJobs(data.jobOpenings)
     if (data?.departments) setDepartments(data.departments)
   }, [data?.jobOpenings, data?.departments])
+
+  const fetchReferrals = async () => {
+    if (!user) return
+    setReferralsLoading(true)
+    try {
+      const isHRorAdmin = isAdmin || checkPermission('hirings', 'canEdit')
+      const url = isHRorAdmin
+        ? `${API_URL}/referrals`
+        : `${API_URL}/referrals?employee_id=${user.id || user._id}`
+      const response = await fetch(url)
+      if (response.ok) {
+        setReferrals(await response.json())
+      }
+    } catch (error) {
+      console.error('Error fetching referrals:', error)
+    } finally {
+      setReferralsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (user) {
+      fetchReferrals()
+    }
+  }, [user])
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingJob, setEditingJob] = useState<JobOpening | null>(null)
@@ -73,8 +123,10 @@ export default function RecruitmentPage() {
     postedDate: '',
   })
 
-  const openJobs = jobs.filter((j) => j.status === 'open').length
-  const totalApplications = jobs.reduce((sum, j) => sum + j.applications, 0)
+  const isHRorAdmin = isAdmin || checkPermission('hirings', 'canEdit')
+  const displayedJobs = isHRorAdmin ? jobs : jobs.filter((j) => j.status === 'open')
+  const openJobs = displayedJobs.filter((j) => j.status === 'open').length
+  const totalApplications = displayedJobs.reduce((sum, j) => sum + j.applications, 0)
 
   const handleOpenModal = (job?: JobOpening) => {
     if (job) {
@@ -152,6 +204,149 @@ export default function RecruitmentPage() {
     setDeleteDialogOpen(false)
   }
 
+  // Resume Upload Handler
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingResume(true)
+    const uploadData = new FormData()
+    uploadData.append('file', file)
+
+    const backendUrl = typeof window !== 'undefined'
+      ? `${window.location.protocol}//127.0.0.1:8000`
+      : 'http://127.0.0.1:8000'
+
+    try {
+      // Direct upload bypasses Next.js proxy upload limits and EPIPE/Turbopack proxy issues
+      let response = await fetch(`${backendUrl}/chat/upload`, {
+        method: 'POST',
+        body: uploadData,
+      }).catch(() => null)
+
+      if (!response || !response.ok) {
+        // Fallback to proxy
+        response = await fetch(`${API_URL}/chat/upload`, {
+          method: 'POST',
+          body: uploadData,
+        })
+      }
+
+      if (response.ok) {
+        const result = await response.json()
+        setReferralFormData({ ...referralFormData, resumeUrl: result.url })
+      } else {
+        const details = await response.text().catch(() => 'Could not read details')
+        alert(`File upload failed. Status: ${response.status} (${response.statusText}). Details: ${details}`)
+      }
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      alert(`Error uploading file: ${error.message || error}`)
+    } finally {
+      setUploadingResume(false)
+    }
+  }
+
+  // Referral Modal actions
+  const handleOpenReferralModal = (jobTitle?: string) => {
+    const openJobsList = jobs.filter(j => j.status === 'open')
+    setReferralFormData({
+      candidateName: '',
+      phone: '',
+      jobTitle: jobTitle || (openJobsList.length > 0 ? openJobsList[0].title : ''),
+      resumeUrl: ''
+    })
+    setReferralModalOpen(true)
+  }
+
+  const handleSaveReferral = async () => {
+    if (!referralFormData.candidateName || !referralFormData.phone) {
+      alert('Please fill in both candidate name and mobile number')
+      return
+    }
+
+    if (!referralFormData.resumeUrl) {
+      alert('Please upload a resume first')
+      return
+    }
+
+    setIsLoading(true)
+    const payload = {
+      candidateName: referralFormData.candidateName,
+      phone: referralFormData.phone,
+      jobTitle: referralFormData.jobTitle,
+      resumeUrl: referralFormData.resumeUrl,
+      referredById: user?.id || user?._id || 'unknown',
+      referredByName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Employee',
+      status: 'Pending',
+      relationship: 'Friend',
+      email: '',
+      notes: '',
+      submissionDate: new Date().toISOString().split('T')[0]
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/referrals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (response.ok) {
+        fetchReferrals()
+        setReferralModalOpen(false)
+      }
+    } catch (error) {
+      console.error('Error saving referral:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleOpenStatusModal = (referral: any) => {
+    setStatusFormData({
+      id: referral.id,
+      status: referral.status,
+      notes: referral.notes || ''
+    })
+    setStatusUpdateOpen(true)
+  }
+
+  const handleSaveStatusUpdate = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/referrals/${statusFormData.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: statusFormData.status,
+          notes: statusFormData.notes
+        }),
+      })
+      if (response.ok) {
+        fetchReferrals()
+        setStatusUpdateOpen(false)
+      }
+    } catch (error) {
+      console.error('Error updating status:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDeleteReferral = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this referral reference?')) return
+    try {
+      const response = await fetch(`${API_URL}/referrals/${id}`, {
+        method: 'DELETE'
+      })
+      if (response.ok) {
+        fetchReferrals()
+      }
+    } catch (error) {
+      console.error('Error deleting referral:', error)
+    }
+  }
+
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'full-time':
@@ -196,45 +391,105 @@ export default function RecruitmentPage() {
   ]
 
   const renderActions = (job: JobOpening) => {
-    const showView = isAdmin || checkPermission('interviews', 'canView')
     const showEdit = isAdmin || checkPermission('hirings', 'canEdit')
     const showDelete = isAdmin || checkPermission('hirings', 'canDelete')
 
-    if (!showView && !showEdit && !showDelete) return null
-
     return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal className="h-4 w-4" />
+      <div className="flex items-center justify-end gap-2">
+        {showEdit && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleOpenModal(job)}
+            title="Edit Job"
+            className="h-8 w-8 text-slate-500 hover:text-brand-teal hover:bg-slate-100 rounded-lg"
+          >
+            <Pencil className="h-4 w-4" />
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {showView && (
-            <DropdownMenuItem onClick={() => router.push('/recruitment/hiring-board')}>
-              <Eye className="mr-2 h-4 w-4" />
-              View Applications
-            </DropdownMenuItem>
-          )}
-          {showEdit && (
-            <DropdownMenuItem onClick={() => handleOpenModal(job)}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </DropdownMenuItem>
-          )}
-          {showDelete && (
-            <DropdownMenuItem
-              onClick={() => handleDeleteClick(job)}
-              className="text-destructive"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        )}
+        {showDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleDeleteClick(job)}
+            title="Delete Job"
+            className="h-8 w-8 text-slate-500 hover:text-destructive hover:bg-red-50 rounded-lg"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
     )
   }
+
+  const referralColumns = [
+    { key: 'candidateName' as const, header: 'Candidate Name' },
+    { key: 'phone' as const, header: 'Mobile Number' },
+    {
+      key: 'resumeUrl' as const,
+      header: 'Resume',
+      render: (ref: any) => ref.resumeUrl ? (
+        <a href={`${API_URL}${ref.resumeUrl}`} target="_blank" rel="noreferrer" className="text-blue-600 underline font-medium hover:text-blue-800 flex items-center gap-1">
+          <FileText className="w-3.5 h-3.5" /> View Resume
+        </a>
+      ) : (
+        <span className="text-gray-400">No Resume</span>
+      )
+    },
+    { key: 'jobTitle' as const, header: 'Referred Position' },
+    { key: 'referredByName' as const, header: 'Referred By' },
+    { key: 'submissionDate' as const, header: 'Submission Date' },
+    {
+      key: 'status' as const,
+      header: 'Status',
+      render: (ref: any) => (
+        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+          ref.status === 'Hired' ? 'bg-green-100 text-green-700' :
+          ref.status === 'Contacted' ? 'bg-blue-100 text-blue-700' :
+          ref.status === 'Interviewing' ? 'bg-purple-100 text-purple-700' :
+          ref.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+        }`}>
+          {ref.status}
+        </span>
+      )
+    },
+    { key: 'notes' as const, header: 'HR Remarks / Notes' }
+  ]
+
+  const renderReferralActions = (ref: any) => {
+    const showEditStatus = isAdmin || checkPermission('hirings', 'canEdit')
+    const showDelete = isAdmin || checkPermission('hirings', 'canDelete') || (user && (user.id === ref.referredById || user._id === ref.referredById))
+
+    return (
+      <div className="flex items-center justify-end gap-2">
+        {showEditStatus && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleOpenStatusModal(ref)}
+            title="Update Status / Notes"
+            className="h-8 w-8 text-slate-500 hover:text-brand-teal hover:bg-slate-100 rounded-lg"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        )}
+        {showDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleDeleteReferral(ref.id)}
+            title="Delete Reference"
+            className="h-8 w-8 text-slate-500 hover:text-destructive hover:bg-red-50 rounded-lg"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  const hasJobActions = isAdmin || checkPermission('hirings', 'canEdit') || checkPermission('hirings', 'canDelete')
+  const hasReferralActions = isAdmin || checkPermission('hirings', 'canEdit') || checkPermission('hirings', 'canDelete') || referrals.some(r => user && (r.referredById === user.id || r.referredById === user._id))
 
   if (permissionsLoading) {
     return (
@@ -246,8 +501,12 @@ export default function RecruitmentPage() {
 
   return (
     <>
-      <PageHeader title="Hirings" description="Manage hirings and recruitment.">
+      <PageHeader title="Hirings" description="Manage job openings and candidate references.">
         <div className="flex gap-3">
+          <Button onClick={() => handleOpenReferralModal()} variant="outline" className="border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white">
+            <Plus className="mr-2 h-4 w-4" />
+            Refer a Friend
+          </Button>
           {(isAdmin || checkPermission('hirings', 'canAdd')) && (
             <Button onClick={() => handleOpenModal()}>
               <Plus className="mr-2 h-4 w-4" />
@@ -269,28 +528,67 @@ export default function RecruitmentPage() {
           icon={<CheckCircle className="h-6 w-6" />}
         />
         <StatsCard
-          title="Total Applications"
-          value={totalApplications}
+          title="Submitted Referrals"
+          value={referrals.length}
           icon={<Users className="h-6 w-6" />}
         />
       </div>
 
-      {(apiLoading && jobs.length === 0) ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200 mt-8 mb-4">
+        <button
+          onClick={() => setActiveTab('jobs')}
+          className={`py-2 px-4 font-semibold text-sm border-b-2 transition-all ${
+            activeTab === 'jobs' ? 'border-brand-teal text-brand-teal' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Job Openings
+        </button>
+        <button
+          onClick={() => setActiveTab('referrals')}
+          className={`py-2 px-4 font-semibold text-sm border-b-2 transition-all ${
+            activeTab === 'referrals' ? 'border-brand-teal text-brand-teal' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Employee Referrals ({referrals.length})
+        </button>
+      </div>
+
+      {activeTab === 'jobs' ? (
+        (apiLoading && jobs.length === 0) ? (
+          <div className="flex h-64 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="mt-2">
+            <DataTable
+              data={displayedJobs}
+              columns={columns}
+              searchKey="title"
+              searchPlaceholder="Search jobs..."
+              actions={hasJobActions ? renderActions : undefined}
+            />
+          </div>
+        )
       ) : (
-        <div className="mt-6">
-          <DataTable
-            data={jobs}
-            columns={columns}
-            searchKey="title"
-            searchPlaceholder="Search jobs..."
-            actions={renderActions}
-          />
-        </div>
+        referralsLoading ? (
+          <div className="flex h-64 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="mt-2">
+            <DataTable
+              data={referrals}
+              columns={referralColumns}
+              searchKey="candidateName"
+              searchPlaceholder="Search candidate..."
+              actions={hasReferralActions ? renderReferralActions : undefined}
+            />
+          </div>
+        )
       )}
 
+      {/* Edit/Post Job Dialog */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
@@ -331,7 +629,7 @@ export default function RecruitmentPage() {
                 <Input
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="e.g., New York, Remote"
+                  placeholder="e.g., Surat, Remote"
                 />
               </div>
             </div>
@@ -405,6 +703,144 @@ export default function RecruitmentPage() {
               </Button>
               <Button onClick={handleSave} disabled={isLoading}>
                 {isLoading ? (editingJob ? 'Saving...' : 'Posting...') : (editingJob ? 'Save Changes' : 'Post Job')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Refer a Friend Dialog (Simplified: Name, Mobile Number, Upload Resume, Referred Position) */}
+      <Dialog open={referralModalOpen} onOpenChange={setReferralModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Refer a Candidate / Add Reference</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Candidate Name</Label>
+              <Input
+                value={referralFormData.candidateName}
+                onChange={(e) => setReferralFormData({ ...referralFormData, candidateName: e.target.value })}
+                placeholder="Full Name"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Mobile Number</Label>
+              <Input
+                value={referralFormData.phone}
+                onChange={(e) => setReferralFormData({ ...referralFormData, phone: e.target.value })}
+                placeholder="Mobile / Phone Number"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Referred Position</Label>
+              <Select
+                value={referralFormData.jobTitle}
+                onValueChange={(val) => setReferralFormData({ ...referralFormData, jobTitle: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select referred position" />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobs.filter(j => j.status === 'open').map(j => (
+                    <SelectItem key={j.id} value={j.title}>{j.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Upload Resume</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="resume-file-input"
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleResumeUpload}
+                  className="hidden"
+                  disabled={uploadingResume}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => document.getElementById('resume-file-input')?.click()}
+                  disabled={uploadingResume}
+                  className="w-full flex items-center justify-center gap-2"
+                >
+                  {uploadingResume ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Choose Resume file
+                    </>
+                  )}
+                </Button>
+              </div>
+              {referralFormData.resumeUrl && (
+                <p className="text-xs text-emerald-600 mt-1 font-semibold flex items-center gap-1">
+                  <CheckCircle className="w-3.5 h-3.5" /> Resume uploaded successfully
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setReferralModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveReferral} disabled={isLoading || uploadingResume} className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold">
+                Submit Referral
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* HR/Admin Status Update Dialog */}
+      <Dialog open={statusUpdateOpen} onOpenChange={setStatusUpdateOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Update Referral Status & Notes</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Referral Status</Label>
+              <Select
+                value={statusFormData.status}
+                onValueChange={(val) => setStatusFormData({ ...statusFormData, status: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Contacted">Contacted</SelectItem>
+                  <SelectItem value="Interviewing">Interviewing</SelectItem>
+                  <SelectItem value="Hired">Hired</SelectItem>
+                  <SelectItem value="Rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>HR Notes / Contact Status Remarks</Label>
+              <Textarea
+                value={statusFormData.notes}
+                onChange={(e) => setStatusFormData({ ...statusFormData, notes: e.target.value })}
+                placeholder="Add contact details, interview schedule, or general remarks..."
+                rows={4}
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setStatusUpdateOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveStatusUpdate} disabled={isLoading} className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold">
+                Save Status
               </Button>
             </div>
           </div>

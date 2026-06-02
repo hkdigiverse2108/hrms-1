@@ -4007,4 +4007,34 @@ async def get_next_invoice_number(db):
     next_num = max_num + 1
     return f"INV-{next_num:03d}"
 
+# Referral (Reference) CRUD
+async def get_referrals(db, skip: int = 0, limit: int = 10000):
+    cursor = db.referrals.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def get_employee_referrals(db, employee_id: str, skip: int = 0, limit: int = 10000):
+    cursor = db.referrals.find({"referredById": employee_id}).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def create_referral(db, referral: schemas.ReferralCreate):
+    referral_dict = referral.dict()
+    if not referral_dict.get("submissionDate"):
+        referral_dict["submissionDate"] = get_now().strftime("%Y-%m-%d")
+    result = await db.referrals.insert_one(referral_dict)
+    doc = await db.referrals.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def update_referral(db, referral_id: str, referral_update: schemas.ReferralUpdate):
+    update_data = referral_update.dict(exclude_unset=True)
+    if update_data:
+        await db.referrals.update_one({"_id": ObjectId(referral_id)}, {"$set": update_data})
+    doc = await db.referrals.find_one({"_id": ObjectId(referral_id)})
+    return fix_id(doc)
+
+async def delete_referral(db, referral_id: str):
+    await db.referrals.delete_one({"_id": ObjectId(referral_id)})
+    return True
+
 

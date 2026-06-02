@@ -63,7 +63,7 @@ async def lifespan(app):
 app = FastAPI(title="HRMS API", lifespan=lifespan)
 
 # CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
-_default_origins = "http://localhost:3535,http://127.0.0.1:3535"
+_default_origins = "http://localhost:3535,http://127.0.0.1:3535,http://localhost:3550,http://127.0.0.1:3550"
 _allowed_origins = [
     o.strip()
     for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
@@ -530,6 +530,26 @@ async def read_application_logs(app_id: str, db=Depends(get_db)):
 async def read_interns(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_interns(db, skip, limit)
 @app.post("/interns", response_model=schemas.Intern)
 async def create_intern(intern: schemas.InternCreate, db=Depends(get_db)): return await crud.create_intern(db, intern)
+
+# Referral / Job Reference Endpoints
+@app.get("/referrals", response_model=List[schemas.Referral])
+async def read_referrals(employee_id: Optional[str] = None, db=Depends(get_db)):
+    if employee_id:
+        return await crud.get_employee_referrals(db, employee_id)
+    return await crud.get_referrals(db)
+
+@app.post("/referrals", response_model=schemas.Referral)
+async def create_referral(referral: schemas.ReferralCreate, db=Depends(get_db)):
+    return await crud.create_referral(db, referral)
+
+@app.put("/referrals/{referral_id}", response_model=schemas.Referral)
+async def update_referral(referral_id: str, referral_update: schemas.ReferralUpdate, db=Depends(get_db)):
+    return await crud.update_referral(db, referral_id, referral_update)
+
+@app.delete("/referrals/{referral_id}")
+async def delete_referral(referral_id: str, db=Depends(get_db)):
+    await crud.delete_referral(db, referral_id)
+    return {"message": "Referral deleted successfully"}
 
 # Asset & Expense Endpoints
 @app.get("/assets", response_model=List[schemas.Asset])

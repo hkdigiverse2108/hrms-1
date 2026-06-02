@@ -1463,3 +1463,35 @@ class DocumentType(DocumentTypeBase):
     id: str
     class Config:
         from_attributes = True
+
+# Referral (Reference) Schemas
+class ReferralBase(BaseModel):
+    candidateName: str
+    email: Optional[str] = None
+    phone: str
+    jobTitle: str
+    relationship: Optional[str] = None
+    resumeUrl: Optional[str] = None
+    referredById: str
+    referredByName: str
+    status: str = "Pending"
+    notes: Optional[str] = None
+    submissionDate: Optional[RobustDate] = None
+
+class ReferralCreate(ReferralBase):
+    pass
+
+class ReferralUpdate(BaseModel):
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    candidateName: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    jobTitle: Optional[str] = None
+    relationship: Optional[str] = None
+    resumeUrl: Optional[str] = None
+
+class Referral(ReferralBase):
+    id: str
+    class Config:
+        from_attributes = True
