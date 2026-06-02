@@ -3993,7 +3993,7 @@ async def delete_invoice(db, invoice_id: str):
     await db.invoices.delete_one({"_id": ObjectId(invoice_id)})
     return True
 
-async def get_next_invoice_number(db, invoice_type: str = "Tax Invoice"):
+async def get_next_invoice_number(db, invoice_type: str = "Tax Invoice", tax_type: str = "CGST+SGST"):
     import re
     
     cursor = db.invoices.find()
@@ -4004,7 +4004,10 @@ async def get_next_invoice_number(db, invoice_type: str = "Tax Invoice"):
     if invoice_type == "Proforma Invoice":
         prefix = settings.get("proformaInvoicePrefix", "PINV")
     else:
-        prefix = settings.get("taxInvoicePrefix", "INV")
+        if tax_type == "No Tax":
+            prefix = settings.get("noTaxInvoicePrefix", "NINV")
+        else:
+            prefix = settings.get("taxInvoicePrefix", "INV")
     
     max_num = 0
     for inv in invoices:

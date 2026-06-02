@@ -46,6 +46,7 @@ export default function CreateInvoicePage() {
   const [sgst, setSgst] = useState("9");
   const [igst, setIgst] = useState("18");
   const [taxType, setTaxType] = useState("CGST+SGST");
+  const [paymentMode, setPaymentMode] = useState("Current Account");
   const [isIgstEditable, setIsIgstEditable] = useState(false);
   const [isCgstEditable, setIsCgstEditable] = useState(false);
   const [isSgstEditable, setIsSgstEditable] = useState(false);
@@ -96,7 +97,7 @@ export default function CreateInvoicePage() {
     let active = true;
     const fetchNumber = async () => {
       try {
-        const res = await fetch(`${API_URL}/invoices/next-number?type=${encodeURIComponent(invoiceType)}`);
+        const res = await fetch(`${API_URL}/invoices/next-number?type=${encodeURIComponent(invoiceType)}&taxType=${encodeURIComponent(taxType)}`);
         if (res.ok) {
           const data = await res.json();
           if (active) setInvoiceNumber(data.nextInvoiceNumber);
@@ -118,7 +119,16 @@ export default function CreateInvoicePage() {
     };
     fetchNumber();
     return () => { active = false; };
-  }, [invoiceType]);
+  }, [invoiceType, taxType]);
+
+  // Adjust tax type based on payment mode
+  useEffect(() => {
+    if (paymentMode === "Cash" || paymentMode === "Other Account") {
+      setTaxType("No Tax");
+    } else {
+      setTaxType((prev) => prev === "No Tax" ? "CGST+SGST" : prev);
+    }
+  }, [paymentMode]);
 
   const addItem = () => {
     setItems([...items, { id: Date.now(), description: "", rate: "0.00", qty: "1", discount: "0", amount: 0.00 }]);
@@ -243,6 +253,7 @@ export default function CreateInvoicePage() {
         discount: 0,
         tax: taxRate,
         taxType: taxType,
+        paymentMode: paymentMode,
         subtotal,
         total: totalDue,
         notes: notes || null,
@@ -445,6 +456,19 @@ export default function CreateInvoicePage() {
               </select>
             </div>
             <div className="space-y-2">
+              <label className="text-sm font-semibold text-foreground">Mode of Payment</label>
+              <select
+                value={paymentMode}
+                onChange={(e) => setPaymentMode(e.target.value)}
+                className="w-full px-3 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer h-11 font-medium text-slate-700"
+              >
+                <option value="Current Account">Current Account</option>
+                <option value="Cash with GST">Cash with GST</option>
+                <option value="Cash">Cash</option>
+                <option value="Other Account">Other Account</option>
+              </select>
+            </div>
+            <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Invoice Number</label>
               <Input value={invoiceNumber} className="bg-gray-50 w-full font-bold text-slate-700 h-11" readOnly />
             </div>
@@ -567,9 +591,15 @@ export default function CreateInvoicePage() {
                       onChange={(e) => setTaxType(e.target.value)}
                       className="w-32 h-8 px-2 rounded-md border border-border bg-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-teal"
                     >
-                      <option value="No Tax">No Tax</option>
-                      <option value="CGST+SGST">CGST + SGST</option>
-                      <option value="IGST">IGST</option>
+                      {(paymentMode === "Cash" || paymentMode === "Other Account") && (
+                        <option value="No Tax">No Tax</option>
+                      )}
+                      {paymentMode !== "Cash" && paymentMode !== "Other Account" && (
+                        <>
+                          <option value="CGST+SGST">CGST + SGST</option>
+                          <option value="IGST">IGST</option>
+                        </>
+                      )}
                     </select>
                   </div>
                   
