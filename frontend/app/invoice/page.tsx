@@ -13,8 +13,14 @@ import {
   Trash2,
   Eye,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  X
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -49,6 +55,15 @@ export default function AllInvoicesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedType, setSelectedType] = useState("All");
+  
+  // Advanced Filters
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [paymentMode, setPaymentMode] = useState("All");
+  const [clientFilter, setClientFilter] = useState("All");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+  const [taxTypeFilter, setTaxTypeFilter] = useState("All");
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -158,8 +173,46 @@ export default function AllInvoicesPage() {
       selectedType === "All" || 
       (invoice.invoiceType || "Tax Invoice") === selectedType;
 
-    return matchesSearch && matchesStatus && matchesType;
+    const matchesClient = clientFilter === "All" || invoice.clientName === clientFilter;
+    const matchesPaymentMode = paymentMode === "All" || invoice.paymentMode === paymentMode;
+    const matchesTaxType = taxTypeFilter === "All" || invoice.taxType === taxTypeFilter;
+    
+    const amt = invoice.total || 0;
+    const matchesMinAmount = minAmount === "" || amt >= parseFloat(minAmount);
+    const matchesMaxAmount = maxAmount === "" || amt <= parseFloat(maxAmount);
+
+    let matchesDateFrom = true;
+    let matchesDateTo = true;
+    if (dateFrom || dateTo) {
+      const issueDate = new Date(invoice.issueDate);
+      if (dateFrom) matchesDateFrom = issueDate >= new Date(dateFrom);
+      if (dateTo) matchesDateTo = issueDate <= new Date(dateTo);
+    }
+
+    return matchesSearch && matchesStatus && matchesType && matchesClient && 
+           matchesPaymentMode && matchesTaxType && matchesMinAmount && matchesMaxAmount && 
+           matchesDateFrom && matchesDateTo;
   });
+
+  const uniqueClients = Array.from(new Set(invoices.map(inv => inv.clientName).filter(Boolean)));
+  
+  const activeFiltersCount = [
+    dateFrom, dateTo, 
+    paymentMode !== "All" ? paymentMode : "",
+    clientFilter !== "All" ? clientFilter : "",
+    minAmount, maxAmount,
+    taxTypeFilter !== "All" ? taxTypeFilter : ""
+  ].filter(Boolean).length;
+  
+  const resetFilters = () => {
+    setDateFrom("");
+    setDateTo("");
+    setPaymentMode("All");
+    setClientFilter("All");
+    setMinAmount("");
+    setMaxAmount("");
+    setTaxTypeFilter("All");
+  };
 
   // Calculate items for current page
   const totalItems = filteredInvoices.length;
@@ -250,6 +303,97 @@ export default function AllInvoicesPage() {
                 className="pl-9 bg-gray-50/50 border-border rounded-lg h-10 font-medium" 
               />
             </div>
+            
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn("h-10 px-3 bg-white hover:bg-gray-50", activeFiltersCount > 0 && "border-brand-teal text-brand-teal")}>
+                  <Filter className="w-4 h-4 mr-2" />
+                  Filters
+                  {activeFiltersCount > 0 && (
+                    <span className="ml-2 bg-brand-teal text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-sm">Advanced Filters</h4>
+                  {activeFiltersCount > 0 && (
+                    <Button variant="ghost" size="sm" onClick={resetFilters} className="h-6 px-2 text-xs text-muted-foreground hover:text-red-500">
+                      Clear All
+                    </Button>
+                  )}
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-muted-foreground uppercase">Client Name</label>
+                    <select 
+                      value={clientFilter} 
+                      onChange={(e) => setClientFilter(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border text-sm font-medium bg-white focus:ring-1 focus:ring-brand-teal focus:outline-none"
+                    >
+                      <option value="All">All Clients</option>
+                      {uniqueClients.map(c => (
+                        <option key={c as string} value={c as string}>{c as string}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-muted-foreground uppercase">From Date</label>
+                      <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 text-sm font-medium" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-muted-foreground uppercase">To Date</label>
+                      <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 text-sm font-medium" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-muted-foreground uppercase">Min Amount</label>
+                      <Input type="number" placeholder="₹0" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} className="h-9 text-sm font-medium" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-muted-foreground uppercase">Max Amount</label>
+                      <Input type="number" placeholder="₹99999" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} className="h-9 text-sm font-medium" />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-muted-foreground uppercase">Mode of Payment</label>
+                    <select 
+                      value={paymentMode} 
+                      onChange={(e) => setPaymentMode(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border text-sm font-medium bg-white focus:ring-1 focus:ring-brand-teal focus:outline-none"
+                    >
+                      <option value="All">All Modes</option>
+                      <option value="Current Account">Current Account</option>
+                      <option value="Cash with GST">Cash with GST</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Other Account">Other Account</option>
+                    </select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-muted-foreground uppercase">Tax Type</label>
+                    <select 
+                      value={taxTypeFilter} 
+                      onChange={(e) => setTaxTypeFilter(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border text-sm font-medium bg-white focus:ring-1 focus:ring-brand-teal focus:outline-none"
+                    >
+                      <option value="All">All Tax Types</option>
+                      <option value="CGST+SGST">CGST + SGST</option>
+                      <option value="IGST">IGST</option>
+                      <option value="No Tax">No Tax</option>
+                    </select>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
         
