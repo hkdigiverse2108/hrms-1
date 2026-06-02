@@ -122,8 +122,8 @@ export default function ReviewPage() {
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
 
-  const canViewReviews = isAdmin || checkPermission('review', 'canView');
-  const canAddReviews = isAdmin || checkPermission('review', 'canAdd');
+  const canViewReviews = true;
+  const canAddReviews = true;
   const canEditReviews = isAdmin || checkPermission('review', 'canEdit');
   const canDeleteReviews = isAdmin || checkPermission('review', 'canDelete');
 
@@ -145,14 +145,23 @@ export default function ReviewPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (user !== undefined) {
+      fetchData();
+    }
+    if (user && !isAdmin) {
+      setNewReview(prev => ({
+        ...prev,
+        employeeId: user.id || user._id || ""
+      }));
+    }
+  }, [user, isAdmin]);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      const employeeIdParam = (!isAdmin && user) ? `?employeeId=${user.id || user._id || ''}` : '';
       const [revRes, empRes] = await Promise.all([
-        fetch(`${API_URL}/reviews`),
+        fetch(`${API_URL}/reviews${employeeIdParam}`),
         fetch(`${API_URL}/employees`)
       ]);
       if (revRes.ok) setReviews(await revRes.json());
@@ -169,14 +178,27 @@ export default function ReviewPage() {
     
     setIsSubmitting(true);
     try {
-      const emp = employees.find(e => e.id === newReview.employeeId || e.employeeId === newReview.employeeId);
-      const payload = {
-        ...newReview,
-        employeeName: emp?.name || "Unknown",
-        role: emp?.designation || "Staff",
-        avatar: emp?.profilePhoto || "",
-        department: emp?.department || "N/A"
-      };
+      let payload;
+      if (!isAdmin && user) {
+        payload = {
+          employeeId: user.id || user._id || "",
+          employeeName: user.name || "Unknown",
+          role: user.designation || "Staff",
+          avatar: user.profilePhoto || "",
+          department: user.department || "N/A",
+          summary: newReview.summary,
+          rating: newReview.rating
+        };
+      } else {
+        const emp = employees.find(e => e.id === newReview.employeeId || e.employeeId === newReview.employeeId);
+        payload = {
+          ...newReview,
+          employeeName: emp?.name || "Unknown",
+          role: emp?.designation || "Staff",
+          avatar: emp?.profilePhoto || "",
+          department: emp?.department || "N/A"
+        };
+      }
 
       const res = await fetch(`${API_URL}/reviews`, {
         method: 'POST',
@@ -186,7 +208,7 @@ export default function ReviewPage() {
 
       if (res.ok) {
         setCreateModalOpen(false);
-        setNewReview({ employeeId: "", summary: "", rating: 0 });
+        setNewReview({ employeeId: (!isAdmin && user) ? (user.id || user._id || "") : "", summary: "", rating: 0 });
         setNewRating(0);
         fetchData();
       }
@@ -238,10 +260,16 @@ export default function ReviewPage() {
     setEditModalOpen(true);
   };
 
-  const filteredReviews = reviews.filter(r => 
-    r.employeeName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.department?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredReviews = reviews.filter(r => {
+    if (!isAdmin && user) {
+      const myId = user.id || user._id;
+      if (r.employeeId !== myId) return false;
+    }
+    return (
+      r.employeeName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.department?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
   if (permissionsLoading) {
     return (
@@ -275,22 +303,34 @@ export default function ReviewPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-foreground">Employee</label>
-                    <Select onValueChange={(val: string) => setNewReview(prev => ({ ...prev, employeeId: val }))} value={newReview.employeeId}>
-                      <SelectTrigger className="w-full bg-white shadow-sm border-border">
-                        <SelectValue placeholder="Select employee..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {employees.map(emp => (
-                          <SelectItem key={emp.id} value={emp.id || emp.employeeId}>{emp.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {!isAdmin ? (
+                      <Input 
+                        value={user?.name || ""} 
+                        className="bg-gray-50 text-muted-foreground" 
+                        readOnly 
+                      />
+                    ) : (
+                      <Select onValueChange={(val: string) => setNewReview(prev => ({ ...prev, employeeId: val }))} value={newReview.employeeId}>
+                        <SelectTrigger className="w-full bg-white shadow-sm border-border">
+                          <SelectValue placeholder="Select employee..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employees.map(emp => (
+                            <SelectItem key={emp.id} value={emp.id || emp.employeeId}>{emp.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-foreground">Department</label>
                     <Input 
-                      value={employees.find(e => e.id === newReview.employeeId || e.employeeId === newReview.employeeId)?.department || ""} 
+                      value={
+                        !isAdmin 
+                          ? (user?.department || "Staff") 
+                          : (employees.find(e => e.id === newReview.employeeId || e.employeeId === newReview.employeeId)?.department || "")
+                      } 
                       placeholder="Auto-filled" 
                       className="bg-gray-50 text-muted-foreground" 
                       readOnly 
