@@ -179,7 +179,7 @@ function SinglePayslip({
           </tr>
           <tr>
             <td colSpan={4} className="text-center font-extrabold border-b border-black text-[16px] uppercase py-2 bg-slate-50 font-sans">
-              <span className="underline decoration-2 underline-offset-4">{record.employeeName?.toUpperCase()}</span>
+              <span>{record.employeeName?.toUpperCase()}</span>
             </td>
           </tr>
 
@@ -192,21 +192,21 @@ function SinglePayslip({
           </tr>
           <tr>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Income Tax Number (PAN)</td>
-            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.panCard || 'AHQPN3916P'}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.panCard || 'ABCDE1234F'}</td>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Bank Details</td>
-            <td className="border-b border-black text-[13px] px-3 py-1.5 font-bold">{(employee?.bankName || 'BANK OF BARODA').toUpperCase()}</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 font-bold">{(employee?.bankName || 'AXIS BANK').toUpperCase()}</td>
           </tr>
           <tr>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Designation</td>
-            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.designation || 'Worker'}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.designation || 'Sales Executive'}</td>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">A/C.NO:</td>
-            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.accountNumber || '-'}</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.accountNumber || '87654345678'}</td>
           </tr>
           <tr>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Date of Joining</td>
             <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.joinDate ? new Date(employee.joinDate).toLocaleDateString('en-GB') : '-'}</td>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">IFSC</td>
-            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.ifscCode || '-'}</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.ifscCode || 'UTIB0000123'}</td>
           </tr>
 
           {/* Attendance Details */}
@@ -286,7 +286,8 @@ function SinglePayslip({
               <div className="text-[13px] font-bold mb-1">Amount (in words)</div>
               <div className="text-[13px] italic text-slate-800 font-medium mb-4">{numberToWords(totalSalary)}</div>
               
-              {/* Payment Mode Table */}
+              {/* Payment Status & Payment Mode Table */}
+
               <div className="mt-2">
                 <table className="w-[90%] border-collapse border border-black text-[12px] text-black">
                   <thead>
@@ -310,7 +311,7 @@ function SinglePayslip({
                       <td className="border border-black px-3 py-1.5 font-bold">Cash</td>
                       <td className="border border-black px-3 py-1.5 text-center">-</td>
                       <td className="border border-black px-3 py-1.5 text-right font-bold">
-                        {record.paymentMode !== 'Cheque' ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0'}
+                        {record.paymentMode === 'Cash' || !record.paymentMode ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                       </td>
                     </tr>
                     <tr className="font-bold bg-slate-50">
@@ -337,12 +338,15 @@ function SinglePayslip({
 function PayslipContent() {
   const searchParams = useSearchParams()
   const payrollId = searchParams.get('id')
+  const employeeIdParam = searchParams.get('employeeId')
   const [allPayrolls, setAllPayrolls] = useState<any[]>([])
   const [employees, setEmployees] = useState<any[]>([])
   const [records, setRecords] = useState<any[]>([])
   const [settings, setSettings] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isDownloading, setIsDownloading] = useState(false)
+  const [activePayslipId, setActivePayslipId] = useState<string | null>(null)
+  const [downloadingRecord, setDownloadingRecord] = useState<any>(null)
 
   // Auth roles logic - fallback to localStorage synchronously to prevent flicker/race condition
   const { user } = useUser()
@@ -484,7 +488,7 @@ function PayslipContent() {
           clone.style.width = `${nodeWidth}px`
           clone.style.height = `${nodeHeight}px`
           clone.style.margin = '0'
-          clone.style.padding = '48px'
+          clone.style.padding = '24px'
           clone.style.position = 'relative'
           clone.style.transform = 'none'
           clone.style.boxShadow = 'none'
@@ -528,6 +532,98 @@ function PayslipContent() {
     generate()
   }
 
+  const downloadSingleRecordPDF = (targetRecord: any) => {
+    toast.info("Preparing PDF download...")
+    const loadScript = (src: string) => {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = src
+        script.onload = resolve
+        script.onerror = reject
+        document.body.appendChild(script)
+      })
+    }
+
+    const generate = async () => {
+      try {
+        setDownloadingRecord(targetRecord)
+        // Wait 250ms for React to mount the temp target off-screen
+        await new Promise(resolve => setTimeout(resolve, 250))
+
+        if (!(window as any).domtoimage) {
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js')
+        }
+        if (!(window as any).jspdf) {
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+        }
+
+        const node = document.querySelector('#temp-download-target .payslip-card') as HTMLElement
+        if (!node) {
+          toast.error("Failed to locate payslip card for download")
+          return
+        }
+
+        const { jsPDF } = (window as any).jspdf
+        const pdf = new jsPDF('p', 'mm', 'a4')
+
+        const rect = node.getBoundingClientRect()
+        const nodeWidth = rect.width || node.clientWidth || 800
+        const nodeHeight = rect.height || node.clientHeight || 1131
+
+        const clone = node.cloneNode(true) as HTMLElement
+        const container = document.createElement('div')
+        container.style.position = 'fixed'
+        container.style.left = '-10000px'
+        container.style.top = '0'
+        container.style.width = `${nodeWidth}px`
+        container.style.height = `${nodeHeight}px`
+        container.style.overflow = 'hidden'
+        container.style.background = 'white'
+        container.appendChild(clone)
+        document.body.appendChild(container)
+
+        clone.style.width = `${nodeWidth}px`
+        clone.style.height = `${nodeHeight}px`
+        clone.style.margin = '0'
+        clone.style.padding = '48px'
+        clone.style.position = 'relative'
+        clone.style.transform = 'none'
+        clone.style.boxShadow = 'none'
+        clone.style.border = 'none'
+
+        const scale = 2
+        const dataUrl = await (window as any).domtoimage.toPng(clone, {
+          bgcolor: '#ffffff',
+          width: nodeWidth * scale,
+          height: nodeHeight * scale,
+          cacheBust: true,
+          style: {
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            width: `${nodeWidth}px`,
+            height: `${nodeHeight}px`,
+          }
+        })
+
+        document.body.removeChild(container)
+
+        const pdfWidth = pdf.internal.pageSize.getWidth()
+        const pdfHeight = (nodeHeight * pdfWidth) / nodeWidth
+
+        pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight)
+
+        const filename = `Payslip_${targetRecord.employeeName?.replace(/\s+/g, '_')}_${targetRecord.month}_${targetRecord.year}.pdf`
+        pdf.save(filename)
+        toast.success("Download completed successfully!")
+      } catch (error) {
+        console.error('PDF Generation Error:', error)
+        toast.error("Error generating PDF")
+      } finally {
+        setDownloadingRecord(null)
+      }
+    }
+    generate()
+  }
 
   const handleUpdate = (record: any) => {
     setFormData(record)
@@ -669,35 +765,34 @@ function PayslipContent() {
     },
   ]
 
-  const renderActions = (record: any) => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {isAdminOrHR && (
-          <>
-            {record.status !== 'paid' && (
-              <DropdownMenuItem onClick={() => handleMarkAsPaid(record)} className="text-green-600 font-medium">
-                <CreditCard className="mr-2 h-4 w-4" />
-                Mark as Paid
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={() => handleUpdate(record)}>
-              <Edit className="mr-2 h-4 w-4 text-blue-500" />
-              Update
+  const renderActions = (record: any) => {
+    if (!isAdminOrHR) return null;
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {record.status !== 'paid' && (
+            <DropdownMenuItem onClick={() => handleMarkAsPaid(record)} className="text-green-600 font-medium">
+              <CreditCard className="mr-2 h-4 w-4" />
+              Mark as Paid
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(record.id)} className="text-red-600">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
+          )}
+          <DropdownMenuItem onClick={() => handleUpdate(record)}>
+            <Edit className="mr-2 h-4 w-4 text-blue-500" />
+            Update
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleDelete(record.id)} className="text-red-600">
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
 
   useEffect(() => {
     fetchInitialData()
@@ -705,7 +800,7 @@ function PayslipContent() {
 
   useEffect(() => {
     updateSelectedRecord()
-  }, [selectedEmpId, selectedMonth, selectedYear, allPayrolls])
+  }, [selectedEmpId, selectedMonth, selectedYear, allPayrolls, activePayslipId])
 
   const fetchInitialData = async () => {
     setLoading(true)
@@ -739,12 +834,17 @@ function PayslipContent() {
               setSelectedEmpId(payrollRecord.employeeId)
               setSelectedMonth(payrollRecord.month)
               setSelectedYear(String(payrollRecord.year))
+              setActivePayslipId(payrollRecord.id)
             } else {
               toast.error('You are not authorized to view this payslip.')
               if (currentUserId) {
                 setSelectedEmpId(currentUserId)
               }
             }
+          }
+        } else if (employeeIdParam) {
+          if (isUserAdminOrHR || employeeIdParam === currentUserId) {
+            setSelectedEmpId(employeeIdParam)
           }
         } else if (!isUserAdminOrHR && currentUserId) {
           setSelectedEmpId(currentUserId)
@@ -758,28 +858,27 @@ function PayslipContent() {
   }
 
   const updateSelectedRecord = async () => {
-    if (!selectedMonth || !selectedYear) return
-
     const finalEmpId = isAdminOrHR ? selectedEmpId : (user?.id || user?._id)
 
     if (finalEmpId === 'all') {
+      if (!selectedMonth || !selectedYear) return
       const matches = allPayrolls.filter(p => 
         p.month === selectedMonth && 
         String(p.year) === selectedYear
       )
       setRecords(matches)
     } else if (finalEmpId) {
-      const match = allPayrolls.find(p => 
-        p.employeeId === finalEmpId && 
-        p.month === selectedMonth && 
-        String(p.year) === selectedYear
-      )
-      setRecords(match ? [match] : [])
+      if (activePayslipId) {
+        const match = allPayrolls.find(p => p.id === activePayslipId)
+        setRecords(match ? [match] : [])
+      } else {
+        const matches = allPayrolls.filter(p => p.employeeId === finalEmpId)
+        setRecords(matches)
+      }
     } else {
       setRecords([])
     }
   }
-
   if (loading) return (
     <div className="flex h-64 items-center justify-center">
       <Loader2 className="h-8 w-8 animate-spin text-brand-teal" />
@@ -791,11 +890,11 @@ function PayslipContent() {
       <div className="no-print">
         <PageHeader title="Employee Payslip" description="Detailed monthly salary breakdown and payment proof." />
       </div>
-      {/* Selection Bar - Always Visible */}
+      {/* Selection Bar - Visible only when selectedEmpId is 'all' */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-5 rounded-2xl border border-slate-200 shadow-sm w-full">
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
           <div className="w-full sm:w-[220px]">
-            <Select value={selectedEmpId} onValueChange={setSelectedEmpId} disabled={!isAdminOrHR}>
+            <Select value={selectedEmpId} onValueChange={(val) => { setSelectedEmpId(val); setActivePayslipId(null); }} disabled={!isAdminOrHR}>
               <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
                 <SelectValue placeholder="Select Employee" />
               </SelectTrigger>
@@ -811,7 +910,7 @@ function PayslipContent() {
             </Select>
           </div>
           <div className="w-full sm:w-[130px]">
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <Select value={selectedMonth} onValueChange={(val) => { setSelectedMonth(val); setActivePayslipId(null); }}>
               <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
                 <SelectValue placeholder="Month" />
               </SelectTrigger>
@@ -823,7 +922,7 @@ function PayslipContent() {
             </Select>
           </div>
           <div className="w-full sm:w-[100px]">
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <Select value={selectedYear} onValueChange={(val) => { setSelectedYear(val); setActivePayslipId(null); }}>
               <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
                 <SelectValue placeholder="Year" />
               </SelectTrigger>
@@ -835,7 +934,6 @@ function PayslipContent() {
             </Select>
           </div>
         </div>
-
         <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full xl:w-auto">
           {isAdminOrHR && (
             <Button variant="outline" onClick={handleManualGenerate} className="flex-1 md:flex-none border-slate-300">
@@ -876,18 +974,75 @@ function PayslipContent() {
           <DataTable 
             data={records}
             columns={columns}
-            searchKey="employeeName"
-            searchPlaceholder="Search employee..."
             actions={renderActions}
             onRowClick={(record) => {
               setSelectedEmpId(record.employeeId)
               setSelectedMonth(record.month)
               setSelectedYear(String(record.year))
+              setActivePayslipId(record.id)
             }}
+          />
+        </div>
+      ) : !activePayslipId ? (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <DataTable 
+            data={records}
+            columns={[
+              { 
+                key: 'monthYear', 
+                header: 'Period',
+                render: (record: any) => `${record.month} ${record.year}`
+              },
+              { 
+                key: 'netSalary', 
+                header: 'Net Salary',
+                render: (record: any) => `₹${record.netSalary?.toLocaleString('en-IN')}`
+              },
+              { 
+                key: 'status', 
+                header: 'Status',
+                render: (record: any) => {
+                  const displayStatus = record.status === 'processed' ? 'draft' : record.status;
+                  return (
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                      record.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {displayStatus}
+                    </span>
+                  )
+                }
+              },
+            ]}
+            actions={(record) => (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadSingleRecordPDF(record);
+                }}
+                className="text-brand-teal hover:text-brand-teal-light hover:bg-slate-100 h-8 w-8"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            )}
+            onRowClick={(record) => setActivePayslipId(record.id)}
           />
         </div>
       ) : (
         <div id="payslip-container">
+          <div className="no-print mb-4 flex justify-start max-w-4xl mx-auto w-full">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setSelectedEmpId('all');
+                setActivePayslipId(null);
+              }} 
+              className="border-slate-300 font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+            >
+              ← Back to Payslips List
+            </Button>
+          </div>
           {records.map((record) => (
             <SinglePayslip 
               key={record.id} 
@@ -902,6 +1057,18 @@ function PayslipContent() {
               companyGstin={settings?.companyGstin}
             />
           ))}
+        </div>
+      )}
+
+      {downloadingRecord && (
+        <div style={{ position: 'fixed', left: '-10000px', top: '0', zIndex: -1000, pointerEvents: 'none' }} id="temp-download-target">
+          <SinglePayslip 
+            record={downloadingRecord} 
+            employee={employees.find(e => e.id === downloadingRecord.employeeId)}
+            numberToWords={numberToWords}
+            payslipNumber={getPayslipNumber(downloadingRecord, allPayrolls)}
+            companyGstin={settings?.companyGstin}
+          />
         </div>
       )}
 
@@ -1021,6 +1188,29 @@ function PayslipContent() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label>Payment Mode</Label>
+              <Select value={formData.paymentMode || 'Cash'} onValueChange={(val: any) => setFormData({...formData, paymentMode: val})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.paymentMode === 'Cheque' && (
+              <div className="space-y-2 col-span-2">
+                <Label>Cheque Number</Label>
+                <Input 
+                  type="text" 
+                  value={formData.chequeNumber || ''} 
+                  onChange={(e) => setFormData({...formData, chequeNumber: e.target.value})} 
+                  placeholder="Enter cheque number..." 
+                />
+              </div>
+            )}
 
             <div className="space-y-2 col-span-2">
               <Label>Deduction Remarks</Label>

@@ -24,6 +24,7 @@ import { API_URL } from '@/lib/config'
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from 'sonner'
 import type { Payroll } from '@/lib/types'
+import { Input } from '@/components/ui/input'
 
 export default function PayrollPage() {
   const [payroll, setPayroll] = useState<Payroll[]>([])
@@ -112,6 +113,7 @@ export default function PayrollPage() {
       }
     } catch (error) {
       console.error('Error marking as paid:', error)
+      toast.error('Failed to mark as paid')
     }
   }
 
@@ -163,6 +165,87 @@ export default function PayrollPage() {
       render: (record: Payroll) => (
         <span className="font-bold text-slate-900">{formatCurrency(record.netSalary)}</span>
       ),
+    },
+    {
+      key: 'paymentMode' as const,
+      header: 'Payment Mode',
+      render: (record: Payroll) => (
+        <div className="flex flex-col gap-1.5 min-w-[140px]" onClick={(e) => e.stopPropagation()}>
+          <Select 
+            value={record.paymentMode || 'Cash'} 
+            onValueChange={async (val) => {
+              try {
+                const response = await fetch(`${API_URL}/payroll/${record.id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ paymentMode: val }),
+                })
+                if (response.ok) {
+                  toast.success(`Payment mode updated to ${val}`)
+                  fetchPayroll()
+                }
+              } catch (error) {
+                console.error('Error updating payment mode:', error)
+                toast.error('Failed to update payment mode')
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs bg-white border-slate-200">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Cash">Cash</SelectItem>
+              <SelectItem value="Cheque">Cheque</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {record.paymentMode === 'Cheque' && (
+            <Input
+              type="text"
+              placeholder="Enter Chq. No."
+              defaultValue={record.chequeNumber || ''}
+              className="h-7 text-[11px] px-2 py-1 bg-white border-slate-200 focus-visible:ring-brand-teal"
+              onBlur={async (e) => {
+                const val = e.target.value;
+                try {
+                  const response = await fetch(`${API_URL}/payroll/${record.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chequeNumber: val }),
+                  })
+                  if (response.ok) {
+                    toast.success(`Cheque number updated to ${val}`)
+                    fetchPayroll()
+                  }
+                } catch (error) {
+                  console.error('Error updating cheque number:', error)
+                  toast.error('Failed to update cheque number')
+                }
+              }}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter') {
+                  const val = (e.target as HTMLInputElement).value;
+                  try {
+                    const response = await fetch(`${API_URL}/payroll/${record.id}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ chequeNumber: val }),
+                    })
+                    if (response.ok) {
+                      toast.success(`Cheque number updated to ${val}`)
+                      ;(e.target as HTMLInputElement).blur()
+                      fetchPayroll()
+                    }
+                  } catch (error) {
+                    console.error('Error updating cheque number:', error)
+                    toast.error('Failed to update cheque number')
+                  }
+                }
+              }}
+            />
+          )}
+        </div>
+      )
     },
     {
       key: 'status' as const,
@@ -250,7 +333,6 @@ export default function PayrollPage() {
           icon={<Clock className="h-6 w-6 text-amber-500" />}
         />
       </div>
-
       <div className="mt-6">
         <DataTable
           data={finalPayroll}
@@ -259,6 +341,9 @@ export default function PayrollPage() {
           searchKey="employeeName"
           searchPlaceholder="Search by name..."
           actions={renderActions}
+          onRowClick={(record) => {
+            window.location.href = `/payroll/payslips?id=${record.id}`
+          }}
         />
       </div>
     </>
