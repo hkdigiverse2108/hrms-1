@@ -286,7 +286,14 @@ function SinglePayslip({
               <div className="text-[13px] font-bold mb-1">Amount (in words)</div>
               <div className="text-[13px] italic text-slate-800 font-medium mb-4">{numberToWords(totalSalary)}</div>
               
-              {/* Payment Mode Table */}
+              {/* Payment Status & Payment Mode Table */}
+              <div className="text-[13px] font-bold mb-3 flex items-center gap-1.5">
+                <span>Payment Status:</span>
+                <span className={record.status === 'paid' ? "text-emerald-600 font-extrabold uppercase" : "text-amber-500 font-extrabold uppercase"}>
+                  {record.status === 'paid' ? 'PAID' : 'DRAFT / UNPAID'}
+                </span>
+              </div>
+
               <div className="mt-2">
                 <table className="w-[90%] border-collapse border border-black text-[12px] text-black">
                   <thead>
@@ -300,17 +307,17 @@ function SinglePayslip({
                     <tr>
                       <td className="border border-black px-3 py-1.5 font-bold">Cheque</td>
                       <td className="border border-black px-3 py-1.5 text-center">
-                        {record.paymentMode === 'Cheque' ? (record.chequeNumber || '-') : '0'}
+                        {record.paymentMode === 'Cheque' ? (record.chequeNumber || '-') : '-'}
                       </td>
                       <td className="border border-black px-3 py-1.5 text-right font-bold">
-                        {record.paymentMode === 'Cheque' ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0'}
+                        {record.paymentMode === 'Cheque' ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                       </td>
                     </tr>
                     <tr>
                       <td className="border border-black px-3 py-1.5 font-bold">Cash</td>
                       <td className="border border-black px-3 py-1.5 text-center">-</td>
                       <td className="border border-black px-3 py-1.5 text-right font-bold">
-                        {record.paymentMode !== 'Cheque' ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0'}
+                        {record.paymentMode === 'Cash' || !record.paymentMode ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                       </td>
                     </tr>
                     <tr className="font-bold bg-slate-50">
@@ -1021,6 +1028,29 @@ function PayslipContent() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label>Payment Mode</Label>
+              <Select value={formData.paymentMode || 'Cash'} onValueChange={(val: any) => setFormData({...formData, paymentMode: val})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.paymentMode === 'Cheque' && (
+              <div className="space-y-2 col-span-2">
+                <Label>Cheque Number</Label>
+                <Input 
+                  type="text" 
+                  value={formData.chequeNumber || ''} 
+                  onChange={(e) => setFormData({...formData, chequeNumber: e.target.value})} 
+                  placeholder="Enter cheque number..." 
+                />
+              </div>
+            )}
 
             <div className="space-y-2 col-span-2">
               <Label>Deduction Remarks</Label>
