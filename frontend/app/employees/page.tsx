@@ -442,13 +442,7 @@ export default function EmployeeListPage() {
                                 Permissions
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem 
-                              onClick={() => router.push(`/payroll/payslips?employeeId=${emp.id}`)}
-                              className="cursor-pointer text-brand-teal focus:text-brand-teal font-medium"
-                            >
-                              <CreditCard className="w-4 h-4 mr-2" />
-                              Payslips
-                            </DropdownMenuItem>
+
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>

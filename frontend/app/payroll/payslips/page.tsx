@@ -765,35 +765,34 @@ function PayslipContent() {
     },
   ]
 
-  const renderActions = (record: any) => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {isAdminOrHR && (
-          <>
-            {record.status !== 'paid' && (
-              <DropdownMenuItem onClick={() => handleMarkAsPaid(record)} className="text-green-600 font-medium">
-                <CreditCard className="mr-2 h-4 w-4" />
-                Mark as Paid
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={() => handleUpdate(record)}>
-              <Edit className="mr-2 h-4 w-4 text-blue-500" />
-              Update
+  const renderActions = (record: any) => {
+    if (!isAdminOrHR) return null;
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {record.status !== 'paid' && (
+            <DropdownMenuItem onClick={() => handleMarkAsPaid(record)} className="text-green-600 font-medium">
+              <CreditCard className="mr-2 h-4 w-4" />
+              Mark as Paid
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(record.id)} className="text-red-600">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
+          )}
+          <DropdownMenuItem onClick={() => handleUpdate(record)}>
+            <Edit className="mr-2 h-4 w-4 text-blue-500" />
+            Update
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleDelete(record.id)} className="text-red-600">
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
 
   useEffect(() => {
     fetchInitialData()
@@ -975,8 +974,6 @@ function PayslipContent() {
           <DataTable 
             data={records}
             columns={columns}
-            searchKey="employeeName"
-            searchPlaceholder="Search employee..."
             actions={renderActions}
             onRowClick={(record) => {
               setSelectedEmpId(record.employeeId)
@@ -1016,8 +1013,6 @@ function PayslipContent() {
                 }
               },
             ]}
-            searchKey="month"
-            searchPlaceholder="Search month..."
             actions={(record) => (
               <Button 
                 variant="ghost" 
