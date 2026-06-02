@@ -477,6 +477,13 @@ export default function AllInvoicesPage() {
                               <Eye className="w-4 h-4 mr-2" />
                               View Invoice
                             </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => router.push(`/invoice/edit/${invoice.id}`)}
+                              className="cursor-pointer font-medium"
+                            >
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Edit Invoice
+                            </DropdownMenuItem>
                             {invoice.status !== "Paid" && (
                               <DropdownMenuItem 
                                 onClick={() => handleMarkAsPaid(invoice.id)}
