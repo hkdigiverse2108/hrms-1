@@ -127,7 +127,7 @@ export default function PayrollPage() {
     { key: 'totalWorkingDays' as const, header: 'Working Days' },
     { key: 'workedDays' as const, header: 'Worked' },
     { key: 'leaveDays' as const, header: 'Total Leaves' },
-    { key: 'lopDays' as const, header: 'LOP / Unpaid Days' },
+    { key: 'monthlyLeaveDays' as const, header: 'Monthly Leave' },
     {
       key: 'basicSalary' as const,
       header: 'Basic',

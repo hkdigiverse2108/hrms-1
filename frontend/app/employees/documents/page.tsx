@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil } from 'lucide-react'
+import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil, Eye } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useRouter } from 'next/navigation'
@@ -45,6 +45,93 @@ export default function EmployeeDocumentsPage() {
 
   // Official Letter Requests State
   const [activeMainTab, setActiveMainTab] = useState<'submitted' | 'requests'>('submitted')
+  
+  // Deposit Ledger States
+  const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false)
+  const [ledgerLoading, setLedgerLoading] = useState(false)
+  const [ledgerData, setLedgerData] = useState<any>({
+    employeeName: '',
+    target: 10000,
+    paid: 0,
+    remaining: 10000,
+    transactions: []
+  })
+
+  const handleViewLedger = async (record: any) => {
+    setIsLedgerModalOpen(true)
+    setLedgerLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/payroll`)
+      if (response.ok) {
+        const allPayrolls = await response.json()
+        const employeePayrolls = allPayrolls.filter((p: any) => p.employeeId === record.employeeId)
+        
+        // Sort by year and month
+        const monthsOrder = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ]
+        employeePayrolls.sort((a: any, b: any) => {
+          if (a.year !== b.year) return b.year - a.year
+          return monthsOrder.indexOf(b.month) - monthsOrder.indexOf(a.month)
+        })
+
+        let totalPaid = employeePayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0)
+        
+        let target = 10000
+        if (record.documentName?.includes('Intern - 2000')) {
+          target = 2000
+        } else if (record.documentName?.includes('Employee - 10000')) {
+          target = 10000
+        } else {
+          // Parse target from string if custom
+          const match = record.documentName?.match(/(\d+)/)
+          if (match) {
+            target = Number(match[0])
+          }
+        }
+
+        const isAccepted = record.status === 'Accepted'
+        
+        const paidPayrolls = employeePayrolls.filter((p: any) => (p.securityDeposit || 0) > 0)
+        const transactions = paidPayrolls.map((p: any) => ({
+          month: p.month,
+          year: p.year,
+          amount: p.securityDeposit || 0,
+          status: p.status || 'processed'
+        }))
+
+        if (isAccepted) {
+          const remainder = target - totalPaid
+          if (remainder > 0) {
+            transactions.push({
+              month: 'Manual Direct Payment',
+              year: '(Accepted)',
+              amount: remainder,
+              status: 'paid'
+            })
+          }
+          totalPaid = target
+        }
+
+        const remaining = Math.max(0, target - totalPaid)
+        
+        setLedgerData({
+          employeeName: record.employeeName,
+          target,
+          paid: totalPaid,
+          remaining,
+          transactions
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching ledger details:', error)
+      toast.error('Failed to load deposit ledger')
+    } finally {
+      setLedgerLoading(false)
+    }
+  }
+
   const [documentRequests, setDocumentRequests] = useState<any[]>([])
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false)
   const [isSendModalOpen, setIsSendModalOpen] = useState(false)
@@ -71,19 +158,26 @@ export default function EmployeeDocumentsPage() {
     uploadDate: new Date().toISOString().split('T')[0],
     isReceived: 'Yes',
     isOtherSelected: false,
-    status: 'Rejected'
+    status: 'Pending'
   })
 
-  const documentTypes = [
-    "Security Cheque",
-    "Degree Certificate",
-    "10th Marksheet",
-    "12th Marksheet",
-    "Passport Photo",
-    "Security Deposite (Employee - 10000)",
-    "Security Deposite (Intern - 2000)",
-    "Other"
-  ]
+  const [docTypes, setDocTypes] = useState<any[]>([])
+  const [isTypeModalOpen, setIsTypeModalOpen] = useState(false)
+  const [editingType, setEditingType] = useState<any>(null)
+  const [typeForm, setTypeForm] = useState({ name: '', description: '' })
+
+  const fetchDocTypes = async () => {
+    try {
+      const response = await fetch(`${API_URL}/document-types`)
+      if (response.ok) {
+        setDocTypes(await response.json())
+      }
+    } catch (error) {
+      console.error('Error fetching document types:', error)
+    }
+  }
+
+  const documentTypes = [...docTypes.map((t: any) => t.name), "Other"]
 
   const fetchRequests = async () => {
     try {
@@ -102,6 +196,7 @@ export default function EmployeeDocumentsPage() {
   useEffect(() => {
     if (user) {
       fetchRequests()
+      fetchDocTypes()
     }
   }, [user, isAdminOrHR])
 
@@ -208,9 +303,9 @@ export default function EmployeeDocumentsPage() {
     const finalData = {
       ...formData,
       employeeName: selectedEmp?.name || 'Unknown',
-      documentName: isDeposit ? `${formData.documentName} - Received: ${formData.isReceived}` : formData.documentName,
-      fileUrl: isDeposit ? 'N/A' : formData.fileUrl,
-      fileName: isDeposit ? 'Payment Record' : formData.fileName,
+      documentName: formData.documentName,
+      fileUrl: formData.fileUrl || 'N/A',
+      fileName: formData.fileName || 'Payment Record',
       status: formData.status
     }
 
@@ -239,7 +334,7 @@ export default function EmployeeDocumentsPage() {
           uploadDate: new Date().toISOString().split('T')[0],
           isReceived: 'Yes',
           isOtherSelected: false,
-          status: 'Rejected'
+          status: 'Pending'
         })
       }
     } catch (error) {
@@ -266,6 +361,56 @@ export default function EmployeeDocumentsPage() {
     }
   }
 
+  const handleSaveType = async () => {
+    if (!typeForm.name) {
+      toast.error('Please enter a document type name')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const url = editingType ? `${API_URL}/document-types/${editingType.id}` : `${API_URL}/document-types`
+      const method = editingType ? 'PUT' : 'POST'
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(typeForm)
+      })
+
+      if (response.ok) {
+        toast.success(editingType ? 'Document type updated' : 'Document type created')
+        setTypeForm({ name: '', description: '' })
+        setEditingType(null)
+        setIsTypeModalOpen(false)
+        fetchDocTypes()
+      } else {
+        toast.error('Failed to save document type')
+      }
+    } catch (error) {
+      console.error('Error saving document type:', error)
+      toast.error('Error saving document type')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDeleteType = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this document type?')) return
+
+    try {
+      const response = await fetch(`${API_URL}/document-types/${id}`, { method: 'DELETE' })
+      if (response.ok) {
+        toast.success('Document type deleted')
+        fetchDocTypes()
+      } else {
+        toast.error('Failed to delete document type')
+      }
+    } catch (error) {
+      console.error('Error deleting document type:', error)
+      toast.error('Error deleting document type')
+    }
+  }
+
   const handleEdit = (record: any) => {
     setEditingId(record.id)
     setFormData({
@@ -277,7 +422,7 @@ export default function EmployeeDocumentsPage() {
       uploadDate: record.uploadDate,
       isReceived: record.documentName?.includes('Received: Yes') ? 'Yes' : 'No',
       isOtherSelected: !documentTypes.includes(record.documentName?.split(' - Received:')[0] || ''),
-      status: record.status || 'Rejected'
+      status: record.status || 'Pending'
     })
     setModalOpen(true)
   }
@@ -309,12 +454,21 @@ export default function EmployeeDocumentsPage() {
   const actions = (record: any) => {
     const hasEdit = isAdmin || checkPermission('employee-documents', 'canEdit')
     const hasDelete = isAdmin || checkPermission('employee-documents', 'canDelete')
+    const isDeposit = record.documentName?.includes('Deposite')
+    const hasFile = record.fileUrl && record.fileUrl !== 'N/A'
 
     return (
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => window.open(record.fileUrl, '_blank')}>
-          <ExternalLink className="h-4 w-4" />
-        </Button>
+        {isDeposit && (
+          <Button variant="ghost" size="icon" className="text-brand-teal" onClick={() => handleViewLedger(record)} title="View Deposit Ledger">
+            <Eye className="h-4 w-4" />
+          </Button>
+        )}
+        {(!isDeposit || hasFile) && (
+          <Button variant="ghost" size="icon" onClick={() => window.open(record.fileUrl, '_blank')} title="View Document File">
+            <ExternalLink className="h-4 w-4" />
+          </Button>
+        )}
         {hasEdit && (
           <Button variant="ghost" size="icon" className="text-brand-teal" onClick={() => handleEdit(record)}>
             <Pencil className="h-4 w-4" />
@@ -459,7 +613,8 @@ export default function EmployeeDocumentsPage() {
               fileUrl: '',
               uploadDate: new Date().toISOString().split('T')[0],
               isReceived: 'Yes',
-              isOtherSelected: false
+              isOtherSelected: false,
+              status: 'Pending'
             });
             setModalOpen(true);
           }}>
@@ -473,12 +628,40 @@ export default function EmployeeDocumentsPage() {
             Request New Letter
           </Button>
         )}
+        {activeMainTab === 'types' && isAdminOrHR && (
+          <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={() => {
+            setEditingType(null);
+            setTypeForm({ name: '', description: '' });
+            setIsTypeModalOpen(true);
+          }}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Document Type
+          </Button>
+        )}
       </PageHeader>
 
       <Tabs value={activeMainTab} onValueChange={(val: any) => setActiveMainTab(val)} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
-          <TabsTrigger value="submitted" className="font-bold">Submitted Documents</TabsTrigger>
-          <TabsTrigger value="requests" className="font-bold">Official Letters & Requests</TabsTrigger>
+        <TabsList className={`grid w-full p-1 bg-slate-100/80 rounded-xl ${isAdminOrHR ? 'grid-cols-3 max-w-[600px]' : 'grid-cols-2 max-w-[400px]'}`}>
+          <TabsTrigger 
+            value="submitted" 
+            className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
+          >
+            Submitted Documents
+          </TabsTrigger>
+          <TabsTrigger 
+            value="requests" 
+            className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
+          >
+            Official Letters & Requests
+          </TabsTrigger>
+          {isAdminOrHR && (
+            <TabsTrigger 
+              value="types" 
+              className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
+            >
+              Document Types
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="submitted" className="mt-6 space-y-6">
@@ -551,6 +734,48 @@ export default function EmployeeDocumentsPage() {
             />
           </div>
         </TabsContent>
+
+        {isAdminOrHR && (
+          <TabsContent value="types" className="mt-6 space-y-6">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <DataTable
+                data={docTypes}
+                columns={[
+                  { key: 'name' as const, header: 'Document Type' },
+                  { key: 'description' as const, header: 'Description' }
+                ]}
+                actions={(record: any) => (
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-brand-teal" 
+                      onClick={() => {
+                        setEditingType(record);
+                        setTypeForm({ name: record.name, description: record.description || '' });
+                        setIsTypeModalOpen(true);
+                      }}
+                      title="Edit Document Type"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-rose-500" 
+                      onClick={() => handleDeleteType(record.id)}
+                      title="Delete Document Type"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                searchKey="name"
+                searchPlaceholder="Search by document type..."
+              />
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Upload Document Modal (Tab 1) */}
@@ -617,92 +842,75 @@ export default function EmployeeDocumentsPage() {
             </div>
 
             <div className="space-y-4">
-              {formData.documentName?.includes('Deposite') ? (
-                <div className="space-y-2">
-                  <Label>Deposit Received?</Label>
-                  <Select 
-                    value={formData.isReceived} 
-                    onValueChange={(val) => setFormData({...formData, isReceived: val})}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes, Received</SelectItem>
-                      <SelectItem value="No">No, Pending</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label>Select Document</Label>
-                  <div className="flex items-center gap-2">
-                    <Input 
-                      type="file" 
-                      className="flex-1"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0]
-                        if (!file) return
+              <div className="space-y-2">
+                <Label>Select Document</Label>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    type="file" 
+                    className="flex-1"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      
+                      if (file.size > 512 * 1024 * 1024) {
+                        toast.error('File size cannot exceed 512 MB')
+                        e.target.value = ''
+                        return
+                      }
+                      
+                      setIsSubmitting(true)
+                      const formDataUpload = new FormData()
+                      formDataUpload.append('file', file)
+                      
+                      try {
+                        const response = await fetch(`${API_URL}/upload`, {
+                          method: 'POST',
+                          body: formDataUpload,
+                        })
                         
-                        if (file.size > 512 * 1024 * 1024) {
-                          toast.error('File size cannot exceed 512 MB')
-                          e.target.value = ''
-                          return
-                        }
-                        
-                        setIsSubmitting(true)
-                        const formDataUpload = new FormData()
-                        formDataUpload.append('file', file)
-                        
-                        try {
-                          const response = await fetch(`${API_URL}/upload`, {
-                            method: 'POST',
-                            body: formDataUpload,
-                          })
+                        if (response.ok) {
+                          const data = await response.json()
+                          const absoluteUrl = data.url.startsWith('http') 
+                            ? data.url 
+                            : `${API_URL}${data.url}`
                           
-                          if (response.ok) {
-                            const data = await response.json()
-                            const absoluteUrl = data.url.startsWith('http') 
-                              ? data.url 
-                              : `${API_URL}${data.url}`
-                            
-                            setFormData({
-                              ...formData, 
-                              fileUrl: absoluteUrl, 
-                              fileName: file.name
-                            })
-                            toast.success('File uploaded successfully')
-                          } else {
-                            toast.error('Failed to upload file')
-                          }
-                        } catch (error) {
-                          console.error('Upload error:', error)
-                          toast.error('Error uploading file')
-                        } finally {
-                          setIsSubmitting(false)
+                          setFormData({
+                            ...formData, 
+                            fileUrl: absoluteUrl, 
+                            fileName: file.name
+                          })
+                          toast.success('File uploaded successfully')
+                        } else {
+                          toast.error('Failed to upload file')
                         }
-                      }}
-                    />
-                  </div>
-                  {formData.fileName && (
-                    <p className="text-[10px] text-brand-teal font-medium">Selected: {formData.fileName}</p>
-                  )}
-                  <p className="text-[10px] text-slate-400 font-medium tracking-tight">Upload official documents, certificates, or IDs.</p>
+                      } catch (error) {
+                        console.error('Upload error:', error)
+                        toast.error('Error uploading file')
+                      } finally {
+                        setIsSubmitting(false)
+                      }
+                    }}
+                  />
                 </div>
-              )}
+                {formData.fileName && (
+                  <p className="text-[10px] text-brand-teal font-medium">Selected: {formData.fileName}</p>
+                )}
+                <p className="text-[10px] text-slate-400 font-medium tracking-tight">Upload official documents, certificates, or IDs.</p>
+              </div>
 
               {isAdminOrHR && (
                 <>
                   <div className="space-y-2 animate-in fade-in duration-200">
                     <Label>Document Status</Label>
                     <Select 
-                      value={formData.status || 'Rejected'} 
+                      value={formData.status || 'Pending'} 
                       onValueChange={(val) => setFormData({...formData, status: val})}
                     >
                       <SelectTrigger className="w-full bg-white border-slate-200 font-bold">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="Pending" className="text-slate-900 font-medium">Pending</SelectItem>
                         <SelectItem value="Accepted" className="text-slate-900 font-medium">Accepted</SelectItem>
                         <SelectItem value="Rejected" className="text-slate-900 font-medium">Rejected</SelectItem>
                         <SelectItem value="Returned to Employee" className="text-slate-900 font-medium">Returned to Employee</SelectItem>
@@ -835,6 +1043,134 @@ export default function EmployeeDocumentsPage() {
             <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={handleSendLetter} disabled={isSubmitting || !sendFormData.fileUrl}>
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Send Document to Employee
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Security Deposit Ledger Modal */}
+      <Dialog open={isLedgerModalOpen} onOpenChange={setIsLedgerModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <FileText className="w-5 h-5 text-brand-teal" /> Security Deposit Statement
+            </DialogTitle>
+            <p className="text-xs text-slate-500 font-semibold">
+              Installment tracking ledger for <span className="text-slate-900 font-black">{ledgerData.employeeName}</span>
+            </p>
+          </DialogHeader>
+
+          {ledgerLoading ? (
+            <div className="flex h-48 items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-brand-teal" />
+            </div>
+          ) : (
+            <div className="space-y-6 py-4">
+              {/* Progress Summary Cards */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl shadow-sm text-center">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Deposit</div>
+                  <div className="text-lg font-black text-slate-800 mt-1">₹{ledgerData.target.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                </div>
+                <div className="bg-emerald-50/40 border border-emerald-100/50 p-3 rounded-xl shadow-sm text-center">
+                  <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Total Paid</div>
+                  <div className="text-lg font-black text-emerald-700 mt-1">₹{ledgerData.paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                </div>
+                <div className="bg-rose-50/40 border border-rose-100/50 p-3 rounded-xl shadow-sm text-center">
+                  <div className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">Remaining Balance</div>
+                  <div className="text-lg font-black text-rose-700 mt-1">₹{ledgerData.remaining.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                </div>
+              </div>
+
+              {/* Graphical Progress Bar */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-bold text-slate-500">
+                  <span>Deduction Progress</span>
+                  <span className="text-brand-teal">{Math.min(100, Math.round((ledgerData.paid / ledgerData.target) * 100))}% Completed</span>
+                </div>
+                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-brand-teal h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${Math.min(100, (ledgerData.paid / ledgerData.target) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Installment History Table */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Installment History</h4>
+                <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-500 uppercase">
+                        <th className="py-2.5 px-4">Period</th>
+                        <th className="py-2.5 px-4">Amount Deducted</th>
+                        <th className="py-2.5 px-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 font-semibold text-slate-700">
+                      {ledgerData.transactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="py-6 text-center text-slate-400 italic">No deposit deductions processed yet.</td>
+                        </tr>
+                      ) : (
+                        ledgerData.transactions.map((t: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="py-2.5 px-4">{t.month} {t.year}</td>
+                            <td className="py-2.5 px-4 text-slate-900 font-extrabold">₹{t.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="py-2.5 px-4">
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                t.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {t.status === 'paid' ? 'Cleared' : 'Draft'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={() => setIsLedgerModalOpen(false)}>Close Statement</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add/Edit Document Type Modal */}
+      <Dialog open={isTypeModalOpen} onOpenChange={(open) => { setIsTypeModalOpen(open); if(!open) setEditingType(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingType ? 'Edit Document Type' : 'Add Document Type'}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Document Type Name</Label>
+              <Input 
+                placeholder="e.g. Experience Letter, Degree Certificate..." 
+                value={typeForm.name} 
+                onChange={(e) => setTypeForm({...typeForm, name: e.target.value})} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description (Optional)</Label>
+              <textarea 
+                className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal disabled:cursor-not-allowed disabled:opacity-50"
+                placeholder="Brief description of the document purpose..." 
+                value={typeForm.description} 
+                onChange={(e) => setTypeForm({...typeForm, description: e.target.value})} 
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsTypeModalOpen(false)}>Cancel</Button>
+            <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={handleSaveType} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {editingType ? 'Save Changes' : 'Create Type'}
             </Button>
           </DialogFooter>
         </DialogContent>

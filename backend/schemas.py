@@ -369,15 +369,19 @@ class PayrollBase(BaseModel):
     totalWorkingDays: int = 0
     workedDays: float = 0
     leaveDays: float = 0
+    monthlyLeaveDays: float = 0
     lopDays: float = 0
     basicSalary: float
     allowances: float
     bonus: float = 0
     deductions: float
     penalty: float = 0
+    securityDeposit: Optional[float] = 0.0
     netSalary: float
     status: str
     deductionRemarks: str = ""
+    paymentMode: Optional[str] = "Cash"
+    chequeNumber: Optional[str] = "-"
 
 class Payroll(PayrollBase):
     id: str
@@ -393,6 +397,7 @@ class SalaryStructureBase(BaseModel):
     esi: float
     professionalTax: float
     tds: float
+    securityDeposit: Optional[float] = 0.0
     monthlyGross: float
 
 class SalaryStructureCreate(SalaryStructureBase):
@@ -1439,5 +1444,22 @@ class InvoiceUpdate(BaseModel):
 class Invoice(InvoiceBase):
     id: str
     timestamp: str
+    class Config:
+        from_attributes = True
+
+# Document Type Schemas
+class DocumentTypeBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class DocumentTypeCreate(DocumentTypeBase):
+    pass
+
+class DocumentTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+class DocumentType(DocumentTypeBase):
+    id: str
     class Config:
         from_attributes = True

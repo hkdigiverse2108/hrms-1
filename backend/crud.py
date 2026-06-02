@@ -469,13 +469,30 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
         if any(a["reason"] in r["details"] or r["details"] in a["reason"] for a in adjustments if a["employeeId"] == r["employeeId"]):
             continue
 
-        try:
-            date_parts = r["date"].split(" ")
-            r_month = date_parts[0]
-            r_year = int(date_parts[-1])
-        except Exception:
-            r_month = month or "Unknown"
-            r_year = year or 2026
+        r_date = r.get("date")
+        r_month = month or "Unknown"
+        r_year = year or 2026
+
+        if isinstance(r_date, datetime):
+            r_month = r_date.strftime("%B")
+            r_year = r_date.year
+        elif isinstance(r_date, str):
+            try:
+                if "T" in r_date or "-" in r_date:
+                    parts = r_date.split("T")[0].split("-")
+                    if len(parts[0]) == 4:
+                        r_year = int(parts[0])
+                        month_num = int(parts[1])
+                    else:
+                        r_year = int(parts[2])
+                        month_num = int(parts[1])
+                    r_month = calendar.month_name[month_num]
+                else:
+                    date_parts = r_date.split(" ")
+                    r_month = date_parts[0].replace(",", "")
+                    r_year = int(date_parts[-1])
+            except Exception:
+                pass
 
         p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
         
@@ -485,18 +502,30 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
             if salary_struct:
                 # Replicate working days calculation for accuracy
                 try:
-                    date_parts = r["date"].split(" ")
-                    r_month_name = date_parts[0].replace(",", "")
-                    r_year = int(date_parts[-1])
-                    # Use month_abbr for "May", "Jun", etc.
-                    try:
-                        month_num = list(calendar.month_abbr).index(r_month_name)
-                    except ValueError:
-                        month_num = list(calendar.month_name).index(r_month_name)
+                    if isinstance(r_date, datetime):
+                        month_num = r_date.month
+                        curr_year = r_date.year
+                    else:
+                        if "T" in r_date or "-" in r_date:
+                            parts = r_date.split("T")[0].split("-")
+                            if len(parts[0]) == 4:
+                                curr_year = int(parts[0])
+                                month_num = int(parts[1])
+                            else:
+                                curr_year = int(parts[2])
+                                month_num = int(parts[1])
+                        else:
+                            date_parts = r_date.split(" ")
+                            r_month_name = date_parts[0].replace(",", "")
+                            curr_year = int(date_parts[-1])
+                            try:
+                                month_num = list(calendar.month_abbr).index(r_month_name)
+                            except ValueError:
+                                month_num = list(calendar.month_name).index(r_month_name)
                         
-                    _, num_days = calendar.monthrange(r_year, month_num)
+                    _, num_days = calendar.monthrange(curr_year, month_num)
                     
-                    sundays = sum(1 for d in range(1, num_days + 1) if calendar.weekday(r_year, month_num, d) == 6)
+                    sundays = sum(1 for d in range(1, num_days + 1) if calendar.weekday(curr_year, month_num, d) == 6)
                     total_working_days = max(1, num_days - sundays)
                     p_amount = round(salary_struct["monthlyGross"] / total_working_days, 2)
                 except Exception as e:
@@ -596,7 +625,7 @@ async def run_payroll_processing(db, month: str, year: int):
         })
         all_emp_leaves = await leave_cursor.to_list(length=100)
         
-        leave_map = {} # date -> deduction_factor (1.0 for Full, 0.5 for Half)
+        leave_map = {} # date -> {"factor": factor, "type": leave_type}
         for l in all_emp_leaves:
             try:
                 # Robust day type & half day detection (handles strings, booleans, case differences)
@@ -609,6 +638,7 @@ async def run_payroll_processing(db, month: str, year: int):
                     day_type_str in ["half day", "first half", "second half", "half-day"]
                 )
                 factor = 0.5 if is_half else 1.0
+                l_type = str(l.get("type") or l.get("leaveType") or "annual").strip().lower()
                 
                 # Check both snake_case and camelCase for dates
                 raw_start = l.get("start_date") or l.get("startDate")
@@ -656,7 +686,11 @@ async def run_payroll_processing(db, month: str, year: int):
                     # Only map if it falls within the requested month
                     if curr.month == month_num and curr.year == year:
                         d_str = curr.strftime("%Y-%m-%d")
-                        leave_map[d_str] = max(leave_map.get(d_str, 0), factor)
+                        if d_str in leave_map:
+                            if factor > leave_map[d_str]["factor"]:
+                                leave_map[d_str] = {"factor": factor, "type": l_type}
+                        else:
+                            leave_map[d_str] = {"factor": factor, "type": l_type}
                     curr += timedelta(days=1)
                     # Safety break to prevent infinite loops
                     if (curr - s).days > 365:
@@ -692,58 +726,59 @@ async def run_payroll_processing(db, month: str, year: int):
         }
         
         actual_worked_days = 0.0
-        
         half_day_leave_days = 0.0
         full_day_leave_days = 0.0
+        monthly_leave_days = 0.0  # Only "annual" type leaves
         unapproved_absent_days = 0.0
         attendance_present_days = 0.0
-
+ 
         for d in range(1, num_days + 1):
             date_str = f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}"
             
             # We only care about scheduled working days
             if date_str not in sunday_dates_set and date_str not in holiday_dates_set:
                 if date_str in leave_map:
-                    factor = leave_map[date_str]
+                    leave_info = leave_map[date_str]
+                    factor = leave_info["factor"]
+                    l_type = leave_info["type"]
+                    
                     if factor == 0.5:
                         half_day_leave_days += 0.5
-                        actual_worked_days += 0.5
+                        attendance_present_days += 0.5 # Worked the other half of the day
+                        if l_type in ["annual", "monthly leave", "monthly_leave"]:
+                            monthly_leave_days += 0.5
                     else:
                         full_day_leave_days += 1.0
+                        if l_type in ["annual", "monthly leave", "monthly_leave"]:
+                            monthly_leave_days += 1.0
                 elif date_str in attendance_dates:
                     attendance_present_days += 1.0
-                    actual_worked_days += 1.0
                 else:
                     unapproved_absent_days += 1.0
         
+        # Force all monthly leaves to be unpaid Loss of Pay (LOP) days
+        allowed_leaves = 0.0
+        total_leaves_taken = full_day_leave_days + half_day_leave_days
+        
+        # Calculate Loss of Pay (LOP) days (only unapproved absences and leaves are unpaid LOP)
+        lop_days = total_leaves_taken + unapproved_absent_days
+        actual_worked_days = attendance_present_days
+        deducted_leaves = 0.0
+        
         total_working_days = num_days - sundays - unique_holidays
-        
-        # Apply 1 paid leave allowance per month only to full-day leaves/absences
-        paid_leave_allowance = 1.0
-        other_lop_days = full_day_leave_days + unapproved_absent_days
-        deducted_leaves = min(other_lop_days, paid_leave_allowance)
-        remaining_other_lop_days = other_lop_days - deducted_leaves
-        
-        # Unpaid loss of pay days includes half days and remaining other LOP days
-        lop_days = half_day_leave_days + remaining_other_lop_days
-        actual_worked_days += deducted_leaves
-        
         per_day_gross = salary["monthlyGross"] / total_working_days
-        half_day_lop_amount = half_day_leave_days * per_day_gross
-        remaining_other_lop_amount = remaining_other_lop_days * per_day_gross
         lop_amount = lop_days * per_day_gross
         
         deduction_details = []
         if deducted_leaves > 0:
             deduction_details.append(f"Paid Leave Allowance - {round(deducted_leaves, 1)} day(s) applied")
             
-        if half_day_leave_days > 0:
-            deduction_details.append(f"Half-day Leave Deduction - {round(half_day_leave_days, 1)} day(s): ₹{round(half_day_lop_amount, 2)}")
+        if lop_days > unapproved_absent_days:
+            unpaid_leaves = lop_days - unapproved_absent_days
+            deduction_details.append(f"Unpaid Leave - {round(unpaid_leaves, 1)} day(s): ₹{round(unpaid_leaves * per_day_gross, 2)}")
             
-        if remaining_other_lop_days > 0:
-            leave_types = {l.get("type") or l.get("leaveType") for l in all_emp_leaves if l.get("type") or l.get("leaveType")}
-            leave_desc = f" ({', '.join(leave_types)})" if leave_types else ""
-            deduction_details.append(f"Unpaid Leave/Absence{leave_desc} - {round(remaining_other_lop_days, 1)} day(s): ₹{round(remaining_other_lop_amount, 2)}")
+        if unapproved_absent_days > 0:
+            deduction_details.append(f"Unpaid Absence - {round(unapproved_absent_days, 1)} day(s): ₹{round(unapproved_absent_days * per_day_gross, 2)}")
 
         # Ad-hoc Bonus/Deductions
         adjustments = await get_bonus_deductions(db, month, year)
@@ -819,7 +854,11 @@ async def run_payroll_processing(db, month: str, year: int):
                 penalty_total += p_amount
                 deduction_details.append(f"{r['type']} ({r_date_str}): ₹{p_amount}")
         
-        net_salary = (salary["monthlyGross"] - lop_amount + total_bonus + incentive_amount - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"])
+        deposit_deduction = salary.get("securityDeposit", 0.0) or 0.0
+        if deposit_deduction > 0:
+            deduction_details.append(f"Security Deposit: ₹{deposit_deduction}")
+
+        net_salary = (salary["monthlyGross"] - lop_amount + total_bonus + incentive_amount - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + deposit_deduction)
         
         payroll_record = {
             "employeeId": emp_id,
@@ -828,13 +867,15 @@ async def run_payroll_processing(db, month: str, year: int):
             "year": year,
             "totalWorkingDays": int(total_working_days),
             "workedDays": round(actual_worked_days, 1),
-            "leaveDays": round(half_day_leave_days + full_day_leave_days, 1),
+            "leaveDays": round(half_day_leave_days + full_day_leave_days - monthly_leave_days, 1),
+            "monthlyLeaveDays": round(monthly_leave_days, 1),
             "lopDays": round(lop_days, 1),
             "basicSalary": salary["basic"],
             "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"] + incentive_amount,
             "bonus": total_bonus,
-            "deductions": salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + lop_amount + total_adhoc_deduction + penalty_total,
+            "deductions": salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + lop_amount + total_adhoc_deduction + penalty_total + deposit_deduction,
             "penalty": penalty_total,
+            "securityDeposit": deposit_deduction,
             "netSalary": round(net_salary, 2),
             "status": "processed",
             "deductionRemarks": "; ".join(deduction_details)
@@ -1152,13 +1193,35 @@ async def get_remarks(db, skip: int = 0, limit: int = 100):
             salary_struct = salary_cache[emp_id]
             if salary_struct:
                 try:
-                    date_parts = item["date"].split(" ")
-                    r_month_name = date_parts[0].replace(",", "")
-                    r_year = int(date_parts[-1])
-                    try:
-                        month_num = list(calendar.month_abbr).index(r_month_name)
-                    except ValueError:
-                        month_num = list(calendar.month_name).index(r_month_name)
+                    itm_date = item.get("date")
+                    if isinstance(itm_date, datetime):
+                        month_num = itm_date.month
+                        r_year = itm_date.year
+                    elif isinstance(itm_date, str):
+                        if "T" in itm_date or "-" in itm_date:
+                            try:
+                                parts = itm_date.split("T")[0].split("-")
+                                if len(parts[0]) == 4:
+                                    r_year = int(parts[0])
+                                    month_num = int(parts[1])
+                                else:
+                                    r_year = int(parts[2])
+                                    month_num = int(parts[1])
+                            except Exception:
+                                from dateutil.parser import parse
+                                parsed_dt = parse(itm_date)
+                                month_num = parsed_dt.month
+                                r_year = parsed_dt.year
+                        else:
+                            date_parts = itm_date.split(" ")
+                            r_month_name = date_parts[0].replace(",", "")
+                            r_year = int(date_parts[-1])
+                            try:
+                                month_num = list(calendar.month_abbr).index(r_month_name)
+                            except ValueError:
+                                month_num = list(calendar.month_name).index(r_month_name)
+                    else:
+                        raise ValueError("Unknown date type")
 
                     _, num_days = calendar.monthrange(r_year, month_num)
                     
@@ -3244,6 +3307,37 @@ async def update_employee_document(db, doc_id: str, doc_update: schemas.Employee
 async def delete_employee_document(db, doc_id: str):
     result = await db.employee_documents.delete_one({"_id": ObjectId(doc_id)})
     return result.deleted_count > 0
+
+# Document Type CRUD
+async def create_document_type(db, doc_type: schemas.DocumentTypeCreate):
+    dt_dict = doc_type.dict()
+    result = await db.document_types.insert_one(dt_dict)
+    dt_dict["id"] = str(result.inserted_id)
+    if "_id" in dt_dict:
+        dt_dict.pop("_id")
+    return dt_dict
+
+async def get_document_types(db):
+    cursor = db.document_types.find({})
+    types = []
+    async for dt in cursor:
+        types.append(fix_id(dt))
+    return types
+
+async def update_document_type(db, type_id: str, type_update: schemas.DocumentTypeUpdate):
+    update_data = type_update.dict(exclude_unset=True)
+    if not update_data:
+        dt = await db.document_types.find_one({"_id": ObjectId(type_id)})
+        return fix_id(dt)
+    
+    await db.document_types.update_one({"_id": ObjectId(type_id)}, {"$set": update_data})
+    dt = await db.document_types.find_one({"_id": ObjectId(type_id)})
+    return fix_id(dt)
+
+async def delete_document_type(db, type_id: str):
+    result = await db.document_types.delete_one({"_id": ObjectId(type_id)})
+    return result.deleted_count > 0
+
 
 # Document Request CRUD
 async def create_document_request(db, request: schemas.DocumentRequestCreate):

@@ -38,6 +38,24 @@ async def lifespan(app):
             print(f"Seeded employee_id counter at {count}")
     except Exception as e:
         print(f"Error seeding employee counter: {e}")
+    # Seed default document types if they don't exist
+    try:
+        from database import db
+        existing_types = await db.document_types.count_documents({})
+        if existing_types == 0:
+            defaults = [
+                {"name": "Security Cheque", "description": "Cheque collected for security purpose"},
+                {"name": "Degree Certificate", "description": "Highest education degree certificate"},
+                {"name": "10th Marksheet", "description": "10th grade marksheet/certificate"},
+                {"name": "12th Marksheet", "description": "12th grade marksheet/certificate"},
+                {"name": "Passport Photo", "description": "Recent passport size photograph"},
+                {"name": "Security Deposite (Employee - 10000)", "description": "Security deposit for standard employee structure (INR 10,000)"},
+                {"name": "Security Deposite (Intern - 2000)", "description": "Security deposit for intern structure (INR 2,000)"}
+            ]
+            await db.document_types.insert_many(defaults)
+            print("Seeded default document types")
+    except Exception as e:
+        print(f"Error seeding default document types: {e}")
     
     yield
     # --- Shutdown (nothing needed for now) ---
@@ -396,6 +414,18 @@ async def read_bonus_deductions(month: Optional[str] = None, year: Optional[int]
 @app.post("/bonus-deductions", response_model=schemas.BonusDeduction)
 async def create_bonus_deduction(item: schemas.BonusDeductionCreate, db=Depends(get_db)):
     return await crud.create_bonus_deduction(db, item)
+
+@app.put("/bonus-deductions/{item_id}", response_model=schemas.BonusDeduction)
+async def update_bonus_deduction(item_id: str, request: dict, db=Depends(get_db)):
+    res = await crud.update_item(db, "bonus_deductions", item_id, request)
+    if not res:
+        raise HTTPException(status_code=404, detail="Adjustment not found")
+    return res
+
+@app.delete("/bonus-deductions/{item_id}")
+async def delete_bonus_deduction(item_id: str, db=Depends(get_db)):
+    await crud.delete_item(db, "bonus_deductions", item_id)
+    return {"message": "Adjustment deleted successfully"}
 
 # Notification Endpoints
 @app.get("/notifications/{employee_id}", response_model=List[schemas.Notification])
@@ -1104,6 +1134,30 @@ async def delete_employee_document(doc_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"message": "Document deleted successfully"}
+
+# Document Type Endpoints
+@app.post("/document-types", response_model=schemas.DocumentType)
+async def create_document_type(doc_type: schemas.DocumentTypeCreate, db=Depends(get_db)):
+    return await crud.create_document_type(db, doc_type)
+
+@app.get("/document-types", response_model=List[schemas.DocumentType])
+async def read_document_types(db=Depends(get_db)):
+    return await crud.get_document_types(db)
+
+@app.put("/document-types/{type_id}", response_model=schemas.DocumentType)
+async def update_document_type(type_id: str, type_update: schemas.DocumentTypeUpdate, db=Depends(get_db)):
+    updated = await crud.update_document_type(db, type_id, type_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Document type not found")
+    return updated
+
+@app.delete("/document-types/{type_id}")
+async def delete_document_type(type_id: str, db=Depends(get_db)):
+    success = await crud.delete_document_type(db, type_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document type not found")
+    return {"message": "Document type deleted successfully"}
+
 
 # Document Request Endpoints
 @app.post("/document-requests", response_model=schemas.DocumentRequest)
