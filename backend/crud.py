@@ -1164,7 +1164,13 @@ async def create_kpi_record(db, kpi: schemas.KPICreate): return await create_ite
 async def update_kpi_record(db, kpi_id: str, update: schemas.KPIUpdate): return await update_item(db, "kpi_records", kpi_id, update.dict(exclude_unset=True))
 async def delete_kpi_record(db, kpi_id: str): return await delete_item(db, "kpi_records", kpi_id)
 
-async def get_reviews(db, skip: int = 0, limit: int = 100): return await get_items(db, "reviews", skip, limit)
+async def get_reviews(db, employee_id: str = None, skip: int = 0, limit: int = 100):
+    query = {}
+    if employee_id:
+        query["employeeId"] = employee_id
+    cursor = db.reviews.find(query).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
 async def create_review(db, review: schemas.ReviewCreate): 
     review_dict = review.dict()
     if not review_dict.get("date"):
