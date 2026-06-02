@@ -1417,7 +1417,7 @@ class InvoiceBase(BaseModel):
     clientGstin: Optional[str] = None
     invoiceNumber: str
     issueDate: str
-    dueDate: str
+    dueDate: Optional[str] = None
     lineItems: List[InvoiceLineItem]
     discount: float = 0.0
     tax: float = 0.0

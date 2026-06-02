@@ -41,7 +41,6 @@ export default function CreateInvoicePage() {
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceType, setInvoiceType] = useState("Tax Invoice");
   const [issueDate, setIssueDate] = useState("");
-  const [dueDate, setDueDate] = useState("");
   const [discount, setDiscount] = useState("0");
   const [cgst, setCgst] = useState("9");
   const [sgst, setSgst] = useState("9");
@@ -76,7 +75,6 @@ export default function CreateInvoicePage() {
   useEffect(() => {
     const today = dayjs();
     setIssueDate(today.format("YYYY-MM-DD"));
-    setDueDate(today.add(3, "day").format("YYYY-MM-DD"));
     fetchClients();
   }, []);
 
@@ -174,49 +172,12 @@ export default function CreateInvoicePage() {
     setRoundedTotalInput(Math.round(actualTotal).toFixed(2));
   }, [actualTotal]);
 
-  const updateNotesDays = (currentNotes: string, days: number) => {
-    const regex = /within \d+ days?/i;
-    if (regex.test(currentNotes)) {
-      return currentNotes.replace(regex, `within ${days} ${days === 1 ? 'day' : 'days'}`);
-    }
-    return currentNotes;
-  };
-
   const handleIssueDateChange = (newIssueDate: string) => {
     setIssueDate(newIssueDate);
-    if (newIssueDate && dueDate) {
-      const diff = dayjs(dueDate).diff(dayjs(issueDate), "day");
-      const preservedDiff = diff >= 0 ? diff : 3;
-      const newDueDate = dayjs(newIssueDate).add(preservedDiff, "day").format("YYYY-MM-DD");
-      setDueDate(newDueDate);
-      
-      // Update notes with the preserved difference
-      setNotes(prev => updateNotesDays(prev, preservedDiff));
-    }
-  };
-
-  const handleDueDateChange = (newDueDate: string) => {
-    setDueDate(newDueDate);
-    if (issueDate && newDueDate) {
-      const diff = dayjs(newDueDate).diff(dayjs(issueDate), "day");
-      if (diff >= 0) {
-        setNotes(prev => updateNotesDays(prev, diff));
-      }
-    }
   };
 
   const handleNotesChange = (newNotes: string) => {
     setNotes(newNotes);
-    
-    // Parse for "within X days" or "within X day"
-    const match = newNotes.match(/within (\d+) days?/i);
-    if (match && issueDate) {
-      const days = parseInt(match[1], 10);
-      if (!isNaN(days)) {
-        const newDueDate = dayjs(issueDate).add(days, "day").format("YYYY-MM-DD");
-        setDueDate(newDueDate);
-      }
-    }
   };
 
   const handleSubmit = async () => {
@@ -246,12 +207,7 @@ export default function CreateInvoicePage() {
     }
 
     if (!issueDate) {
-      toast.error("Please select a date of issue");
-      return;
-    }
-
-    if (!dueDate) {
-      toast.error("Please select a due date");
+      toast.error("Issue date is required");
       return;
     }
 
@@ -272,7 +228,6 @@ export default function CreateInvoicePage() {
         invoiceNumber,
         invoiceType,
         issueDate: dayjs(issueDate).format("MMM DD, YYYY"),
-        dueDate: dayjs(dueDate).format("MMM DD, YYYY"),
         lineItems: items.map(item => {
           const pct = parseFloat(item.discount) || 0.0;
           const itemDiscountAmt = item.amount * (pct / 100);
@@ -500,17 +455,6 @@ export default function CreateInvoicePage() {
                   type="date"
                   value={issueDate}
                   onChange={(e) => handleIssueDateChange(e.target.value)}
-                  className="bg-white h-11 font-medium cursor-pointer" 
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Due Date</label>
-              <div className="relative">
-                <Input 
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => handleDueDateChange(e.target.value)}
                   className="bg-white h-11 font-medium cursor-pointer" 
                 />
               </div>
