@@ -94,7 +94,8 @@ function SinglePayslip({
   onMarkAsPaid,
   onUpdate,
   onDelete,
-  payslipNumber
+  payslipNumber,
+  companyGstin
 }: { 
   record: any, 
   employee: any, 
@@ -103,114 +104,232 @@ function SinglePayslip({
   onMarkAsPaid?: (record: any) => void,
   onUpdate?: (record: any) => void,
   onDelete?: (id: string) => void,
-  payslipNumber?: string
+  payslipNumber?: string,
+  companyGstin?: string
 }) {
-  const totalSalary = record.netSalary || 0;
+  const [salaryStructure, setSalaryStructure] = useState<any>(null)
+  
+  useEffect(() => {
+    if (record.employeeId) {
+      fetch(`${API_URL}/salary-structures/${record.employeeId}`)
+        .then(res => {
+          if (res.ok) return res.json()
+          throw new Error('Not found')
+        })
+        .then(data => setSalaryStructure(data))
+        .catch(err => console.error("Error fetching salary structure:", err))
+    }
+  }, [record.employeeId])
+
+  const basic = salaryStructure?.basic || record.basicSalary || 0
+  const hra = salaryStructure?.hra || 0
+  const conveyance = salaryStructure?.conveyance || 0
+  const medical = salaryStructure?.medical || 0 // CCA
+  const specialAllowance = salaryStructure?.specialAllowance || 0 // Education Allowance
+  
+  // Calculate ad-hoc bonuses and target incentives
+  const otherEarnings = Math.max(0, (record.bonus || 0) + (record.allowances || 0) - (hra + conveyance + medical + specialAllowance))
+  const totalEarnings = basic + hra + conveyance + medical + specialAllowance + otherEarnings
+
+  // Deductions details
+  const pf = salaryStructure?.pf || 0
+  const esi = salaryStructure?.esi || 0
+  const pt = salaryStructure?.professionalTax || 0
+  const tds = salaryStructure?.tds || 0
+  const securityDeposit = record.securityDeposit || salaryStructure?.securityDeposit || 0
+  
+  // LOP / Leave deduction dynamically calculated
+  const totalDeductions = record.deductions || 0
+  const penalty = record.penalty || 0
+  const lopDeduction = Math.max(0, totalDeductions - securityDeposit - penalty)
+  
+  const totalSalary = record.netSalary || 0
+  const billingMonthUpper = record.month ? String(record.month).toUpperCase() : 'SEPTEMBER'
+  const billingYear = record.year ? String(record.year) : '2025'
+
   return (
-    <div 
-      className="payslip-card bg-white p-12 mb-8 last:mb-0 break-after-page max-w-4xl mx-auto relative border-0 shadow-none"
-      style={{ fontFamily: "'Poppins', sans-serif", WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' }}
-    >
-      {/* Header - Brand Section */}
-      <div className="flex justify-between items-center pb-4 border-b-3 border-gray-300">
-        <div className="flex items-center">
-          <img 
-            src="/logo.png" 
-            alt="HK DigiVerse Logo" 
-            width={220}
-            height={107}
-            className="w-[220px] h-auto object-contain"
-            style={{ imageRendering: 'auto' }}
-          />
-        </div>
-        <div className="text-left text-[15px] text-slate-700 space-y-1.5 font-normal">
-          <p>Email: hrmangukiya3494@gmail.com</p>
-          <p>Contact No: 8866005029</p>
-        </div>
-      </div>
+    <div className="payslip-card bg-white p-6 mb-8 last:mb-0 break-after-page max-w-4xl mx-auto border-0 shadow-none text-black select-text">
+      <table className="w-full border-collapse border-2 border-black text-black">
+        <tbody>
+          {/* Header Rows */}
+          <tr>
+            <td colSpan={4} className="text-center font-extrabold border-b border-black text-[15px] py-1.5 bg-slate-50 uppercase tracking-wider">
+              {(employee?.company || 'HARIKRUSHN DIGIVERSE LLP').toUpperCase()}
+            </td>
+          </tr>
+          <tr>
+            <td colSpan={4} className="text-center font-bold border-b border-black text-[13px] py-1 bg-slate-50 uppercase">
+              {employee?.companyAddress || 'SURAT, GUJARAT, INDIA'}
+            </td>
+          </tr>
+          <tr>
+            <td colSpan={4} className="text-center font-bold border-b border-black text-[13px] py-1 bg-slate-50 uppercase">
+              GSTIN: {companyGstin || employee?.gstin || '24APQPN3916P1Z4'}
+            </td>
+          </tr>
+          <tr>
+            <td colSpan={4} className="text-center font-semibold border-b border-black text-[14px] py-1">
+              Salary Slip
+            </td>
+          </tr>
+          <tr>
+            <td colSpan={4} className="text-center font-semibold border-b border-black text-[13px] py-1">
+              For {billingMonthUpper}-{billingYear}
+            </td>
+          </tr>
+          <tr>
+            <td colSpan={4} className="text-center font-extrabold border-b border-black text-[16px] uppercase py-2 bg-slate-50 font-sans">
+              <span className="underline decoration-2 underline-offset-4">{record.employeeName?.toUpperCase()}</span>
+            </td>
+          </tr>
 
-      {/* Metadata Section */}
-      <div className="grid grid-cols-[1.5fr_0.8fr_0.8fr_0.9fr] gap-4 py-8">
-        <div className="space-y-1">
-          <p className="text-[15px] text-slate-700 font-normal">Payslip No.</p>
-          <p className="text-[17px] font-bold text-slate-900 text-black whitespace-nowrap">
-            {payslipNumber || `INV-${record.year}${record.month.toLowerCase()}-${record.id?.slice(-12).toUpperCase()}`}
-          </p>
-        </div>
-        <div className="space-y-1">
-          <p className="text-[15px] text-slate-700 font-normal">Date :</p>
-          <p className="text-[17px] font-bold text-slate-900 text-black">
-            {new Date().toLocaleDateString('en-GB')}
-          </p>
-        </div>
-        <div className="space-y-1">
-          <p className="text-[15px] text-slate-700 font-normal">Payment Status :</p>
-          <p className="text-[17px] font-bold text-slate-900 text-black lowercase">
-            {record.status === 'processed' ? 'draft' : (record.status || 'draft')}
-          </p>
-        </div>
-        <div className="space-y-1">
-          <p className="text-[15px] text-slate-700 font-normal">Total Amount :</p>
-          <p className="text-[17px] font-bold text-slate-900 text-black">
-            ₹{totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-      </div>
+          {/* Employee Details Grid */}
+          <tr>
+            <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 w-[25%] bg-slate-50">Emplyoee ID</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 w-[25%]">{employee?.employeeId || record.employeeId || '-'}</td>
+            <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 w-[25%] bg-slate-50">Location</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5">{(employee?.company || 'SURAT').toUpperCase()}</td>
+          </tr>
+          <tr>
+            <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Income Tax Number (PAN)</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.panCard || 'AHQPN3916P'}</td>
+            <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Bank Details</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 font-bold">{(employee?.bankName || 'BANK OF BARODA').toUpperCase()}</td>
+          </tr>
+          <tr>
+            <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Designation</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.designation || 'Worker'}</td>
+            <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">A/C.NO:</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.accountNumber || '-'}</td>
+          </tr>
+          <tr>
+            <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Date of Joining</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.joinDate ? new Date(employee.joinDate).toLocaleDateString('en-GB') : '-'}</td>
+            <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">IFSC</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.ifscCode || '-'}</td>
+          </tr>
 
-      {/* Employee Info Section */}
-      <div className="grid grid-cols-2 gap-x-8 gap-y-2 py-2">
-        <div className="flex justify-between items-center py-1">
-          <span className="text-[16px] text-slate-700 font-medium">Name :</span>
-          <span className="text-[17px] font-medium text-slate-900 text-right">{record.employeeName}</span>
-        </div>
-        <div className="flex justify-between items-center py-1">
-          <span className="text-[16px] text-slate-700 font-medium">Department :</span>
-          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.department || 'Development'}</span>
-        </div>
-        <div className="flex justify-between items-center py-1">
-          <span className="text-[16px] text-slate-700 font-medium">Designation :</span>
-          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.designation || 'Software Engineer'}</span>
-        </div>
-        <div className="flex justify-between items-center py-1">
-          <span className="text-[16px] text-slate-700 font-medium">Position :</span>
-          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.role || 'Intern'}</span>
-        </div>
-        <div className="flex justify-between items-center py-1">
-          <span className="text-[16px] text-slate-700 font-medium">Email :</span>
-          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.email || 'janvivasani13@gmil.com'}</span>
-        </div>
-        <div className="flex justify-between items-center py-1">
-          <span className="text-[16px] text-slate-700 font-medium">Phone :</span>
-          <span className="text-[17px] font-medium text-slate-900 text-right">{employee?.phone || '8200548988'}</span>
-        </div>
-      </div>
+          {/* Attendance Details */}
+          <tr>
+            <td colSpan={3} className="border-r border-b border-black font-bold text-[13px] px-3 py-1.5 bg-slate-50">Attendance Details</td>
+            <td className="border-b border-black bg-slate-50"></td>
+          </tr>
+          <tr>
+            <td colSpan={3} className="border-r border-b border-black text-[13px] px-3 py-1.5">Present Days</td>
+            <td className="border-b border-black text-center font-bold text-[14px] py-1">{record.workedDays || 0}</td>
+          </tr>
 
-      {/* Salary Details Section */}
-      <div className="mt-6">
-        <div className="bg-[#2b5f60] text-white px-6 py-2 text-[21px] font-bold">
-          Salary Details
-        </div>
-        <div className="bg-[#f5f6f9] px-6 py-4 space-y-4">
-          <div className="flex justify-between items-center text-slate-700">
-            <span className="text-[16px] text-slate-700 font-medium">Base Salary</span>
-            <span className="text-[16px] font-medium text-slate-900 tabular-nums text-right">{record.basicSalary?.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-center text-slate-700">
-            <span className="text-[16px] text-slate-700 font-medium">Bonus</span>
-            <span className="text-[16px] font-medium text-slate-900 tabular-nums text-right">{((record.bonus || 0) + (record.allowances || 0)).toLocaleString()}</span>
-          </div>
-          {record.deductions && record.deductions > 0 ? (
-            <div className="flex justify-between items-center text-slate-700">
-              <span className="text-[16px] text-slate-700 font-medium">Deductions</span>
-              <span className="text-[16px] font-medium text-slate-900 tabular-nums text-right">-{record.deductions?.toLocaleString()}</span>
-            </div>
-          ) : null}
-        </div>
-        <div className="flex justify-end items-center gap-20 py-6">
-          <span className="text-[16px] font-medium text-slate-700">Total Salary</span>
-          <span className="text-[17px] font-bold text-slate-900 text-black">₹{totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-        </div>
-      </div>
+          {/* Table Headers for Earnings/Deductions */}
+          <tr>
+            <td className="border-r border-b-2 border-black font-extrabold text-[13px] px-3 py-2 text-center bg-slate-100 uppercase w-[35%]">Earnings</td>
+            <td className="border-r border-b-2 border-black font-extrabold text-[13px] px-3 py-2 text-center bg-slate-100 uppercase w-[15%]">Amount</td>
+            <td className="border-r border-b-2 border-black font-extrabold text-[13px] px-3 py-2 text-center bg-slate-100 uppercase w-[35%]">Deduction</td>
+            <td className="border-b-2 border-black font-extrabold text-[13px] px-3 py-2 text-center bg-slate-100 uppercase w-[15%]">Amount</td>
+          </tr>
+
+          {/* Itemized Rows */}
+          <tr>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">Basic</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 text-right font-medium">{basic.toLocaleString('en-IN')}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">Security Deposit</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 text-right font-medium">{securityDeposit.toLocaleString('en-IN')}</td>
+          </tr>
+          <tr>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">H.R.A</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 text-right font-medium">{hra.toLocaleString('en-IN')}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 text-red-600 font-medium">Penalty Deduction</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 text-right text-red-600 font-medium">{penalty.toLocaleString('en-IN')}</td>
+          </tr>
+          <tr>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">Conveyance Allowance</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 text-right font-medium">{conveyance.toLocaleString('en-IN')}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 font-medium text-red-600">Leave Deduction</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 text-right text-red-600 font-medium">{lopDeduction.toLocaleString('en-IN')}</td>
+          </tr>
+          <tr>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">C.C.A</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 text-right font-medium">{medical.toLocaleString('en-IN')}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5"></td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 text-right"></td>
+          </tr>
+          <tr>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">Education Allowance</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 text-right font-medium">{specialAllowance.toLocaleString('en-IN')}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5"></td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 text-right"></td>
+          </tr>
+          <tr>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">Bonus / Incentives</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 text-right font-medium">{otherEarnings.toLocaleString('en-IN')}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5"></td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 text-right"></td>
+          </tr>
+
+          {/* Total Earnings and Deductions */}
+          <tr>
+            <td className="border-r border-b-2 border-black font-extrabold text-[13px] px-3 py-2 bg-slate-50">Total Earnings</td>
+            <td className="border-r border-b-2 border-black font-extrabold text-[13px] px-3 py-2 text-right bg-slate-50">{totalEarnings.toLocaleString('en-IN')}</td>
+            <td className="border-r border-b-2 border-black font-extrabold text-[13px] px-3 py-2 bg-slate-50">Total Deduction</td>
+            <td className="border-b-2 border-black font-extrabold text-[13px] px-3 py-2 text-right bg-slate-50">{totalDeductions.toLocaleString('en-IN')}</td>
+          </tr>
+
+          {/* Net Amount Row */}
+          <tr>
+            <td colSpan={2} className="border-r border-b border-black"></td>
+            <td className="border-r border-b border-black font-extrabold text-[14px] px-3 py-2 bg-slate-100 uppercase text-brand-teal">Net Amount</td>
+            <td className="border-b border-black font-extrabold text-[15px] px-3 py-2 text-right bg-slate-100 text-brand-teal">{totalSalary.toLocaleString('en-IN')}</td>
+          </tr>
+
+          {/* Footer Area with Amount in Words, Mode, Signatures */}
+          <tr>
+            <td colSpan={2} className="border-r border-black p-3 align-top w-[50%]">
+              <div className="text-[13px] font-bold mb-1">Amount (in words)</div>
+              <div className="text-[13px] italic text-slate-800 font-medium mb-4">{numberToWords(totalSalary)}</div>
+              
+              {/* Payment Mode Table */}
+              <div className="mt-2">
+                <table className="w-[90%] border-collapse border border-black text-[12px] text-black">
+                  <thead>
+                    <tr className="bg-slate-50 font-bold">
+                      <th className="border border-black px-3 py-1.5 text-left w-[40%]">Mode</th>
+                      <th className="border border-black px-3 py-1.5 text-center w-[30%]">Chq.No.</th>
+                      <th className="border border-black px-3 py-1.5 text-right w-[30%]">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border border-black px-3 py-1.5 font-bold">Cheque</td>
+                      <td className="border border-black px-3 py-1.5 text-center">
+                        {record.paymentMode === 'Cheque' ? (record.chequeNumber || '-') : '0'}
+                      </td>
+                      <td className="border border-black px-3 py-1.5 text-right font-bold">
+                        {record.paymentMode === 'Cheque' ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-black px-3 py-1.5 font-bold">Cash</td>
+                      <td className="border border-black px-3 py-1.5 text-center">-</td>
+                      <td className="border border-black px-3 py-1.5 text-right font-bold">
+                        {record.paymentMode !== 'Cheque' ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0'}
+                      </td>
+                    </tr>
+                    <tr className="font-bold bg-slate-50">
+                      <td colSpan={2} className="border border-black px-3 py-1.5 text-right uppercase">Total</td>
+                      <td className="border border-black px-3 py-1.5 text-right font-black">{totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </td>
+            
+            <td colSpan={2} className="p-3 align-top w-[50%] pt-8 pl-6">
+              <div className="font-bold text-[15px] tracking-wider text-black text-left">
+                FOR {(employee?.company || 'HARIKRUSHN DIGIVERSE LLP').toUpperCase()}
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -221,6 +340,7 @@ function PayslipContent() {
   const [allPayrolls, setAllPayrolls] = useState<any[]>([])
   const [employees, setEmployees] = useState<any[]>([])
   const [records, setRecords] = useState<any[]>([])
+  const [settings, setSettings] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isDownloading, setIsDownloading] = useState(false)
 
@@ -275,7 +395,9 @@ function PayslipContent() {
     totalWorkingDays: 26,
     workedDays: 26,
     leaveDays: 0,
-    lopDays: 0
+    lopDays: 0,
+    paymentMode: 'Cash',
+    chequeNumber: ''
   })
   const [isEditing, setIsEditing] = useState(false)
 
@@ -286,18 +408,30 @@ function PayslipContent() {
   const years = ['2024', '2025', '2026'];
 
   const numberToWords = (num: number) => {
-    const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+    const a = [
+      '', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ',
+      'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '
+    ];
     const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
-    const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/) as any;
-    if (!n) return '';
-    let str = '';
-    str += (Number(n[1]) !== 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
-    str += (Number(n[2]) !== 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
-    str += (Number(n[3]) !== 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
-    str += (Number(n[4]) !== 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
-    str += (Number(n[5]) !== 0) ? ((str !== '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) + 'Only' : '';
-    return str;
+    const numToWords = (n: number): string => {
+      if (n < 20) return a[n];
+      if (n < 100) return b[Math.floor(n / 10)] + ' ' + (n % 10 !== 0 ? a[n % 10] : '');
+      if (n < 1000) return a[Math.floor(n / 100)] + 'Hundred ' + (n % 100 !== 0 ? 'and ' + numToWords(n % 100) : '');
+      if (n < 100000) return numToWords(Math.floor(n / 1000)) + 'Thousand ' + (n % 1000 !== 0 ? ' ' + numToWords(n % 1000) : '');
+      if (n < 10000000) return numToWords(Math.floor(n / 100000)) + 'Lakh ' + (n % 100000 !== 0 ? ' ' + numToWords(n % 100000) : '');
+      return numToWords(Math.floor(n / 10000000)) + 'Crore ' + (n % 10000000 !== 0 ? ' ' + numToWords(n % 10000000) : '');
+    };
+
+    const roundedNum = Math.floor(num);
+    const paisa = Math.round((num - roundedNum) * 100);
+    
+    let words = numToWords(roundedNum) + 'Rupees';
+    if (paisa > 0) {
+      words += ' and ' + numToWords(paisa) + 'Paisa';
+    }
+    words += ' Only';
+    return words.replace(/\s+/g, ' ').trim();
   }
 
   const handleDownloadPDF = () => {
@@ -394,21 +528,6 @@ function PayslipContent() {
     generate()
   }
 
-  const handleWhatsAppShare = () => {
-    if (records.length !== 1) return
-    const record = records[0]
-    const employee = employees.find(e => e.id === record.employeeId)
-    const phone = employee?.phone || ""
-    const cleanedPhone = phone.replace(/[^0-9]/g, "")
-    const formattedPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone
-
-    const totalSalary = record.netSalary || 0
-    const text = `Dear *${record.employeeName}*,\n\nYour payslip for *${record.month} ${record.year}* has been successfully generated.\n*\n\nPlease check the HR portal to download it.\n\nBest regards,\n*HR Department*`
-
-    const encodedText = encodeURIComponent(text)
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`
-    window.open(whatsappUrl, "_blank")
-  }
 
   const handleUpdate = (record: any) => {
     setFormData(record)
@@ -430,7 +549,9 @@ function PayslipContent() {
       totalWorkingDays: 26,
       workedDays: 26,
       leaveDays: 0,
-      lopDays: 0
+      lopDays: 0,
+      paymentMode: 'Cash',
+      chequeNumber: ''
     })
     setIsEditing(false)
     setIsDialogOpen(true)
@@ -450,6 +571,8 @@ function PayslipContent() {
 
     const payload = {
       ...formData,
+      paymentMode: formData.paymentMode || 'Cash',
+      chequeNumber: formData.chequeNumber || '',
       netSalary: net,
       employeeName: employees.find(e => e.id === formData.employeeId)?.name || formData.employeeName
     }
@@ -587,9 +710,10 @@ function PayslipContent() {
   const fetchInitialData = async () => {
     setLoading(true)
     try {
-      const [payrollRes, empRes] = await Promise.all([
+      const [payrollRes, empRes, settingsRes] = await Promise.all([
         fetch(`${API_URL}/payroll`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/system-settings`)
       ])
       
       if (payrollRes.ok && empRes.ok) {
@@ -597,6 +721,11 @@ function PayslipContent() {
         const empData = await empRes.json()
         setAllPayrolls(payrollData)
         setEmployees(empData)
+
+        if (settingsRes && settingsRes.ok) {
+          const settingsData = await settingsRes.json()
+          setSettings(settingsData)
+        }
 
         // Read user details for initial authentication check
         const currentUser = user || (typeof window !== 'undefined' && localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!) : null)
@@ -659,6 +788,9 @@ function PayslipContent() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      <div className="no-print">
+        <PageHeader title="Employee Payslip" description="Detailed monthly salary breakdown and payment proof." />
+      </div>
       {/* Selection Bar - Always Visible */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-5 rounded-2xl border border-slate-200 shadow-sm w-full">
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
@@ -727,18 +859,7 @@ function PayslipContent() {
               <Download className="h-4 w-4" />
             )}
           </Button>
-          {records.length === 1 && (
-            <Button 
-              variant="outline" 
-              onClick={handleWhatsAppShare} 
-              className="flex-1 md:flex-none border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 font-semibold"
-              size="icon"
-            >
-              <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
-                <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.96 9.96 0 001.333 4.982L2 22l5.202-1.362a9.923 9.923 0 004.804 1.233h.004c5.505 0 9.99-4.478 9.99-9.984A9.97 9.97 0 0012.012 2zm5.787 14.417c-.319.896-1.6 1.637-2.207 1.762-.562.115-1.3.208-3.791-.823-3.187-1.316-5.215-4.57-5.374-4.781-.159-.21-1.29-1.718-1.29-3.278 0-1.56.815-2.327 1.106-2.627.291-.3.636-.375.848-.375.213 0 .425.002.61.011.196.009.46-.073.72.553.273.66.936 2.278 1.018 2.443.082.165.137.357.027.576-.11.22-.248.481-.375.626-.129.145-.262.303-.11.564.152.261.677 1.115 1.453 1.808.998.892 1.839 1.168 2.103 1.3.264.132.417.11.573-.072.155-.183.67-.783.848-1.05.178-.266.357-.22.61-.128.252.091 1.602.755 1.875.892.272.137.454.206.522.32.068.115.068.665-.251 1.561z"/>
-              </svg>
-            </Button>
-          )}
+
         </div>
       </div>
 
@@ -778,6 +899,7 @@ function PayslipContent() {
               onUpdate={handleUpdate}
               onDelete={handleDelete}
               payslipNumber={getPayslipNumber(record, allPayrolls)}
+              companyGstin={settings?.companyGstin}
             />
           ))}
         </div>
@@ -920,7 +1042,6 @@ function PayslipContent() {
 export default function PayslipsPage() {
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-brand-teal" /></div>}>
-      <PageHeader title="Employee Payslip" description="Detailed monthly salary breakdown and payment proof." />
       <PayslipContent />
     </Suspense>
   )

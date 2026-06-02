@@ -369,15 +369,19 @@ class PayrollBase(BaseModel):
     totalWorkingDays: int = 0
     workedDays: float = 0
     leaveDays: float = 0
+    monthlyLeaveDays: float = 0
     lopDays: float = 0
     basicSalary: float
     allowances: float
     bonus: float = 0
     deductions: float
     penalty: float = 0
+    securityDeposit: Optional[float] = 0.0
     netSalary: float
     status: str
     deductionRemarks: str = ""
+    paymentMode: Optional[str] = "Cash"
+    chequeNumber: Optional[str] = "-"
 
 class Payroll(PayrollBase):
     id: str
@@ -393,6 +397,7 @@ class SalaryStructureBase(BaseModel):
     esi: float
     professionalTax: float
     tds: float
+    securityDeposit: Optional[float] = 0.0
     monthlyGross: float
 
 class SalaryStructureCreate(SalaryStructureBase):
@@ -1024,6 +1029,7 @@ class SystemSettingsBase(BaseModel):
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
     allowedMonthlyPaidLeaves: Optional[int] = 1
+    companyGstin: Optional[str] = "24APQPN3916P1Z4"
     taxInvoicePrefix: Optional[str] = "INV"
     proformaInvoicePrefix: Optional[str] = "PINV"
 
@@ -1034,6 +1040,7 @@ class SystemSettingsUpdate(BaseModel):
     officeEndTime: Optional[str] = None
     lateBufferMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
+    companyGstin: Optional[str] = None
     taxInvoicePrefix: Optional[str] = None
     proformaInvoicePrefix: Optional[str] = None
 
@@ -1445,5 +1452,54 @@ class InvoiceUpdate(BaseModel):
 class Invoice(InvoiceBase):
     id: str
     timestamp: str
+    class Config:
+        from_attributes = True
+
+# Document Type Schemas
+class DocumentTypeBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class DocumentTypeCreate(DocumentTypeBase):
+    pass
+
+class DocumentTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+class DocumentType(DocumentTypeBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+# Referral (Reference) Schemas
+class ReferralBase(BaseModel):
+    candidateName: str
+    email: Optional[str] = None
+    phone: str
+    jobTitle: str
+    relationship: Optional[str] = None
+    resumeUrl: Optional[str] = None
+    referredById: str
+    referredByName: str
+    status: str = "Pending"
+    notes: Optional[str] = None
+    submissionDate: Optional[RobustDate] = None
+
+class ReferralCreate(ReferralBase):
+    pass
+
+class ReferralUpdate(BaseModel):
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    candidateName: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    jobTitle: Optional[str] = None
+    relationship: Optional[str] = None
+    resumeUrl: Optional[str] = None
+
+class Referral(ReferralBase):
+    id: str
     class Config:
         from_attributes = True

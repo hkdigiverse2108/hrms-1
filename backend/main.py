@@ -38,6 +38,24 @@ async def lifespan(app):
             print(f"Seeded employee_id counter at {count}")
     except Exception as e:
         print(f"Error seeding employee counter: {e}")
+    # Seed default document types if they don't exist
+    try:
+        from database import db
+        existing_types = await db.document_types.count_documents({})
+        if existing_types == 0:
+            defaults = [
+                {"name": "Security Cheque", "description": "Cheque collected for security purpose"},
+                {"name": "Degree Certificate", "description": "Highest education degree certificate"},
+                {"name": "10th Marksheet", "description": "10th grade marksheet/certificate"},
+                {"name": "12th Marksheet", "description": "12th grade marksheet/certificate"},
+                {"name": "Passport Photo", "description": "Recent passport size photograph"},
+                {"name": "Security Deposite (Employee - 10000)", "description": "Security deposit for standard employee structure (INR 10,000)"},
+                {"name": "Security Deposite (Intern - 2000)", "description": "Security deposit for intern structure (INR 2,000)"}
+            ]
+            await db.document_types.insert_many(defaults)
+            print("Seeded default document types")
+    except Exception as e:
+        print(f"Error seeding default document types: {e}")
     
     yield
     # --- Shutdown (nothing needed for now) ---
@@ -45,7 +63,7 @@ async def lifespan(app):
 app = FastAPI(title="HRMS API", lifespan=lifespan)
 
 # CORS: read allowed origins from env (comma-separated), fallback to localhost for dev
-_default_origins = "http://localhost:3535,http://127.0.0.1:3535"
+_default_origins = "http://localhost:3535,http://127.0.0.1:3535,http://localhost:3550,http://127.0.0.1:3550"
 _allowed_origins = [
     o.strip()
     for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
@@ -397,6 +415,18 @@ async def read_bonus_deductions(month: Optional[str] = None, year: Optional[int]
 async def create_bonus_deduction(item: schemas.BonusDeductionCreate, db=Depends(get_db)):
     return await crud.create_bonus_deduction(db, item)
 
+@app.put("/bonus-deductions/{item_id}", response_model=schemas.BonusDeduction)
+async def update_bonus_deduction(item_id: str, request: dict, db=Depends(get_db)):
+    res = await crud.update_item(db, "bonus_deductions", item_id, request)
+    if not res:
+        raise HTTPException(status_code=404, detail="Adjustment not found")
+    return res
+
+@app.delete("/bonus-deductions/{item_id}")
+async def delete_bonus_deduction(item_id: str, db=Depends(get_db)):
+    await crud.delete_item(db, "bonus_deductions", item_id)
+    return {"message": "Adjustment deleted successfully"}
+
 # Notification Endpoints
 @app.get("/notifications/{employee_id}", response_model=List[schemas.Notification])
 async def read_notifications(employee_id: str, db=Depends(get_db)):
@@ -500,6 +530,26 @@ async def read_application_logs(app_id: str, db=Depends(get_db)):
 async def read_interns(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_interns(db, skip, limit)
 @app.post("/interns", response_model=schemas.Intern)
 async def create_intern(intern: schemas.InternCreate, db=Depends(get_db)): return await crud.create_intern(db, intern)
+
+# Referral / Job Reference Endpoints
+@app.get("/referrals", response_model=List[schemas.Referral])
+async def read_referrals(employee_id: Optional[str] = None, db=Depends(get_db)):
+    if employee_id:
+        return await crud.get_employee_referrals(db, employee_id)
+    return await crud.get_referrals(db)
+
+@app.post("/referrals", response_model=schemas.Referral)
+async def create_referral(referral: schemas.ReferralCreate, db=Depends(get_db)):
+    return await crud.create_referral(db, referral)
+
+@app.put("/referrals/{referral_id}", response_model=schemas.Referral)
+async def update_referral(referral_id: str, referral_update: schemas.ReferralUpdate, db=Depends(get_db)):
+    return await crud.update_referral(db, referral_id, referral_update)
+
+@app.delete("/referrals/{referral_id}")
+async def delete_referral(referral_id: str, db=Depends(get_db)):
+    await crud.delete_referral(db, referral_id)
+    return {"message": "Referral deleted successfully"}
 
 # Asset & Expense Endpoints
 @app.get("/assets", response_model=List[schemas.Asset])
@@ -1104,6 +1154,30 @@ async def delete_employee_document(doc_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"message": "Document deleted successfully"}
+
+# Document Type Endpoints
+@app.post("/document-types", response_model=schemas.DocumentType)
+async def create_document_type(doc_type: schemas.DocumentTypeCreate, db=Depends(get_db)):
+    return await crud.create_document_type(db, doc_type)
+
+@app.get("/document-types", response_model=List[schemas.DocumentType])
+async def read_document_types(db=Depends(get_db)):
+    return await crud.get_document_types(db)
+
+@app.put("/document-types/{type_id}", response_model=schemas.DocumentType)
+async def update_document_type(type_id: str, type_update: schemas.DocumentTypeUpdate, db=Depends(get_db)):
+    updated = await crud.update_document_type(db, type_id, type_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Document type not found")
+    return updated
+
+@app.delete("/document-types/{type_id}")
+async def delete_document_type(type_id: str, db=Depends(get_db)):
+    success = await crud.delete_document_type(db, type_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document type not found")
+    return {"message": "Document type deleted successfully"}
+
 
 # Document Request Endpoints
 @app.post("/document-requests", response_model=schemas.DocumentRequest)
