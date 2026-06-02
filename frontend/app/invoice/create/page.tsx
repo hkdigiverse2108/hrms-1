@@ -41,10 +41,12 @@ export default function CreateInvoicePage() {
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceType, setInvoiceType] = useState("Tax Invoice");
   const [issueDate, setIssueDate] = useState("");
-  const [dueDate, setDueDate] = useState("");
   const [discount, setDiscount] = useState("0");
   const [cgst, setCgst] = useState("9");
   const [sgst, setSgst] = useState("9");
+  const [igst, setIgst] = useState("18");
+  const [taxType, setTaxType] = useState("CGST+SGST");
+  const [isIgstEditable, setIsIgstEditable] = useState(false);
   const [isCgstEditable, setIsCgstEditable] = useState(false);
   const [isSgstEditable, setIsSgstEditable] = useState(false);
   const [isRoundedTotalEditable, setIsRoundedTotalEditable] = useState(false);
@@ -73,7 +75,6 @@ export default function CreateInvoicePage() {
   useEffect(() => {
     const today = dayjs();
     setIssueDate(today.format("YYYY-MM-DD"));
-    setDueDate(today.add(3, "day").format("YYYY-MM-DD"));
     fetchClients();
   }, []);
 
@@ -145,9 +146,10 @@ export default function CreateInvoicePage() {
   };
 
   const subtotal = items.reduce((acc, item) => acc + item.amount, 0);
-  const cgstRate = parseFloat(cgst) || 0;
-  const sgstRate = parseFloat(sgst) || 0;
-  const taxRate = cgstRate + sgstRate;
+  const cgstRate = taxType === "CGST+SGST" ? (parseFloat(cgst) || 0) : 0;
+  const sgstRate = taxType === "CGST+SGST" ? (parseFloat(sgst) || 0) : 0;
+  const igstRate = taxType === "IGST" ? (parseFloat(igst) || 0) : 0;
+  const taxRate = cgstRate + sgstRate + igstRate;
   
   const totalDiscountAmount = items.reduce((acc, item) => {
     const pct = parseFloat(item.discount) || 0;
@@ -156,7 +158,8 @@ export default function CreateInvoicePage() {
   const taxableAmount = subtotal - totalDiscountAmount;
   const cgstAmount = taxableAmount * (cgstRate / 100);
   const sgstAmount = taxableAmount * (sgstRate / 100);
-  const taxAmount = cgstAmount + sgstAmount;
+  const igstAmount = taxableAmount * (igstRate / 100);
+  const taxAmount = cgstAmount + sgstAmount + igstAmount;
   const actualTotal = taxableAmount + taxAmount;
 
   // Calculate roundOff and totalDue based on roundedTotalInput
@@ -169,49 +172,12 @@ export default function CreateInvoicePage() {
     setRoundedTotalInput(Math.round(actualTotal).toFixed(2));
   }, [actualTotal]);
 
-  const updateNotesDays = (currentNotes: string, days: number) => {
-    const regex = /within \d+ days?/i;
-    if (regex.test(currentNotes)) {
-      return currentNotes.replace(regex, `within ${days} ${days === 1 ? 'day' : 'days'}`);
-    }
-    return currentNotes;
-  };
-
   const handleIssueDateChange = (newIssueDate: string) => {
     setIssueDate(newIssueDate);
-    if (newIssueDate && dueDate) {
-      const diff = dayjs(dueDate).diff(dayjs(issueDate), "day");
-      const preservedDiff = diff >= 0 ? diff : 3;
-      const newDueDate = dayjs(newIssueDate).add(preservedDiff, "day").format("YYYY-MM-DD");
-      setDueDate(newDueDate);
-      
-      // Update notes with the preserved difference
-      setNotes(prev => updateNotesDays(prev, preservedDiff));
-    }
-  };
-
-  const handleDueDateChange = (newDueDate: string) => {
-    setDueDate(newDueDate);
-    if (issueDate && newDueDate) {
-      const diff = dayjs(newDueDate).diff(dayjs(issueDate), "day");
-      if (diff >= 0) {
-        setNotes(prev => updateNotesDays(prev, diff));
-      }
-    }
   };
 
   const handleNotesChange = (newNotes: string) => {
     setNotes(newNotes);
-    
-    // Parse for "within X days" or "within X day"
-    const match = newNotes.match(/within (\d+) days?/i);
-    if (match && issueDate) {
-      const days = parseInt(match[1], 10);
-      if (!isNaN(days)) {
-        const newDueDate = dayjs(issueDate).add(days, "day").format("YYYY-MM-DD");
-        setDueDate(newDueDate);
-      }
-    }
   };
 
   const handleSubmit = async () => {
@@ -241,12 +207,7 @@ export default function CreateInvoicePage() {
     }
 
     if (!issueDate) {
-      toast.error("Please select a date of issue");
-      return;
-    }
-
-    if (!dueDate) {
-      toast.error("Please select a due date");
+      toast.error("Issue date is required");
       return;
     }
 
@@ -267,7 +228,6 @@ export default function CreateInvoicePage() {
         invoiceNumber,
         invoiceType,
         issueDate: dayjs(issueDate).format("MMM DD, YYYY"),
-        dueDate: dayjs(dueDate).format("MMM DD, YYYY"),
         lineItems: items.map(item => {
           const pct = parseFloat(item.discount) || 0.0;
           const itemDiscountAmt = item.amount * (pct / 100);
@@ -282,6 +242,7 @@ export default function CreateInvoicePage() {
         }),
         discount: 0,
         tax: taxRate,
+        taxType: taxType,
         subtotal,
         total: totalDue,
         notes: notes || null,
@@ -498,17 +459,6 @@ export default function CreateInvoicePage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Due Date</label>
-              <div className="relative">
-                <Input 
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => handleDueDateChange(e.target.value)}
-                  className="bg-white h-11 font-medium cursor-pointer" 
-                />
-              </div>
-            </div>
           </div>
         </div>
 
@@ -610,52 +560,95 @@ export default function CreateInvoicePage() {
                     <span className="text-muted-foreground font-semibold">Total Discount</span>
                     <span className="text-slate-800 font-extrabold">₹ {totalDiscountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground font-semibold">CGST (%)</span>
-                    <div>
-                      {isCgstEditable ? (
-                        <div className="w-24">
-                          <Input 
-                            value={cgst}
-                            onChange={(e) => setCgst(e.target.value)}
-                            onBlur={() => setIsCgstEditable(false)}
-                            autoFocus
-                            className="bg-white h-9 text-right font-extrabold text-slate-700" 
-                          />
-                        </div>
-                      ) : (
-                        <span 
-                          onClick={() => setIsCgstEditable(true)}
-                          className="text-slate-800 font-extrabold cursor-pointer hover:text-brand-teal transition-colors select-none"
-                        >
-                          {cgst}
-                        </span>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-between text-sm pt-2">
+                    <span className="text-muted-foreground font-semibold">Tax Options</span>
+                    <select 
+                      value={taxType}
+                      onChange={(e) => setTaxType(e.target.value)}
+                      className="w-32 h-8 px-2 rounded-md border border-border bg-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-teal"
+                    >
+                      <option value="No Tax">No Tax</option>
+                      <option value="CGST+SGST">CGST + SGST</option>
+                      <option value="IGST">IGST</option>
+                    </select>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground font-semibold">SGST (%)</span>
-                    <div>
-                      {isSgstEditable ? (
-                        <div className="w-24">
-                          <Input 
-                            value={sgst}
-                            onChange={(e) => setSgst(e.target.value)}
-                            onBlur={() => setIsSgstEditable(false)}
-                            autoFocus
-                            className="bg-white h-9 text-right font-extrabold text-slate-700" 
-                          />
+                  
+                  {taxType === "CGST+SGST" && (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground font-semibold">CGST (%)</span>
+                        <div>
+                          {isCgstEditable ? (
+                            <div className="w-24">
+                              <Input 
+                                value={cgst}
+                                onChange={(e) => setCgst(e.target.value)}
+                                onBlur={() => setIsCgstEditable(false)}
+                                autoFocus
+                                className="bg-white h-9 text-right font-extrabold text-slate-700" 
+                              />
+                            </div>
+                          ) : (
+                            <span 
+                              onClick={() => setIsCgstEditable(true)}
+                              className="text-slate-800 font-extrabold cursor-pointer hover:text-brand-teal transition-colors select-none"
+                            >
+                              {cgst}
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <span 
-                          onClick={() => setIsSgstEditable(true)}
-                          className="text-slate-800 font-extrabold cursor-pointer hover:text-brand-teal transition-colors select-none"
-                        >
-                          {sgst}
-                        </span>
-                      )}
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground font-semibold">SGST (%)</span>
+                        <div>
+                          {isSgstEditable ? (
+                            <div className="w-24">
+                              <Input 
+                                value={sgst}
+                                onChange={(e) => setSgst(e.target.value)}
+                                onBlur={() => setIsSgstEditable(false)}
+                                autoFocus
+                                className="bg-white h-9 text-right font-extrabold text-slate-700" 
+                              />
+                            </div>
+                          ) : (
+                            <span 
+                              onClick={() => setIsSgstEditable(true)}
+                              className="text-slate-800 font-extrabold cursor-pointer hover:text-brand-teal transition-colors select-none"
+                            >
+                              {sgst}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {taxType === "IGST" && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground font-semibold">IGST (%)</span>
+                      <div>
+                        {isIgstEditable ? (
+                          <div className="w-24">
+                            <Input 
+                              value={igst}
+                              onChange={(e) => setIgst(e.target.value)}
+                              onBlur={() => setIsIgstEditable(false)}
+                              autoFocus
+                              className="bg-white h-9 text-right font-extrabold text-slate-700" 
+                            />
+                          </div>
+                        ) : (
+                          <span 
+                            onClick={() => setIsIgstEditable(true)}
+                            className="text-slate-800 font-extrabold cursor-pointer hover:text-brand-teal transition-colors select-none"
+                          >
+                            {igst}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   {/* Actual Total */}
                   <div className="flex items-center justify-between text-sm border-t border-dashed border-border pt-3 mt-1">
                     <span className="text-muted-foreground font-semibold">Actual Total</span>

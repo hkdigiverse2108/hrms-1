@@ -262,7 +262,6 @@ export default function AllInvoicesPage() {
                 <th className="px-6 py-4">Invoice ID</th>
                 <th className="px-6 py-4">Type</th>
                 <th className="px-6 py-4">Date of Issue</th>
-                <th className="px-6 py-4">Due Date</th>
                 <th className="px-6 py-4 text-right">Amount</th>
                 <th className="px-6 py-4 text-center">Status</th>
                 <th className="px-6 py-4 text-right">Action</th>
@@ -309,9 +308,6 @@ export default function AllInvoicesPage() {
                     </td>
                     <td className="px-6 py-4 font-medium text-slate-600 text-[13px]">
                       {invoice.issueDate}
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-600 text-[13px]">
-                      {invoice.dueDate}
                     </td>
                     <td className="px-6 py-4 font-black text-slate-800 text-right">
                       ₹ {(invoice.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}

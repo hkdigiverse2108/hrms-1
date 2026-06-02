@@ -501,7 +501,14 @@ export default function ViewInvoicePage() {
                 </span>
               </div>
               
-              {isGujarat ? (
+              {invoice.taxType === "No Tax" ? null : invoice.taxType === "IGST" || (!invoice.taxType && !isGujarat) ? (
+                <div className="flex justify-between items-center leading-[1]">
+                  <span className="text-gray-500">Add: IGST @ {taxRate}%</span>
+                  <span className="text-[#111827] text-slate-900">
+                    ₹{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ) : (
                 <>
                   <div className="flex justify-between items-center leading-[1]">
                     <span className="text-gray-500">Add: CGST @ {(taxRate / 2)}%</span>
@@ -516,13 +523,6 @@ export default function ViewInvoicePage() {
                     </span>
                   </div>
                 </>
-              ) : (
-                <div className="flex justify-between items-center leading-[1]">
-                  <span className="text-gray-500">Add: IGST @ {taxRate}%</span>
-                  <span className="text-[#111827] text-slate-900">
-                    ₹{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
               )}
 
               <div className="flex justify-between items-center leading-[1]">
