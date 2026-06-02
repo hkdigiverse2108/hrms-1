@@ -437,11 +437,17 @@ export default function AllInvoicesPage() {
                 currentItems.map((invoice) => (
                   <tr key={invoice.id} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-brand-teal/5 flex items-center justify-center border border-brand-teal/15 font-bold text-xs text-brand-teal uppercase">
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer group/client"
+                        onClick={() => router.push(`/invoice/${invoice.id}`)}
+                        title="View Invoice"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-brand-teal/5 flex items-center justify-center border border-brand-teal/15 font-bold text-xs text-brand-teal uppercase group-hover/client:bg-brand-teal group-hover/client:text-white transition-colors">
                           {invoice.clientName ? invoice.clientName[0] : "C"}
                         </div>
-                        <span className="font-bold text-slate-700">{invoice.clientName}</span>
+                        <span className="font-bold text-slate-700 group-hover/client:text-brand-teal transition-colors hover:underline">
+                          {invoice.clientName}
+                        </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-500">
@@ -462,55 +468,47 @@ export default function AllInvoicesPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal">
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem 
-                              onClick={() => router.push(`/invoice/${invoice.id}`)}
-                              className="cursor-pointer font-medium"
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Invoice
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => router.push(`/invoice/edit/${invoice.id}`)}
-                              className="cursor-pointer font-medium"
-                            >
-                              <Pencil className="w-4 h-4 mr-2" />
-                              Edit Invoice
-                            </DropdownMenuItem>
-                            {invoice.status !== "Paid" && (
-                              <DropdownMenuItem 
-                                onClick={() => handleMarkAsPaid(invoice.id)}
-                                className="cursor-pointer font-medium text-emerald-600 focus:text-emerald-700"
-                              >
-                                <CheckCircle2 className="w-4 h-4 mr-2" />
-                                Mark as Paid
-                              </DropdownMenuItem>
-                            )}
-                            {invoice.invoiceType === "Proforma Invoice" && (
-                              <DropdownMenuItem 
-                                onClick={() => handleConvertToTaxInvoice(invoice.id)}
-                                className="cursor-pointer font-medium text-brand-teal focus:text-brand-teal"
-                              >
-                                <FileText className="w-4 h-4 mr-2" />
-                                Convert to Tax Invoice
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem 
-                              onClick={() => handleDelete(invoice.id, invoice.invoiceNumber)}
-                              className="cursor-pointer font-medium text-red-600 focus:text-red-700"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete Invoice
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-muted-foreground hover:text-blue-600 hover:bg-blue-50"
+                          onClick={() => router.push(`/invoice/edit/${invoice.id}`)}
+                          title="Edit Invoice"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        {invoice.status !== "Paid" && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
+                            onClick={() => handleMarkAsPaid(invoice.id)}
+                            title="Mark as Paid"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {invoice.invoiceType === "Proforma Invoice" && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
+                            onClick={() => handleConvertToTaxInvoice(invoice.id)}
+                            title="Convert to Tax Invoice"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleDelete(invoice.id, invoice.invoiceNumber)}
+                          title="Delete Invoice"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
