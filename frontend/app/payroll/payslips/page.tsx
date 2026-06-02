@@ -94,7 +94,8 @@ function SinglePayslip({
   onMarkAsPaid,
   onUpdate,
   onDelete,
-  payslipNumber
+  payslipNumber,
+  companyGstin
 }: { 
   record: any, 
   employee: any, 
@@ -103,7 +104,8 @@ function SinglePayslip({
   onMarkAsPaid?: (record: any) => void,
   onUpdate?: (record: any) => void,
   onDelete?: (id: string) => void,
-  payslipNumber?: string
+  payslipNumber?: string,
+  companyGstin?: string
 }) {
   const [salaryStructure, setSalaryStructure] = useState<any>(null)
   
@@ -162,7 +164,7 @@ function SinglePayslip({
           </tr>
           <tr>
             <td colSpan={4} className="text-center font-bold border-b border-black text-[13px] py-1 bg-slate-50 uppercase">
-              GSTIN: {employee?.gstin || '24APQPN3916P1Z4'}
+              GSTIN: {companyGstin || employee?.gstin || '24APQPN3916P1Z4'}
             </td>
           </tr>
           <tr>
@@ -338,6 +340,7 @@ function PayslipContent() {
   const [allPayrolls, setAllPayrolls] = useState<any[]>([])
   const [employees, setEmployees] = useState<any[]>([])
   const [records, setRecords] = useState<any[]>([])
+  const [settings, setSettings] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isDownloading, setIsDownloading] = useState(false)
 
@@ -707,9 +710,10 @@ function PayslipContent() {
   const fetchInitialData = async () => {
     setLoading(true)
     try {
-      const [payrollRes, empRes] = await Promise.all([
+      const [payrollRes, empRes, settingsRes] = await Promise.all([
         fetch(`${API_URL}/payroll`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/system-settings`)
       ])
       
       if (payrollRes.ok && empRes.ok) {
@@ -717,6 +721,11 @@ function PayslipContent() {
         const empData = await empRes.json()
         setAllPayrolls(payrollData)
         setEmployees(empData)
+
+        if (settingsRes && settingsRes.ok) {
+          const settingsData = await settingsRes.json()
+          setSettings(settingsData)
+        }
 
         // Read user details for initial authentication check
         const currentUser = user || (typeof window !== 'undefined' && localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!) : null)
@@ -890,6 +899,7 @@ function PayslipContent() {
               onUpdate={handleUpdate}
               onDelete={handleDelete}
               payslipNumber={getPayslipNumber(record, allPayrolls)}
+              companyGstin={settings?.companyGstin}
             />
           ))}
         </div>

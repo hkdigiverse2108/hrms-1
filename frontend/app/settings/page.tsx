@@ -26,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { API_URL } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -129,7 +130,8 @@ export default function SettingsPage() {
           officeStartTime: settings?.officeStartTime || "09:30",
           officeEndTime: settings?.officeEndTime || "18:30",
           lateBufferMins: settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10,
-          allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1
+          allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1,
+          companyGstin: settings?.companyGstin || "24APQPN3916P1Z4"
         })
       });
       if (res.ok) {
@@ -227,7 +229,7 @@ export default function SettingsPage() {
                     <Switch 
                       checked={settings?.latePunchDeductionEnabled ?? true}
                       onCheckedChange={handleToggleLatePunchDeduction}
-                      disabled={isUpdating || user?.role !== 'Admin'}
+                      disabled={isUpdating || !isAdmin}
                     />
                   )}
                 </div>
@@ -275,7 +277,7 @@ export default function SettingsPage() {
                       className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
                       value={settings?.officeStartTime || "09:30"}
                       onChange={(e) => setSettings({...settings, officeStartTime: e.target.value})}
-                      disabled={isUpdating || user?.role !== 'Admin'}
+                      disabled={isUpdating || !isAdmin}
                     />
                     <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">AM</div>
                   </div>
@@ -289,7 +291,7 @@ export default function SettingsPage() {
                       className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
                       value={settings?.officeEndTime || "18:30"}
                       onChange={(e) => setSettings({...settings, officeEndTime: e.target.value})}
-                      disabled={isUpdating || user?.role !== 'Admin'}
+                      disabled={isUpdating || !isAdmin}
                     />
                     <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">PM</div>
                   </div>
@@ -309,7 +311,7 @@ export default function SettingsPage() {
                         className="w-20 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
                         value={settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10}
                         onChange={(e) => setSettings({...settings, lateBufferMins: parseInt(e.target.value) || 0})}
-                        disabled={isUpdating || user?.role !== 'Admin'}
+                        disabled={isUpdating || !isAdmin}
                       />
                       <span className="text-xs text-muted-foreground font-medium">minutes</span>
                     </div>
@@ -345,7 +347,7 @@ export default function SettingsPage() {
                         className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
                         value={settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1}
                         onChange={(e) => setSettings({...settings, allowedMonthlyPaidLeaves: parseInt(e.target.value) || 0})}
-                        disabled={isUpdating || user?.role !== 'Admin'}
+                        disabled={isUpdating || !isAdmin}
                         min={0}
                       />
                       <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">DAYS</div>
@@ -362,6 +364,48 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+            </Card>
+          )}
+
+          {/* Company Configuration Card */}
+          {isAdmin && (
+            <Card className="p-6 border-border shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <Building2 className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-lg text-foreground">Company Information</h3>
+                    <Badge variant="outline" className="text-[9px] h-4 font-bold bg-white text-blue-600 border-blue-200">FINANCIALS</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Manage organization settings and billing details.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-foreground">Company GSTIN</Label>
+                    <Input 
+                      type="text" 
+                      className="w-full bg-white border-border font-semibold uppercase focus-visible:ring-brand-teal"
+                      placeholder="e.g. 24APQPN3916P1Z4"
+                      value={settings?.companyGstin || ""}
+                      onChange={(e) => setSettings({...settings, companyGstin: e.target.value})}
+                      disabled={isUpdating || !isAdmin}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/30">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Enter the company's <span className="font-bold text-foreground">GSTIN (Goods and Services Tax Identification Number)</span>. This customized value will be automatically generated and displayed on all employee <span className="text-brand-teal font-bold">payslips</span>.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </Card>
           )}
 

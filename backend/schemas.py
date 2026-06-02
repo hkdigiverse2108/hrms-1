@@ -1029,6 +1029,7 @@ class SystemSettingsBase(BaseModel):
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
     allowedMonthlyPaidLeaves: Optional[int] = 1
+    companyGstin: Optional[str] = "24APQPN3916P1Z4"
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1037,6 +1038,7 @@ class SystemSettingsUpdate(BaseModel):
     officeEndTime: Optional[str] = None
     lateBufferMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
+    companyGstin: Optional[str] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str

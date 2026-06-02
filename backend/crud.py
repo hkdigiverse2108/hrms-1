@@ -2747,7 +2747,8 @@ async def get_system_settings(db):
             "officeStartTime": "09:30",
             "officeEndTime": "18:30",
             "lateBufferMins": 10,
-            "allowedMonthlyPaidLeaves": 1
+            "allowedMonthlyPaidLeaves": 1,
+            "companyGstin": "24APQPN3916P1Z4"
         }
         result = await db.system_settings.insert_one(default_settings)
         settings = await db.system_settings.find_one({"_id": result.inserted_id})
