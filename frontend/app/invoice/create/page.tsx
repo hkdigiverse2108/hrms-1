@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/common/PageHeader";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
@@ -30,6 +30,7 @@ interface LineItem {
 
 export default function CreateInvoicePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [clientName, setClientName] = useState("");
   const [clientAddress, setClientAddress] = useState("");
@@ -38,6 +39,7 @@ export default function CreateInvoicePage() {
   const [clientGstin, setClientGstin] = useState("");
   const [clientDepartment, setClientDepartment] = useState("Billing Department");
   const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceType, setInvoiceType] = useState("Tax Invoice");
   const [issueDate, setIssueDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [discount, setDiscount] = useState("0");
@@ -57,9 +59,18 @@ export default function CreateInvoicePage() {
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [isCustomClient, setIsCustomClient] = useState(false);
 
-  // Generate unique invoice number and default dates on mount
+  // Update invoice type if URL param changes
   useEffect(() => {
-    generateInvoiceNumber();
+    const typeParam = searchParams.get("type");
+    if (typeParam === "Proforma") {
+      setInvoiceType("Proforma Invoice");
+    } else {
+      setInvoiceType("Tax Invoice");
+    }
+  }, [searchParams]);
+
+  // Generate default dates and fetch clients on mount
+  useEffect(() => {
     const today = dayjs();
     setIssueDate(today.format("YYYY-MM-DD"));
     setDueDate(today.add(3, "day").format("YYYY-MM-DD"));
@@ -80,22 +91,33 @@ export default function CreateInvoicePage() {
     }
   };
 
-  const generateInvoiceNumber = async () => {
-    try {
-      const res = await fetch(`${API_URL}/invoices/next-number`);
-      if (res.ok) {
-        const data = await res.json();
-        setInvoiceNumber(data.nextInvoiceNumber);
-      } else {
-        const random = Math.floor(100 + Math.random() * 900);
-        setInvoiceNumber(`INV-${random}`);
+  useEffect(() => {
+    let active = true;
+    const fetchNumber = async () => {
+      try {
+        const res = await fetch(`${API_URL}/invoices/next-number?type=${encodeURIComponent(invoiceType)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (active) setInvoiceNumber(data.nextInvoiceNumber);
+        } else {
+          if (active) {
+            const prefix = invoiceType === "Proforma Invoice" ? "PINV" : "INV";
+            const random = Math.floor(100 + Math.random() * 900);
+            setInvoiceNumber(`${prefix}-${random}`);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching next invoice number:", err);
+        if (active) {
+          const prefix = invoiceType === "Proforma Invoice" ? "PINV" : "INV";
+          const random = Math.floor(100 + Math.random() * 900);
+          setInvoiceNumber(`${prefix}-${random}`);
+        }
       }
-    } catch (err) {
-      console.error("Error fetching next invoice number:", err);
-      const random = Math.floor(100 + Math.random() * 900);
-      setInvoiceNumber(`INV-${random}`);
-    }
-  };
+    };
+    fetchNumber();
+    return () => { active = false; };
+  }, [invoiceType]);
 
   const addItem = () => {
     setItems([...items, { id: Date.now(), description: "", rate: "0.00", qty: "1", discount: "0", amount: 0.00 }]);
@@ -243,6 +265,7 @@ export default function CreateInvoicePage() {
         clientPhone: clientPhone || null,
         clientDepartment: clientDepartment || null,
         invoiceNumber,
+        invoiceType,
         issueDate: dayjs(issueDate).format("MMM DD, YYYY"),
         dueDate: dayjs(dueDate).format("MMM DD, YYYY"),
         lineItems: items.map(item => {
@@ -449,6 +472,17 @@ export default function CreateInvoicePage() {
                 </div>
               </>
             )}
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-foreground">Invoice Type</label>
+              <select
+                value={invoiceType}
+                onChange={(e) => setInvoiceType(e.target.value)}
+                className="w-full px-3 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer h-11 font-medium text-slate-700"
+              >
+                <option value="Tax Invoice">Tax Invoice</option>
+                <option value="Proforma Invoice">Proforma Invoice</option>
+              </select>
+            </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Invoice Number</label>
               <Input value={invoiceNumber} className="bg-gray-50 w-full font-bold text-slate-700 h-11" readOnly />

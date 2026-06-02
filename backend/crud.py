@@ -2754,7 +2754,9 @@ async def get_system_settings(db):
             "officeEndTime": "18:30",
             "lateBufferMins": 10,
             "allowedMonthlyPaidLeaves": 1,
-            "companyGstin": "24APQPN3916P1Z4"
+            "companyGstin": "24APQPN3916P1Z4",
+            "taxInvoicePrefix": "INV",
+            "proformaInvoicePrefix": "PINV"
         }
         result = await db.system_settings.insert_one(default_settings)
         settings = await db.system_settings.find_one({"_id": result.inserted_id})
@@ -3991,17 +3993,24 @@ async def delete_invoice(db, invoice_id: str):
     await db.invoices.delete_one({"_id": ObjectId(invoice_id)})
     return True
 
-async def get_next_invoice_number(db):
+async def get_next_invoice_number(db, invoice_type: str = "Tax Invoice"):
     import re
     
     cursor = db.invoices.find()
     invoices = await cursor.to_list(length=1000)
     
+    settings = await get_system_settings(db)
+    
+    if invoice_type == "Proforma Invoice":
+        prefix = settings.get("proformaInvoicePrefix", "PINV")
+    else:
+        prefix = settings.get("taxInvoicePrefix", "INV")
+    
     max_num = 0
     for inv in invoices:
         num_str = inv.get("invoiceNumber", "")
-        # ONLY match the new INV-XXX format (e.g. INV-001) to start fresh from INV-001!
-        match_simple = re.match(r'^INV-(\d+)$', num_str)
+        # ONLY match the current prefix format
+        match_simple = re.match(rf'^{prefix}-(\d+)$', num_str)
         
         if match_simple:
             try:
@@ -4012,7 +4021,7 @@ async def get_next_invoice_number(db):
                 pass
                 
     next_num = max_num + 1
-    return f"INV-{next_num:03d}"
+    return f"{prefix}-{next_num:03d}"
 
 # Referral (Reference) CRUD
 async def get_referrals(db, skip: int = 0, limit: int = 10000):

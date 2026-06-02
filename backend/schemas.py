@@ -1030,6 +1030,8 @@ class SystemSettingsBase(BaseModel):
     lateBufferMins: Optional[int] = 10
     allowedMonthlyPaidLeaves: Optional[int] = 1
     companyGstin: Optional[str] = "24APQPN3916P1Z4"
+    taxInvoicePrefix: Optional[str] = "INV"
+    proformaInvoicePrefix: Optional[str] = "PINV"
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1039,6 +1041,8 @@ class SystemSettingsUpdate(BaseModel):
     lateBufferMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
     companyGstin: Optional[str] = None
+    taxInvoicePrefix: Optional[str] = None
+    proformaInvoicePrefix: Optional[str] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1421,6 +1425,7 @@ class InvoiceBase(BaseModel):
     total: float
     notes: Optional[str] = None
     status: str = "Pending"  # Pending, Paid, Overdue
+    invoiceType: str = "Tax Invoice"  # Tax Invoice, Proforma Invoice
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1442,6 +1447,7 @@ class InvoiceUpdate(BaseModel):
     total: Optional[float] = None
     notes: Optional[str] = None
     status: Optional[str] = None
+    invoiceType: Optional[str] = None
 
 class Invoice(InvoiceBase):
     id: str

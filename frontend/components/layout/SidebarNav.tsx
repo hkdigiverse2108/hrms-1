@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Menu } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -48,6 +48,7 @@ function getItem(
 
 export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: boolean; toggleCollapse?: () => void }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const { checkPermission, isAdmin, permissions } = usePermissions();
   const [settings, setSettings] = useState<any>(null);
@@ -220,6 +221,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('invoice', 'canView')) {
       invoiceChildren.push(getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"));
       invoiceChildren.push(getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"));
+      invoiceChildren.push(getItem(<Link href="/invoice/create?type=Proforma">Create Proforma Invoice</Link>, "/invoice/create?type=Proforma"));
     }
 
     if (isAdmin || invoiceChildren.length > 0) {
@@ -260,7 +262,12 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/task")) return ["/task"];
     if (pathname.startsWith("/remarks")) return ["/remarks"];
     if (pathname.startsWith("/review")) return ["/review"];
-    if (pathname.startsWith("/invoice")) return [pathname];
+    if (pathname.startsWith("/invoice")) {
+      if (pathname === "/invoice/create" && searchParams.get("type") === "Proforma") {
+        return ["/invoice/create?type=Proforma"];
+      }
+      return [pathname];
+    }
     if (pathname.startsWith("/work-management")) return [pathname];
     if (pathname.startsWith("/chat")) return ["/chat"];
     if (pathname.startsWith("/recruitment")) return [pathname];
