@@ -333,7 +333,6 @@ export default function PayrollPage() {
           icon={<Clock className="h-6 w-6 text-amber-500" />}
         />
       </div>
-
       <div className="mt-6">
         <DataTable
           data={finalPayroll}
@@ -342,6 +341,9 @@ export default function PayrollPage() {
           searchKey="employeeName"
           searchPlaceholder="Search by name..."
           actions={renderActions}
+          onRowClick={(record) => {
+            window.location.href = `/payroll/payslips?id=${record.id}`
+          }}
         />
       </div>
     </>

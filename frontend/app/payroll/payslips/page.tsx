@@ -179,7 +179,7 @@ function SinglePayslip({
           </tr>
           <tr>
             <td colSpan={4} className="text-center font-extrabold border-b border-black text-[16px] uppercase py-2 bg-slate-50 font-sans">
-              <span className="underline decoration-2 underline-offset-4">{record.employeeName?.toUpperCase()}</span>
+              <span>{record.employeeName?.toUpperCase()}</span>
             </td>
           </tr>
 
@@ -192,21 +192,21 @@ function SinglePayslip({
           </tr>
           <tr>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Income Tax Number (PAN)</td>
-            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.panCard || 'AHQPN3916P'}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.panCard || 'ABCDE1234F'}</td>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Bank Details</td>
-            <td className="border-b border-black text-[13px] px-3 py-1.5 font-bold">{(employee?.bankName || 'BANK OF BARODA').toUpperCase()}</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 font-bold">{(employee?.bankName || 'AXIS BANK').toUpperCase()}</td>
           </tr>
           <tr>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Designation</td>
-            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.designation || 'Worker'}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.designation || 'Sales Executive'}</td>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">A/C.NO:</td>
-            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.accountNumber || '-'}</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.accountNumber || '87654345678'}</td>
           </tr>
           <tr>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">Date of Joining</td>
             <td className="border-r border-b border-black text-[13px] px-3 py-1.5">{employee?.joinDate ? new Date(employee.joinDate).toLocaleDateString('en-GB') : '-'}</td>
             <td className="border-r border-b border-black font-semibold text-[13px] px-3 py-1.5 bg-slate-50">IFSC</td>
-            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.ifscCode || '-'}</td>
+            <td className="border-b border-black text-[13px] px-3 py-1.5 font-semibold">{employee?.ifscCode || 'UTIB0000123'}</td>
           </tr>
 
           {/* Attendance Details */}
@@ -287,12 +287,6 @@ function SinglePayslip({
               <div className="text-[13px] italic text-slate-800 font-medium mb-4">{numberToWords(totalSalary)}</div>
               
               {/* Payment Status & Payment Mode Table */}
-              <div className="text-[13px] font-bold mb-3 flex items-center gap-1.5">
-                <span>Payment Status:</span>
-                <span className={record.status === 'paid' ? "text-emerald-600 font-extrabold uppercase" : "text-amber-500 font-extrabold uppercase"}>
-                  {record.status === 'paid' ? 'PAID' : 'DRAFT / UNPAID'}
-                </span>
-              </div>
 
               <div className="mt-2">
                 <table className="w-[90%] border-collapse border border-black text-[12px] text-black">
@@ -307,10 +301,10 @@ function SinglePayslip({
                     <tr>
                       <td className="border border-black px-3 py-1.5 font-bold">Cheque</td>
                       <td className="border border-black px-3 py-1.5 text-center">
-                        {record.paymentMode === 'Cheque' ? (record.chequeNumber || '-') : '-'}
+                        {record.paymentMode === 'Cheque' ? (record.chequeNumber || '-') : '0'}
                       </td>
                       <td className="border border-black px-3 py-1.5 text-right font-bold">
-                        {record.paymentMode === 'Cheque' ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                        {record.paymentMode === 'Cheque' ? totalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0'}
                       </td>
                     </tr>
                     <tr>
@@ -494,7 +488,7 @@ function PayslipContent() {
           clone.style.width = `${nodeWidth}px`
           clone.style.height = `${nodeHeight}px`
           clone.style.margin = '0'
-          clone.style.padding = '48px'
+          clone.style.padding = '24px'
           clone.style.position = 'relative'
           clone.style.transform = 'none'
           clone.style.boxShadow = 'none'
@@ -898,81 +892,75 @@ function PayslipContent() {
         <PageHeader title="Employee Payslip" description="Detailed monthly salary breakdown and payment proof." />
       </div>
       {/* Selection Bar - Visible only when selectedEmpId is 'all' */}
-      {selectedEmpId === 'all' && (
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-5 rounded-2xl border border-slate-200 shadow-sm w-full">
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
-            <div className="w-full sm:w-[220px]">
-              <Select value={selectedEmpId} onValueChange={(val) => { setSelectedEmpId(val); setActivePayslipId(null); }} disabled={!isAdminOrHR}>
-                <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
-                  <SelectValue placeholder="Select Employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {isAdminOrHR && <SelectItem value="all">All Employees</SelectItem>}
-                  {employees
-                    .filter(emp => isAdminOrHR || emp.id === (user?.id || user?._id))
-                    .map(emp => (
-                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                    ))
-                  }
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedEmpId === 'all' && (
-              <>
-                <div className="w-full sm:w-[130px]">
-                  <Select value={selectedMonth} onValueChange={(val) => { setSelectedMonth(val); setActivePayslipId(null); }}>
-                    <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
-                      <SelectValue placeholder="Month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {months.map(m => (
-                        <SelectItem key={m} value={m}>{m}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="w-full sm:w-[100px]">
-                  <Select value={selectedYear} onValueChange={(val) => { setSelectedYear(val); setActivePayslipId(null); }}>
-                    <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
-                      <SelectValue placeholder="Year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {years.map(y => (
-                        <SelectItem key={y} value={y}>{y}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-5 rounded-2xl border border-slate-200 shadow-sm w-full">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
+          <div className="w-full sm:w-[220px]">
+            <Select value={selectedEmpId} onValueChange={(val) => { setSelectedEmpId(val); setActivePayslipId(null); }} disabled={!isAdminOrHR}>
+              <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
+                <SelectValue placeholder="Select Employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {isAdminOrHR && <SelectItem value="all">All Employees</SelectItem>}
+                {employees
+                  .filter(emp => isAdminOrHR || emp.id === (user?.id || user?._id))
+                  .map(emp => (
+                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                  ))
+                }
+              </SelectContent>
+            </Select>
           </div>
-          <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full xl:w-auto">
-            {isAdminOrHR && (
-              <Button variant="outline" onClick={handleManualGenerate} className="flex-1 md:flex-none border-slate-300">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Manual Generate
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => window.print()} className="flex-1 md:flex-none border-slate-300" size="icon">
-              <Printer className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={handleDownloadPDF} 
-              disabled={isDownloading || records.length === 0}
-              className="flex-1 md:flex-none border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-              size="icon"
-            >
-              {isDownloading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-            </Button>
-
+          <div className="w-full sm:w-[130px]">
+            <Select value={selectedMonth} onValueChange={(val) => { setSelectedMonth(val); setActivePayslipId(null); }}>
+              <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map(m => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-full sm:w-[100px]">
+            <Select value={selectedYear} onValueChange={(val) => { setSelectedYear(val); setActivePayslipId(null); }}>
+              <SelectTrigger className="bg-slate-50 border-slate-200 h-10 font-medium">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map(y => (
+                  <SelectItem key={y} value={y}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
-      )}
+        <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full xl:w-auto">
+          {isAdminOrHR && (
+            <Button variant="outline" onClick={handleManualGenerate} className="flex-1 md:flex-none border-slate-300">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Manual Generate
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => window.print()} className="flex-1 md:flex-none border-slate-300" size="icon">
+            <Printer className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={handleDownloadPDF} 
+            disabled={isDownloading || records.length === 0}
+            className="flex-1 md:flex-none border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+            size="icon"
+          >
+            {isDownloading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+          </Button>
+
+        </div>
+      </div>
 
       {records.length === 0 ? (
         <div className="max-w-4xl mx-auto py-20 text-center bg-white rounded-xl border border-slate-100 shadow-sm">
@@ -994,6 +982,7 @@ function PayslipContent() {
               setSelectedEmpId(record.employeeId)
               setSelectedMonth(record.month)
               setSelectedYear(String(record.year))
+              setActivePayslipId(record.id)
             }}
           />
         </div>
@@ -1047,10 +1036,13 @@ function PayslipContent() {
         </div>
       ) : (
         <div id="payslip-container">
-          <div className="no-print mb-4 flex justify-start">
+          <div className="no-print mb-4 flex justify-start max-w-4xl mx-auto w-full">
             <Button 
               variant="outline" 
-              onClick={() => setActivePayslipId(null)} 
+              onClick={() => {
+                setSelectedEmpId('all');
+                setActivePayslipId(null);
+              }} 
               className="border-slate-300 font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900"
             >
               ← Back to Payslips List
