@@ -7,7 +7,7 @@ import autoTable from "jspdf-autotable";
 import { SearchBar } from "@/components/common/SearchBar";
 import { TablePagination } from "@/components/common/TablePagination";
 import { Button } from "@/components/ui/button";
-import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2, Eye, EyeOff } from "lucide-react";
+import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2, Eye, EyeOff, CreditCard } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -442,6 +442,13 @@ export default function EmployeeListPage() {
                                 Permissions
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem 
+                              onClick={() => router.push(`/payroll/payslips?employeeId=${emp.id}`)}
+                              className="cursor-pointer text-brand-teal focus:text-brand-teal font-medium"
+                            >
+                              <CreditCard className="w-4 h-4 mr-2" />
+                              Payslips
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
