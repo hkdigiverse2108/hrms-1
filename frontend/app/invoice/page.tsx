@@ -48,6 +48,7 @@ export default function AllInvoicesPage() {
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All");
+  const [selectedType, setSelectedType] = useState("All");
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -121,6 +122,28 @@ export default function AllInvoicesPage() {
     }
   };
 
+  const handleConvertToTaxInvoice = async (id: string) => {
+    if (!window.confirm("Are you sure you want to convert this Proforma Invoice to a Tax Invoice? This will assign a new Tax Invoice number.")) return;
+    
+    try {
+      const res = await fetch(`${API_URL}/invoices/${id}/convert-to-tax`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      if (res.ok) {
+        const newInvoice = await res.json();
+        setInvoices([newInvoice, ...invoices]);
+        toast.success("Successfully converted to Tax Invoice!");
+      } else {
+        const errorData = await res.json();
+        toast.error(errorData.detail || "Failed to convert invoice");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error converting invoice");
+    }
+  };
+
   // Filter invoices based on Search and Status Tab selection
   const filteredInvoices = invoices.filter((invoice) => {
     const matchesSearch = 
@@ -131,7 +154,11 @@ export default function AllInvoicesPage() {
       selectedStatus === "All" || 
       invoice.status?.toLowerCase() === selectedStatus.toLowerCase();
 
-    return matchesSearch && matchesStatus;
+    const matchesType = 
+      selectedType === "All" || 
+      (invoice.invoiceType || "Tax Invoice") === selectedType;
+
+    return matchesSearch && matchesStatus && matchesType;
   });
 
   // Calculate items for current page
@@ -152,7 +179,7 @@ export default function AllInvoicesPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedStatus]);
+  }, [searchTerm, selectedStatus, selectedType]);
 
   const statuses = ["All", "Paid", "Pending", "Overdue"];
 
@@ -204,14 +231,25 @@ export default function AllInvoicesPage() {
             ))}
           </div>
 
-          <div className="relative w-full sm:w-[350px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground animate-pulse" />
-            <Input 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by client or invoice ID..." 
-              className="pl-9 bg-gray-50/50 border-border rounded-lg h-10 font-medium" 
-            />
+          <div className="flex gap-3 w-full sm:w-auto">
+            <select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className="bg-gray-50/50 border border-border rounded-lg h-10 px-3 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-brand-teal text-slate-700 cursor-pointer"
+            >
+              <option value="All">All Types</option>
+              <option value="Tax Invoice">Tax Invoices</option>
+              <option value="Proforma Invoice">Proforma Invoices</option>
+            </select>
+            <div className="relative w-full sm:w-[280px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground animate-pulse" />
+              <Input 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by client or ID..." 
+                className="pl-9 bg-gray-50/50 border-border rounded-lg h-10 font-medium" 
+              />
+            </div>
           </div>
         </div>
         
@@ -222,6 +260,7 @@ export default function AllInvoicesPage() {
               <tr>
                 <th className="px-6 py-4">Client</th>
                 <th className="px-6 py-4">Invoice ID</th>
+                <th className="px-6 py-4">Type</th>
                 <th className="px-6 py-4">Date of Issue</th>
                 <th className="px-6 py-4">Due Date</th>
                 <th className="px-6 py-4 text-right">Amount</th>
@@ -265,6 +304,9 @@ export default function AllInvoicesPage() {
                     <td className="px-6 py-4 font-bold text-slate-500">
                       {invoice.invoiceNumber}
                     </td>
+                    <td className="px-6 py-4 text-[11px] font-bold text-brand-teal uppercase tracking-wide">
+                      {invoice.invoiceType || "Tax Invoice"}
+                    </td>
                     <td className="px-6 py-4 font-medium text-slate-600 text-[13px]">
                       {invoice.issueDate}
                     </td>
@@ -302,6 +344,15 @@ export default function AllInvoicesPage() {
                               >
                                 <CheckCircle2 className="w-4 h-4 mr-2" />
                                 Mark as Paid
+                              </DropdownMenuItem>
+                            )}
+                            {invoice.invoiceType === "Proforma Invoice" && (
+                              <DropdownMenuItem 
+                                onClick={() => handleConvertToTaxInvoice(invoice.id)}
+                                className="cursor-pointer font-medium text-brand-teal focus:text-brand-teal"
+                              >
+                                <FileText className="w-4 h-4 mr-2" />
+                                Convert to Tax Invoice
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem 

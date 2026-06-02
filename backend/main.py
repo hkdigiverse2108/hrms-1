@@ -1313,8 +1313,8 @@ async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_invoices(db, skip=skip, limit=limit)
 
 @app.get("/invoices/next-number")
-async def get_next_number(db=Depends(get_db)):
-    next_num = await crud.get_next_invoice_number(db)
+async def get_next_number(type: str = "Tax Invoice", db=Depends(get_db)):
+    next_num = await crud.get_next_invoice_number(db, invoice_type=type)
     return {"nextInvoiceNumber": next_num}
 
 @app.get("/invoices/{invoice_id}", response_model=schemas.Invoice)
@@ -1330,6 +1330,30 @@ async def update_invoice(invoice_id: str, invoice_update: schemas.InvoiceUpdate,
     if updated is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return updated
+
+@app.post("/invoices/{invoice_id}/convert-to-tax", response_model=schemas.Invoice)
+async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db)):
+    db_invoice = await crud.get_invoice(db, invoice_id)
+    if not db_invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if db_invoice.get("invoiceType") != "Proforma Invoice":
+        raise HTTPException(status_code=400, detail="Only Proforma Invoices can be converted")
+    
+    next_num = await crud.get_next_invoice_number(db, invoice_type="Tax Invoice")
+    
+    # Copy data to create a new invoice
+    new_invoice_data = dict(db_invoice)
+    new_invoice_data.pop("id", None)
+    new_invoice_data.pop("_id", None)
+    
+    new_invoice_data["invoiceType"] = "Tax Invoice"
+    new_invoice_data["invoiceNumber"] = next_num
+    
+    # Use schema to validate and parse
+    new_invoice = schemas.InvoiceCreate(**new_invoice_data)
+    created_invoice = await crud.create_invoice(db, new_invoice)
+    
+    return created_invoice
 
 @app.delete("/invoices/{invoice_id}")
 async def delete_invoice(invoice_id: str, db=Depends(get_db)):

@@ -195,6 +195,32 @@ export default function ViewInvoicePage() {
     }
   };
 
+  const handleConvertToTaxInvoice = async () => {
+    if (!invoice) return;
+    if (!window.confirm("Are you sure you want to convert this Proforma Invoice to a Tax Invoice? This will generate a new Tax Invoice number.")) return;
+    
+    setIsUpdatingStatus(true);
+    try {
+      const res = await fetch(`${API_URL}/invoices/${invoiceId}/convert-to-tax`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      if (res.ok) {
+        const newInvoice = await res.json();
+        toast.success("Successfully converted to Tax Invoice!");
+        router.push(`/invoice/${newInvoice.id}`);
+      } else {
+        const errorData = await res.json();
+        toast.error(errorData.detail || "Failed to convert invoice");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error converting invoice");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center gap-3">
@@ -258,6 +284,19 @@ export default function ViewInvoicePage() {
         </div>
         
         <div className="flex items-center gap-3">
+          {invoice.invoiceType === "Proforma Invoice" && (
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium h-10 px-4"
+              onClick={handleConvertToTaxInvoice}
+              disabled={isUpdatingStatus}
+            >
+              {isUpdatingStatus ? (
+                <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Processing...</>
+              ) : (
+                <><CheckCircle2 className="w-3.5 h-3.5 mr-2" />Convert to Tax Invoice</>
+              )}
+            </Button>
+          )}
           {invoice.status !== "Paid" && (
             <Button 
               className="bg-[#15803D] hover:bg-[#15803D]/90 text-white font-medium h-10 px-4"
@@ -322,7 +361,7 @@ export default function ViewInvoicePage() {
             </div>
 
             <div className="bg-[#1E60F2] text-white px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider shadow-sm select-none">
-              TAX INVOICE
+              {invoice.invoiceType ? invoice.invoiceType.toUpperCase() : "TAX INVOICE"}
             </div>
           </div>
 

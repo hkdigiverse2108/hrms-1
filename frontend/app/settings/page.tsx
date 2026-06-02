@@ -18,7 +18,8 @@ import {
   Building2,
   Clock,
   Timer,
-  Save
+  Save,
+  FileText
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -129,7 +130,9 @@ export default function SettingsPage() {
           officeStartTime: settings?.officeStartTime || "09:30",
           officeEndTime: settings?.officeEndTime || "18:30",
           lateBufferMins: settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10,
-          allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1
+          allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1,
+          taxInvoicePrefix: settings?.taxInvoicePrefix || "INV",
+          proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV"
         })
       });
       if (res.ok) {
@@ -365,7 +368,50 @@ export default function SettingsPage() {
             </Card>
           )}
 
+          {/* Invoice Configuration Card */}
+          {isAdmin && (
+            <Card className="p-6 border-border shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-brand-light rounded-lg">
+                  <FileText className="w-5 h-5 text-brand-teal" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-foreground">Invoice Configuration</h3>
+                  <p className="text-xs text-muted-foreground">Define prefixes used for the invoice numbering series.</p>
+                </div>
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Tax Invoice Prefix</Label>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold uppercase"
+                      value={settings?.taxInvoicePrefix || ""}
+                      onChange={(e) => setSettings({...settings, taxInvoicePrefix: e.target.value.toUpperCase()})}
+                      disabled={isUpdating || user?.role !== 'Admin'}
+                      placeholder="e.g. INV"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Proforma Invoice Prefix</Label>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold uppercase"
+                      value={settings?.proformaInvoicePrefix || ""}
+                      onChange={(e) => setSettings({...settings, proformaInvoicePrefix: e.target.value.toUpperCase()})}
+                      disabled={isUpdating || user?.role !== 'Admin'}
+                      placeholder="e.g. PINV"
+                    />
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
 
       </div>
     </div>
