@@ -1032,6 +1032,7 @@ class SystemSettingsBase(BaseModel):
     companyGstin: Optional[str] = "24APQPN3916P1Z4"
     taxInvoicePrefix: Optional[str] = "INV"
     proformaInvoicePrefix: Optional[str] = "PINV"
+    noTaxInvoicePrefix: Optional[str] = "NINV"
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1043,6 +1044,7 @@ class SystemSettingsUpdate(BaseModel):
     companyGstin: Optional[str] = None
     taxInvoicePrefix: Optional[str] = None
     proformaInvoicePrefix: Optional[str] = None
+    noTaxInvoicePrefix: Optional[str] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1422,6 +1424,7 @@ class InvoiceBase(BaseModel):
     discount: float = 0.0
     tax: float = 0.0
     taxType: Optional[str] = "CGST+SGST"
+    paymentMode: Optional[str] = "Current Account"
     subtotal: float
     total: float
     notes: Optional[str] = None

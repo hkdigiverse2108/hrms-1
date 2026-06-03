@@ -134,7 +134,8 @@ export default function SettingsPage() {
           allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1,
           companyGstin: settings?.companyGstin || "24APQPN3916P1Z4",
           taxInvoicePrefix: settings?.taxInvoicePrefix || "INV",
-          proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV"
+          proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
+          noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV"
         })
       });
       if (res.ok) {
@@ -449,6 +450,20 @@ export default function SettingsPage() {
                       onChange={(e) => setSettings({...settings, proformaInvoicePrefix: e.target.value.toUpperCase()})}
                       disabled={isUpdating || user?.role !== 'Admin'}
                       placeholder="e.g. PINV"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">No-Tax Invoice Prefix</Label>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold uppercase"
+                      value={settings?.noTaxInvoicePrefix || ""}
+                      onChange={(e) => setSettings({...settings, noTaxInvoicePrefix: e.target.value.toUpperCase()})}
+                      disabled={isUpdating || user?.role !== 'Admin'}
+                      placeholder="e.g. NINV"
                     />
                   </div>
                 </div>

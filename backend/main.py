@@ -1387,8 +1387,8 @@ async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_invoices(db, skip=skip, limit=limit)
 
 @app.get("/invoices/next-number")
-async def get_next_number(type: str = "Tax Invoice", db=Depends(get_db)):
-    next_num = await crud.get_next_invoice_number(db, invoice_type=type)
+async def get_next_number(type: str = "Tax Invoice", taxType: str = "CGST+SGST", db=Depends(get_db)):
+    next_num = await crud.get_next_invoice_number(db, invoice_type=type, tax_type=taxType)
     return {"nextInvoiceNumber": next_num}
 
 @app.get("/invoices/{invoice_id}", response_model=schemas.Invoice)

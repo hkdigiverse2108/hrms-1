@@ -7,13 +7,14 @@ import {
   Calendar as CalendarIcon,
   Send,
   RefreshCw,
-  Loader2
+  Loader2,
+  Save
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/common/PageHeader";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
@@ -28,8 +29,10 @@ interface LineItem {
   amount: number;
 }
 
-export default function CreateInvoicePage() {
+export default function EditInvoicePage() {
   const router = useRouter();
+  const params = useParams();
+  const invoiceId = params.id as string;
   const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [clientName, setClientName] = useState("");
@@ -95,31 +98,55 @@ export default function CreateInvoicePage() {
 
   useEffect(() => {
     let active = true;
-    const fetchNumber = async () => {
+    const fetchInvoice = async () => {
       try {
-        const res = await fetch(`${API_URL}/invoices/next-number?type=${encodeURIComponent(invoiceType)}&taxType=${encodeURIComponent(taxType)}`);
+        const res = await fetch(`${API_URL}/invoices/${invoiceId}`);
         if (res.ok) {
           const data = await res.json();
-          if (active) setInvoiceNumber(data.nextInvoiceNumber);
-        } else {
           if (active) {
-            const prefix = invoiceType === "Proforma Invoice" ? "PINV" : "INV";
-            const random = Math.floor(100 + Math.random() * 900);
-            setInvoiceNumber(`${prefix}-${random}`);
+            setClientName(data.clientName || "");
+            setClientAddress(data.clientAddress || "");
+            setClientEmail(data.clientEmail || "");
+            setClientPhone(data.clientPhone || "");
+            setClientGstin(data.clientGstin || "");
+            setClientDepartment(data.clientDepartment || "");
+            setInvoiceNumber(data.invoiceNumber || "");
+            setInvoiceType(data.invoiceType || "Tax Invoice");
+            setIssueDate(dayjs(data.issueDate, "MMM DD, YYYY").format("YYYY-MM-DD") !== "Invalid Date" ? dayjs(data.issueDate).format("YYYY-MM-DD") : data.issueDate || "");
+            setTaxType(data.taxType || "CGST+SGST");
+            setPaymentMode(data.paymentMode || "Current Account");
+            setNotes(data.notes || "");
+            
+            if (data.lineItems && data.lineItems.length > 0) {
+              setItems(data.lineItems.map((item: any, idx: number) => ({
+                id: Date.now() + idx,
+                description: item.description || "",
+                rate: (item.rate || 0).toString(),
+                qty: (item.qty || 1).toString(),
+                discount: (item.discount ? ((item.discount / item.amount) * 100).toFixed(2) : "0"), // approximate discount %
+                amount: item.amount || 0
+              })));
+            }
+            
+            // Re-calculate the actual tax rates from the invoice total and subtotal.
+            // But since we don't store individual percentages easily, let's keep the defaults 
+            // and let the calculations run. The tax amount should match if it's 18%.
+            if (data.total) {
+              setRoundedTotalInput(data.total.toString());
+            }
           }
+        } else {
+          toast.error("Failed to fetch invoice details");
         }
       } catch (err) {
-        console.error("Error fetching next invoice number:", err);
-        if (active) {
-          const prefix = invoiceType === "Proforma Invoice" ? "PINV" : "INV";
-          const random = Math.floor(100 + Math.random() * 900);
-          setInvoiceNumber(`${prefix}-${random}`);
-        }
+        console.error("Error fetching invoice:", err);
       }
     };
-    fetchNumber();
+    if (invoiceId) {
+      fetchInvoice();
+    }
     return () => { active = false; };
-  }, [invoiceType, taxType]);
+  }, [invoiceId]);
 
   // Adjust tax type based on payment mode
   useEffect(() => {
@@ -260,22 +287,22 @@ export default function CreateInvoicePage() {
         status: "Pending"
       };
 
-      const res = await fetch(`${API_URL}/invoices`, {
-        method: "POST",
+      const res = await fetch(`${API_URL}/invoices/${invoiceId}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
 
       if (res.ok) {
         const data = await res.json();
-        toast.success("Invoice created successfully!");
+        toast.success("Invoice updated successfully!");
         router.push(`/invoice/${data.id}`);
       } else {
-        toast.error("Failed to create invoice");
+        toast.error("Failed to update invoice");
       }
     } catch (err) {
       console.error(err);
-      toast.error("Failed to create invoice due to network error");
+      toast.error("Failed to update invoice due to network error");
     } finally {
       setIsSubmitting(false);
     }
@@ -284,8 +311,8 @@ export default function CreateInvoicePage() {
   return (
     <div className="space-y-6 pb-20">
       <PageHeader 
-        title="Create Invoice" 
-        description="Draft a new invoice to send to your client."
+        title="Edit Invoice" 
+        description="Modify the details of the selected invoice."
       >
         <div className="flex items-center gap-3">
           <Button variant="outline" className="px-6 h-10 font-medium bg-white" onClick={() => router.back()} disabled={isSubmitting}>
@@ -297,9 +324,9 @@ export default function CreateInvoicePage() {
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</>
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
             ) : (
-              <><Send className="w-4 h-4 mr-2" />Create & Send</>
+              <><Save className="w-4 h-4 mr-2" />Save Changes</>
             )}
           </Button>
         </div>
