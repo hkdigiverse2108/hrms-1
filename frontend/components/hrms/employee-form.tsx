@@ -329,9 +329,19 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
       <div className="space-y-6 pt-6 max-w-4xl">
         <div className="flex items-center gap-4">
           <Label className="w-44 text-left font-medium text-gray-700">Employee ID:</Label>
-          <div className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-600 font-mono text-sm">
-            {formData.employeeId || 'System Generated'}
-          </div>
+          {formData.role === 'Admin' ? (
+            <Input
+              value={formData.employeeId}
+              onChange={(e) => handleChange('employeeId', e.target.value)}
+              placeholder="Enter Admin ID (e.g., ADMIN001)"
+              className="flex-1 bg-white border-gray-200 focus-visible:ring-brand-teal h-10 shadow-sm max-w-[400px]"
+              disabled={mode === 'edit'}
+            />
+          ) : (
+            <div className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-600 font-mono text-sm max-w-[400px]">
+              {formData.employeeId || 'System Generated'}
+            </div>
+          )}
         </div>
         
         {formData.role !== 'Admin' && (
