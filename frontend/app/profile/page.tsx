@@ -289,8 +289,10 @@ export default function ProfilePage() {
 
   const tabs = [
     { id: 'personal', label: 'Personal & Identity' },
-    { id: 'professional', label: 'Professional Info' },
-    { id: 'bank_family', label: 'Bank & Family' },
+    ...(!isAdmin ? [
+      { id: 'professional', label: 'Professional Info' },
+      { id: 'bank_family', label: 'Bank & Family' },
+    ] : [])
   ]
 
   return (

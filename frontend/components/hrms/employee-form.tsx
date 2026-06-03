@@ -155,7 +155,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.startTime || !formData.endTime) {
+    if (formData.role !== 'Admin' && (!formData.startTime || !formData.endTime)) {
       alert('Please enter both Start Time and End Time.')
       return
     }
@@ -243,8 +243,12 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
         {/* Row 3 */}
         <FormField label="DOB" id="dob" type="date" required value={formData.dob} onChange={v => handleChange('dob', v)} />
-        <FormField label="Joining Date" id="joinDate" type="date" required value={formData.joinDate} onChange={v => handleChange('joinDate', v)} />
-        <FormField label="Salary" id="salary" type="number" required value={formData.salary} onChange={v => handleChange('salary', v)} placeholder="Enter salary" />
+        {formData.role !== 'Admin' && (
+          <>
+            <FormField label="Joining Date" id="joinDate" type="date" required value={formData.joinDate} onChange={v => handleChange('joinDate', v)} />
+            <FormField label="Salary" id="salary" type="number" required value={formData.salary} onChange={v => handleChange('salary', v)} placeholder="Enter salary" />
+          </>
+        )}
 
         <FormSelect
           label="Gender"
@@ -337,42 +341,46 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           </>
         )}
         
-        <FormSelect 
-          key={`dept-${departments.length}`} 
-          label="Department" 
-          id="department" 
-          required 
-          value={formData.department} 
-          onValueChange={v => handleChange('department', v)} 
-          options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
-          placeholder="Select department" 
-        />
-        <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
-        
-        <FormSelect 
-          label="Status" 
-          id="status" 
-          required 
-          value={formData.status} 
-          onValueChange={v => handleChange('status', v)} 
-          options={[
-            { label: 'Active', value: 'active' },
-            { label: 'Inactive', value: 'inactive' }
-          ]} 
-          placeholder="Select status" 
-        />
+        {formData.role !== 'Admin' && (
+          <>
+            <FormSelect 
+              key={`dept-${departments.length}`} 
+              label="Department" 
+              id="department" 
+              required 
+              value={formData.department} 
+              onValueChange={v => handleChange('department', v)} 
+              options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
+              placeholder="Select department" 
+            />
+            <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+            
+            <FormSelect 
+              label="Status" 
+              id="status" 
+              required 
+              value={formData.status} 
+              onValueChange={v => handleChange('status', v)} 
+              options={[
+                { label: 'Active', value: 'active' },
+                { label: 'Inactive', value: 'inactive' }
+              ]} 
+              placeholder="Select status" 
+            />
 
-        {/* Working Hours */}
-        <div className="flex items-center gap-4">
-          <Label className="w-44 text-left font-medium text-gray-700">
-            Working Hours{<span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
-          </Label>
-          <div className="flex items-center gap-4 flex-1 max-w-[400px]">
-            <Input type="time" required value={formData.startTime} onChange={(e) => handleChange('startTime', e.target.value)} />
-            <span className="text-gray-400 font-medium whitespace-nowrap">to</span>
-            <Input type="time" required value={formData.endTime} onChange={(e) => handleChange('endTime', e.target.value)} />
-          </div>
-        </div>
+            {/* Working Hours */}
+            <div className="flex items-center gap-4">
+              <Label className="w-44 text-left font-medium text-gray-700">
+                Working Hours{<span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
+              </Label>
+              <div className="flex items-center gap-4 flex-1 max-w-[400px]">
+                <Input type="time" required value={formData.startTime} onChange={(e) => handleChange('startTime', e.target.value)} />
+                <span className="text-gray-400 font-medium whitespace-nowrap">to</span>
+                <Input type="time" required value={formData.endTime} onChange={(e) => handleChange('endTime', e.target.value)} />
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Profile Photo */}
         <div className="flex items-start gap-4">
