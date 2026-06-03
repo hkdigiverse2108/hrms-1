@@ -764,7 +764,25 @@ function PayslipContent() {
   }
 
   const columns = [
-    { key: 'employeeName', header: 'Employee' },
+    { 
+      key: 'employeeName', 
+      header: 'Employee',
+      render: (record: any) => (
+        <span 
+          className="text-brand-teal font-bold hover:underline cursor-pointer"
+          title="View Payslip"
+          onClick={(e) => {
+            e.stopPropagation()
+            setSelectedEmpId(record.employeeId)
+            setSelectedMonth(record.month)
+            setSelectedYear(String(record.year))
+            setActivePayslipId(record.id)
+          }}
+        >
+          {record.employeeName}
+        </span>
+      )
+    },
     { key: 'month', header: 'Month' },
     { key: 'year', header: 'Year' },
     { 
@@ -1041,7 +1059,21 @@ function PayslipContent() {
               { 
                 key: 'monthYear', 
                 header: 'Period',
-                render: (record: any) => `${record.month} ${record.year}`
+                render: (record: any) => (
+                  <span 
+                    className="text-brand-teal font-bold hover:underline cursor-pointer"
+                    title="View Payslip"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedEmpId(record.employeeId)
+                      setSelectedMonth(record.month)
+                      setSelectedYear(String(record.year))
+                      setActivePayslipId(record.id)
+                    }}
+                  >
+                    {`${record.month} ${record.year}`}
+                  </span>
+                )
               },
               { 
                 key: 'netSalary', 

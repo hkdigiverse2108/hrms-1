@@ -761,10 +761,12 @@ export default function LeavePage() {
         description="View your leave balances, history, and upcoming time off."
       >
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
-          <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium" onClick={() => exportToCSV(leaves, 'leaves')}>
-            <Download className="w-4 h-4 mr-2" />
-            Export PDF
-          </Button>
+          {(user?.role === 'Admin' || user?.role === 'HR') && (
+            <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium" onClick={() => exportToCSV(leaves, 'leaves')}>
+              <Download className="w-4 h-4 mr-2" />
+              Export PDF
+            </Button>
+          )}
           <Button variant="outline" className="shadow-sm w-full sm:w-auto font-medium" onClick={() => setIsCalendarOpen(true)}>
             <CalendarIcon className="w-4 h-4 mr-2" />
             View Calendar
@@ -1259,12 +1261,14 @@ export default function LeavePage() {
             >
               Upcoming Time Off
             </TabsTrigger>
-            <TabsTrigger 
-              value="public" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-muted-foreground data-[state=active]:bg-transparent px-1 py-3 data-[state=active]:shadow-none font-medium"
-            >
-              Public Holidays
-            </TabsTrigger>
+            {(user?.role === 'Admin' || user?.role === 'HR') && (
+              <TabsTrigger 
+                value="public" 
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-muted-foreground data-[state=active]:bg-transparent px-1 py-3 data-[state=active]:shadow-none font-medium"
+              >
+                Public Holidays
+              </TabsTrigger>
+            )}
           </TabsList>
           
           <TabsContent value="history" className="mt-6 bg-white border border-border rounded-xl shadow-sm overflow-hidden">
@@ -1594,269 +1598,271 @@ export default function LeavePage() {
             />
           </TabsContent>
 
-          <TabsContent value="public" className="mt-6 bg-white border border-border rounded-xl shadow-sm overflow-hidden">
-            <div className="p-5 flex flex-col sm:flex-row justify-between items-center border-b border-border gap-4">
-              <h3 className="font-bold text-lg">Public Holidays</h3>
-              <div className="flex w-full sm:w-auto gap-3">
-                <Select defaultValue="2026">
-                  <SelectTrigger className="flex-1 sm:w-[120px] h-9 bg-gray-50/50">
-                    <SelectValue placeholder="Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2026">Year: 2026</SelectItem>
-                    <SelectItem value="2025">Year: 2025</SelectItem>
-                  </SelectContent>
-                </Select>
+          {(user?.role === 'Admin' || user?.role === 'HR') && (
+            <TabsContent value="public" className="mt-6 bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+              <div className="p-5 flex flex-col sm:flex-row justify-between items-center border-b border-border gap-4">
+                <h3 className="font-bold text-lg">Public Holidays</h3>
+                <div className="flex w-full sm:w-auto gap-3">
+                  <Select defaultValue="2026">
+                    <SelectTrigger className="flex-1 sm:w-[120px] h-9 bg-gray-50/50">
+                      <SelectValue placeholder="Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2026">Year: 2026</SelectItem>
+                      <SelectItem value="2025">Year: 2025</SelectItem>
+                    </SelectContent>
+                  </Select>
 
-                {canAddLeave && (
-                  <>
-                  <Dialog open={isFetchHolidaysDialogOpen} onOpenChange={setIsFetchHolidaysDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="h-9 bg-brand-orange hover:bg-brand-orange/90 text-white font-medium mr-2" onClick={() => {
-                        setFetchedHolidays([]);
-                        setSelectedFetchedHolidays(new Set());
-                      }}>
-                        <Globe className="w-4 h-4 mr-2" />
-                        Auto-Fetch
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[500px] max-h-[80vh] flex flex-col">
-                      <DialogHeader>
-                        <DialogTitle>Auto-Fetch External Holidays</DialogTitle>
-                        <DialogDescription>Fetch holidays for a specific country and year.</DialogDescription>
-                      </DialogHeader>
-                      <div className="flex gap-2 py-4 border-b">
-                        <Select value={fetchCountry} onValueChange={setFetchCountry}>
-                          <SelectTrigger className="flex-1">
-                            <SelectValue placeholder="Country Code" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="IN">India (IN)</SelectItem>
-                            <SelectItem value="US">United States (US)</SelectItem>
-                            <SelectItem value="GB">United Kingdom (GB)</SelectItem>
-                            <SelectItem value="AU">Australia (AU)</SelectItem>
-                            <SelectItem value="CA">Canada (CA)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Select value={fetchYear} onValueChange={setFetchYear}>
-                          <SelectTrigger className="w-[100px]">
-                            <SelectValue placeholder="Year" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="2024">2024</SelectItem>
-                            <SelectItem value="2025">2025</SelectItem>
-                            <SelectItem value="2026">2026</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button onClick={handleFetchExternalHolidays} disabled={isFetchingHolidays} className="bg-slate-800 text-white">
-                          {isFetchingHolidays ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
+                  {canAddLeave && (
+                    <>
+                    <Dialog open={isFetchHolidaysDialogOpen} onOpenChange={setIsFetchHolidaysDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="h-9 bg-brand-orange hover:bg-brand-orange/90 text-white font-medium mr-2" onClick={() => {
+                          setFetchedHolidays([]);
+                          setSelectedFetchedHolidays(new Set());
+                        }}>
+                          <Globe className="w-4 h-4 mr-2" />
+                          Auto-Fetch
                         </Button>
-                      </div>
-                      
-                      <div className="flex-1 overflow-y-auto py-2 max-h-[300px]">
-                        {fetchedHolidays.length > 0 ? (
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center px-1 pb-2">
-                              <span className="text-sm font-semibold">{fetchedHolidays.length} Holidays found</span>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="h-7 text-xs"
-                                onClick={() => {
-                                  if (selectedFetchedHolidays.size === fetchedHolidays.length) {
-                                    setSelectedFetchedHolidays(new Set());
-                                  } else {
-                                    const all = new Set<string>();
-                                    fetchedHolidays.forEach((h: any) => all.add(h.date + '-' + h.name));
-                                    setSelectedFetchedHolidays(all);
-                                  }
-                                }}
-                              >
-                                {selectedFetchedHolidays.size === fetchedHolidays.length ? "Deselect All" : "Select All"}
-                              </Button>
-                            </div>
-                            {fetchedHolidays.map((h, i) => {
-                              const key = h.date + '-' + h.name;
-                              const isSelected = selectedFetchedHolidays.has(key);
-                              return (
-                                <div key={i} className="flex items-center space-x-3 bg-slate-50 p-2 rounded-md border border-slate-100">
-                                  <Checkbox 
-                                    checked={isSelected}
-                                    onCheckedChange={(checked) => {
-                                      const newSet = new Set(selectedFetchedHolidays);
-                                      if (checked) newSet.add(key);
-                                      else newSet.delete(key);
-                                      setSelectedFetchedHolidays(newSet);
-                                    }}
-                                  />
-                                  <div className="flex flex-col flex-1">
-                                    <span className="text-sm font-semibold">{h.name}</span>
-                                    <span className="text-xs text-slate-500">{dayjs(h.date).format("MMM DD, YYYY")} - {h.type}</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 text-slate-400 text-sm">
-                            Click Fetch to load holidays
-                          </div>
-                        )}
-                      </div>
-
-                      <DialogFooter className="pt-4 border-t">
-                        <Button variant="outline" onClick={() => setIsFetchHolidaysDialogOpen(false)}>Cancel</Button>
-                        <Button 
-                          className="bg-brand-teal hover:bg-brand-teal-light text-white" 
-                          onClick={handleSaveFetchedHolidays}
-                          disabled={selectedFetchedHolidays.size === 0}
-                        >
-                          Save Selected ({selectedFetchedHolidays.size})
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-
-                  <Dialog open={isHolidayDialogOpen} onOpenChange={setIsHolidayDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="h-9 bg-brand-teal hover:bg-brand-teal-light text-white font-medium" onClick={() => {
-                        setEditingHolidayId(null);
-                        setHolidayForm({ name: "", date: dayjs(), type: "National", company: "All Companies" });
-                      }}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Holiday
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[400px]">
-                      <DialogHeader>
-                        <DialogTitle>{editingHolidayId ? 'Edit Public Holiday' : 'Add Public Holiday'}</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label>Holiday Name</Label>
-                          <Input 
-                            placeholder="e.g. New Year's Day" 
-                            value={holidayForm.name}
-                            onChange={(e) => setHolidayForm({...holidayForm, name: e.target.value})}
-                          />
-                        </div>
-                        <div className="space-y-2 flex flex-col">
-                          <Label>Date</Label>
-                          <DatePicker 
-                            value={holidayForm.date}
-                            onChange={(date) => setHolidayForm({...holidayForm, date: date || dayjs()})}
-                            className="w-full"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Type</Label>
-                          <Select 
-                            value={holidayForm.type}
-                            onValueChange={(val) => setHolidayForm({...holidayForm, type: val})}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[500px] max-h-[80vh] flex flex-col">
+                        <DialogHeader>
+                          <DialogTitle>Auto-Fetch External Holidays</DialogTitle>
+                          <DialogDescription>Fetch holidays for a specific country and year.</DialogDescription>
+                        </DialogHeader>
+                        <div className="flex gap-2 py-4 border-b">
+                          <Select value={fetchCountry} onValueChange={setFetchCountry}>
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Country Code" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="National">National</SelectItem>
-                              <SelectItem value="Regional">Regional</SelectItem>
-                              <SelectItem value="Optional">Optional</SelectItem>
+                              <SelectItem value="IN">India (IN)</SelectItem>
+                              <SelectItem value="US">United States (US)</SelectItem>
+                              <SelectItem value="GB">United Kingdom (GB)</SelectItem>
+                              <SelectItem value="AU">Australia (AU)</SelectItem>
+                              <SelectItem value="CA">Canada (CA)</SelectItem>
                             </SelectContent>
                           </Select>
+                          <Select value={fetchYear} onValueChange={setFetchYear}>
+                            <SelectTrigger className="w-[100px]">
+                              <SelectValue placeholder="Year" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="2024">2024</SelectItem>
+                              <SelectItem value="2025">2025</SelectItem>
+                              <SelectItem value="2026">2026</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button onClick={handleFetchExternalHolidays} disabled={isFetchingHolidays} className="bg-slate-800 text-white">
+                            {isFetchingHolidays ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
+                          </Button>
                         </div>
-                      </div>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsHolidayDialogOpen(false)}>Cancel</Button>
-                        <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={handleHolidaySubmit}>
-                          Save Holiday
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                  </>
-                )}
-              </div>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-muted-foreground font-semibold bg-brand-light/40 border-b border-border uppercase">
-                  <tr>
-                    <th className="px-6 py-4 font-medium tracking-wider">Holiday Name</th>
-                    <th className="px-6 py-4 font-medium tracking-wider">Date</th>
-                    <th className="px-6 py-4 font-medium tracking-wider text-center">Type</th>
-                    <th className="px-6 py-4 font-medium tracking-wider text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {(() => {
-                    const filteredHolidays = holidays.filter(h => 
-                      user?.role === 'Admin' || user?.role === 'HR' || 
-                      !h.company || h.company === "All Companies" || h.company === user?.company
-                    );
-                    return filteredHolidays
-                      .slice((holidaysPage - 1) * itemsPerPage, holidaysPage * itemsPerPage)
-                      .map((item) => {
-                        const Icon = getHolidayIcon(item.name);
-                        return (
-                          <tr key={item.id} className="hover:bg-muted/50 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="p-1.5 bg-brand-light rounded-md">
-                                  <Icon className="w-4 h-4 text-brand-teal" />
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className="font-medium text-foreground">{item.name}</span>
-                                  {item.company && <span className="text-[10px] text-muted-foreground uppercase">{item.company}</span>}
-                                </div>
+                        
+                        <div className="flex-1 overflow-y-auto py-2 max-h-[300px]">
+                          {fetchedHolidays.length > 0 ? (
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center px-1 pb-2">
+                                <span className="text-sm font-semibold">{fetchedHolidays.length} Holidays found</span>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="h-7 text-xs"
+                                  onClick={() => {
+                                    if (selectedFetchedHolidays.size === fetchedHolidays.length) {
+                                      setSelectedFetchedHolidays(new Set());
+                                    } else {
+                                      const all = new Set<string>();
+                                      fetchedHolidays.forEach((h: any) => all.add(h.date + '-' + h.name));
+                                      setSelectedFetchedHolidays(all);
+                                    }
+                                  }}
+                                >
+                                  {selectedFetchedHolidays.size === fetchedHolidays.length ? "Deselect All" : "Select All"}
+                                </Button>
                               </div>
-                            </td>
-                            <td className="px-6 py-4 text-foreground font-medium">
-                              {dayjs(item.date).format("MMMM DD, YYYY")}
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <span className={`inline-flex px-2.5 py-1 text-[10px] font-bold rounded-md ${
-                                item.type === 'National' ? 'bg-indigo-50 text-indigo-700' :
-                                item.type === 'Regional' ? 'bg-amber-50 text-amber-700' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>
-                                {item.type}
-                              </span>
-                            </td>
-                             <td className="px-6 py-4 text-right">
-                               {(canEditLeave || canDeleteLeave) && (
-                                 <div className="flex gap-2 justify-end">
-                                   {canEditLeave && (
-                                     <Button variant="ghost" size="icon" className="text-brand-teal h-8 w-8" onClick={() => handleHolidayEdit(item)}>
-                                       <Pencil className="w-4 h-4" />
-                                     </Button>
-                                   )}
-                                   {canDeleteLeave && (
-                                     <Button variant="ghost" size="icon" className="text-red-600 h-8 w-8" onClick={() => handleHolidayDelete(item.id)}>
-                                       <Trash2 className="w-4 h-4" />
-                                     </Button>
-                                   )}
-                                 </div>
-                               )}
-                             </td>
-                          </tr>
-                        );
-                      });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-            <TablePagination 
-              totalItems={holidays.filter(h => 
-                user?.role === 'Admin' || user?.role === 'HR' || 
-                !h.company || h.company === "All Companies" || h.company === user?.company
-              ).length}
-              itemsPerPage={itemsPerPage}
-              currentPage={holidaysPage}
-              onPageChange={setHolidaysPage}
-              itemName="holidays"
-            />
-          </TabsContent>
+                              {fetchedHolidays.map((h, i) => {
+                                const key = h.date + '-' + h.name;
+                                const isSelected = selectedFetchedHolidays.has(key);
+                                return (
+                                  <div key={i} className="flex items-center space-x-3 bg-slate-50 p-2 rounded-md border border-slate-100">
+                                    <Checkbox 
+                                      checked={isSelected}
+                                      onCheckedChange={(checked) => {
+                                        const newSet = new Set(selectedFetchedHolidays);
+                                        if (checked) newSet.add(key);
+                                        else newSet.delete(key);
+                                        setSelectedFetchedHolidays(newSet);
+                                      }}
+                                    />
+                                    <div className="flex flex-col flex-1">
+                                      <span className="text-sm font-semibold">{h.name}</span>
+                                      <span className="text-xs text-slate-500">{dayjs(h.date).format("MMM DD, YYYY")} - {h.type}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-center py-8 text-slate-400 text-sm">
+                              Click Fetch to load holidays
+                            </div>
+                          )}
+                        </div>
+
+                        <DialogFooter className="pt-4 border-t">
+                          <Button variant="outline" onClick={() => setIsFetchHolidaysDialogOpen(false)}>Cancel</Button>
+                          <Button 
+                            className="bg-brand-teal hover:bg-brand-teal-light text-white" 
+                            onClick={handleSaveFetchedHolidays}
+                            disabled={selectedFetchedHolidays.size === 0}
+                          >
+                            Save Selected ({selectedFetchedHolidays.size})
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={isHolidayDialogOpen} onOpenChange={setIsHolidayDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="h-9 bg-brand-teal hover:bg-brand-teal-light text-white font-medium" onClick={() => {
+                          setEditingHolidayId(null);
+                          setHolidayForm({ name: "", date: dayjs(), type: "National", company: "All Companies" });
+                        }}>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Holiday
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[400px]">
+                        <DialogHeader>
+                          <DialogTitle>{editingHolidayId ? 'Edit Public Holiday' : 'Add Public Holiday'}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label>Holiday Name</Label>
+                            <Input 
+                              placeholder="e.g. New Year's Day" 
+                              value={holidayForm.name}
+                              onChange={(e) => setHolidayForm({...holidayForm, name: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2 flex flex-col">
+                            <Label>Date</Label>
+                            <DatePicker 
+                              value={holidayForm.date}
+                              onChange={(date) => setHolidayForm({...holidayForm, date: date || dayjs()})}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Type</Label>
+                            <Select 
+                              value={holidayForm.type}
+                              onValueChange={(val) => setHolidayForm({...holidayForm, type: val})}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="National">National</SelectItem>
+                                <SelectItem value="Regional">Regional</SelectItem>
+                                <SelectItem value="Optional">Optional</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setIsHolidayDialogOpen(false)}>Cancel</Button>
+                          <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={handleHolidaySubmit}>
+                            Save Holiday
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-xs text-muted-foreground font-semibold bg-brand-light/40 border-b border-border uppercase">
+                    <tr>
+                      <th className="px-6 py-4 font-medium tracking-wider">Holiday Name</th>
+                      <th className="px-6 py-4 font-medium tracking-wider">Date</th>
+                      <th className="px-6 py-4 font-medium tracking-wider text-center">Type</th>
+                      <th className="px-6 py-4 font-medium tracking-wider text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {(() => {
+                      const filteredHolidays = holidays.filter(h => 
+                        user?.role === 'Admin' || user?.role === 'HR' || 
+                        !h.company || h.company === "All Companies" || h.company === user?.company
+                      );
+                      return filteredHolidays
+                        .slice((holidaysPage - 1) * itemsPerPage, holidaysPage * itemsPerPage)
+                        .map((item) => {
+                          const Icon = getHolidayIcon(item.name);
+                          return (
+                            <tr key={item.id} className="hover:bg-muted/50 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-1.5 bg-brand-light rounded-md">
+                                    <Icon className="w-4 h-4 text-brand-teal" />
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium text-foreground">{item.name}</span>
+                                    {item.company && <span className="text-[10px] text-muted-foreground uppercase">{item.company}</span>}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-foreground font-medium">
+                                {dayjs(item.date).format("MMMM DD, YYYY")}
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <span className={`inline-flex px-2.5 py-1 text-[10px] font-bold rounded-md ${
+                                  item.type === 'National' ? 'bg-indigo-50 text-indigo-700' :
+                                  item.type === 'Regional' ? 'bg-amber-50 text-amber-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {item.type}
+                                </span>
+                              </td>
+                               <td className="px-6 py-4 text-right">
+                                 {(canEditLeave || canDeleteLeave) && (
+                                   <div className="flex gap-2 justify-end">
+                                     {canEditLeave && (
+                                       <Button variant="ghost" size="icon" className="text-brand-teal h-8 w-8" onClick={() => handleHolidayEdit(item)}>
+                                         <Pencil className="w-4 h-4" />
+                                       </Button>
+                                     )}
+                                     {canDeleteLeave && (
+                                       <Button variant="ghost" size="icon" className="text-red-600 h-8 w-8" onClick={() => handleHolidayDelete(item.id)}>
+                                         <Trash2 className="w-4 h-4" />
+                                       </Button>
+                                     )}
+                                   </div>
+                                 )}
+                               </td>
+                            </tr>
+                          );
+                        });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+              <TablePagination 
+                totalItems={holidays.filter(h => 
+                  user?.role === 'Admin' || user?.role === 'HR' || 
+                  !h.company || h.company === "All Companies" || h.company === user?.company
+                ).length}
+                itemsPerPage={itemsPerPage}
+                currentPage={holidaysPage}
+                onPageChange={setHolidaysPage}
+                itemName="holidays"
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
       
