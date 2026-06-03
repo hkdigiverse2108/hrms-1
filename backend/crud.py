@@ -161,6 +161,37 @@ async def get_employee(db, employee_id: str):
     except Exception:
         return None
 
+async def sync_employee_salary_to_structure(db, employee_id: str, salary_amount: float):
+    if salary_amount is None:
+        return
+    try:
+        existing = await db.salary_structures.find_one({"employeeId": employee_id})
+        if existing:
+            if existing.get("monthlyGross") != salary_amount or existing.get("basic") != salary_amount:
+                await db.salary_structures.update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": {"monthlyGross": salary_amount, "basic": salary_amount}}
+                )
+        else:
+            new_structure = {
+                "employeeId": employee_id,
+                "basic": salary_amount,
+                "hra": 0.0,
+                "conveyance": 0.0,
+                "medical": 0.0,
+                "specialAllowance": 0.0,
+                "pf": 0.0,
+                "esi": 0.0,
+                "professionalTax": 0.0,
+                "tds": 0.0,
+                "securityDeposit": 0.0,
+                "monthlyGross": salary_amount
+            }
+            await db.salary_structures.insert_one(new_structure)
+    except Exception as e:
+        print(f"Error syncing salary to structure: {e}")
+
+
 async def update_employee(db, employee_id: str, employee_update: schemas.EmployeeUpdate):
     # Fetch existing employee first to handle name recalculation
     existing = await db.employees.find_one({"_id": ObjectId(employee_id)})
@@ -197,6 +228,9 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
         {"_id": ObjectId(employee_id)},
         {"$set": update_data}
     )
+    
+    if "salary" in update_data and update_data["salary"] is not None:
+        await sync_employee_salary_to_structure(db, employee_id, update_data["salary"])
     
     updated_doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
     return fix_id(updated_doc)
@@ -422,6 +456,26 @@ async def create_or_update_salary_structure(db, salary: schemas.SalaryStructureC
         {"$set": salary_dict},
         upsert=True
     )
+    
+    # Sync monthlyGross back to the employee's salary field
+    try:
+        emp_filter = {}
+        if len(salary.employeeId) == 24:
+            from bson import ObjectId
+            try:
+                emp_filter = {"_id": ObjectId(salary.employeeId)}
+            except Exception:
+                emp_filter = {"employeeId": salary.employeeId}
+        else:
+            emp_filter = {"employeeId": salary.employeeId}
+            
+        await db.employees.update_one(
+            emp_filter,
+            {"$set": {"salary": salary.monthlyGross}}
+        )
+    except Exception as e:
+        print(f"Error syncing structure monthlyGross back to employee: {e}")
+
     doc = await db.salary_structures.find_one({"employeeId": salary.employeeId})
     return fix_id(doc)
 
@@ -916,6 +970,9 @@ async def create_employee(db, employee: schemas.EmployeeCreate):
     if "_id" in employee_dict:
         employee_dict.pop("_id")
     
+    if employee.salary is not None and employee.salary > 0:
+        await sync_employee_salary_to_structure(db, employee_dict["id"], employee.salary)
+        
     return employee_dict
 
 # Department CRUD
