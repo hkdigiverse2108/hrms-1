@@ -20,6 +20,8 @@ MONGO_URL = os.getenv("MONGO_URL")
 if not MONGO_URL:
     raise ValueError("MONGO_URL environment variable is not set. Please check your .env or .env.server file.")
 
+MONGO_DB = os.getenv("MONGO_DB", "hrms_db")
+
 ALLOW_INVALID_CERTS = os.getenv("ALLOW_INVALID_CERTS", "true").lower() == "true"
 
 client = AsyncIOMotorClient(
@@ -252,7 +254,7 @@ class TimestampedDatabase:
         return item
 
 # Wrap database with dynamic timestamp proxy
-db = TimestampedDatabase(client.hrms_db)
+db = TimestampedDatabase(client[MONGO_DB])
 
 async def get_db():
     yield db
