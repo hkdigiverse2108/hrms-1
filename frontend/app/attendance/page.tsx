@@ -500,9 +500,7 @@ export default function AttendancePage() {
           date: recoveryForm.date,
           late_minutes: 0, // Not used in this version
           recovery_minutes: 0, // Not used in this version
-          reason: recoveryForm.type === 'break' 
-            ? `Break-In: ${recoveryForm.recordedBreakIn}, Actual Break-Out: ${recoveryForm.actualBreakOut}. ${recoveryForm.reason}`
-            : `Forgot Punch-Out. Actual Punch-Out: ${recoveryForm.actualPunchOut}. ${recoveryForm.reason}`,
+          reason: `Break-In: ${recoveryForm.recordedBreakIn}, Actual Break-Out: ${recoveryForm.actualBreakOut}. ${recoveryForm.reason}`,
           status: "pending"
         })
       });
@@ -616,25 +614,6 @@ export default function AttendancePage() {
               </DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-2 flex flex-col">
-                  <label className="text-sm font-medium text-foreground">Recovery Type</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button 
-                      variant={recoveryForm.type === 'break' ? 'default' : 'outline'}
-                      className={recoveryForm.type === 'break' ? 'bg-brand-teal text-white' : ''}
-                      onClick={() => setRecoveryForm({...recoveryForm, type: 'break'})}
-                    >
-                      Break Correction
-                    </Button>
-                    <Button 
-                      variant={recoveryForm.type === 'punch-out' ? 'default' : 'outline'}
-                      className={recoveryForm.type === 'punch-out' ? 'bg-brand-teal text-white' : ''}
-                      onClick={() => setRecoveryForm({...recoveryForm, type: 'punch-out'})}
-                    >
-                      Punch-Out Fix
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2 flex flex-col">
                   <label className="text-sm font-medium text-foreground">Date of Record</label>
                   <DatePicker 
                     className="w-full h-9 hover:border-brand-teal focus-within:border-brand-teal"
@@ -643,7 +622,6 @@ export default function AttendancePage() {
                     onChange={(date) => setRecoveryForm({...recoveryForm, date: date ? date.format("YYYY-MM-DD") : ""})}
                   />
                 </div>
-                {recoveryForm.type === 'break' ? (
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2 flex flex-col">
                       <label className="text-sm font-medium text-foreground">Recorded Break-In</label>
@@ -668,19 +646,6 @@ export default function AttendancePage() {
                       />
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-2 flex flex-col">
-                    <label className="text-sm font-medium text-foreground">Actual Punch-Out Time</label>
-                    <TimePicker 
-                      className="w-full h-9" 
-                      format="hh:mm:ss A" 
-                      use12Hours 
-                      showNow={false}
-                      value={recoveryForm.actualPunchOut ? dayjs(`2000-01-01 ${recoveryForm.actualPunchOut}`, "YYYY-MM-DD HH:mm:ss") : null}
-                      onChange={(time) => setRecoveryForm({...recoveryForm, actualPunchOut: time ? time.format("HH:mm:ss") : ""})}
-                    />
-                  </div>
-                )}
                 <div className="space-y-2 flex flex-col">
                   <label className="text-sm font-medium text-foreground">Reason / Explanation</label>
                   <textarea 
