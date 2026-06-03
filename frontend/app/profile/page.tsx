@@ -479,28 +479,32 @@ export default function ProfilePage() {
                       onEditInitiate={handleEditClick}
                       focusedField={focusedField}
                     />
-                    <ProfileField 
-                      label="Aadhar Card Number" 
-                      id="aadharCard" 
-                      value={isEditing ? formData.aadharCard : user.aadharCard} 
-                      isEditing={isEditing} 
-                      onChange={(v) => handleFieldChange('aadharCard', v)} 
-                      disabled={!isAdmin} 
-                      icon={CreditCard} 
-                      onEditInitiate={handleEditClick}
-                      focusedField={focusedField}
-                    />
-                    <ProfileField 
-                      label="PAN Card Number" 
-                      id="panCard" 
-                      value={isEditing ? formData.panCard : user.panCard} 
-                      isEditing={isEditing} 
-                      onChange={(v) => handleFieldChange('panCard', v)} 
-                      disabled={!isAdmin} 
-                      icon={CreditCard} 
-                      onEditInitiate={handleEditClick}
-                      focusedField={focusedField}
-                    />
+                    {!isAdmin && (
+                      <>
+                        <ProfileField 
+                          label="Aadhar Card Number" 
+                          id="aadharCard" 
+                          value={isEditing ? formData.aadharCard : user.aadharCard} 
+                          isEditing={isEditing} 
+                          onChange={(v) => handleFieldChange('aadharCard', v)} 
+                          disabled={!isAdmin} 
+                          icon={CreditCard} 
+                          onEditInitiate={handleEditClick}
+                          focusedField={focusedField}
+                        />
+                        <ProfileField 
+                          label="PAN Card Number" 
+                          id="panCard" 
+                          value={isEditing ? formData.panCard : user.panCard} 
+                          isEditing={isEditing} 
+                          onChange={(v) => handleFieldChange('panCard', v)} 
+                          disabled={!isAdmin} 
+                          icon={CreditCard} 
+                          onEditInitiate={handleEditClick}
+                          focusedField={focusedField}
+                        />
+                      </>
+                    )}
                   </div>
                 )}
 
