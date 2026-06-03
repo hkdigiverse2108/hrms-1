@@ -1,6 +1,15 @@
 from pymongo import MongoClient
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from auth import get_password_hash
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+for env_file in [".env.server", ".env"]:
+    env_path = BASE_DIR / env_file
+    if env_path.exists():
+        load_dotenv(dotenv_path=str(env_path))
+        break
 
 MONGO_URL = os.getenv("MONGO_URL")
 if not MONGO_URL:
