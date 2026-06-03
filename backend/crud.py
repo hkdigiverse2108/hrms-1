@@ -259,6 +259,7 @@ async def get_dashboard_stats(db):
     doc = await db.dashboard_stats.find_one()
     if not doc:
         doc = {
+            "id": "default",
             "totalEmployees": 0,
             "presentToday": 0,
             "onLeave": 0,
@@ -301,6 +302,9 @@ async def get_dashboard_stats(db):
     doc["onLeave"] = on_leave
     doc["pendingLeaves"] = pending_leaves
     doc["lateToday"] = late_today
+    doc["newJoinees"] = doc.get("newJoinees", 0)
+    doc["upcomingBirthdays"] = doc.get("upcomingBirthdays", 0)
+    doc["upcomingAnniversaries"] = doc.get("upcomingAnniversaries", 0)
     
     return fix_id(doc)
 
