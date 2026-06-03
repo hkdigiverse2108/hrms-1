@@ -37,10 +37,12 @@ import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function EmployeeAttendanceListPage() {
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+  const { confirm } = useConfirm();
   const formatToHhMm = (totalMinutes: number) => {
     if (!totalMinutes || totalMinutes <= 0) return "-";
     const h = Math.floor(totalMinutes / 60);
@@ -236,7 +238,13 @@ export default function EmployeeAttendanceListPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this record? This action cannot be undone.")) return;
+    const isConfirmed = await confirm({
+      title: "Delete Record",
+      message: "Are you sure you want to delete this record? This action cannot be undone.",
+      destructive: true,
+      confirmText: "Delete"
+    });
+    if (!isConfirmed) return;
     setIsDeleting(true);
     try {
       const res = await fetch(`${API_URL}/attendance/${id}`, {

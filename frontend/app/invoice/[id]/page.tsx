@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 import { API_URL } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
@@ -52,6 +53,7 @@ export default function ViewInvoicePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const { confirm } = useConfirm();
 
   useEffect(() => {
     // Dynamic import/load of external PDF dependencies
@@ -197,7 +199,12 @@ export default function ViewInvoicePage() {
 
   const handleConvertToTaxInvoice = async () => {
     if (!invoice) return;
-    if (!window.confirm("Are you sure you want to convert this Proforma Invoice to a Tax Invoice? This will generate a new Tax Invoice number.")) return;
+    const isConfirmed = await confirm({
+      title: "Convert to Tax Invoice",
+      message: "Are you sure you want to convert this Proforma Invoice to a Tax Invoice? This will generate a new Tax Invoice number.",
+      confirmText: "Convert"
+    });
+    if (!isConfirmed) return;
     
     setIsUpdatingStatus(true);
     try {

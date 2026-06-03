@@ -23,11 +23,14 @@ import {
 import { Key } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EmployeeModal } from "@/components/hrms/employee-modal";
+import { useConfirm } from "@/context/ConfirmContext";
+import { toast } from "sonner";
 
 export default function EmployeeListPage() {
   const router = useRouter();
   const { data: apiData } = useApi();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+  const { confirm } = useConfirm();
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -120,7 +123,7 @@ export default function EmployeeListPage() {
       doc.save(`Employee_Directory_${new Date().toISOString().slice(0,10)}.pdf`)
     } catch (err) {
       console.error("PDF Export error:", err)
-      alert("Failed to export PDF file.")
+      toast.error("Failed to export PDF file.")
     } finally {
       setIsExporting(false)
     }
@@ -157,7 +160,14 @@ export default function EmployeeListPage() {
   }, []);
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`)) {
+    const isConfirmed = await confirm({
+      title: "Delete Employee",
+      message: `Are you sure you want to delete ${name}? This action cannot be undone.`,
+      destructive: true,
+      confirmText: "Delete"
+    });
+    
+    if (!isConfirmed) {
       return;
     }
 
@@ -168,13 +178,14 @@ export default function EmployeeListPage() {
 
       if (response.ok) {
         setEmployees(employees.filter(emp => emp.id !== id));
+        toast.success("Employee deleted successfully");
       } else {
         const data = await response.json();
-        alert(data.detail || "Failed to delete employee");
+        toast.error(data.detail || "Failed to delete employee");
       }
     } catch (err) {
       console.error("Delete error:", err);
-      alert("An error occurred while deleting the employee");
+      toast.error("An error occurred while deleting the employee");
     }
   };
 
@@ -190,13 +201,14 @@ export default function EmployeeListPage() {
         const newEmployee = await response.json();
         setEmployees([newEmployee, ...employees]);
         setIsAddModalOpen(false);
+        toast.success("Employee added successfully");
       } else {
         const errorData = await response.json();
-        alert(errorData.detail || "Failed to add employee");
+        toast.error(errorData.detail || "Failed to add employee");
       }
     } catch (err) {
       console.error("Add error:", err);
-      alert("An error occurred while adding the employee");
+      toast.error("An error occurred while adding the employee");
     }
   };
 

@@ -25,6 +25,7 @@ import { useApi } from "@/hooks/useApi";
 import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -38,6 +39,7 @@ const getStatusBadge = (status: string) => {
 export default function ResourceManagementPage() {
   const { user, isLoading: userLoading } = useUser();
   const { data, isLoading, refresh: apiRefresh } = useApi();
+  const { confirm } = useConfirm();
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -98,7 +100,13 @@ export default function ResourceManagementPage() {
   };
 
   const handleDeleteResource = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this resource?")) return;
+    const isConfirmed = await confirm({
+      title: "Delete Resource",
+      message: "Are you sure you want to delete this resource?",
+      destructive: true,
+      confirmText: "Delete"
+    });
+    if (!isConfirmed) return;
 
     try {
       const response = await fetch(`${API_URL}/assets/${id}`, {

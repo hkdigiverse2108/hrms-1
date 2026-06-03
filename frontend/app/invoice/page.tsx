@@ -37,6 +37,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const getStatusStyles = (status: string) => {
   switch (status) {
@@ -64,6 +65,7 @@ export default function AllInvoicesPage() {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [taxTypeFilter, setTaxTypeFilter] = useState("All");
+  const { confirm } = useConfirm();
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -95,9 +97,13 @@ export default function AllInvoicesPage() {
   };
 
   const handleDelete = async (id: string, invoiceNumber: string) => {
-    if (!window.confirm(`Are you sure you want to delete invoice ${invoiceNumber}? This action cannot be undone.`)) {
-      return;
-    }
+    const isConfirmed = await confirm({
+      title: "Delete Invoice",
+      message: `Are you sure you want to delete invoice ${invoiceNumber}? This action cannot be undone.`,
+      destructive: true,
+      confirmText: "Delete"
+    });
+    if (!isConfirmed) return;
 
     try {
       const res = await fetch(`${API_URL}/invoices/${id}`, {
@@ -138,7 +144,12 @@ export default function AllInvoicesPage() {
   };
 
   const handleConvertToTaxInvoice = async (id: string) => {
-    if (!window.confirm("Are you sure you want to convert this Proforma Invoice to a Tax Invoice? This will assign a new Tax Invoice number.")) return;
+    const isConfirmed = await confirm({
+      title: "Convert to Tax Invoice",
+      message: "Are you sure you want to convert this Proforma Invoice to a Tax Invoice? This will assign a new Tax Invoice number.",
+      confirmText: "Convert"
+    });
+    if (!isConfirmed) return;
     
     try {
       const res = await fetch(`${API_URL}/invoices/${id}/convert-to-tax`, {
