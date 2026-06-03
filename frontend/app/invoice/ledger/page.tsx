@@ -11,11 +11,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/common/PageHeader";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
-import { exportToCSV } from "@/lib/export-utils";
+import { exportToPDF } from "@/lib/export-utils";
 
 export default function InvoiceLedgerPage() {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -27,6 +34,9 @@ export default function InvoiceLedgerPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState(""); // YYYY-MM format
+  
+  // Dialog State
+  const [selectedGroup, setSelectedGroup] = useState<{name: string, invoices: any[]} | null>(null);
 
   useEffect(() => {
     fetchInvoices();
@@ -70,8 +80,12 @@ export default function InvoiceLedgerPage() {
 
   // Aggregation Logic
   const aggregatedData = useMemo(() => {
-    // 1. Filter by Date Range
+    // 1. Filter by Date Range and exclude Proforma for client ledger
     const filtered = invoices.filter((invoice) => {
+      if (groupBy === "client" && invoice.invoiceType === "Proforma Invoice") {
+        return false;
+      }
+
       if (dateFrom || dateTo) {
         // Need to parse issueDate robustly. The DB stores it as "MMM DD, YYYY" or "YYYY-MM-DD".
         const issueDate = dayjs(invoice.issueDate);
@@ -91,6 +105,7 @@ export default function InvoiceLedgerPage() {
       paidAmount: number;
       pendingAmount: number;
       overdueAmount: number;
+      invoices: any[];
     }>();
 
     filtered.forEach(invoice => {
@@ -109,11 +124,13 @@ export default function InvoiceLedgerPage() {
           paidAmount: 0,
           pendingAmount: 0,
           overdueAmount: 0,
+          invoices: [],
         });
       }
 
       const group = map.get(key)!;
       group.count += 1;
+      group.invoices.push(invoice);
       const amt = invoice.total || 0;
       group.totalAmount += amt;
 
@@ -150,7 +167,25 @@ export default function InvoiceLedgerPage() {
           <Button 
             variant="outline" 
             className="h-10 px-4 text-sm font-medium bg-white"
-            onClick={() => exportToCSV(aggregatedData, 'invoice_ledger')}
+            onClick={() => {
+              const exportData = aggregatedData.map(row => ({
+                "Group Name": row.name,
+                "Invoices Count": row.count,
+                "Total Amount": `Rs. ${row.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                "Total Paid": `Rs. ${row.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                "Total Pending": `Rs. ${row.pendingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                "Total Overdue": `Rs. ${row.overdueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              }));
+              exportData.push({
+                "Group Name": "GRAND TOTAL",
+                "Invoices Count": aggregatedData.reduce((acc, curr) => acc + curr.count, 0),
+                "Total Amount": `Rs. ${grandTotals.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                "Total Paid": `Rs. ${grandTotals.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                "Total Pending": `Rs. ${grandTotals.pendingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                "Total Overdue": `Rs. ${grandTotals.overdueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              });
+              exportToPDF(exportData, 'invoice_ledger');
+            }}
             disabled={aggregatedData.length === 0}
           >
             <Download className="w-4 h-4 mr-2" />
@@ -268,7 +303,12 @@ export default function InvoiceLedgerPage() {
                   {aggregatedData.map((row, idx) => (
                     <tr key={idx} className="hover:bg-gray-50/50 transition-colors bg-white">
                       <td className="px-6 py-4 font-bold text-slate-800">
-                        {row.name}
+                        <button 
+                          onClick={() => setSelectedGroup({ name: row.name, invoices: row.invoices })}
+                          className="text-brand-teal hover:underline text-left outline-none"
+                        >
+                          {row.name}
+                        </button>
                       </td>
                       <td className="px-6 py-4 font-bold text-slate-500 text-center">
                         {row.count}
@@ -314,6 +354,86 @@ export default function InvoiceLedgerPage() {
           </table>
         </div>
       </div>
+
+      {/* Detailed Ledger Dialog */}
+      <Dialog open={!!selectedGroup} onOpenChange={(open) => !open && setSelectedGroup(null)}>
+        <DialogContent className="max-w-4xl sm:max-w-4xl md:max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-gray-50">
+          <DialogHeader className="p-6 pb-4 border-b border-border bg-white shrink-0">
+            <div className="flex items-start justify-between gap-4 pr-6">
+              <div>
+                <DialogTitle className="text-xl font-black text-slate-800 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-brand-teal" />
+                  Ledger details for {selectedGroup?.name}
+                </DialogTitle>
+                <DialogDescription className="font-medium text-slate-500 mt-1">
+                  Showing {selectedGroup?.invoices.length} invoices.
+                </DialogDescription>
+              </div>
+              {selectedGroup?.invoices && selectedGroup.invoices.length > 0 && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    const exportData = selectedGroup.invoices.map(inv => ({
+                      "Invoice Number": inv.invoiceNumber,
+                      "Date of Issue": inv.issueDate,
+                      "Status": inv.status || "Pending",
+                      "Total Amount": `Rs. ${(inv.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    }));
+                    const totalAmount = selectedGroup.invoices.reduce((acc, inv) => acc + (inv.total || 0), 0);
+                    exportData.push({
+                      "Invoice Number": "GRAND TOTAL",
+                      "Date of Issue": "-",
+                      "Status": "-",
+                      "Total Amount": `Rs. ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    });
+                    exportToPDF(exportData, `ledger_${selectedGroup.name.replace(/\s+/g, '_')}`);
+                  }}
+                  className="h-9 font-bold text-brand-teal border-brand-teal/20 hover:bg-brand-teal/5"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download PDF
+                </Button>
+              )}
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+              <table className="w-full text-sm text-left whitespace-nowrap">
+                <thead className="text-[11px] text-muted-foreground font-bold border-b border-border bg-gray-50/50 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-4">Invoice No.</th>
+                    <th className="px-6 py-4">Date</th>
+                    <th className="px-6 py-4 text-center">Status</th>
+                    <th className="px-6 py-4 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {selectedGroup?.invoices.sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()).map(inv => (
+                    <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-700">{inv.invoiceNumber}</td>
+                      <td className="px-6 py-4 font-medium text-slate-600">{inv.issueDate}</td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={cn(
+                          "px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide",
+                          inv.status === "Paid" ? "bg-emerald-100 text-emerald-700" :
+                          inv.status === "Overdue" ? "bg-red-100 text-red-700" :
+                          "bg-amber-100 text-amber-700"
+                        )}>
+                          {inv.status || "Pending"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-black text-slate-800 text-right">
+                        ₹ {(inv.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
