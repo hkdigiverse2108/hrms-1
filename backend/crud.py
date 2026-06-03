@@ -947,14 +947,19 @@ async def run_payroll_processing(db, month: str, year: int):
     return payroll_results
 
 async def create_employee(db, employee: schemas.EmployeeCreate):
-    # Atomic counter to prevent duplicate IDs under concurrent requests
-    counter = await db.counters.find_one_and_update(
-        {"_id": "employee_id"},
-        {"$inc": {"seq": 1}},
-        upsert=True,
-        return_document=True
-    )
-    next_id = f"EMP{str(counter['seq']).zfill(3)}"
+    is_admin = employee.role and employee.role.lower() == "admin"
+    
+    if not is_admin:
+        # Atomic counter to prevent duplicate IDs under concurrent requests
+        counter = await db.counters.find_one_and_update(
+            {"_id": "employee_id"},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True
+        )
+        next_id = f"EMP{str(counter['seq']).zfill(3)}"
+    else:
+        next_id = employee.employeeId
     
     # Calculate full name
     name = f"{employee.firstName} {employee.lastName}"
@@ -963,7 +968,13 @@ async def create_employee(db, employee: schemas.EmployeeCreate):
     
     employee_dict = employee.dict()
     employee_dict["name"] = name
-    employee_dict["employeeId"] = next_id # Override frontend generation
+    
+    if next_id:
+        employee_dict["employeeId"] = next_id # Override frontend generation unless it's admin with no ID provided
+    else:
+        # If admin and no ID provided, just don't set or keep whatever is in employee.employeeId
+        pass
+
     
     result = await db.employees.insert_one(employee_dict)
     employee_dict["id"] = str(result.inserted_id)
