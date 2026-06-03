@@ -37,5 +37,4 @@ async def main():
     print(f"\nMigration complete. Total records migrated: {migrated_count}")
 
 if __name__ == "__main__":
-    os.environ["MONGO_URL"] = "mongodb+srv://HK_Digiverse:HK%40Digiverse%40123@cluster0.lcbyqbq.mongodb.net/hrms_db?retryWrites=true&w=majority&appName=Cluster0"
     asyncio.run(main())

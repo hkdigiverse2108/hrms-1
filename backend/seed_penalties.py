@@ -2,7 +2,9 @@ import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 
-MONGODB_URL = "mongodb+srv://HK_Digiverse:HK%40Digiverse%40123@cluster0.lcbyqbq.mongodb.net/hrms_db?retryWrites=true&w=majority&appName=Cluster0"
+MONGODB_URL = os.getenv("MONGO_URL")
+if not MONGODB_URL:
+    raise ValueError("MONGO_URL environment variable is not set. Please check your .env or .env.server file.")
 client = AsyncIOMotorClient(MONGODB_URL)
 db = client.hrms_db
 
