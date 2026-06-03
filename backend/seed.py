@@ -1,13 +1,24 @@
 from pymongo import MongoClient
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+for env_file in [".env.server", ".env"]:
+    env_path = BASE_DIR / env_file
+    if env_path.exists():
+        load_dotenv(dotenv_path=str(env_path))
+        break
 
 MONGO_URL = os.getenv("MONGO_URL")
 if not MONGO_URL:
     raise ValueError("MONGO_URL environment variable is not set. Please check your .env or .env.server file.")
 
+MONGO_DB = os.getenv("MONGO_DB", "hrms_db")
+
 def seed():
     client = MongoClient(MONGO_URL)
-    db = client.hrms_db
+    db = client[MONGO_DB]
     
     # Clear existing data
     db.employees.delete_many({})

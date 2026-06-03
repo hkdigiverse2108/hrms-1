@@ -5,8 +5,10 @@ import os
 MONGODB_URL = os.getenv("MONGO_URL")
 if not MONGODB_URL:
     raise ValueError("MONGO_URL environment variable is not set. Please check your .env or .env.server file.")
+
+MONGO_DB = os.getenv("MONGO_DB", "hrms_db")
 client = AsyncIOMotorClient(MONGODB_URL)
-db = client.hrms_db
+db = client[MONGO_DB]
 
 PENALTIES = [
     {"name": "Language rule violation", "amount": 10},
