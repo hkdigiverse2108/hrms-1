@@ -220,6 +220,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     const invoiceChildren: MenuItem[] = [];
     if (isAdmin || checkPermission('invoice', 'canView')) {
       invoiceChildren.push(getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"));
+      invoiceChildren.push(getItem(<Link href="/invoice/ledger">Invoice Ledger</Link>, "/invoice/ledger"));
       invoiceChildren.push(getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"));
       invoiceChildren.push(getItem(<Link href="/invoice/create?type=Proforma">Create Proforma Invoice</Link>, "/invoice/create?type=Proforma"));
     }
