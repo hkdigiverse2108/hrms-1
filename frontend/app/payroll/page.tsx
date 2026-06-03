@@ -297,10 +297,12 @@ export default function PayrollPage() {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" onClick={() => exportToCSV(finalPayroll, `payroll_${selectedMonth}_${selectedYear}`)}>
-          <Download className="mr-2 h-4 w-4" />
-          Export PDF
-        </Button>
+        {isAdminOrHR && (
+          <Button variant="outline" onClick={() => exportToCSV(finalPayroll, `payroll_${selectedMonth}_${selectedYear}`)}>
+            <Download className="mr-2 h-4 w-4" />
+            Export PDF
+          </Button>
+        )}
         <Button 
           className="bg-brand-teal hover:bg-brand-teal/90" 
           onClick={handleRunPayroll} 
