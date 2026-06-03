@@ -1507,3 +1507,26 @@ class Referral(ReferralBase):
     id: str
     class Config:
         from_attributes = True
+
+# Document Templates
+class DocumentTemplateBase(BaseModel):
+    template_id: str
+    name: str
+    description: Optional[str] = None
+    fields: List[str] = []
+    content: str
+
+class DocumentTemplateCreate(DocumentTemplateBase):
+    pass
+
+class DocumentTemplateUpdate(BaseModel):
+    template_id: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    fields: Optional[List[str]] = None
+    content: Optional[str] = None
+
+class DocumentTemplate(DocumentTemplateBase):
+    id: str
+    class Config:
+        from_attributes = True

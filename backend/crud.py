@@ -4124,4 +4124,32 @@ async def delete_referral(db, referral_id: str):
     await db.referrals.delete_one({"_id": ObjectId(referral_id)})
     return True
 
+# Document Templates CRUD
+async def create_document_template(db, template: schemas.DocumentTemplateCreate):
+    template_dict = template.dict()
+    result = await db.document_templates.insert_one(template_dict)
+    doc = await db.document_templates.find_one({"_id": result.inserted_id})
+    return fix_id(doc)
+
+async def get_document_templates(db, skip: int = 0, limit: int = 100):
+    cursor = db.document_templates.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def get_document_template(db, template_id: str):
+    doc = await db.document_templates.find_one({"_id": ObjectId(template_id)})
+    if doc:
+        return fix_id(doc)
+    return None
+
+async def update_document_template(db, template_id: str, template_update: schemas.DocumentTemplateUpdate):
+    update_data = template_update.dict(exclude_unset=True)
+    if update_data:
+        await db.document_templates.update_one({"_id": ObjectId(template_id)}, {"$set": update_data})
+    doc = await db.document_templates.find_one({"_id": ObjectId(template_id)})
+    return fix_id(doc)
+
+async def delete_document_template(db, template_id: str):
+    result = await db.document_templates.delete_one({"_id": ObjectId(template_id)})
+    return result.deleted_count > 0
 
