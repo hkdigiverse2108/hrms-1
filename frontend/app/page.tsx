@@ -442,7 +442,7 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Here's what's happening in your organization today."
       >
-        {(isEmployee || isHR || userRole === "team leader") && (
+        {(!isAdmin) && (
           <Button 
             onClick={() => setIsRequestDialogOpen(true)}
             className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9 px-4 rounded-lg shadow-sm flex items-center gap-2"
@@ -457,7 +457,7 @@ export default function DashboardPage() {
 
       {isHR && <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />}
 
-      {(isEmployee || isHR || userRole === "team leader") && (
+      {(!isAdmin) && (
         <EmployeeView 
           user={user} 
           attendanceStatus={attendanceStatus} 
