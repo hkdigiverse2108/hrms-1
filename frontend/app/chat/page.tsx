@@ -751,7 +751,7 @@ export default function ChatPage() {
       const activeChat = selectedChatRef.current;
       const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
       
-      const isGroupMsg = data.groupId !== null;
+      const isGroupMsg = !!data.groupId;
       const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
       
       if (activeChatId === messageChatId) {
