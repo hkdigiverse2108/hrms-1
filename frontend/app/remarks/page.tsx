@@ -823,19 +823,21 @@ export default function RemarksPage() {
             )}
           </div>
 
-          <Button 
-            variant="outline" 
-            className="w-full xl:w-auto shadow-sm font-medium text-foreground bg-white hover:bg-gray-50 border-border"
-            onClick={handleExportPDF}
-            disabled={isExporting}
-          >
-            {isExporting ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin text-brand-teal" />
-            ) : (
-              <Download className="w-4 h-4 mr-2 text-brand-teal" />
-            )}
-            Export PDF
-          </Button>
+          {canManageRemarks && (
+            <Button 
+              variant="outline" 
+              className="w-full xl:w-auto shadow-sm font-medium text-foreground bg-white hover:bg-gray-50 border-border"
+              onClick={handleExportPDF}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin text-brand-teal" />
+              ) : (
+                <Download className="w-4 h-4 mr-2 text-brand-teal" />
+              )}
+              Export PDF
+            </Button>
+          )}
 
         </div>
         
