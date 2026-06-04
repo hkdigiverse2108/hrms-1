@@ -789,6 +789,37 @@ async def delete_project(project_id: str, db=Depends(get_db)):
     return {"message": "Project deleted successfully"}
 
 # WM Task Endpoints
+# General Task Endpoints
+@app.get("/tasks", response_model=List[schemas.Task])
+async def get_tasks_api(userId: str = None, role: str = None, skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_tasks(db, userId, role, skip, limit)
+
+@app.post("/tasks", response_model=schemas.Task)
+async def create_task_api(task: schemas.TaskCreate, db=Depends(get_db)):
+    new_task = await crud.create_task(db, task)
+    await ws_manager.broadcast_all("task_update", {"taskId": str(new_task.id)})
+    return new_task
+
+@app.put("/tasks/{task_id}", response_model=schemas.Task)
+async def update_task_api(task_id: str, task: schemas.TaskUpdate, db=Depends(get_db)):
+    updated = await crud.update_task(db, task_id, task)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Task not found")
+    await ws_manager.broadcast_all("task_update", {"taskId": task_id})
+    return updated
+
+@app.delete("/tasks/{task_id}")
+async def delete_task_api(task_id: str, db=Depends(get_db)):
+    success = await crud.delete_task(db, task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    await ws_manager.broadcast_all("task_update", {"taskId": task_id})
+    return {"message": "Task deleted successfully"}
+
+@app.get("/tasks/{task_id}/activities")
+async def read_task_activities(task_id: str, db=Depends(get_db)):
+    return await crud.get_task_activities(db, task_id)
+
 @app.get("/wm-tasks", response_model=List[schemas.WMTask])
 async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_wm_tasks(db, userId=userId, role=role, skip=skip, limit=limit)

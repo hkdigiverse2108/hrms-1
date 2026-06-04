@@ -124,14 +124,11 @@ def run_app():
     
     # HRMS-1 backend is in 'backend' folder, entry is main.py
     backend_dir = Path(__file__).parent / "backend"
-    backend_cmd = [python_exe, "-m", "uvicorn", "main:app", "--host", app_host, "--port", backend_port]
+    backend_cmd = [python_exe, "-m", "uvicorn", "main:app", "--reload", "--host", app_host, "--port", backend_port]
     
     # Add PYTHONPATH so backend modules can be imported correctly
     backend_env = os.environ.copy()
     backend_env["PYTHONPATH"] = str(backend_dir)
-
-    if os.environ.get("DEBUG", "False").lower() == "true":
-        backend_cmd.append("--reload")
 
     print(f"\n-> Starting Backend  (FastAPI on port {backend_port})")
     print(f"  {' '.join(backend_cmd)}")

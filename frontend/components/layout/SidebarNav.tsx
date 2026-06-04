@@ -215,6 +215,14 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       ));
     }
 
+    if (user) {
+      menuItems.push(getItem(
+        <Link href="/task">Tasks</Link>,
+        "/task",
+        <ClipboardList className="w-5 h-5" />
+      ));
+    }
+
     if (isAdmin || workManagementChildren.length > 0) {
       menuItems.push(getItem("Work Management", "work-management", <Briefcase className="w-5 h-5" />, workManagementChildren));
     }
