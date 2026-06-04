@@ -577,15 +577,7 @@ export default function ChatPage() {
     }
   };
 
-  const markAsSeen = async (chatId?: string) => {
-    const targetId = chatId || selectedChat?.id;
-    if (!targetId || !user) return;
-    try {
-      await fetch(`${API_URL}/chat/mark-seen/${targetId}/${user.id}`, { method: 'POST' });
-    } catch (err) {
-      console.error("Error marking as seen:", err);
-    }
-  };
+
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -713,7 +705,7 @@ export default function ChatPage() {
         // If there are unread messages from others, mark them seen
         const hasUnread = marked.some((m: any) => !m.isMe && (!m.seenBy || !m.seenBy.includes(user.id)));
         if (hasUnread) {
-          markAsSeen();
+          markAsSeen(selectedChat.id || selectedChat.employeeId);
         }
       }
     } catch (err) {
