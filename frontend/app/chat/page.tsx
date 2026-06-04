@@ -2059,6 +2059,7 @@ export default function ChatPage() {
         !selectedChat && "hidden md:flex"
       )}>
         {selectedChat ? (
+          !showRightSidebar ? (
           <>
             {/* Chat Header */}
             <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
@@ -2863,6 +2864,7 @@ export default function ChatPage() {
               </form>
             </div>
           </>
+          ) : null
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-4">
             <div className="w-20 h-20 rounded-full bg-brand-teal/10 flex items-center justify-center">
@@ -2877,14 +2879,15 @@ export default function ChatPage() {
 
         {/* Right Sidebar - Shared Files Repository */}
         {selectedChat && showRightSidebar && (
-          <div className="w-80 border-l border-border bg-gray-50/30 flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
-              <h3 className="font-bold text-slate-800">Shared Files</h3>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setShowRightSidebar(false)}>
-                <X className="w-4 h-4" />
+          <div className="flex-1 w-full bg-white flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+            <div className="h-[88px] border-b border-border px-6 flex items-center gap-4 bg-white shrink-0">
+              <Button variant="ghost" size="sm" className="h-8 rounded-full text-brand-teal hover:text-brand-teal-light hover:bg-brand-teal/10" onClick={() => setShowRightSidebar(false)}>
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Back to Chat
               </Button>
+              <h3 className="font-bold text-slate-800">Shared Files Repository</h3>
             </div>
-            <ScrollArea className="flex-1">
+            <div className="flex-1 overflow-y-auto">
               <div className="p-4 space-y-6">
                 {chatFiles.length > 0 ? (
                   // Group files by date
@@ -2943,7 +2946,7 @@ export default function ChatPage() {
                   </div>
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </div>
         )}
       </div>
