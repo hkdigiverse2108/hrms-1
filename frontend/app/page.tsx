@@ -1237,7 +1237,8 @@ function EventsSidebar({ user }: { user: any }) {
              } p-3 rounded-xl`}>
                {event.type === 'meeting' ? <CalendarIcon className="w-5 h-5" /> : 
                 event.type === 'discussion' ? <MessageSquare className="w-5 h-5" /> : 
-                <Cake className="w-5 h-5" />}
+                event.type === 'birthday' ? <Cake className="w-5 h-5" /> : 
+                <CalendarIcon className="w-5 h-5" />}
              </div>
              <div className="flex-1 min-w-0">
                <h4 className="font-bold text-[14px] text-[#111827] truncate">{event.title}</h4>

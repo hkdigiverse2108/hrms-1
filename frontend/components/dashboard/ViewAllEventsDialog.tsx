@@ -80,13 +80,14 @@ export function ViewAllEventsDialog({
                    return (
                      <div key={event.id || i} className={`group p-4 rounded-xl bg-white border border-gray-100 hover:border-brand-teal/20 transition-all shadow-sm flex items-center gap-4 ${isPast ? 'opacity-60' : ''}`}>
                        <div className={`${
-                         event.type === 'meeting' ? 'bg-[#F0FDF4] text-green-600' : 
-                         event.type === 'discussion' ? 'bg-[#EFF6FF] text-blue-600' : 
-                         'bg-[#FFF7ED] text-orange-600'
-                       } p-3 rounded-xl`}>
-                         {event.type === 'meeting' ? <CalendarIcon className="w-5 h-5" /> : 
-                          event.type === 'discussion' ? <MessageSquare className="w-5 h-5" /> : 
-                          <Cake className="w-5 h-5" />}
+                          event.type === 'meeting' ? 'bg-[#F0FDF4] text-green-600' : 
+                          event.type === 'discussion' ? 'bg-[#EFF6FF] text-blue-600' : 
+                          'bg-[#FFF7ED] text-orange-600'
+                        } p-3 rounded-xl`}>
+                          {event.type === 'meeting' ? <CalendarIcon className="w-5 h-5" /> : 
+                           event.type === 'discussion' ? <MessageSquare className="w-5 h-5" /> : 
+                           event.type === 'birthday' ? <Cake className="w-5 h-5" /> : 
+                           <CalendarIcon className="w-5 h-5" />}
                        </div>
                        <div className="flex-1 min-w-0">
                          <h4 className="font-bold text-[14px] text-[#111827] truncate">{event.title}</h4>
