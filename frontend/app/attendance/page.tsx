@@ -881,13 +881,13 @@ export default function AttendancePage() {
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
                   <span className="text-xs font-medium text-muted-foreground">
-                    {selectedEmployeeId === "all" ? "Total Attendance" : "Present Days"}
+                    {canManageAttendance && selectedEmployeeId === "all" ? "Total Attendance" : "Present Days"}
                   </span>
                   <CalendarIcon className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.presentDays}</div>
                 <p className="text-xs text-muted-foreground">
-                  {selectedEmployeeId === "all" ? "All employee records" : "Days recorded this month"}
+                  {canManageAttendance && selectedEmployeeId === "all" ? "All employee records" : "My attendance records"}
                 </p>
               </div>
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
@@ -897,7 +897,7 @@ export default function AttendancePage() {
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.avgHours}</div>
                 <p className="text-xs text-muted-foreground">
-                  {selectedEmployeeId === "all" ? "Across all active days" : "Based on active logs"}
+                  {canManageAttendance && selectedEmployeeId === "all" ? "Across all active days" : "Based on active logs"}
                 </p>
               </div>
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
@@ -907,7 +907,7 @@ export default function AttendancePage() {
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.totalBreakTime}</div>
                 <p className="text-xs text-muted-foreground">
-                  {selectedEmployeeId === "all" ? "Total organizational breaks" : "Cumulative break duration"}
+                  {canManageAttendance && selectedEmployeeId === "all" ? "Total organizational breaks" : "Cumulative break duration"}
                 </p>
               </div>
               <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
@@ -917,7 +917,7 @@ export default function AttendancePage() {
                 </div>
                 <div className="text-3xl font-bold text-foreground mb-2">{stats.totalWorkTime}</div>
                 <p className="text-xs text-muted-foreground">
-                  {selectedEmployeeId === "all" ? "Total across organization" : "Total hours this month"}
+                  {canManageAttendance && selectedEmployeeId === "all" ? "Total across organization" : "Total hours this month"}
                 </p>
               </div>
             </div>
