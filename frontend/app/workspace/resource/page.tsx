@@ -1155,15 +1155,6 @@ export default function ResourceManagementPage() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-foreground">Total Items</label>
-                  <Input 
-                    type="number"
-                    placeholder="0" 
-                    value={categoryFormData.totalItems}
-                    onChange={(e) => setCategoryFormData({ ...categoryFormData, totalItems: parseInt(e.target.value) || 0 })}
-                  />
-                </div>
 
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-foreground">Category Description</label>
@@ -1201,14 +1192,13 @@ export default function ResourceManagementPage() {
                     <tr>
                       <th className="px-6 py-4 font-bold text-foreground">Category</th>
                       <th className="px-6 py-4 font-bold text-foreground">Description</th>
-                      <th className="px-6 py-4 font-bold text-foreground text-center">Total Items</th>
                       <th className="px-6 py-4 font-bold text-foreground text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {categoryStats.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-6 py-10 text-center text-muted-foreground">
+                        <td colSpan={3} className="px-6 py-10 text-center text-muted-foreground">
                           {categoriesLoading ? "Syncing categories..." : "No categories found. Click 'Add Category' to create one."}
                         </td>
                       </tr>
@@ -1219,9 +1209,6 @@ export default function ResourceManagementPage() {
                         </td>
                         <td className="px-6 py-4 text-xs text-muted-foreground">
                           {cat.description || "No description provided."}
-                        </td>
-                        <td className="px-6 py-4 text-center font-bold text-foreground text-sm">
-                          {cat.totalItems || 0} <span className="text-[10px] text-muted-foreground font-normal">({cat.total} active)</span>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-1">
