@@ -403,6 +403,8 @@ export default function ChatPage() {
   const recordingTimerRef = useRef<any>(null);
   const typingTimeoutRef = useRef<any>(null);
   const isSendingRef = useRef(false);
+  const fetchMessagesRef = useRef<() => void>(() => {});
+  const fetchChatSummariesRef = useRef<() => void>(() => {});
 
 
   const scrollToBottom = useCallback((force = false) => {
@@ -581,8 +583,6 @@ export default function ChatPage() {
     if (!targetId || !user) return;
     try {
       await fetch(`${API_URL}/chat/mark-seen/${targetId}/${user.id}`, { method: 'POST' });
-      // Small delay before refresh to ensure DB consistency
-      setTimeout(() => fetchUnreadCounts(), 500);
     } catch (err) {
       console.error("Error marking as seen:", err);
     }
@@ -637,12 +637,14 @@ export default function ChatPage() {
           isMe: m.senderId === user.id
         }));
 
-        // Play sound, trigger desktop alerts, and handle scroll — all in one state update
         setCurrentMessages(prev => {
           const isInitialLoad = prev.length === 0;
+          // Filter out optimistic messages to get real message count
+          const prevReal = prev.filter(m => !m._optimistic);
+          const hasNewMessages = marked.length > prevReal.length;
 
           // Notification logic: only when we already had messages and new ones arrived
-          if (prev.length > 0 && marked.length > prev.length) {
+          if (prevReal.length > 0 && hasNewMessages) {
             const lastMsg = marked[marked.length - 1];
             const chatId = selectedChat.id || selectedChat.employeeId;
             const isMuted = mutedChats.includes(chatId);
@@ -675,10 +677,8 @@ export default function ChatPage() {
               
               const isPersonal = !lastMsg.groupId;
               if (resolvedMode === "all" || (resolvedMode === "mentions" && (isMention || isPersonal))) {
-                // 1. Play chime sound
                 playTestSound(resolvedSound);
 
-                // 2. Trigger browser desktop system notification if document is unfocused / minimized
                 const isTabInactive = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
                 if (isTabInactive && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
                   const senderName = selectedChat.name || lastMsg.sender || "Colleague";
@@ -689,6 +689,14 @@ export default function ChatPage() {
                 }
               }
             }
+
+            // Scroll to bottom when new messages arrive
+            shouldScrollToBottom.current = true;
+            setTimeout(() => {
+              if (scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+              }
+            }, 100);
           }
 
           // Scroll-to-bottom on initial load
@@ -699,6 +707,11 @@ export default function ChatPage() {
                 scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
               }
             }, 100);
+          }
+
+          // If no change in message count, keep previous state to avoid unnecessary re-render
+          if (!isInitialLoad && !hasNewMessages && prevReal.length === marked.length) {
+            return prev;
           }
 
           return marked;
@@ -738,9 +751,38 @@ export default function ChatPage() {
     }
   }, [selectedChat, user, fetchMessages, fetchGroups]);
 
+  // Keep refs updated so the polling interval always calls the latest version
+  useEffect(() => {
+    fetchMessagesRef.current = fetchMessages;
+  }, [fetchMessages]);
+
+  useEffect(() => {
+    fetchChatSummariesRef.current = fetchChatSummaries;
+  }, [fetchChatSummaries]);
+
+  // Polling fallback: fetch messages every 2 seconds to guarantee real-time feel
+  // Uses refs so the interval never restarts due to callback reference changes
+  useEffect(() => {
+    if (!selectedChat || !user) return;
+    console.log("[Chat] Starting message polling for chat:", selectedChat.id);
+    const pollInterval = setInterval(() => {
+      fetchMessagesRef.current();
+      fetchChatSummariesRef.current();
+    }, 2000);
+    return () => {
+      console.log("[Chat] Stopping message polling");
+      clearInterval(pollInterval);
+    };
+  }, [selectedChat?.id, user?.id]);
+
   useEffect(() => {
     wsRef.current = ws;
     setIsWsConnected(!!ws);
+    if (ws) {
+      console.log("[Chat] WebSocket connected ✅");
+    } else {
+      console.log("[Chat] WebSocket disconnected ❌");
+    }
   }, [ws]);
 
   useEffect(() => {
