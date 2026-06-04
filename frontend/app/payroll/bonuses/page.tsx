@@ -47,6 +47,7 @@ export default function BonusesPage() {
   const [selectedType, setSelectedType] = useState<string>('all')
   const [selectedEmpId, setSelectedEmpId] = useState<string>('all')
   const [timePeriod, setTimePeriod] = useState<string>('This Month')
+  const [filterDate, setFilterDate] = useState<string>('')
 
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -55,7 +56,8 @@ export default function BonusesPage() {
     type: 'bonus',
     amount: 0,
     reason: '',
-    status: 'active'
+    status: 'active',
+    date: new Date().toISOString().split('T')[0]
   })
 
   const months = [
@@ -89,7 +91,8 @@ export default function BonusesPage() {
       type: 'bonus',
       amount: 0,
       reason: '',
-      status: 'active'
+      status: 'active',
+      date: new Date().toISOString().split('T')[0]
     })
     setModalOpen(true)
   }
@@ -103,7 +106,8 @@ export default function BonusesPage() {
       type: record.type,
       amount: record.amount,
       reason: record.reason,
-      status: record.status || 'active'
+      status: record.status || 'active',
+      date: record.date || new Date().toISOString().split('T')[0]
     })
     setModalOpen(true)
   }
@@ -182,7 +186,13 @@ export default function BonusesPage() {
         </span>
     )},
     { key: 'amount' as const, header: 'Amount', render: (record: any) => `₹${record.amount?.toLocaleString() || 0}` },
-    { key: 'month' as const, header: 'Period', render: (record: any) => `${record.month} ${record.year}` },
+    { key: 'date' as const, header: 'Date', render: (record: any) => {
+        if (record.date) {
+          const d = new Date(record.date);
+          return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        return `${record.month} ${record.year}`;
+    }},
     { key: 'reason' as const, header: 'Reason' },
   ]
 
@@ -204,10 +214,23 @@ export default function BonusesPage() {
     .filter(a => {
       if (timePeriod === 'All Time') return true
       const now = new Date()
-      const currentMonthName = now.toLocaleString('default', { month: 'long' }) // e.g. "May"
-      const currentYear = now.getFullYear() // e.g. 2026
-      if (timePeriod === 'This Month' || timePeriod === 'Today') {
+      const currentMonthName = now.toLocaleString('default', { month: 'long' })
+      const currentYear = now.getFullYear()
+      const todayStr = now.toISOString().split('T')[0]
+      
+      if (timePeriod === 'Today') {
+        if (a.date) return a.date === todayStr
         return a.month === currentMonthName && a.year === currentYear
+      }
+      if (timePeriod === 'This Month') {
+        if (a.date) {
+          const ad = new Date(a.date)
+          return ad.getMonth() === now.getMonth() && ad.getFullYear() === now.getFullYear()
+        }
+        return a.month === currentMonthName && a.year === currentYear
+      }
+      if (timePeriod === 'Specific Date...' && filterDate) {
+        return a.date === filterDate
       }
       return true
     })
@@ -289,7 +312,18 @@ export default function BonusesPage() {
           </Select>
         </div>
 
-        {(searchQuery || selectedType !== 'all' || selectedEmpId !== 'all' || timePeriod !== 'This Month') && (
+        {timePeriod === 'Specific Date...' && (
+          <div className="w-[180px] animate-in fade-in slide-in-from-left-2 duration-200">
+            <Input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="h-10 text-sm border-slate-200 rounded-lg bg-white text-gray-700 focus-visible:ring-brand-teal shadow-sm"
+            />
+          </div>
+        )}
+
+        {(searchQuery || selectedType !== 'all' || selectedEmpId !== 'all' || timePeriod !== 'This Month' || filterDate) && (
           <Button 
             variant="ghost" 
             size="sm" 
@@ -298,6 +332,7 @@ export default function BonusesPage() {
               setSelectedType('all')
               setSelectedEmpId('all')
               setTimePeriod('This Month')
+              setFilterDate('')
             }}
             className="text-brand-teal h-10 px-3 text-xs font-bold hover:bg-brand-light/50"
           >
@@ -355,22 +390,27 @@ export default function BonusesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Month</Label>
-                <Select value={formData.month} onValueChange={(val) => setFormData({...formData, month: val})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Year</Label>
-                <Input type="number" value={formData.year} onChange={(e) => setFormData({...formData, year: Number(e.target.value)})} />
-              </div>
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Input 
+                type="date" 
+                value={formData.date || ''} 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (!val) return;
+                  const d = new Date(val);
+                  const mNames = [
+                    'January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'
+                  ];
+                  setFormData({
+                    ...formData,
+                    date: val,
+                    month: mNames[d.getMonth()],
+                    year: d.getFullYear()
+                  });
+                }} 
+              />
             </div>
 
             <div className="space-y-2">

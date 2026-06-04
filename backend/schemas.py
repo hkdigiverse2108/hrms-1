@@ -414,6 +414,7 @@ class BonusDeductionBase(BaseModel):
     amount: float
     reason: str
     status: str  # active, cancelled
+    date: Optional[str] = None
 
 class BonusDeductionCreate(BonusDeductionBase):
     pass

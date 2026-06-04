@@ -590,6 +590,25 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
                     print(f"Error calculating p_amount in merged list: {e}")
                     p_amount = round(salary_struct["monthlyGross"] / 30, 2)
 
+        r_date_str = None
+        if isinstance(r_date, datetime):
+            r_date_str = r_date.strftime("%Y-%m-%d")
+        elif isinstance(r_date, str):
+            if "T" in r_date:
+                r_date_str = r_date.split("T")[0]
+            elif "-" in r_date:
+                r_date_str = r_date
+            else:
+                try:
+                    dt = datetime.strptime(r_date, "%b %d, %Y")
+                    r_date_str = dt.strftime("%Y-%m-%d")
+                except Exception:
+                    try:
+                        dt = datetime.strptime(r_date, "%B %d, %Y")
+                        r_date_str = dt.strftime("%Y-%m-%d")
+                    except Exception:
+                        r_date_str = r_date
+
         adjustments.append({
             "id": f"remark_{str(r['_id'])}",
             "employeeId": r["employeeId"],
@@ -598,7 +617,8 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
             "type": "deduction",
             "amount": p_amount, # Note: Late punch will show 0 here as it's calculated at payroll
             "reason": f"[Remark] {r['type']}: {r['details']}",
-            "status": "active"
+            "status": "active",
+            "date": r_date_str
         })
         
     return adjustments
@@ -3608,7 +3628,8 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
                 type="deduction",
                 amount=round(per_day_salary, 2),
                 reason=reason,
-                status="active"
+                status="active",
+                date=report_date
             )
             await create_bonus_deduction(db, deduction)
             
