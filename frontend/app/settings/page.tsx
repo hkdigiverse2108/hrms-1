@@ -31,6 +31,13 @@ import { Input } from "@/components/ui/input";
 import { API_URL } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
@@ -363,17 +370,20 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="text-sm font-bold">Free Leaves per Month (No Salary Cut)</Label>
-                    <div className="flex gap-2">
-                      <input 
-                        type="number" 
-                        className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
-                        value={settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1}
-                        onChange={(e) => setSettings({...settings, allowedMonthlyPaidLeaves: parseInt(e.target.value) || 0})}
-                        disabled={isUpdating || !isAdmin}
-                        min={0}
-                      />
-                      <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">DAYS</div>
-                    </div>
+                    <Select 
+                      value={String(settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1)}
+                      onValueChange={(val) => setSettings({...settings, allowedMonthlyPaidLeaves: parseFloat(val)})}
+                      disabled={isUpdating || !isAdmin}
+                    >
+                      <SelectTrigger className="w-full h-10 bg-white border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">One Leave (1 Day)</SelectItem>
+                        <SelectItem value="0.5">Only Half Leave (0.5 Day)</SelectItem>
+                        <SelectItem value="0">No Leave (0 Days)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 

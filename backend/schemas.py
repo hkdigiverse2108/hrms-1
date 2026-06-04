@@ -1036,7 +1036,7 @@ class SystemSettingsBase(BaseModel):
     officeStartTime: Optional[str] = "09:30"
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
-    allowedMonthlyPaidLeaves: Optional[int] = 1
+    allowedMonthlyPaidLeaves: Optional[float] = 1.0
     companyGstin: Optional[str] = "24APQPN3916P1Z4"
     taxInvoicePrefix: Optional[str] = "INV"
     proformaInvoicePrefix: Optional[str] = "PINV"
@@ -1048,7 +1048,7 @@ class SystemSettingsUpdate(BaseModel):
     officeStartTime: Optional[str] = None
     officeEndTime: Optional[str] = None
     lateBufferMins: Optional[int] = None
-    allowedMonthlyPaidLeaves: Optional[int] = None
+    allowedMonthlyPaidLeaves: Optional[float] = None
     companyGstin: Optional[str] = None
     taxInvoicePrefix: Optional[str] = None
     proformaInvoicePrefix: Optional[str] = None
