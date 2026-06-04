@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Analytics } from '@vercel/analytics/next'
+
 import './globals.css'
 import { AppLayout } from "@/components/layout/AppLayout"
 import { AntdRegistry } from '@ant-design/nextjs-registry';
@@ -76,7 +76,7 @@ export default function RootLayout({
           </AntdRegistry>
         </UserProvider>
  
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+
       </body>
     </html>
   )
