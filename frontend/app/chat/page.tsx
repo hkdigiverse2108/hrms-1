@@ -1439,12 +1439,11 @@ export default function ChatPage() {
 
   const chats = useMemo(() => {
     return employees
-      .filter((emp: any) => emp.id !== user?.id) // Don't chat with self
       .map((emp: any) => {
         const summary = chatSummaries[emp.id];
         return {
           id: emp.id || emp.employeeId,
-          name: emp.name,
+          name: emp.id === user?.id ? `${emp.name} (You)` : emp.name,
           status: "Online",
           lastMessage: summary?.lastMessage || "Click to start chatting",
           time: summary?.timestamp ? dayjs(summary.timestamp).format("hh:mm A") : "",
@@ -1456,7 +1455,11 @@ export default function ChatPage() {
         };
       })
       .sort((a: any, b: any) => {
-        // Sort by timestamp descending
+        // Pin self-chat to the very top
+        if (a.id === user?.id) return -1;
+        if (b.id === user?.id) return 1;
+
+        // Sort remaining chats by timestamp descending
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
         return timeB - timeA;
@@ -3058,13 +3061,13 @@ export default function ChatPage() {
               />
             </div>
             <div className="max-h-[300px] overflow-y-auto space-y-1 pr-2">
-              {employees.filter((e: any) => e.id !== user?.id).map((emp: any) => (
+              {employees.map((emp: any) => (
                 <div 
                   key={emp.id}
                   onClick={() => {
                     setSelectedChat({
                       id: emp.id || emp.employeeId,
-                      name: emp.name,
+                      name: emp.id === user?.id ? `${emp.name} (You)` : emp.name,
                       status: "Online",
                       avatar: emp.profilePhoto 
                         ? (emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`)
@@ -3087,7 +3090,7 @@ export default function ChatPage() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                    <p className="text-sm font-bold text-slate-800">{emp.name}</p>
+                    <p className="text-sm font-bold text-slate-800">{emp.id === user?.id ? `${emp.name} (You)` : emp.name}</p>
                     <p className="text-[11px] text-muted-foreground">{emp.designation || "Colleague"}</p>
                   </div>
                 </div>
