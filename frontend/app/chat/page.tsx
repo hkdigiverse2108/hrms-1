@@ -3369,6 +3369,7 @@ export default function ChatPage() {
       {/* Image Preview Modal */}
       <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
         <DialogContent className="sm:max-w-[800px] p-0 overflow-hidden bg-black/95 border-none shadow-2xl [&>button:last-child]:hidden">
+          <DialogTitle className="sr-only">Image Preview</DialogTitle>
           <div className="absolute top-0 right-0 p-4 z-50 flex items-center gap-2">
             <Button 
               variant="ghost" 
