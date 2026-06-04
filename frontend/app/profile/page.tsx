@@ -583,7 +583,7 @@ export default function ProfilePage() {
                       label="Start Time" 
                       id="startTime" 
                       type="time" 
-                      value={isEditing ? formData.startTime : user.startTime} 
+                      value={isEditing ? formData.startTime : (user.startTime ? convertTo12Hour(user.startTime) : '—')} 
                       isEditing={isEditing} 
                       onChange={(v) => handleFieldChange('startTime', v)} 
                       disabled={!isAdmin} 
@@ -595,7 +595,7 @@ export default function ProfilePage() {
                       label="End Time" 
                       id="endTime" 
                       type="time" 
-                      value={isEditing ? formData.endTime : user.endTime} 
+                      value={isEditing ? formData.endTime : (user.endTime ? convertTo12Hour(user.endTime) : '—')} 
                       isEditing={isEditing} 
                       onChange={(v) => handleFieldChange('endTime', v)} 
                       disabled={!isAdmin} 
