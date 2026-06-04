@@ -90,7 +90,7 @@ export default function RecruitmentPage() {
     if (!user) return
     setReferralsLoading(true)
     try {
-      const isHRorAdmin = isAdmin || checkPermission('hirings', 'canEdit')
+      const isHRorAdmin = isAdmin || user?.role?.toLowerCase() === 'hr' || checkPermission('hirings', 'canEdit')
       const url = isHRorAdmin
         ? `${API_URL}/referrals`
         : `${API_URL}/referrals?employee_id=${user.id || user._id}`
@@ -124,9 +124,11 @@ export default function RecruitmentPage() {
     applications: 0,
     status: 'open',
     postedDate: '',
+    experience: '',
+    salaryRange: '',
   })
 
-  const isHRorAdmin = isAdmin || checkPermission('hirings', 'canEdit')
+  const isHRorAdmin = isAdmin || user?.role?.toLowerCase() === 'hr' || checkPermission('hirings', 'canEdit')
   const displayedJobs = isHRorAdmin ? jobs : jobs.filter((j) => j.status === 'open')
   const openJobs = displayedJobs.filter((j) => j.status === 'open').length
   const totalApplications = displayedJobs.reduce((sum, j) => sum + j.applications, 0)
@@ -143,6 +145,8 @@ export default function RecruitmentPage() {
         applications: job.applications,
         status: job.status,
         postedDate: job.postedDate,
+        experience: job.experience || '',
+        salaryRange: job.salaryRange || '',
       })
     } else {
       setEditingJob(null)
@@ -155,6 +159,8 @@ export default function RecruitmentPage() {
         applications: 0,
         status: 'open',
         postedDate: new Date().toISOString().split('T')[0],
+        experience: '',
+        salaryRange: '',
       })
     }
     setModalOpen(true)
@@ -389,6 +395,20 @@ export default function RecruitmentPage() {
       header: 'Applications',
       render: (job: JobOpening) => (
         <span className="font-medium">{job.applications}</span>
+      ),
+    },
+    {
+      key: 'experience' as const,
+      header: 'Experience',
+      render: (job: JobOpening) => (
+        <span>{job.experience || 'Not specified'}</span>
+      ),
+    },
+    {
+      key: 'salaryRange' as const,
+      header: 'Salary Range',
+      render: (job: JobOpening) => (
+        <span>{job.salaryRange || 'Not specified'}</span>
       ),
     },
     { key: 'postedDate' as const, header: 'Posted Date' },
@@ -694,6 +714,24 @@ export default function RecruitmentPage() {
                   type="date"
                   value={formData.postedDate}
                   onChange={(e) => setFormData({ ...formData, postedDate: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Experience</Label>
+                <Input
+                  value={formData.experience}
+                  onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
+                  placeholder="e.g., 2-4 years"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Salary Range</Label>
+                <Input
+                  value={formData.salaryRange}
+                  onChange={(e) => setFormData({ ...formData, salaryRange: e.target.value })}
+                  placeholder="e.g., $80k - $100k or 15L - 20L"
                 />
               </div>
             </div>
