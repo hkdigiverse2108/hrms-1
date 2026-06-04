@@ -1168,9 +1168,57 @@ async def get_assets(db, skip: int = 0, limit: int = 100):
             row["assetId"] = f"ASSET-{row['id'][-4:].upper()}"
         results.append(row)
     return results
-async def create_asset(db, asset: schemas.AssetCreate): return await create_item(db, "assets", asset.dict())
-async def update_asset(db, asset_id: str, update: schemas.AssetUpdate): return await update_item(db, "assets", asset_id, update.dict(exclude_unset=True))
-async def delete_asset(db, asset_id: str): return await delete_item(db, "assets", asset_id)
+async def create_asset(db, asset: schemas.AssetCreate):
+    asset_dict = asset.dict()
+    performedBy = asset_dict.pop("performedBy", "System")
+    userName = asset_dict.pop("userName", "System User")
+    
+    result = await create_item(db, "assets", asset_dict)
+    await log_activity(db, "Created", performedBy, userName, f"Asset '{asset_dict['name']}' ({asset_dict.get('assetId', 'N/A')}) was created and added to inventory.", assetId=result["id"])
+    return result
+
+async def update_asset(db, asset_id: str, update: schemas.AssetUpdate):
+    existing = await db.assets.find_one({"_id": ObjectId(asset_id)})
+    update_dict = update.dict(exclude_unset=True)
+    performedBy = update_dict.pop("performedBy", "System")
+    userName = update_dict.pop("userName", "System User")
+    
+    await db.assets.update_one(
+        {"_id": ObjectId(asset_id)},
+        {"$set": update_dict}
+    )
+    
+    if existing:
+        changes = []
+        if "status" in update_dict and existing.get("status") != update_dict["status"]:
+            changes.append(f"Status changed from '{existing.get('status')}' to '{update_dict['status']}'")
+        if "assignedTo" in update_dict and existing.get("assignedTo") != update_dict["assignedTo"]:
+            old_assign = existing.get("assignedTo") or "Unassigned"
+            new_assign = update_dict["assignedTo"] or "Unassigned"
+            changes.append(f"Assignment changed from '{old_assign}' to '{new_assign}'")
+        if "condition" in update_dict and existing.get("condition") != update_dict["condition"]:
+            changes.append(f"Condition updated from '{existing.get('condition')}' to '{update_dict['condition']}'")
+        if "location" in update_dict and existing.get("location") != update_dict["location"]:
+            changes.append(f"Location changed from '{existing.get('location')}' to '{update_dict['location']}'")
+            
+        if not changes:
+            changes.append("General asset details updated")
+            
+        log_details = f"Asset '{existing.get('name')}' ({existing.get('assetId', 'N/A')}): " + ", ".join(changes)
+        await log_activity(db, "Updated", performedBy, userName, log_details, assetId=asset_id)
+        
+    updated_doc = await db.assets.find_one({"_id": ObjectId(asset_id)})
+    return fix_id(updated_doc)
+
+async def delete_asset(db, asset_id: str, performedBy: str = None, userName: str = None):
+    existing = await db.assets.find_one({"_id": ObjectId(asset_id)})
+    asset_name = existing.get("name", "Unknown Asset") if existing else "Unknown Asset"
+    asset_code = existing.get("assetId", "N/A") if existing else "N/A"
+    
+    result = await delete_item(db, "assets", asset_id)
+    if result:
+        await log_activity(db, "Deleted", performedBy or "System", userName or "System User", f"Asset '{asset_name}' ({asset_code}) was deleted from inventory.", assetId=asset_id)
+    return result
 
 async def get_expense_claims(db, skip: int = 0, limit: int = 100): return await get_items(db, "expense_claims", skip, limit)
 async def create_expense_claim(db, claim: schemas.ExpenseClaimCreate): return await create_item(db, "expense_claims", claim.dict())
@@ -2632,7 +2680,7 @@ async def delete_wm_task(db, task_id: str):
     return result.deleted_count > 0
 
 # Activity Log CRUD
-async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None):
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None):
     log_entry = {
         "action": action,
         "performedBy": performedBy,
@@ -2647,6 +2695,7 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
     if dailyReportId: log_entry["dailyReportId"] = dailyReportId
     if monthlyReportId: log_entry["monthlyReportId"] = monthlyReportId
     if applicationId: log_entry["applicationId"] = applicationId
+    if assetId: log_entry["assetId"] = assetId
     
     await db.task_logs.insert_one(log_entry)
 
@@ -2659,6 +2708,14 @@ async def get_application_logs(db, application_id: str):
 
 async def get_lead_logs(db, lead_id: str):
     cursor = db.task_logs.find({"leadId": lead_id}).sort("timestamp", -1)
+    logs = []
+    async for doc in cursor:
+        logs.append(fix_id(doc))
+    return logs
+
+async def get_asset_logs(db, asset_id: str = None):
+    query = {"assetId": asset_id} if asset_id else {"assetId": {"$exists": True}}
+    cursor = db.task_logs.find(query).sort("timestamp", -1)
     logs = []
     async for doc in cursor:
         logs.append(fix_id(doc))
@@ -4156,4 +4213,46 @@ async def update_document_template(db, template_id: str, template_update: schema
 async def delete_document_template(db, template_id: str):
     result = await db.document_templates.delete_one({"_id": ObjectId(template_id)})
     return result.deleted_count > 0
+# Asset Category CRUD
+async def get_asset_categories(db, skip: int = 0, limit: int = 100):
+    # Seed initial categories if none exist
+    count = await db.asset_categories.count_documents({})
+    if count == 0:
+        initial_categories = [
+            {"name": "PC", "icon": "Laptop", "description": "Laptops, Notebooks, and Personal Computers"},
+            {"name": "CPU", "icon": "Layers", "description": "System unit CPU cabinets and server modules"},
+            {"name": "Monitor", "icon": "Monitor", "description": "Display units, LCD, and LED monitors"},
+            {"name": "Keyboard", "icon": "Keyboard", "description": "Wired and wireless input keyboards"},
+            {"name": "Mouse", "icon": "Mouse", "description": "Wired and wireless optical computer mice"},
+            {"name": "Mousepad", "icon": "ImageIcon", "description": "Standard and extended mouse pads"},
+            {"name": "Parking Card", "icon": "CreditCard", "description": "Security access parking slot cards"},
+            {"name": "Other", "icon": "Package", "description": "Other general hardware resources"}
+        ]
+        await db.asset_categories.insert_many(initial_categories)
+
+    cursor = db.asset_categories.find().skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def create_asset_category(db, category: schemas.AssetCategoryCreate):
+    category_dict = category.dict()
+    result = await db.asset_categories.insert_one(category_dict)
+    category_dict["id"] = str(result.inserted_id)
+    if "_id" in category_dict:
+        category_dict.pop("_id")
+    return category_dict
+
+async def update_asset_category(db, category_id: str, category_update: schemas.AssetCategoryUpdate):
+    update_data = category_update.dict(exclude_unset=True)
+    await db.asset_categories.update_one(
+        {"_id": ObjectId(category_id)},
+        {"$set": update_data}
+    )
+    updated_doc = await db.asset_categories.find_one({"_id": ObjectId(category_id)})
+    return fix_id(updated_doc)
+
+async def delete_asset_category(db, category_id: str):
+    await db.asset_categories.delete_one({"_id": ObjectId(category_id)})
+    return True
+
 

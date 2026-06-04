@@ -588,7 +588,8 @@ class AssetBase(BaseModel):
     description: Optional[str] = None
 
 class AssetCreate(AssetBase):
-    pass
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class AssetUpdate(BaseModel):
     assetId: Optional[str] = None
@@ -602,6 +603,8 @@ class AssetUpdate(BaseModel):
     purchaseDate: Optional[RobustDate] = None
     value: Optional[float] = None
     description: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class Asset(AssetBase):
     id: str
@@ -1504,6 +1507,27 @@ class ReferralUpdate(BaseModel):
     resumeUrl: Optional[str] = None
 
 class Referral(ReferralBase):
+    id: str
+
+# Asset Category Schemas
+class AssetCategoryBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    totalItems: Optional[int] = 0
+    valuation: Optional[float] = 0.0
+
+class AssetCategoryCreate(AssetCategoryBase):
+    pass
+
+class AssetCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    totalItems: Optional[int] = None
+    valuation: Optional[float] = None
+
+class AssetCategory(AssetCategoryBase):
     id: str
     class Config:
         from_attributes = True
