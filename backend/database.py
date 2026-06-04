@@ -9,8 +9,14 @@ from bson import ObjectId
 # Get the absolute path to the project root (one level up from 'backend' folder)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+import platform
+
 # Load environment variables from root directory
-for env_file in [".env.server", ".env"]:
+env_files = [".env.server", ".env"]
+if platform.system() == "Darwin":
+    env_files = [".env", ".env.server"]
+
+for env_file in env_files:
     env_path = BASE_DIR / env_file
     if env_path.exists():
         load_dotenv(dotenv_path=str(env_path))
