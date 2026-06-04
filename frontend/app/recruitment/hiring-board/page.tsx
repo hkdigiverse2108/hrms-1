@@ -50,6 +50,7 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
+import { useConfirm } from "@/context/ConfirmContext";
 
 interface Application {
   id: string
@@ -90,6 +91,7 @@ const STAGES = [
 ]
 
 export default function HiringBoardPage() {
+  const { confirm } = useConfirm();
   const router = useRouter()
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
   const [applications, setApplications] = useState<Application[]>([])
@@ -235,7 +237,13 @@ export default function HiringBoardPage() {
   }
 
   const handleDeleteApplication = async (appId: string) => {
-    if (!confirm("Are you sure you want to delete this candidate?")) return
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this candidate?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
     try {
       const res = await fetch(`${API_URL}/applications/${appId}`, { method: 'DELETE' })
       if (res.ok) {

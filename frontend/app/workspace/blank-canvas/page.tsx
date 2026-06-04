@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export default function BlankCanvasPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -323,7 +324,7 @@ export default function BlankCanvasPage() {
       localStorage.setItem("workspace_canvas_elements", JSON.stringify(elements));
       localStorage.setItem("workspace_custom_layout", dataUrl);
       
-      alert("Workspace saved and published successfully!");
+      toast.success("Workspace saved and published successfully!");
     }
   };
 

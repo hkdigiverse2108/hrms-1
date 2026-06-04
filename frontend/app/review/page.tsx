@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const reviewsData = [
   {
@@ -110,6 +111,7 @@ const RatingStars = ({ rating, interactive = false, onRatingChange }: { rating: 
 };
 
 export default function ReviewPage() {
+  const { confirm } = useConfirm();
   const [reviews, setReviews] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -252,7 +254,13 @@ export default function ReviewPage() {
   };
 
   const handleDeleteReview = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this review?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this review?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     
     try {
       const res = await fetch(`${API_URL}/reviews/${id}`, { method: 'DELETE' });

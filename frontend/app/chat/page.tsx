@@ -83,6 +83,8 @@ import {
 } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 
 
 
@@ -94,6 +96,7 @@ const INITIAL_MESSAGES: Record<string, any[]> = {
 };
 
 const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
+  const { confirm } = useConfirm();
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -132,7 +135,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
       } else {
         audioRef.current.play().catch(err => {
           console.error("Audio playback failed:", err);
-          alert("Could not play voice message. The file might be missing or unsupported.");
+          toast.error("Could not play voice message. The file might be missing or unsupported.");
         });
       }
       setIsPlaying(!isPlaying);
@@ -491,7 +494,7 @@ export default function ChatPage() {
         setNewChannelData({ name: "", description: "" });
         setShowCreateChannel(false);
         fetchChannels();
-        alert("Channel created successfully!");
+        toast.success("Channel created successfully!");
       }
     } catch (err) {
       console.error("Error creating channel:", err);
@@ -509,7 +512,7 @@ export default function ChatPage() {
       if (res.ok) {
         setEditingChannel(null);
         fetchChannels();
-        alert("Channel updated successfully!");
+        toast.success("Channel updated successfully!");
       }
     } catch (err) {
       console.error("Error updating channel:", err);
@@ -517,13 +520,19 @@ export default function ChatPage() {
   };
 
   const handleDeleteChannel = async (channelId: string) => {
-    if (!confirm("Are you sure you want to delete this channel and all its messages?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this channel and all its messages?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     try {
       const res = await fetch(`${API_URL}/chat/channels/${channelId}`, { method: 'DELETE' });
       if (res.ok) {
         if (selectedChat?.id === channelId) setSelectedChat(null);
         fetchChannels();
-        alert("Channel deleted successfully!");
+        toast.success("Channel deleted successfully!");
       }
     } catch (err) {
       console.error("Error deleting channel:", err);
@@ -856,7 +865,7 @@ export default function ChatPage() {
 
     if (capturedFile) {
       if (capturedFile.size > 512 * 1024 * 1024) {
-        alert("File size cannot exceed 512 MB");
+        toast.error("File size cannot exceed 512 MB");
         setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
         isSendingRef.current = false;
         return;
@@ -875,14 +884,14 @@ export default function ChatPage() {
           payload.attachmentUrl = uploadData.url;
           payload.attachmentName = uploadData.filename;
         } else {
-          alert("Failed to upload file. Please try again.");
+          toast.error("Failed to upload file. Please try again.");
           setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
           isSendingRef.current = false;
           return;
         }
       } catch (err) {
         console.error("Upload error:", err);
-        alert("An error occurred during upload.");
+        toast.error("An error occurred during upload.");
         setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
         isSendingRef.current = false;
         return;
@@ -917,7 +926,7 @@ export default function ChatPage() {
 
   const handleDownload = async (url: string, filename: string) => {
     if (!url || url === "#") {
-      alert(`This attachment is not available for download (URL: ${url}). Please send a NEW file to test.`);
+      toast.error(`This attachment is not available for download (URL: ${url}). Please send a NEW file to test.`);
       return;
     }
     const fullUrl = url.startsWith('http') ? url : `${API_URL}${url}`;
@@ -1041,7 +1050,7 @@ export default function ChatPage() {
         if (method === 'PUT') {
           setChatGroups(prev => prev.map(g => g.id === result.id ? result : g));
           setSelectedChat({ ...result, type: 'group' });
-          alert("Group updated successfully.");
+          toast.success("Group updated successfully.");
         } else {
           setChatGroups(prev => [result, ...prev]);
           setSelectedChat({ ...result, type: 'group' });
@@ -1062,13 +1071,19 @@ export default function ChatPage() {
     );
   };
   const handleDeleteGroup = async (groupId: string) => {
-    if (!confirm("Are you sure you want to delete this group? This will delete all messages permanently.")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this group? This will delete all messages permanently.",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     try {
       const res = await fetch(`${API_URL}/chat/groups/${groupId}`, { method: 'DELETE' });
       if (res.ok) {
         setChatGroups(prev => prev.filter(g => g.id !== groupId));
         setSelectedChat(null as any);
-        alert("Group deleted successfully.");
+        toast.success("Group deleted successfully.");
       }
     } catch (err) {
       console.error("Error deleting group:", err);
@@ -1201,7 +1216,7 @@ export default function ChatPage() {
         if (selectedChat?.id === recipientId) {
           fetchMessages();
         }
-        alert("Message forwarded successfully!");
+        toast.success("Message forwarded successfully!");
       }
     } catch (err) {
       console.error("Error forwarding message:", err);
@@ -1232,7 +1247,7 @@ export default function ChatPage() {
         const updatedUser = await res.json();
         localStorage.setItem('user', JSON.stringify(updatedUser));
         window.dispatchEvent(new Event('storage'));
-        alert("Status updated!");
+        toast.error("Status updated!");
         setShowStatusPicker(false);
       }
     } catch (err) {
@@ -1321,7 +1336,7 @@ export default function ChatPage() {
       }, 1000);
     } catch (err) {
       console.error("Error starting recording:", err);
-      alert("Please allow microphone access to record voice messages.");
+      toast.error("Please allow microphone access to record voice messages.");
     }
   };
 

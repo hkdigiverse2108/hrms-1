@@ -30,6 +30,7 @@ import { useUserContext } from "@/context/UserContext";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/context/ConfirmContext";
 
   // Holidays will be fetched from database
 
@@ -67,6 +68,7 @@ function TableAvatar({ photoUrl, name }: TableAvatarProps) {
 }
 
 export default function LeavePage() {
+  const { confirm } = useConfirm();
   const { user } = useUserContext();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const router = useRouter();
@@ -393,7 +395,13 @@ export default function LeavePage() {
 
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this leave request?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this leave request?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     
     try {
       const res = await fetch(`${API_URL}/leaves/${id}`, {
@@ -592,7 +600,13 @@ export default function LeavePage() {
   };
 
   const handleHolidayDelete = async (id: string) => {
-    if (!confirm("Delete this holiday?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Delete this holiday?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     try {
       const res = await fetch(`${API_URL}/holidays/${id}`, {
         method: 'DELETE'

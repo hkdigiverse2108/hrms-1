@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { API_URL } from "@/lib/config";
 import dayjs from "dayjs";
+import { toast } from "sonner";
  
 interface RequestPunchOutDialogProps {
   open: boolean;
@@ -67,11 +68,11 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchIn
       if (res.ok) {
         onOpenChange(false);
       } else {
-        alert("Failed to submit request.");
+        toast.error("Failed to submit request.");
       }
     } catch (err) {
       console.error(err);
-      alert("Error submitting request.");
+      toast.error("Error submitting request.");
     } finally {
       setIsSubmitting(false);
     }

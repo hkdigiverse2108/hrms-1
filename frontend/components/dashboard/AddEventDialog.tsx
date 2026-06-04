@@ -27,6 +27,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
+import { toast } from "sonner";
  
 interface AddEventDialogProps {
   open: boolean;
@@ -62,7 +63,7 @@ export function AddEventDialog({ open, onOpenChange, onAddEvent, initialData }: 
  
   const handleCreate = () => {
     if (!title || !date) {
-      alert("Please enter a title and select a date.");
+      toast.error("Please enter a title and select a date.");
       return;
     }
  

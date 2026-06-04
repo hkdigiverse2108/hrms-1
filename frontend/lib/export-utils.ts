@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 export const exportToPDF = (data: any[], fileName: string) => {
   if (!data || data.length === 0) return;
 
@@ -174,7 +175,7 @@ export const exportToPDF = (data: any[], fileName: string) => {
     printWindow.document.write(htmlContent);
     printWindow.document.close();
   } else {
-    alert('Please enable popups for this website to export PDFs.');
+    toast.error('Please enable popups for this website to export PDFs.');
   }
 };
 

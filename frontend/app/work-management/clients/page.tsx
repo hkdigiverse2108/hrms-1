@@ -19,6 +19,8 @@ import { Check, X } from "lucide-react";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TablePagination } from "@/components/common/TablePagination";
+import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -33,6 +35,7 @@ const noScrollbarStyle = `
 `;
 
 export default function ClientsPage() {
+  const { confirm } = useConfirm();
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -148,18 +151,24 @@ export default function ClientsPage() {
         setEditingClient(null);
       } else {
         const error = await res.json();
-        alert(`Error: ${error.detail || "Failed to save client"}`);
+        toast.error(`Error: ${error.detail || "Failed to save client"}`);
       }
     } catch (err) {
       console.error("Error saving client:", err);
-      alert("Failed to connect to the server");
+      toast.error("Failed to connect to the server");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this client?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this client?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
 
     try {
       const res = await fetch(`${API_URL}/clients/${id}`, {

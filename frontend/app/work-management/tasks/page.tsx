@@ -24,6 +24,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TablePagination } from "@/components/common/TablePagination";
+import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const STAGES = [
   { id: "todo", label: "To Do", color: "text-slate-700 bg-transparent", lineColor: "bg-slate-400" },
@@ -33,6 +35,7 @@ const STAGES = [
 ];
 
 export default function TasksPage() {
+  const { confirm } = useConfirm();
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions();
@@ -146,18 +149,24 @@ export default function TasksPage() {
         setEditingTask(null);
       } else {
         const error = await res.json();
-        alert(`Error: ${error.detail || "Failed to save task"}`);
+        toast.error(`Error: ${error.detail || "Failed to save task"}`);
       }
     } catch (err) {
       console.error("Error saving task:", err);
-      alert("Failed to connect to the server");
+      toast.error("Failed to connect to the server");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this task?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this task?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
 
     try {
       const res = await fetch(`${API_URL}/wm-tasks/${id}`, {
@@ -173,7 +182,7 @@ export default function TasksPage() {
 
   const onDragEnd = async (result: DropResult) => {
     if (!canEditTask) {
-      alert("You do not have permission to edit tasks");
+      toast.error("You do not have permission to edit tasks");
       return;
     }
     const { destination, source, draggableId } = result;
@@ -200,7 +209,7 @@ export default function TasksPage() {
       });
       if (!res.ok) {
         setTasks(prevTasks);
-        alert("Failed to update task stage");
+        toast.error("Failed to update task stage");
       }
     } catch (err) {
       console.error("Error updating task status:", err);

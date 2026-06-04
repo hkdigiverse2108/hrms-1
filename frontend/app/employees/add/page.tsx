@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { EmployeeForm, EmployeeFormData } from '@/components/hrms/employee-form'
 import { API_URL } from '@/lib/config'
 import { usePermissions } from '@/hooks/usePermissions'
+import { toast } from "sonner";
 
 export default function AddEmployeePage() {
   const router = useRouter()
@@ -49,11 +50,11 @@ export default function AddEmployeePage() {
         router.push('/employees')
       } else {
         const error = await response.json()
-        alert(`Error: ${error.detail || 'Failed to add employee'}`)
+        toast.error(`Error: ${error.detail || 'Failed to add employee'}`)
       }
     } catch (error) {
       console.error('Error adding employee:', error)
-      alert('Failed to connect to the server')
+      toast.error('Failed to connect to the server')
     } finally {
       setIsSubmitting(false)
     }

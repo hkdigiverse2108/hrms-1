@@ -37,8 +37,11 @@ import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useUser } from '@/hooks/useUser'
+import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function RecruitmentPage() {
+  const { confirm } = useConfirm();
   const router = useRouter()
   const { user } = useUser()
   const { data, isLoading: apiLoading, refresh } = useApi()
@@ -237,11 +240,11 @@ export default function RecruitmentPage() {
         setReferralFormData({ ...referralFormData, resumeUrl: result.url })
       } else {
         const details = await response.text().catch(() => 'Could not read details')
-        alert(`File upload failed. Status: ${response.status} (${response.statusText}). Details: ${details}`)
+        toast.error(`File upload failed. Status: ${response.status} (${response.statusText}). Details: ${details}`)
       }
     } catch (error: any) {
       console.error('Upload error:', error)
-      alert(`Error uploading file: ${error.message || error}`)
+      toast.error(`Error uploading file: ${error.message || error}`)
     } finally {
       setUploadingResume(false)
     }
@@ -261,12 +264,12 @@ export default function RecruitmentPage() {
 
   const handleSaveReferral = async () => {
     if (!referralFormData.candidateName || !referralFormData.phone) {
-      alert('Please fill in both candidate name and mobile number')
+      toast.error('Please fill in both candidate name and mobile number')
       return
     }
 
     if (!referralFormData.resumeUrl) {
-      alert('Please upload a resume first')
+      toast.error('Please upload a resume first')
       return
     }
 
@@ -334,7 +337,13 @@ export default function RecruitmentPage() {
   }
 
   const handleDeleteReferral = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this referral reference?')) return
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: 'Are you sure you want to delete this referral reference?',
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
     try {
       const response = await fetch(`${API_URL}/referrals/${id}`, {
         method: 'DELETE'

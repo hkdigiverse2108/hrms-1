@@ -24,6 +24,7 @@ import { Save, Plus, Loader2, Image as ImageIcon, X, Eye, EyeOff } from 'lucide-
 import Link from 'next/link'
 import Image from 'next/image'
 import { API_URL, getAvatarUrl } from '@/lib/config'
+import { toast } from "sonner";
 
 export interface EmployeeFormData {
   employeeId: string
@@ -156,7 +157,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (formData.role !== 'Admin' && (!formData.startTime || !formData.endTime)) {
-      alert('Please enter both Start Time and End Time.')
+      toast.error('Please enter both Start Time and End Time.')
       return
     }
     onSubmit(formData)
@@ -171,7 +172,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
     if (!file) return
 
     if (file.size > 512 * 1024 * 1024) {
-      alert('File size cannot exceed 512 MB')
+      toast.error('File size cannot exceed 512 MB')
       e.target.value = ''
       return
     }
@@ -191,11 +192,11 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         const filename = data.url.split('/').pop()
         handleChange('profilePhoto', filename)
       } else {
-        alert('Failed to upload image')
+        toast.error('Failed to upload image')
       }
     } catch (error) {
       console.error('Error uploading file:', error)
-      alert('Error uploading file')
+      toast.error('Error uploading file')
     } finally {
       setIsUploading(false)
     }

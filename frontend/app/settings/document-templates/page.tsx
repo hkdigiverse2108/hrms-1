@@ -10,6 +10,7 @@ import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { useConfirm } from "@/context/ConfirmContext";
 
 interface DocumentTemplate {
   id: string
@@ -21,6 +22,7 @@ interface DocumentTemplate {
 }
 
 export default function DocumentTemplatesPage() {
+  const { confirm } = useConfirm();
   const router = useRouter()
   
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
@@ -114,7 +116,13 @@ export default function DocumentTemplatesPage() {
   }
 
   const handleDeleteTemplate = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this template?')) return
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: 'Are you sure you want to delete this template?',
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
     
     setSaving(true)
     try {
