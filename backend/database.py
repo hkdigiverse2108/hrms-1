@@ -253,6 +253,7 @@ class TimestampedDatabase:
             return TimestampedCollection(item)
         return item
 
+print("DEBUG INFO: MONGO_URL =", MONGO_URL)
 print("DEBUG INFO: MONGO_DB =", MONGO_DB, type(MONGO_DB))
 # Wrap database with dynamic timestamp proxy
 db = TimestampedDatabase(client[MONGO_DB])
