@@ -34,6 +34,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { PlusCircle } from 'lucide-react'
 import { useUser } from '@/hooks/useUser'
 import type { Payroll } from '@/lib/types'
+import { useConfirm } from "@/context/ConfirmContext";
 
 const monthMap: Record<string, string> = {
   'January': '01',
@@ -342,6 +343,7 @@ function SinglePayslip({
 }
 
 function PayslipContent() {
+  const { confirm } = useConfirm();
   const searchParams = useSearchParams()
   const payrollId = searchParams.get('id')
   const employeeIdParam = searchParams.get('employeeId')
@@ -721,7 +723,13 @@ function PayslipContent() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this payroll record?')) return
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: 'Are you sure you want to delete this payroll record?',
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
     
     try {
       const response = await fetch(`${API_URL}/payroll/${id}`, {

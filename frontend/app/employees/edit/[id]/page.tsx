@@ -9,6 +9,7 @@ import { EmployeeForm, EmployeeFormData } from '@/components/hrms/employee-form'
 import { API_URL } from '@/lib/config'
 
 import { usePermissions } from '@/hooks/usePermissions'
+import { toast } from "sonner";
 
 export default function EditEmployeePage() {
   const router = useRouter()
@@ -36,12 +37,12 @@ export default function EditEmployeePage() {
           const data = await response.json()
           setEmployeeData(data)
         } else {
-          alert('Failed to fetch employee details')
+          toast.error('Failed to fetch employee details')
           router.push('/employees')
         }
       } catch (error) {
         console.error('Error fetching employee:', error)
-        alert('An error occurred while fetching employee details')
+        toast.error('An error occurred while fetching employee details')
         router.push('/employees')
       } finally {
         setIsLoading(false)
@@ -78,11 +79,11 @@ export default function EditEmployeePage() {
         router.push('/employees')
       } else {
         const error = await response.json()
-        alert(`Error: ${error.detail || 'Failed to update employee'}`)
+        toast.error(`Error: ${error.detail || 'Failed to update employee'}`)
       }
     } catch (error) {
       console.error('Error updating employee:', error)
-      alert('Failed to connect to the server')
+      toast.error('Failed to connect to the server')
     } finally {
       setIsSubmitting(false)
     }

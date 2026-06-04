@@ -16,8 +16,10 @@ import { useRouter } from "next/navigation";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function ProjectsPage() {
+  const { confirm } = useConfirm();
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -122,7 +124,13 @@ export default function ProjectsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this project?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this project?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
 
     try {
       const res = await fetch(`${API_URL}/projects/${id}`, {

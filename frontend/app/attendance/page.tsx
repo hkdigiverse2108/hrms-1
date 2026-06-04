@@ -32,8 +32,10 @@ import { toast } from 'sonner';
 import { formatTime12h } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/context/ConfirmContext";
  
 export default function AttendancePage() {
+  const { confirm } = useConfirm();
   const { user, getISTNow } = useUserContext();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const router = useRouter();
@@ -367,7 +369,13 @@ export default function AttendancePage() {
       toast.error("Please select an employee");
       return;
     }
-    if (!confirm(`Are you sure you want to delete ALL attendance for this employee in ${bulkForm.month} ${bulkForm.year}?`)) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: `Are you sure you want to delete ALL attendance for this employee in ${bulkForm.month} ${bulkForm.year}?`,
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     
     setIsDeleting(true);
     try {
@@ -396,7 +404,13 @@ export default function AttendancePage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this record?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this record?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     setIsDeleting(true);
     try {
       const res = await fetch(`${API_URL}/attendance/${id}`, {
@@ -417,7 +431,13 @@ export default function AttendancePage() {
 
   const handleMultiDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedIds.size} selected records?`)) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: `Are you sure you want to delete ${selectedIds.size} selected records?`,
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     
     setIsDeleting(true);
     try {
@@ -1086,7 +1106,7 @@ export default function AttendancePage() {
                               />
                             </td>
                           )}
-                          <td className="px-4 py-4 font-medium text-muted-foreground">{idx + 1}</td>
+                          <td className="px-4 py-4 font-medium text-muted-foreground">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
                           {canManageAttendance && selectedEmployeeId === "all" && (
                             <td className="px-4 py-4">
                               <div className="flex items-center gap-3">

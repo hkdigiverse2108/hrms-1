@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const reviewsData = [
   {
@@ -110,6 +111,7 @@ const RatingStars = ({ rating, interactive = false, onRatingChange }: { rating: 
 };
 
 export default function ReviewPage() {
+  const { confirm } = useConfirm();
   const [reviews, setReviews] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,6 +120,13 @@ export default function ReviewPage() {
   const [selectedReview, setSelectedReview] = useState<any>(null);
   const [newRating, setNewRating] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+  
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -245,7 +254,13 @@ export default function ReviewPage() {
   };
 
   const handleDeleteReview = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this review?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this review?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     
     try {
       const res = await fetch(`${API_URL}/reviews/${id}`, { method: 'DELETE' });
@@ -270,6 +285,11 @@ export default function ReviewPage() {
       r.department?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
+
+  const paginatedReviews = filteredReviews.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   if (permissionsLoading) {
     return (
@@ -410,10 +430,10 @@ export default function ReviewPage() {
                   </td>
                 </tr>
               ) : (
-                filteredReviews.map((review, idx) => (
+                paginatedReviews.map((review, idx) => (
                   <tr key={review.id} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="px-6 py-4 font-semibold text-slate-500">
-                      {(idx + 1).toString().padStart(2, '0')}
+                      {((currentPage - 1) * itemsPerPage + idx + 1).toString().padStart(2, '0')}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -463,13 +483,14 @@ export default function ReviewPage() {
           </table>
         </div>
         
-        <div className="p-4 bg-white border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-           <div className="text-[13px] text-muted-foreground font-medium">
-             Showing {filteredReviews.length} reviews
-           </div>
-           
-
-        </div>
+        <TablePagination 
+          totalItems={filteredReviews.length} 
+          itemsPerPage={itemsPerPage} 
+          currentPage={currentPage} 
+          onPageChange={setCurrentPage} 
+          onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+          itemName="reviews" 
+        />
       </div>
 
       {/* Edit Modal */}

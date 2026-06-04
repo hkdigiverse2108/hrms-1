@@ -11,6 +11,7 @@ import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { useConfirm } from "@/context/ConfirmContext";
 
 interface ModulePermission {
   moduleName: string
@@ -105,6 +106,7 @@ const PERMISSION_GROUPS = [
 const DEFAULT_MODULES = PERMISSION_GROUPS.flatMap(g => g.modules)
 
 export default function PermissionPresetsPage() {
+  const { confirm } = useConfirm();
   const router = useRouter()
   
   const [presets, setPresets] = useState<any[]>([])
@@ -257,7 +259,13 @@ export default function PermissionPresetsPage() {
 
   const handleDeletePreset = async () => {
     if (!selectedPresetId) return
-    if (!confirm('Are you sure you want to delete this preset?')) return
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: 'Are you sure you want to delete this preset?',
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
     
     setSaving(true)
     try {

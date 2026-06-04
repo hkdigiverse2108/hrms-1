@@ -18,6 +18,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Check, X } from "lucide-react";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
+import { TablePagination } from "@/components/common/TablePagination";
+import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -32,6 +35,7 @@ const noScrollbarStyle = `
 `;
 
 export default function ClientsPage() {
+  const { confirm } = useConfirm();
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -51,6 +55,12 @@ export default function ClientsPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [inlineEditing, setInlineEditing] = useState<{id: string, field: string} | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, activeTab]);
   
   // Logs state
   const [logsOpen, setLogsOpen] = useState(false);
@@ -141,18 +151,24 @@ export default function ClientsPage() {
         setEditingClient(null);
       } else {
         const error = await res.json();
-        alert(`Error: ${error.detail || "Failed to save client"}`);
+        toast.error(`Error: ${error.detail || "Failed to save client"}`);
       }
     } catch (err) {
       console.error("Error saving client:", err);
-      alert("Failed to connect to the server");
+      toast.error("Failed to connect to the server");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this client?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this client?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
 
     try {
       const res = await fetch(`${API_URL}/clients/${id}`, {
@@ -177,6 +193,11 @@ export default function ClientsPage() {
 
     return matchesSearch && matchesStatus && matchesDept;
   });
+
+  const paginatedClients = filteredClients.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   const handleInlineUpdate = async (clientId: string, field: string, value: any) => {
     try {
@@ -340,9 +361,9 @@ export default function ClientsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredClients.map((client, index) => (
+                    {paginatedClients.map((client, index) => (
                       <TableRow key={client.id} className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                        <TableCell className="text-center text-slate-400">{index + 1}</TableCell>
+                        <TableCell className="text-center text-slate-400">{(currentPage - 1) * itemsPerPage + index + 1}</TableCell>
                         
                         {/* Inline Editable Fields based on Dept */}
                         {(activeTab === "development" ? [
@@ -445,7 +466,7 @@ export default function ClientsPage() {
             </div>
           ) : filteredClients.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredClients.map((client) => (
+              {paginatedClients.map((client) => (
                 <Card key={client.id} className="group hover:shadow-md transition-shadow border-border">
                   <CardContent className="p-6">
                     <div className="flex justify-between items-start mb-4">
@@ -526,6 +547,18 @@ export default function ClientsPage() {
                   Add New Client
                 </Button>
               )}
+            </div>
+          )}
+          {filteredClients.length > 0 && (
+            <div className="mt-4">
+              <TablePagination 
+                totalItems={filteredClients.length} 
+                itemsPerPage={itemsPerPage} 
+                currentPage={currentPage} 
+                onPageChange={setCurrentPage}
+                onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+                itemName="clients"
+              />
             </div>
           )}
         </TabsContent>

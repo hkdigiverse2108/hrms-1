@@ -27,9 +27,11 @@ import { Application } from '@/lib/types'
 import { API_URL } from '@/lib/config';
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from "sonner"
+import { useConfirm } from "@/context/ConfirmContext";
 
 
 export default function ApplicationsPage() {
+  const { confirm } = useConfirm();
   const { data, isLoading, refresh } = useApi()
   const [applications, setApplications] = useState<Application[]>([])
   const [selectedApp, setSelectedApp] = useState<Application | null>(null)
@@ -140,7 +142,13 @@ export default function ApplicationsPage() {
   )
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this application?")) return
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this application?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
     try {
       const response = await fetch(`${API_URL}/applications/${id}`, {
         method: 'DELETE',

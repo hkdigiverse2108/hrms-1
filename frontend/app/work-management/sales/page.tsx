@@ -52,8 +52,10 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function SalesPage() {
+  const { confirm } = useConfirm();
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -187,7 +189,13 @@ export default function SalesPage() {
   };
 
   const handleDeleteSlab = async (id: string) => {
-    if (!confirm("Delete this slab?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Delete this slab?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     try {
       const res = await fetch(`${API_URL}/incentive-slabs/${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -350,7 +358,13 @@ export default function SalesPage() {
   };
 
   const handleDeleteLead = async (leadId: string) => {
-    if (!confirm("Are you sure you want to delete this lead?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this lead?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     try {
       const res = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "DELETE",
@@ -1243,7 +1257,13 @@ export default function SalesPage() {
                                         <div className="flex justify-end gap-1">
                                           {canDeleteSales && (
                                             <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-rose-500" onClick={async () => {
-                                              if (confirm("Delete target?")) {
+                                              const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Delete target?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (isConfirmed) {
                                                 await fetch(`${API_URL}/sales-targets/${t.id}`, { method: "DELETE" });
                                                 fetchTargets();
                                               }

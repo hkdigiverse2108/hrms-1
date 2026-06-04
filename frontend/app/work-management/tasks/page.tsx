@@ -23,6 +23,9 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
+import { TablePagination } from "@/components/common/TablePagination";
+import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const STAGES = [
   { id: "todo", label: "To Do", color: "text-slate-700 bg-transparent", lineColor: "bg-slate-400" },
@@ -32,6 +35,7 @@ const STAGES = [
 ];
 
 export default function TasksPage() {
+  const { confirm } = useConfirm();
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions();
@@ -57,6 +61,12 @@ export default function TasksPage() {
   const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showAllTasks, setShowAllTasks] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedDepartment, dateFilter, showAllTasks]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -139,18 +149,24 @@ export default function TasksPage() {
         setEditingTask(null);
       } else {
         const error = await res.json();
-        alert(`Error: ${error.detail || "Failed to save task"}`);
+        toast.error(`Error: ${error.detail || "Failed to save task"}`);
       }
     } catch (err) {
       console.error("Error saving task:", err);
-      alert("Failed to connect to the server");
+      toast.error("Failed to connect to the server");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this task?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this task?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
 
     try {
       const res = await fetch(`${API_URL}/wm-tasks/${id}`, {
@@ -166,7 +182,7 @@ export default function TasksPage() {
 
   const onDragEnd = async (result: DropResult) => {
     if (!canEditTask) {
-      alert("You do not have permission to edit tasks");
+      toast.error("You do not have permission to edit tasks");
       return;
     }
     const { destination, source, draggableId } = result;
@@ -193,7 +209,7 @@ export default function TasksPage() {
       });
       if (!res.ok) {
         setTasks(prevTasks);
-        alert("Failed to update task stage");
+        toast.error("Failed to update task stage");
       }
     } catch (err) {
       console.error("Error updating task status:", err);
@@ -290,6 +306,11 @@ export default function TasksPage() {
 
     return true;
   });
+
+  const paginatedTasks = filteredTasks.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
 
 
@@ -451,12 +472,12 @@ export default function TasksPage() {
                   </tr>
                 </thead>
                 <tbody className="text-[12px] divide-y divide-slate-100">
-                  {filteredTasks.map((task, index) => (
+                  {paginatedTasks.map((task, index) => (
                     <tr 
                       key={task.id} 
                       className="hover:bg-slate-50/50 transition-colors group"
                     >
-                      <td className="px-4 py-3 text-center text-slate-400 font-medium">{index + 1}</td>
+                      <td className="px-4 py-3 text-center text-slate-400 font-medium">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                       
                       {/* Inline Editable Fields */}
                       {[
@@ -592,6 +613,18 @@ export default function TasksPage() {
                 </tbody>
               </table>
             </div>
+            {filteredTasks.length > 0 && (
+              <div className="mt-auto border-t border-slate-200">
+                <TablePagination 
+                  totalItems={filteredTasks.length} 
+                  itemsPerPage={itemsPerPage} 
+                  currentPage={currentPage} 
+                  onPageChange={setCurrentPage}
+                  onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+                  itemName="tasks"
+                />
+              </div>
+            )}
           </div>
         ) : (
           <DragDropContext onDragEnd={onDragEnd}>

@@ -23,8 +23,10 @@ import { toast } from 'sonner'
 import { useUser } from '@/hooks/useUser'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function EmployeeDocumentsPage() {
+  const { confirm } = useConfirm();
   const router = useRouter()
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
   const { user } = useUser()
@@ -346,7 +348,13 @@ export default function EmployeeDocumentsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this document?')) return
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: 'Are you sure you want to delete this document?',
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
     
     try {
       const response = await fetch(`${API_URL}/employee-documents/${id}`, {
@@ -395,7 +403,13 @@ export default function EmployeeDocumentsPage() {
   }
 
   const handleDeleteType = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this document type?')) return
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: 'Are you sure you want to delete this document type?',
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
 
     try {
       const response = await fetch(`${API_URL}/document-types/${id}`, { method: 'DELETE' })

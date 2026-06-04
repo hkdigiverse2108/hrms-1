@@ -29,6 +29,8 @@ import { exportToCSV } from "@/lib/export-utils";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 
 
 const getTypeBadge = (type: string) => {
@@ -68,6 +70,7 @@ const parseRemarkDate = (dateStr: string): Date | null => {
 
 
 export default function RemarksPage() {
+  const { confirm } = useConfirm();
   const [remarks, setRemarks] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -166,13 +169,24 @@ export default function RemarksPage() {
       if (empRes.ok) setEmployees(await empRes.json());
       if (typeRes.ok) {
         const types = await typeRes.json();
-        setPenaltyTypes(types.length > 0 ? types : PENALTIES_FALLBACK);
+        const dbNames = new Set(types.map((t: any) => t.name));
+        const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
+        const missingFallbacks = PENALTIES_FALLBACK
+          .filter(p => !dbNames.has(p.name) && !deletedFallbacks.includes(p.name))
+          .map((p, i) => ({ ...p, id: `fallback-${i}` }));
+        setPenaltyTypes([...types, ...missingFallbacks]);
       } else {
-        setPenaltyTypes(PENALTIES_FALLBACK);
+        const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
+        setPenaltyTypes(PENALTIES_FALLBACK
+          .filter(p => !deletedFallbacks.includes(p.name))
+          .map((p, i) => ({ ...p, id: `fallback-${i}` })));
       }
     } catch (err) {
       console.error("Error fetching remarks data:", err);
-      setPenaltyTypes(PENALTIES_FALLBACK);
+      const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
+      setPenaltyTypes(PENALTIES_FALLBACK
+        .filter(p => !deletedFallbacks.includes(p.name))
+        .map((p, i) => ({ ...p, id: `fallback-${i}` })));
     } finally {
       setIsLoading(false);
     }
@@ -181,7 +195,7 @@ export default function RemarksPage() {
   const handleAddType = async () => {
     if (!newType.name || newType.amount <= 0) return;
     try {
-      if (editingTypeId) {
+      if (editingTypeId && !editingTypeId.startsWith('fallback-')) {
         const res = await fetch(`${API_URL}/penalty-types/${editingTypeId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -209,7 +223,33 @@ export default function RemarksPage() {
   };
 
   const handleDeleteType = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this violation type?")) return;
+    if (id.startsWith('fallback-')) {
+      const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this default violation type?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
+      const fallbackIdx = parseInt(id.split('-')[1]);
+      if (!isNaN(fallbackIdx) && PENALTIES_FALLBACK[fallbackIdx]) {
+        const fallbackName = PENALTIES_FALLBACK[fallbackIdx].name;
+        const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
+        if (!deletedFallbacks.includes(fallbackName)) {
+          deletedFallbacks.push(fallbackName);
+          localStorage.setItem('deletedFallbacks', JSON.stringify(deletedFallbacks));
+        }
+      }
+      fetchData();
+      return;
+    }
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this violation type?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     try {
       const res = await fetch(`${API_URL}/penalty-types/${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
@@ -282,7 +322,13 @@ export default function RemarksPage() {
   };
 
   const handleDeleteRemark = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this remark?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this remark?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     
     try {
       const res = await fetch(`${API_URL}/remarks/${id}`, { method: 'DELETE' });
@@ -293,7 +339,13 @@ export default function RemarksPage() {
   };
 
   const handleRestoreRemark = async (id: string) => {
-    if (!confirm("Are you sure you want to restore this remark?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to restore this remark?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     
     try {
       const res = await fetch(`${API_URL}/remarks/${id}/restore`, { method: 'POST' });
@@ -304,7 +356,13 @@ export default function RemarksPage() {
   };
 
   const handlePermanentDeleteRemark = async (id: string) => {
-    if (!confirm("WARNING: Are you sure you want to PERMANENTLY delete this remark? This action cannot be undone.")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "WARNING: Are you sure you want to PERMANENTLY delete this remark? This action cannot be undone.",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     
     try {
       const res = await fetch(`${API_URL}/remarks/${id}/permanent`, { method: 'DELETE' });
@@ -419,7 +477,7 @@ export default function RemarksPage() {
       doc.save(`Remarks_Penalty_Report_${new Date().toISOString().slice(0,10)}.pdf`)
     } catch (err) {
       console.error("PDF Export error:", err)
-      alert("Failed to export PDF file.")
+      toast.error("Failed to export PDF file.")
     } finally {
       setIsExporting(false)
     }

@@ -52,6 +52,7 @@ import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const monthMap: { [key: string]: string } = {
   "January": "01",
@@ -74,6 +75,7 @@ const normalizeDate = (dateStr: string) => {
 };
 
 export default function MarketingReportsPage() {
+  const { confirm } = useConfirm();
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -335,7 +337,13 @@ export default function MarketingReportsPage() {
         return;
       }
     }
-    if (!confirm("Are you sure you want to delete this report?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this report?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
     try {
       const res = await fetch(`${API_URL}/marketing/reports/${type}/${id}`, {
         method: "DELETE",

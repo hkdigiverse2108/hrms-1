@@ -18,8 +18,10 @@ import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function DepartmentsPage() {
+  const { confirm } = useConfirm();
   const { user } = useUser();
   const router = useRouter();
   const [departments, setDepartments] = useState<any[]>([]);
@@ -96,7 +98,13 @@ export default function DepartmentsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this department?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this department?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
 
     try {
       const res = await fetch(`${API_URL}/departments/${id}`, {

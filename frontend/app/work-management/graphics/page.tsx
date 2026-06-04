@@ -25,8 +25,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/hooks/useUser";
 import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function GraphicsClientsPage() {
+  const { confirm } = useConfirm();
   const { user } = useUser();
   const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -95,7 +97,13 @@ export default function GraphicsClientsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this graphics client?")) return;
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this graphics client?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return;
 
     try {
       const res = await fetch(`${API_URL}/clients/${id}`, {

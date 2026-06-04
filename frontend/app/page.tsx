@@ -56,8 +56,11 @@ import { formatTime12h } from "@/lib/utils";
 import { RequestPunchOutDialog } from "@/components/dashboard/RequestPunchOutDialog";
 import { AddEventDialog } from "@/components/dashboard/AddEventDialog";
 import { ViewAllEventsDialog } from "@/components/dashboard/ViewAllEventsDialog";
+import { toast } from "sonner";
+import { useConfirm } from "@/context/ConfirmContext";
  
 const formatToHhMm = (totalMinutes: number) => {
+  const { confirm } = useConfirm();
   if (!totalMinutes || totalMinutes <= 0) return "0h 0m";
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
@@ -412,11 +415,11 @@ export default function DashboardPage() {
         await fetchHistory();
       } else {
         const errorData = await res.json().catch(() => ({}));
-        alert(`Action failed: ${errorData.detail || 'Server error'}`);
+        toast.error(`Action failed: ${errorData.detail || 'Server error'}`);
       }
     } catch (err) {
       console.error("Punch error:", err);
-      alert("Failed to connect to the server. Please ensure the backend is running.");
+      toast.error("Failed to connect to the server. Please ensure the backend is running.");
     } finally {
       setIsPunching(false);
     }
@@ -1007,6 +1010,7 @@ function EventsSidebar({ user }: { user: any }) {
   const [currentMonth, setCurrentMonth] = useState(dayjs());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const canAddEvents = user?.role === "Admin" || user?.role === "HR";
+  const { confirm } = useConfirm();
  
   useEffect(() => {
     fetchEvents();
@@ -1063,7 +1067,13 @@ function EventsSidebar({ user }: { user: any }) {
   };
  
   const handleDeleteEvent = async (id: string) => {
-    if (confirm("Are you sure you want to delete this event?")) {
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to delete this event?",
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (isConfirmed) {
       try {
         const res = await fetch(`${API_URL}/events/${id}`, { method: 'DELETE' });
         if (res.ok) {

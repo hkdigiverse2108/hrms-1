@@ -19,7 +19,9 @@ import { useUserContext } from '@/context/UserContext'
 import { useApi } from '@/hooks/useApi'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
+import { useConfirm } from "@/context/ConfirmContext";
 export default function BonusesPage() {
+  const { confirm } = useConfirm();
   const { user } = useUserContext()
   const canManage = (() => {
     if (user) {
@@ -113,7 +115,13 @@ export default function BonusesPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this adjustment?')) return
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: 'Are you sure you want to delete this adjustment?',
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
     try {
       const response = await fetch(`${API_URL}/bonus-deductions/${id}`, {
         method: 'DELETE'
