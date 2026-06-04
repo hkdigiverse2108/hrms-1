@@ -51,6 +51,12 @@ export default function EmployeeListPage() {
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterDept, filterRole, filterStatus]);
 
   const handleExportPDF = async () => {
     setIsExporting(true)
@@ -227,6 +233,11 @@ export default function EmployeeListPage() {
     return matchesSearch && matchesDept && matchesRole && matchesStatus;
   });
 
+  const paginatedEmployees = filteredEmployees.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   // Use API data for filters if available, otherwise fallback to existing employee data
   const departments = apiData?.departments?.map((d: any) => d.name) || 
                       Array.from(new Set(employees.map(e => e.department).filter(Boolean)));
@@ -363,7 +374,7 @@ export default function EmployeeListPage() {
                   </td>
                 </tr>
               ) : (
-                filteredEmployees.map((emp) => (
+                paginatedEmployees.map((emp) => (
                   <tr key={emp.id} className="hover:bg-muted/50 transition-colors group cursor-pointer">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -471,7 +482,14 @@ export default function EmployeeListPage() {
         </div>
 
         {/* Pagination Setup */}
-        <TablePagination totalItems={filteredEmployees.length} itemsPerPage={filteredEmployees.length} currentPage={1} onPageChange={() => {}} itemName="employees" />
+        <TablePagination 
+          totalItems={filteredEmployees.length} 
+          itemsPerPage={itemsPerPage} 
+          currentPage={currentPage} 
+          onPageChange={setCurrentPage} 
+          onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+          itemName="employees" 
+        />
       </div>
 
       <EmployeeModal 

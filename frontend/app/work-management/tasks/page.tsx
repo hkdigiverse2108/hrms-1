@@ -23,6 +23,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
+import { TablePagination } from "@/components/common/TablePagination";
 
 const STAGES = [
   { id: "todo", label: "To Do", color: "text-slate-700 bg-transparent", lineColor: "bg-slate-400" },
@@ -57,6 +58,12 @@ export default function TasksPage() {
   const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showAllTasks, setShowAllTasks] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedDepartment, dateFilter, showAllTasks]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -291,6 +298,11 @@ export default function TasksPage() {
     return true;
   });
 
+  const paginatedTasks = filteredTasks.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
 
 
 
@@ -451,12 +463,12 @@ export default function TasksPage() {
                   </tr>
                 </thead>
                 <tbody className="text-[12px] divide-y divide-slate-100">
-                  {filteredTasks.map((task, index) => (
+                  {paginatedTasks.map((task, index) => (
                     <tr 
                       key={task.id} 
                       className="hover:bg-slate-50/50 transition-colors group"
                     >
-                      <td className="px-4 py-3 text-center text-slate-400 font-medium">{index + 1}</td>
+                      <td className="px-4 py-3 text-center text-slate-400 font-medium">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                       
                       {/* Inline Editable Fields */}
                       {[
@@ -592,6 +604,18 @@ export default function TasksPage() {
                 </tbody>
               </table>
             </div>
+            {filteredTasks.length > 0 && (
+              <div className="mt-auto border-t border-slate-200">
+                <TablePagination 
+                  totalItems={filteredTasks.length} 
+                  itemsPerPage={itemsPerPage} 
+                  currentPage={currentPage} 
+                  onPageChange={setCurrentPage}
+                  onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+                  itemName="tasks"
+                />
+              </div>
+            )}
           </div>
         ) : (
           <DragDropContext onDragEnd={onDragEnd}>

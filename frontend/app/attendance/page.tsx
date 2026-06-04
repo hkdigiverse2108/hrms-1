@@ -1086,7 +1086,7 @@ export default function AttendancePage() {
                               />
                             </td>
                           )}
-                          <td className="px-4 py-4 font-medium text-muted-foreground">{idx + 1}</td>
+                          <td className="px-4 py-4 font-medium text-muted-foreground">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
                           {canManageAttendance && selectedEmployeeId === "all" && (
                             <td className="px-4 py-4">
                               <div className="flex items-center gap-3">
