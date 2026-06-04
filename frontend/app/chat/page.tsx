@@ -177,6 +177,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
 
 export default function ChatPage() {
   const { user } = useUser();
+  const { ws, lastEvent } = useChatContext();
   const { data: apiData, isLoading } = useApi();
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [message, setMessage] = useState("");
