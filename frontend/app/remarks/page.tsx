@@ -167,14 +167,23 @@ export default function RemarksPage() {
       if (typeRes.ok) {
         const types = await typeRes.json();
         const dbNames = new Set(types.map((t: any) => t.name));
-        const missingFallbacks = PENALTIES_FALLBACK.filter(p => !dbNames.has(p.name)).map((p, i) => ({ ...p, id: `fallback-${i}` }));
+        const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
+        const missingFallbacks = PENALTIES_FALLBACK
+          .filter(p => !dbNames.has(p.name) && !deletedFallbacks.includes(p.name))
+          .map((p, i) => ({ ...p, id: `fallback-${i}` }));
         setPenaltyTypes([...types, ...missingFallbacks]);
       } else {
-        setPenaltyTypes(PENALTIES_FALLBACK.map((p, i) => ({ ...p, id: `fallback-${i}` })));
+        const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
+        setPenaltyTypes(PENALTIES_FALLBACK
+          .filter(p => !deletedFallbacks.includes(p.name))
+          .map((p, i) => ({ ...p, id: `fallback-${i}` })));
       }
     } catch (err) {
       console.error("Error fetching remarks data:", err);
-      setPenaltyTypes(PENALTIES_FALLBACK.map((p, i) => ({ ...p, id: `fallback-${i}` })));
+      const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
+      setPenaltyTypes(PENALTIES_FALLBACK
+        .filter(p => !deletedFallbacks.includes(p.name))
+        .map((p, i) => ({ ...p, id: `fallback-${i}` })));
     } finally {
       setIsLoading(false);
     }
@@ -212,7 +221,17 @@ export default function RemarksPage() {
 
   const handleDeleteType = async (id: string) => {
     if (id.startsWith('fallback-')) {
-      alert("This is a default violation type and cannot be deleted until customized.");
+      if (!confirm("Are you sure you want to delete this default violation type?")) return;
+      const fallbackIdx = parseInt(id.split('-')[1]);
+      if (!isNaN(fallbackIdx) && PENALTIES_FALLBACK[fallbackIdx]) {
+        const fallbackName = PENALTIES_FALLBACK[fallbackIdx].name;
+        const deletedFallbacks = JSON.parse(localStorage.getItem('deletedFallbacks') || '[]');
+        if (!deletedFallbacks.includes(fallbackName)) {
+          deletedFallbacks.push(fallbackName);
+          localStorage.setItem('deletedFallbacks', JSON.stringify(deletedFallbacks));
+        }
+      }
+      fetchData();
       return;
     }
     if (!confirm("Are you sure you want to delete this violation type?")) return;
