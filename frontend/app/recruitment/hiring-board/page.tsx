@@ -754,6 +754,7 @@ export default function HiringBoardPage() {
                     <Input 
                       type="date" 
                       id="interviewDate"
+                      min={new Date().toISOString().split('T')[0]}
                       value={formData.interviewDate}
                       onChange={(e) => setFormData({...formData, interviewDate: e.target.value})}
                     />
