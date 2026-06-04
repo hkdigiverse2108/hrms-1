@@ -572,7 +572,8 @@ export default function ChatPage() {
       const isGroup = selectedChat.type === 'group' || selectedChat.type === 'general';
       const res = await fetch(`${API_URL}/chat/files/${user.id}/${selectedChat.id}?is_group=${isGroup}`);
       if (res.ok) {
-        setChatFiles(await res.json());
+        const files = await res.json();
+        setChatFiles(files.filter((f: any) => !f.isVoice));
       }
     } catch (err) {
       console.error("Error fetching chat files:", err);
