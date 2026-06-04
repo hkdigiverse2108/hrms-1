@@ -72,17 +72,22 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     const connectWebSocket = () => {
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${wsProtocol}//${window.location.host}/api/chat/ws/${user.id}`;
+      const wsHost = process.env.NEXT_PUBLIC_BACKEND_HOST || window.location.hostname || "127.0.0.1";
+      const wsPort = process.env.NEXT_PUBLIC_BACKEND_PORT || "8000";
+      const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/chat/ws/${user.id}`;
       
+      console.log("[ChatContext] Connecting WebSocket to:", wsUrl);
       const websocket = new WebSocket(wsUrl);
       wsRef.current = websocket;
 
       websocket.onopen = () => {
+        console.log("[ChatContext] WebSocket connected ✅");
         setWs(websocket);
         reconnectAttempts = 0;
       };
 
       websocket.onclose = (event) => {
+        console.log("[ChatContext] WebSocket closed ❌ code:", event.code, "reason:", event.reason);
         setWs(null);
         wsRef.current = null;
         if (reconnectAttempts < 10) {
@@ -94,18 +99,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         }
       };
 
-      websocket.onerror = () => {
+      websocket.onerror = (err) => {
+        console.error("[ChatContext] WebSocket error:", err);
         websocket.close();
       };
 
       websocket.onmessage = async (event) => {
         try {
           const payload = JSON.parse(event.data);
-          setLastEvent(payload);
+          // Wrap with a unique counter so React always detects a new event,
+          // even if two consecutive messages have the same shape
+          setLastEvent({ ...payload, _seq: Date.now() });
 
           const { event: eventType, data } = payload;
           if (eventType === "new_message") {
-            const isGroupMsg = data.groupId !== null;
+            const isGroupMsg = !!data.groupId;
             const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
             const activeChatId = localStorage.getItem("activeChatId");
             const isChatPage = window.location.pathname.startsWith("/chat");
