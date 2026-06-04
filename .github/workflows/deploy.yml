@@ -60,5 +60,5 @@ jobs:
             npm install
             npm run build
 
-            pm2 restart HRMS-LIVE
+            pm2 restart HRMS
           EOF
