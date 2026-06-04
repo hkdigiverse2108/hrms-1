@@ -166,13 +166,15 @@ export default function RemarksPage() {
       if (empRes.ok) setEmployees(await empRes.json());
       if (typeRes.ok) {
         const types = await typeRes.json();
-        setPenaltyTypes(types.length > 0 ? types : PENALTIES_FALLBACK);
+        const dbNames = new Set(types.map((t: any) => t.name));
+        const missingFallbacks = PENALTIES_FALLBACK.filter(p => !dbNames.has(p.name)).map((p, i) => ({ ...p, id: `fallback-${i}` }));
+        setPenaltyTypes([...types, ...missingFallbacks]);
       } else {
-        setPenaltyTypes(PENALTIES_FALLBACK);
+        setPenaltyTypes(PENALTIES_FALLBACK.map((p, i) => ({ ...p, id: `fallback-${i}` })));
       }
     } catch (err) {
       console.error("Error fetching remarks data:", err);
-      setPenaltyTypes(PENALTIES_FALLBACK);
+      setPenaltyTypes(PENALTIES_FALLBACK.map((p, i) => ({ ...p, id: `fallback-${i}` })));
     } finally {
       setIsLoading(false);
     }
@@ -181,7 +183,7 @@ export default function RemarksPage() {
   const handleAddType = async () => {
     if (!newType.name || newType.amount <= 0) return;
     try {
-      if (editingTypeId) {
+      if (editingTypeId && !editingTypeId.startsWith('fallback-')) {
         const res = await fetch(`${API_URL}/penalty-types/${editingTypeId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -209,6 +211,10 @@ export default function RemarksPage() {
   };
 
   const handleDeleteType = async (id: string) => {
+    if (id.startsWith('fallback-')) {
+      alert("This is a default violation type and cannot be deleted until customized.");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this violation type?")) return;
     try {
       const res = await fetch(`${API_URL}/penalty-types/${id}`, { method: 'DELETE' });
