@@ -9,6 +9,8 @@ import { TablePagination } from "@/components/common/TablePagination";
 import { Button } from "@/components/ui/button";
 import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2, Eye, EyeOff, CreditCard } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { API_URL, getAvatarUrl } from "@/lib/config";
@@ -45,7 +47,7 @@ export default function EmployeeListPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDept, setFilterDept] = useState("All Departments");
   const [filterRole, setFilterRole] = useState("All Roles");
-  const [filterStatus, setFilterStatus] = useState("Status");
+  const [filterStatus, setFilterStatus] = useState("active");
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -300,15 +302,17 @@ export default function EmployeeListPage() {
                   <option key={role}>{role}</option>
                 ))}
               </select>
-              <select 
-                className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-              >
-                <option>Status</option>
-                <option>active</option>
-                <option>inactive</option>
-              </select>
+              <div className="flex items-center space-x-2 px-3 py-2.5 sm:py-2 bg-white border border-border rounded-md sm:h-[38px]">
+                <Switch 
+                  id="status-toggle" 
+                  checked={filterStatus === "inactive"}
+                  onCheckedChange={(checked) => setFilterStatus(checked ? "inactive" : "active")}
+                  className="data-[state=checked]:bg-brand-teal"
+                />
+                <Label htmlFor="status-toggle" className="text-sm font-medium cursor-pointer text-muted-foreground whitespace-nowrap">
+                  Show Inactive
+                </Label>
+              </div>
             </div>
           </div>
           <SearchBar 

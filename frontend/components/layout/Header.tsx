@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { SidebarNav } from "./SidebarNav";
 import { useUser } from "@/hooks/useUser";
+import { useChatContext } from "@/context/ChatContext";
 import { useRouter } from "next/navigation";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -26,37 +27,11 @@ dayjs.extend(relativeTime);
 const { Header: AntHeader } = Layout;
  
 export function Header() {
-  const audioCtxRef = React.useRef<any>(null);
-
-  useEffect(() => {
-    const unlockAudio = () => {
-      if (!audioCtxRef.current) {
-        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtxClass) {
-          audioCtxRef.current = new AudioCtxClass();
-        }
-      }
-      if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
-        audioCtxRef.current.resume().catch(() => {});
-      }
-    };
-    if (typeof window !== "undefined") {
-      document.addEventListener("click", unlockAudio);
-      document.addEventListener("keydown", unlockAudio);
-      return () => {
-        document.removeEventListener("click", unlockAudio);
-        document.removeEventListener("keydown", unlockAudio);
-      };
-    }
-  }, []);
-
   const router = useRouter();
   const { user, isLoading } = useUser();
   const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [unreadChatCount, setUnreadChatCount] = useState(0);
-  const prevUnreadChatCount = React.useRef(0);
-  const prevUnreadCountsRef = React.useRef<Record<string, number>>({});
+  const { totalUnreadCount: unreadChatCount } = useChatContext();
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
@@ -116,212 +91,6 @@ export function Header() {
       console.error("Error fetching notifications:", err);
     }
   };
-
-  const fetchUnreadChatCount = async () => {
-    if (!user?.id) return;
-    try {
-      const res = await fetch(`${API_URL}/chat/unread-counts/${user.id}`);
-      if (res.ok) {
-        const data = await res.json() as Record<string, number>;
-        const total = Object.values(data).reduce((sum, val) => sum + (val || 0), 0);
-        
-        // Find which chatId increased
-        let increasedChatId = null;
-        for (const [id, count] of Object.entries(data)) {
-          const prevCount = prevUnreadCountsRef.current[id] || 0;
-          if ((count as number) > prevCount) {
-            increasedChatId = id;
-            break;
-          }
-        }
-        
-        // Trigger alert if message count increases and user is not on the chat page
-        if (total > prevUnreadChatCount.current && typeof window !== "undefined") {
-          const isChatPage = window.location.pathname.startsWith("/chat");
-          const isDnd = localStorage.getItem("globalDndEnabled") === "true";
-          const activeChatId = localStorage.getItem("activeChatId");
-          const isTabActive = typeof document !== "undefined" && document.hasFocus();
-          const isUserViewingThisChat = isChatPage && isTabActive && activeChatId === increasedChatId;
-          
-          if (!isUserViewingThisChat && !isDnd && increasedChatId) {
-            // Read specific preference
-            const prefs = JSON.parse(localStorage.getItem("chatNotificationPrefs") || "{}");
-            const globalMode = localStorage.getItem("globalDefaultMode") || "all";
-            
-            const chatPref = prefs[increasedChatId] || { mode: "default" };
-            const resolvedMode = chatPref.mode === "default" || !chatPref.mode ? globalMode : chatPref.mode;
-            
-            if (resolvedMode === "none") {
-              prevUnreadCountsRef.current = data;
-              prevUnreadChatCount.current = total;
-              setUnreadChatCount(total);
-              return;
-            }
-            
-            // Check for Mentions Only mode
-            if (resolvedMode === "mentions") {
-              try {
-                let url = `${API_URL}/chat/messages/${user.id}/${increasedChatId}?group_id=${increasedChatId}`;
-                let msgRes = await fetch(url);
-                let messages = [];
-                if (msgRes.ok) {
-                  messages = await msgRes.json();
-                }
-                if (messages.length === 0) {
-                  url = `${API_URL}/chat/messages/${user.id}/${increasedChatId}`;
-                  msgRes = await fetch(url);
-                  if (msgRes.ok) {
-                    messages = await msgRes.json();
-                  }
-                }
-                
-                if (messages.length > 0) {
-                  const lastMsg = messages[messages.length - 1];
-                  const isMention = (() => {
-                    if (!lastMsg.text) return false;
-                    const mentions = lastMsg.text.match(/@\w+/g);
-                    if (!mentions) return false;
-                    const firstName = user?.firstName?.toLowerCase() || "";
-                    const lastName = user?.lastName?.toLowerCase() || "";
-                    const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
-                    const strippedFullName = fullName.replace(/\s+/g, "");
-                    
-                    return mentions.some((m: string) => {
-                      const mentionName = m.substring(1).toLowerCase();
-                      if (!mentionName) return false;
-                      if (mentionName === "everyone") return true;
-                      return (
-                        (firstName && firstName === mentionName) ||
-                        (lastName && lastName === mentionName) ||
-                        (fullName && fullName.includes(mentionName)) ||
-                        (strippedFullName && strippedFullName === mentionName)
-                      );
-                    });
-                  })();
-                  
-                  const isPersonal = !lastMsg.groupId;
-                  if (!isMention && !isPersonal) {
-                    // Not a mention and it's a group/general chat! Skip chime and push popup!
-                    prevUnreadCountsRef.current = data;
-                    prevUnreadChatCount.current = total;
-                    setUnreadChatCount(total);
-                    return;
-                  }
-                }
-              } catch (err) {
-                console.error("Error fetching message in mentions mode:", err);
-              }
-            }
-            
-            // 1. Play chime sound in the background
-            try {
-              let audioCtx = audioCtxRef.current;
-              if (!audioCtx) {
-                const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-                if (AudioCtxClass) {
-                  audioCtx = new AudioCtxClass();
-                  audioCtxRef.current = audioCtx;
-                }
-              }
-              const play = () => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                
-                const globalSound = localStorage.getItem("globalDefaultSound") || "default";
-                if (globalSound === "bubble") {
-                  osc.type = "sine";
-                  osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-                  osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.15);
-                  gain.gain.setValueAtTime(0.01, audioCtx.currentTime);
-                  gain.gain.exponentialRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
-                  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-                  osc.start();
-                  osc.stop(audioCtx.currentTime + 0.15);
-                } else if (globalSound === "beep") {
-                  osc.type = "square";
-                  osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-                  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
-                  osc.start();
-                  osc.stop(audioCtx.currentTime + 0.08);
-                } else if (globalSound !== "silent") {
-                  osc.type = "triangle";
-                  osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
-                  osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); 
-                  gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-                  osc.start();
-                  osc.stop(audioCtx.currentTime + 0.3);
-                }
-              };
-              if (audioCtx.state === "suspended") {
-                audioCtx.resume().then(play).catch(() => play());
-              } else {
-                play();
-              }
-            } catch (e) {
-              console.warn(e);
-            }
-
-            // 2. Trigger native browser push notification
-            if ("Notification" in window && Notification.permission === "granted") {
-              // Fetch the last message for a rich notification body
-              try {
-                let msgUrl = `${API_URL}/chat/messages/${user.id}/${increasedChatId}?group_id=${increasedChatId}`;
-                let msgRes = await fetch(msgUrl);
-                let msgs = [];
-                if (msgRes.ok) {
-                  msgs = await msgRes.json();
-                }
-                if (msgs.length === 0) {
-                  msgUrl = `${API_URL}/chat/messages/${user.id}/${increasedChatId}`;
-                  msgRes = await fetch(msgUrl);
-                  if (msgRes.ok) {
-                    msgs = await msgRes.json();
-                  }
-                }
-
-                if (msgs.length > 0) {
-                  const lastMsg = msgs[msgs.length - 1];
-                  const senderName = lastMsg.sender || "Colleague";
-                  const body = lastMsg.text || "Sent an attachment";
-                  const title = lastMsg.type === "group" || lastMsg.groupId ? `💬 ${senderName} (Group Chat)` : `💬 ${senderName}`;
-                  const notif = new Notification(title, {
-                    body,
-                    icon: "/favicon.ico",
-                  });
-                  notif.onclick = () => { window.focus(); router.push("/chat"); };
-                }
-              } catch {
-                // fallback generic notification
-                const notif = new Notification("New HRMS Chat Message", {
-                  body: "You have a new message.",
-                  icon: "/favicon.ico",
-                });
-                notif.onclick = () => { window.focus(); router.push("/chat"); };
-              }
-            }
-          }
-        }
-
-        prevUnreadCountsRef.current = data;
-        prevUnreadChatCount.current = total;
-        setUnreadChatCount(total);
-      }
-    } catch (err) {
-      console.error("Error fetching unread chat count:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (user?.id) {
-      fetchUnreadChatCount();
-      const interval = setInterval(fetchUnreadChatCount, 4000);
-      return () => clearInterval(interval);
-    }
-  }, [user?.id]);
 
   // Dynamically update the browser tab title with the unread chat badge count (like Email / WhatsApp) app-wide
   useEffect(() => {

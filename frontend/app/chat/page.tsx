@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useUser } from "@/hooks/useUser";
+import { useChatContext } from "@/context/ChatContext";
 import {
   Dialog,
   DialogContent,
@@ -257,7 +258,6 @@ export default function ChatPage() {
     setMessage(val);
     handleTyping();
 
-    // Check if user is typing a mention
     const lastAtIdx = val.lastIndexOf("@");
     if (lastAtIdx !== -1 && lastAtIdx >= val.length - 20) {
       const textAfterAt = val.slice(lastAtIdx + 1);
@@ -293,7 +293,6 @@ export default function ChatPage() {
     if (savedPrefs) {
       try { setChatNotificationPrefs(JSON.parse(savedPrefs)); } catch (e) { console.error(e); }
     }
-    // Auto-request notification permission so desktop alerts always work (blocked only by DND)
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
@@ -306,18 +305,6 @@ export default function ChatPage() {
     if (savedGlobalSound) setGlobalDefaultSound(savedGlobalSound);
   }, []);
 
-  // Dynamic tab title update for unread messages
-  useEffect(() => {
-    if (typeof document !== "undefined") {
-      const totalUnread = Object.values(unreadCounts).reduce((sum, val) => sum + (val || 0), 0);
-      if (totalUnread > 0) {
-        document.title = `(${totalUnread}) HRMS Chat`;
-      } else {
-        document.title = "HRMS Chat";
-      }
-    }
-  }, [unreadCounts]);
-
   const toggleMuteChat = (chatId: string) => {
     const next = mutedChats.includes(chatId)
       ? mutedChats.filter(id => id !== chatId)
@@ -325,8 +312,6 @@ export default function ChatPage() {
     setMutedChats(next);
     localStorage.setItem("mutedChats", JSON.stringify(next));
   };
-
-
 
   const toggleGlobalDnd = () => {
     const next = !globalDndEnabled;
@@ -431,7 +416,6 @@ export default function ChatPage() {
     scrollToBottom();
   }, [currentMessages, typingUsers, scrollToBottom]);
 
-  // Force scroll to bottom whenever a new chat is opened
   useEffect(() => {
     if (selectedChat) {
       shouldScrollToBottom.current = true;
@@ -469,7 +453,6 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (user) {
-      fetchUnreadCounts();
       fetchChatSummaries();
       fetchChannels();
       fetchSavedMessages();
@@ -546,36 +529,16 @@ export default function ChatPage() {
     }
   };
 
-  const fetchChatSummaries = async () => {
+  const fetchChatSummaries = useCallback(async () => {
     if (!user) return;
     try {
       const res = await fetch(`${API_URL}/chat/summaries/${user.id}`);
       if (res.ok) {
-        const data = await res.json();
-        setChatSummaries(data);
+        setChatSummaries(await res.json());
       }
     } catch (err) {
       console.error("Error fetching summaries:", err);
     }
-  };
-
-  const fetchUnreadCounts = async () => {
-    if (!user) return;
-    try {
-      const res = await fetch(`${API_URL}/chat/unread-counts/${user.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setUnreadCounts(data);
-      }
-    } catch (err) {
-      console.error("Error fetching unread counts:", err);
-    }
-  };
-
-  // Initially fetch unread counts on user changes
-  useEffect(() => {
-    if (!user) return;
-    fetchUnreadCounts();
   }, [user]);
 
   const fetchSavedMessages = async () => {
@@ -765,194 +728,75 @@ export default function ChatPage() {
     }
   }, [selectedChat, user, fetchMessages, fetchGroups]);
 
-  // Main WebSocket Connection and Listener lifecycle hook
   useEffect(() => {
-    if (!user || !user.id) return;
+    wsRef.current = ws;
+    setIsWsConnected(!!ws);
+  }, [ws]);
 
-    let reconnectTimeout: any;
-    let reconnectAttempts = 0;
-    
-    const connectWebSocket = () => {
-      const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsHost = process.env.NEXT_PUBLIC_BACKEND_HOST || window.location.hostname || "127.0.0.1";
-      const wsPort = process.env.NEXT_PUBLIC_BACKEND_PORT || "8000";
-      const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/chat/ws/${user.id}`;
+  useEffect(() => {
+    if (!lastEvent || !user) return;
+    const { event: eventType, data } = lastEvent;
+
+    if (eventType === "new_message") {
+      const activeChat = selectedChatRef.current;
+      const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
       
-      console.log("Connecting to Chat WebSocket...", wsUrl);
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log("Chat WebSocket Connected successfully.");
-        setIsWsConnected(true);
-        reconnectAttempts = 0;
-      };
-
-      ws.onclose = (event) => {
-        console.log("Chat WebSocket disconnected.", event.reason);
-        setIsWsConnected(false);
-        wsRef.current = null;
-        
-        // Auto-reconnect with exponential backoff capped at 3 seconds
-        if (reconnectAttempts < 10) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 3000);
-          console.log(`Reconnecting to Chat WebSocket in ${delay}ms...`);
-          reconnectTimeout = setTimeout(() => {
-            reconnectAttempts++;
-            connectWebSocket();
-          }, delay);
-        }
-      };
-
-      ws.onerror = (err) => {
-        console.error("Chat WebSocket error encountered:", err);
-        ws.close();
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          const { event: eventType, data } = payload;
-          console.log("WebSocket event received:", eventType, data);
-
-          if (eventType === "new_message") {
-            const activeChat = selectedChatRef.current;
-            const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
-            
-            const isGroupMsg = data.groupId !== null;
-            const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
-            
-            if (activeChatId === messageChatId) {
-              // Append to active chat messages
-              setCurrentMessages((prev) => {
-                // Deduplicate message if optimistic UI already rendered it
-                if (prev.some((m) => m.id === data.id || (data.tempId && (m.tempId === data.tempId || m.id === data.tempId)))) {
-                  return prev.map(m => (m.tempId === data.tempId || m.id === data.tempId || m.id === data.id) ? { ...data, isMe: data.senderId === user.id } : m);
-                }
-                return [...prev, { ...data, isMe: data.senderId === user.id }];
-              });
-              
-              // Automatically clear seen status since user is actively viewing this chat
-              fetch(`${API_URL}/chat/mark-seen/${messageChatId}/${user.id}`, { method: 'POST' });
-            } else {
-              // Not viewing this chat: increment unread count in state!
-              setUnreadCounts((prev) => {
-                const next = { ...prev };
-                next[messageChatId] = (next[messageChatId] || 0) + 1;
-                return next;
-              });
-              
-              // Play alert chime and trigger system push notification if enabled
-              const isMuted = mutedChats.includes(messageChatId);
-              if (!data.isMe && !isMuted && !globalDndEnabled) {
-                const pref = chatNotificationPrefs[messageChatId] || { mode: globalDefaultMode, sound: globalDefaultSound };
-                const resolvedMode = pref.mode === "default" || !pref.mode ? globalDefaultMode : pref.mode;
-                const resolvedSound = pref.sound === "default" || !pref.sound ? globalDefaultSound : pref.sound;
-                
-                const isMention = (() => {
-                  if (!data.text) return false;
-                  const mentions = data.text.match(/@\w+/g);
-                  if (!mentions) return false;
-                  const firstName = user?.firstName?.toLowerCase() || "";
-                  const lastName = user?.lastName?.toLowerCase() || "";
-                  const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
-                  const strippedFullName = fullName.replace(/\s+/g, "");
-                  
-                  return mentions.some((m: string) => {
-                    const mentionName = m.substring(1).toLowerCase();
-                    if (!mentionName) return false;
-                    return (
-                      (firstName && firstName === mentionName) ||
-                      (lastName && lastName === mentionName) ||
-                      (fullName && fullName.includes(mentionName)) ||
-                      (strippedFullName && strippedFullName === mentionName)
-                    );
-                  });
-                })();
-                
-                const isPersonal = !data.groupId;
-                if (resolvedMode === "all" || (resolvedMode === "mentions" && (isMention || isPersonal))) {
-                  playTestSound(resolvedSound);
-                  
-                  const isTabInactive = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
-                  if (isTabInactive && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-                    const senderName = data.sender || "Colleague";
-                    const body = data.text || "Sent an attachment";
-                    const title = isGroupMsg ? `💬 ${senderName} (Group Chat)` : `💬 ${senderName}`;
-                    new Notification(title, {
-                      body,
-                      icon: "/favicon.ico"
-                    });
-                  }
-                }
-              }
-            }
-            
-            // Live refresh lists
-            fetchChatSummaries();
-            fetchGroups();
-            fetchChannels();
-          } 
-          
-          else if (eventType === "typing_status") {
-            const activeChat = selectedChatRef.current;
-            const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
-            const { chatId: eventChatId, userId: typingUserId, isTyping } = data;
-            
-            if (activeChatId === eventChatId) {
-              setTypingUsers((prev) => {
-                const empName = employees.find(e => e.id === typingUserId || e._id === typingUserId)?.name || "Someone";
-                if (isTyping) {
-                  if (prev.includes(empName)) return prev;
-                  return [...prev, empName];
-                } else {
-                  return prev.filter(name => name !== empName);
-                }
-              });
-            }
+      const isGroupMsg = data.groupId !== null;
+      const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
+      
+      if (activeChatId === messageChatId) {
+        // Append to active chat messages
+        setCurrentMessages((prev) => {
+          if (prev.some((m) => m.id === data.id || (data.tempId && (m.tempId === data.tempId || m.id === data.tempId)))) {
+            return prev.map(m => (m.tempId === data.tempId || m.id === data.tempId || m.id === data.id) ? { ...data, isMe: data.senderId === user.id } : m);
           }
-          
-          else if (eventType === "messages_seen") {
-            const { chatId: seenChatId, userId: readerUserId } = data;
-            const activeChat = selectedChatRef.current;
-            const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
-            
-            if (activeChatId === seenChatId) {
-              setCurrentMessages((prev) => 
-                prev.map((msg) => {
-                  if (msg.senderId === user.id) {
-                    const seenBy = msg.seenBy || [];
-                    if (!seenBy.includes(readerUserId)) {
-                      return { ...msg, seenBy: [...seenBy, readerUserId] };
-                    }
-                  }
-                  return msg;
-                })
-              );
-            }
-            setUnreadCounts((prev) => {
-              const next = { ...prev };
-              if (readerUserId === user.id) {
-                delete next[seenChatId];
-              }
-              return next;
-            });
-          }
-        } catch (e) {
-          console.error("Error parsing WebSocket message:", e);
-        }
-      };
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+          return [...prev, { ...data, isMe: data.senderId === user.id }];
+        });
+        markAsSeen(messageChatId);
       }
-      clearTimeout(reconnectTimeout);
-    };
-  }, [user, employees, mutedChats, chatNotificationPrefs, globalDndEnabled, globalDefaultMode, globalDefaultSound]);
+      
+      // Live refresh lists
+      fetchChatSummaries();
+      fetchGroups();
+      fetchChannels();
+    } 
+    else if (eventType === "typing_status") {
+      const activeChat = selectedChatRef.current;
+      const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
+      const { chatId: eventChatId, userId: typingUserId, isTyping } = data;
+      
+      if (activeChatId === eventChatId) {
+        setTypingUsers((prev) => {
+          const empName = employees.find(e => e.id === typingUserId || e._id === typingUserId)?.name || "Someone";
+          if (isTyping) {
+            if (prev.includes(empName)) return prev;
+            return [...prev, empName];
+          } else {
+            return prev.filter(name => name !== empName);
+          }
+        });
+      }
+    }
+    else if (eventType === "messages_seen") {
+      const { chatId: seenChatId, userId: readerUserId } = data;
+      const activeChat = selectedChatRef.current;
+      const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
+      
+      if (activeChatId === seenChatId) {
+        setCurrentMessages((prev) => 
+          prev.map((msg) => {
+            if (msg.senderId === user.id) {
+              const seenBy = msg.seenBy || [];
+              if (!seenBy.includes(readerUserId)) {
+                return { ...msg, seenBy: [...seenBy, readerUserId] };
+              }
+            }
+            return msg;
+          })
+        );
+      }
+    }
+  }, [lastEvent, user]);
 
   const handleSendMessage = async (extraData: any = null) => {
     // Prevent double-send on rapid taps
