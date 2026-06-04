@@ -396,6 +396,7 @@ export default function ChatPage() {
   };
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shouldScrollToBottom = useRef(true);
   const mediaRecorderRef = useRef<any>(null);
@@ -1050,6 +1051,7 @@ export default function ChatPage() {
     const file = e.target.files?.[0];
     if (file) {
       setPendingFile(file);
+      setTimeout(() => messageInputRef.current?.focus(), 10);
     }
   };
 
@@ -2690,8 +2692,15 @@ export default function ChatPage() {
                   <Paperclip className="w-5 h-5" />
                 </Button>
                 <Input 
+                  ref={messageInputRef}
                   value={message}
                   onChange={(e) => handleInputChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
                   onPaste={(e) => {
                     const items = e.clipboardData?.items;
                     if (items) {
@@ -2832,6 +2841,7 @@ export default function ChatPage() {
                           onEmojiSelect={(emoji) => {
                             setMessage(prev => prev + emoji);
                             setShowEmojiPicker(false);
+                            setTimeout(() => messageInputRef.current?.focus(), 10);
                           }}
                           onClose={() => setShowEmojiPicker(false)}
                         />
