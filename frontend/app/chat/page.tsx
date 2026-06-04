@@ -205,6 +205,7 @@ export default function ChatPage() {
   const [laterTab, setLaterTab] = useState<"In progress" | "Archived" | "Completed">("In progress");
   const [showDeletedNotification, setShowDeletedNotification] = useState(true); // Placeholder for demo, normally would be based on actual deletion events
   const [showNewChat, setShowNewChat] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{url: string, name: string} | null>(null);
 
   const [chatChannels, setChatChannels] = useState<any[]>([]);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -2001,7 +2002,10 @@ export default function ChatPage() {
                                         src={msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`}
                                         alt={msg.attachmentName} 
                                         className="max-w-full max-h-[200px] object-contain bg-black/5 cursor-pointer hover:opacity-90 transition-opacity"
-                                        onClick={() => handleDownload(msg.attachmentUrl, msg.attachmentName)}
+                                        onClick={() => setPreviewImage({
+                                          url: msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`,
+                                          name: msg.attachmentName || 'Image'
+                                        })}
                                       />
                                     </div>
                                   ) : (
@@ -2348,7 +2352,10 @@ export default function ChatPage() {
                                       }
                                       alt={msg.attachmentName} 
                                       className="max-w-[280px] sm:max-w-[360px] max-h-[300px] w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                      onClick={() => !msg._blobUrl && handleDownload(msg.attachmentUrl, msg.attachmentName)}
+                                      onClick={() => setPreviewImage({
+                                        url: msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl : msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`,
+                                        name: msg.attachmentName || 'Image'
+                                      })}
                                     />
                                   </div>
                                 ) : (
@@ -2896,7 +2903,16 @@ export default function ChatPage() {
                           <div 
                             key={file.id} 
                             className="bg-white border border-border p-3 rounded-2xl hover:shadow-md transition-all group/file cursor-pointer"
-                            onClick={() => handleDownload(file.attachmentUrl, file.attachmentName)}
+                            onClick={() => {
+                              if (/\.(jpg|jpeg|png|gif|webp)$/i.test(file.attachmentName || "")) {
+                                setPreviewImage({
+                                  url: file.attachmentUrl?.startsWith('http') ? file.attachmentUrl : `${API_URL}${file.attachmentUrl}`,
+                                  name: file.attachmentName || 'Image'
+                                });
+                              } else {
+                                handleDownload(file.attachmentUrl, file.attachmentName);
+                              }
+                            }}
                           >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-xl bg-brand-teal/5 flex items-center justify-center shrink-0 border border-brand-teal/10">
@@ -3344,6 +3360,44 @@ export default function ChatPage() {
               Create Poll
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Preview Modal */}
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="sm:max-w-[800px] p-0 overflow-hidden bg-black/95 border-none shadow-2xl [&>button:last-child]:hidden">
+          <div className="absolute top-0 right-0 p-4 z-50 flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="text-white hover:bg-white/20 rounded-full"
+              onClick={() => previewImage && handleDownload(previewImage.url, previewImage.name)}
+            >
+              <Download className="w-5 h-5" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="text-white hover:bg-white/20 rounded-full"
+              onClick={() => setPreviewImage(null)}
+            >
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+          <div className="relative w-full h-[80vh] flex items-center justify-center p-4">
+            {previewImage && (
+              <img 
+                src={previewImage.url} 
+                alt={previewImage.name}
+                className="max-w-full max-h-full object-contain select-none"
+              />
+            )}
+          </div>
+          {previewImage && (
+            <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white text-center text-sm font-medium truncate">
+              {previewImage.name}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
