@@ -118,6 +118,13 @@ export default function ReviewPage() {
   const [selectedReview, setSelectedReview] = useState<any>(null);
   const [newRating, setNewRating] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+  
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -271,6 +278,11 @@ export default function ReviewPage() {
     );
   });
 
+  const paginatedReviews = filteredReviews.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   if (permissionsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -410,10 +422,10 @@ export default function ReviewPage() {
                   </td>
                 </tr>
               ) : (
-                filteredReviews.map((review, idx) => (
+                paginatedReviews.map((review, idx) => (
                   <tr key={review.id} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="px-6 py-4 font-semibold text-slate-500">
-                      {(idx + 1).toString().padStart(2, '0')}
+                      {((currentPage - 1) * itemsPerPage + idx + 1).toString().padStart(2, '0')}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -463,13 +475,14 @@ export default function ReviewPage() {
           </table>
         </div>
         
-        <div className="p-4 bg-white border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-           <div className="text-[13px] text-muted-foreground font-medium">
-             Showing {filteredReviews.length} reviews
-           </div>
-           
-
-        </div>
+        <TablePagination 
+          totalItems={filteredReviews.length} 
+          itemsPerPage={itemsPerPage} 
+          currentPage={currentPage} 
+          onPageChange={setCurrentPage} 
+          onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+          itemName="reviews" 
+        />
       </div>
 
       {/* Edit Modal */}
