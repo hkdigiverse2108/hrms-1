@@ -326,7 +326,7 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="interviewDate" className="text-[10px] font-bold uppercase text-slate-400">Date</Label>
-                  <Input id="interviewDate" type="date" value={formData.interviewDate} onChange={(e) => handleChange("interviewDate", e.target.value)} />
+                  <Input id="interviewDate" type="date" min={new Date().toISOString().split('T')[0]} value={formData.interviewDate} onChange={(e) => handleChange("interviewDate", e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="interviewTime" className="text-[10px] font-bold uppercase text-slate-400">Time</Label>
