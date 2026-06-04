@@ -1,30 +1,64 @@
-name: Deploy HRMS (Python)
+name: Deploy HRMS
 
 on:
   push:
     branches:
+      - dev
       - main
 
 jobs:
-  deploy-to-main:
+  deploy:
     runs-on: ubuntu-latest
-    name: Deploy HRMS Python
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up SSH
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H 31.97.206.171 >> ~/.ssh/known_hosts
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 31.97.206.171 >> ~/.ssh/known_hosts
 
-    - name: Test SSH Connection
-      run: ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@31.97.206.171 "echo 'SSH connection successful!'"
+      #################################################
+      # DEV DEPLOY
+      #################################################
 
-    - name: Deploy HRMS Python via SSH
-      run: |
-        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@31.97.206.171 \
-        "cd /root/HRMS/live && rm -f frontend/.wrangler/deploy/config.json && git pull origin main && cd frontend && npm install && npm run build && cd .. && pm2 restart HRMS"
+      - name: Deploy DEV
+        if: github.ref == 'refs/heads/dev'
+        run: |
+          ssh root@31.97.206.171 << 'EOF'
+            cd /root/HRMS/dev
+
+            git fetch origin
+            git checkout dev
+            git pull origin dev
+
+            cd frontend
+            npm install
+            npm run build
+
+            pm2 restart HRMS-DEV
+          EOF
+
+      #################################################
+      # LIVE DEPLOY
+      #################################################
+
+      - name: Deploy LIVE
+        if: github.ref == 'refs/heads/main'
+        run: |
+          ssh root@31.97.206.171 << 'EOF'
+            cd /root/HRMS/live
+
+            git fetch origin
+            git checkout main
+            git pull origin main
+
+            cd frontend
+            npm install
+            npm run build
+
+            pm2 restart HRMS-LIVE
+          EOF
