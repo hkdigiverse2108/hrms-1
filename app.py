@@ -96,6 +96,7 @@ def run_app():
     print(f"  Binding host : {app_host}")
     print(f"  Backend URL  : http://{app_host}:{backend_port}")
     print(f"  Frontend URL : http://{app_host}:{frontend_port}")
+    print(f"  Database URL : {os.environ.get('MONGO_URL', 'Not Set')}")
     print("=" * 60)
 
     # Clean up ports first to prevent "Address already in use" errors
