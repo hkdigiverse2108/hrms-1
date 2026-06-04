@@ -2743,16 +2743,18 @@ export default function ChatPage() {
                     </div>
                   ) : (
                     <>
-                      <Button 
-                        type="button"
-                        variant="ghost" 
-                        size="icon" 
-                        className="text-muted-foreground hover:bg-white rounded-full h-9 w-9"
-                        onClick={() => setShowCreatePoll(true)}
-                        title="Create Poll"
-                      >
-                        <BarChart2 className="w-5 h-5" />
-                      </Button>
+                      {selectedChat?.type !== 'personal' && (
+                        <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-muted-foreground hover:bg-white rounded-full h-9 w-9"
+                          onClick={() => setShowCreatePoll(true)}
+                          title="Create Poll"
+                        >
+                          <BarChart2 className="w-5 h-5" />
+                        </Button>
+                      )}
                       <Button 
                         type="button"
                         variant="ghost" 
