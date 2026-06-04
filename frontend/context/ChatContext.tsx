@@ -105,7 +105,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
           const { event: eventType, data } = payload;
           if (eventType === "new_message") {
-            const isGroupMsg = data.groupId !== null;
+            const isGroupMsg = !!data.groupId;
             const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
             const activeChatId = localStorage.getItem("activeChatId");
             const isChatPage = window.location.pathname.startsWith("/chat");
