@@ -2,9 +2,13 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Loader2, Save, Plus, ArrowLeft, Search, FileText, ChevronRight, Trash2, Edit } from 'lucide-react'
+
+const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false })
+import 'react-quill-new/dist/quill.snow.css'
 import { Input } from '@/components/ui/input'
 import { API_URL } from '@/lib/config'
 import { toast } from 'sonner'
@@ -19,6 +23,18 @@ interface DocumentTemplate {
   description: string
   fields: string[]
   content: string
+}
+
+const quillModules = {
+  toolbar: [
+    [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+    ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+    [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
+    ['link', 'image'],
+    [{ 'align': [] }],
+    [{ 'color': [] }, { 'background': [] }],
+    ['clean']
+  ],
 }
 
 export default function DocumentTemplatesPage() {
@@ -274,9 +290,9 @@ export default function DocumentTemplatesPage() {
                     )) || <span className="text-slate-400 text-sm">No fields defined</span>}
                   </div>
 
-                  <h3 className="font-bold text-lg mb-4 text-slate-800">Raw HTML Content Preview</h3>
-                  <div className="bg-slate-900 rounded-xl p-4 text-slate-300 font-mono text-sm overflow-x-auto">
-                    <pre className="whitespace-pre-wrap">{selectedTemplate.content}</pre>
+                  <h3 className="font-bold text-lg mb-4 text-slate-800">Document Content Preview</h3>
+                  <div className="bg-white rounded-xl p-6 text-slate-800 border border-slate-200">
+                    <div dangerouslySetInnerHTML={{ __html: selectedTemplate.content }} className="ql-editor p-0" />
                   </div>
                 </div>
               </div>
@@ -328,21 +344,51 @@ export default function DocumentTemplatesPage() {
             <div className="space-y-2">
               <Label>Custom Fields (comma separated)</Label>
               <Input 
-                placeholder="e.g. name, gender, department, stipend, startDate" 
+                placeholder="e.g. stipend, noticePeriod, bonusAmount, interviewDate" 
                 value={formData.fields} 
                 onChange={e => setFormData({...formData, fields: e.target.value})} 
               />
-              <p className="text-xs text-slate-500">Variables like empName, department, gender, startDate, etc.</p>
+              
+              <div className="mt-3 bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <p className="text-xs font-bold text-blue-800 mb-1 flex items-center gap-1">
+                  <FileText className="w-3 h-3" /> Variable Cheat Sheet
+                </p>
+                <div className="text-[11px] text-blue-700 leading-relaxed grid grid-cols-2 gap-x-4 gap-y-2">
+                  <div>
+                    <span className="font-bold underline">Built-in (DO NOT ADD above):</span>
+                    <ul className="list-disc pl-4 mt-1 space-y-0.5 text-blue-800/80">
+                      <li><code className="bg-white/60 px-1 py-0.5 rounded font-mono text-[10px]">{'{{empName}}'}</code> - Employee Name</li>
+                      <li><code className="bg-white/60 px-1 py-0.5 rounded font-mono text-[10px]">{'{{todayFormatted}}'}</code> - Today's Date</li>
+                      <li><code className="bg-white/60 px-1 py-0.5 rounded font-mono text-[10px]">{'{{startDateFormatted}}'}</code> - Join Date</li>
+                      <li><code className="bg-white/60 px-1 py-0.5 rounded font-mono text-[10px]">{'{{currentEmployee.email}}'}</code> - Email</li>
+                      <li><code className="bg-white/60 px-1 py-0.5 rounded font-mono text-[10px]">{'{{currentEmployee.phone}}'}</code> - Phone</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <span className="font-bold underline">Special Custom Fields (ADD above):</span>
+                    <ul className="list-disc pl-4 mt-1 space-y-0.5 text-blue-800/80">
+                      <li><code className="bg-white/60 px-1 py-0.5 rounded font-mono text-[10px]">department</code> (creates dropdown)</li>
+                      <li><code className="bg-white/60 px-1 py-0.5 rounded font-mono text-[10px]">gender</code> (creates dropdown)</li>
+                      <li><code className="bg-white/60 px-1 py-0.5 rounded font-mono text-[10px]">stipend</code> (creates Paid/Unpaid dropdown)</li>
+                      <li>Any field with "date" (creates calendar)</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2 flex-1 min-h-[300px] flex flex-col">
-              <Label>HTML Content (use {`{{variableName}}`} for dynamic fields)</Label>
-              <textarea 
-                className="flex-1 w-full p-4 font-mono text-sm bg-slate-900 text-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-brand-teal"
-                placeholder="<div class='...'>...{{empName}}...</div>"
-                value={formData.content}
-                onChange={e => setFormData({...formData, content: e.target.value})}
-              />
+            <div className="space-y-2 flex-1 min-h-[400px] flex flex-col">
+              <Label>Document Content (use {`{{variableName}}`} for dynamic fields)</Label>
+              <div className="flex-1 rounded-xl overflow-hidden border border-slate-200 bg-white" style={{ minHeight: '350px' }}>
+                <ReactQuill 
+                  theme="snow"
+                  modules={quillModules}
+                  value={formData.content}
+                  onChange={(content) => setFormData({...formData, content})}
+                  className="h-full bg-white [&_.ql-editor]:min-h-[300px] [&_.ql-container]:border-b-0 [&_.ql-container]:border-x-0 [&_.ql-container]:rounded-b-xl [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:bg-slate-50"
+                  placeholder="Type your document template here. Use {{variableName}} for dynamic fields like {{empName}}, {{startDate}}, etc."
+                />
+              </div>
             </div>
           </div>
           <DialogFooter className="mt-4">
