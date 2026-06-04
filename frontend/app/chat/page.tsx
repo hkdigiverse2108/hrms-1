@@ -180,7 +180,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
 
 export default function ChatPage() {
   const { user } = useUser();
-  const { ws, lastEvent } = useChatContext();
+  const { ws, lastEvent, unreadCounts, markAsSeen } = useChatContext();
   const { data: apiData, isLoading } = useApi();
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [message, setMessage] = useState("");
@@ -188,7 +188,6 @@ export default function ChatPage() {
   const [currentMessages, setCurrentMessages] = useState<any[]>([]);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [chatSummaries, setChatSummaries] = useState<Record<string, any>>({});
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [forwardingMessage, setForwardingMessage] = useState<any>(null);
@@ -609,14 +608,8 @@ export default function ChatPage() {
     setSelectedChat(chat);
     setCurrentMessages([]);  // Clear stale messages immediately on chat switch
     shouldScrollToBottom.current = true;
-    // Force immediate local clear
     const chatId = chat.id || chat.employeeId;
     if (chatId) {
-      setUnreadCounts(prev => {
-        const next = { ...prev };
-        delete next[chatId];
-        return next;
-      });
       markAsSeen(chatId);
     }
   };

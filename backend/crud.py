@@ -509,9 +509,14 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
             month_num = month_map.get(month.capitalize(), 1)
         
         _, num_days = calendar.monthrange(year, month_num)
-        start_dt = datetime(year, month_num, 1, tzinfo=IST)
-        end_dt = datetime(year, month_num, num_days, 23, 59, 59, tzinfo=IST)
-        remark_query["date"] = {"$gte": start_dt, "$lte": end_dt}
+        start_dt_naive = datetime(year, month_num, 1)
+        end_dt_naive = datetime(year, month_num, num_days, 23, 59, 59)
+        start_dt_aware = start_dt_naive.replace(tzinfo=IST)
+        end_dt_aware = end_dt_naive.replace(tzinfo=IST)
+        remark_query["$or"] = [
+            {"date": {"$gte": start_dt_naive, "$lte": end_dt_naive}},
+            {"date": {"$gte": start_dt_aware, "$lte": end_dt_aware}}
+        ]
     
     cursor = db.remarks.find(remark_query)
     remarks = await cursor.to_list(length=1000)
@@ -552,13 +557,10 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
             except Exception:
                 pass
 
-        p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
-        
-        # Calculate one-day salary for Late Punch-in if amount is 0
-        if r["type"] == "Late Punch-in" and p_amount == 0:
+        # Always calculate one-day salary dynamically for Late Punch-in
+        if r["type"] == "Late Punch-in":
             salary_struct = await get_salary_structure_by_employee(db, r["employeeId"])
             if salary_struct:
-                # Replicate working days calculation for accuracy
                 try:
                     if isinstance(r_date, datetime):
                         month_num = r_date.month
@@ -584,11 +586,45 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
                     _, num_days = calendar.monthrange(curr_year, month_num)
                     
                     sundays = sum(1 for d in range(1, num_days + 1) if calendar.weekday(curr_year, month_num, d) == 6)
-                    total_working_days = max(1, num_days - sundays)
+                    
+                    # Count Holidays for the company
+                    try:
+                        from bson import ObjectId
+                        emp = await db.employees.find_one({"_id": ObjectId(r["employeeId"])} if len(r["employeeId"]) == 24 else {"employeeId": r["employeeId"]})
+                    except Exception:
+                        emp = await db.employees.find_one({"employeeId": r["employeeId"]})
+                    emp_company = emp.get("company") if emp else None
+                    start_dt_naive = datetime(curr_year, month_num, 1)
+                    end_dt_naive = datetime(curr_year, month_num, num_days, 23, 59, 59)
+                    start_dt_aware = start_dt_naive.replace(tzinfo=IST)
+                    end_dt_aware = end_dt_naive.replace(tzinfo=IST)
+                    holiday_query = {
+                        "$or": [
+                            {"date": {"$gte": start_dt_naive, "$lte": end_dt_naive}},
+                            {"date": {"$gte": start_dt_aware, "$lte": end_dt_aware}}
+                        ]
+                    }
+                    if emp_company:
+                        holiday_query["$or"] = [
+                            {"$and": [{"company": emp_company}, {"$or": [{"date": {"$gte": start_dt_naive, "$lte": end_dt_naive}}, {"date": {"$gte": start_dt_aware, "$lte": end_dt_aware}}]}]},
+                            {"$and": [{"company": {"$in": [None, "", "null"]}}, {"$or": [{"date": {"$gte": start_dt_naive, "$lte": end_dt_naive}}, {"date": {"$gte": start_dt_aware, "$lte": end_dt_aware}}]}]}
+                        ]
+                    month_holidays = await db.holidays.find(holiday_query).to_list(length=31)
+                    
+                    unique_holidays = 0
+                    for h in month_holidays:
+                        h_date = h.get("date")
+                        h_date_str = h_date.strftime("%Y-%m-%d") if isinstance(h_date, (date, datetime)) else str(h_date)
+                        if h_date_str not in [f"{curr_year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}" for d in range(1, num_days + 1) if calendar.weekday(curr_year, month_num, d) == 6]:
+                            unique_holidays += 1
+                            
+                    total_working_days = max(1, num_days - sundays - unique_holidays)
                     p_amount = round(salary_struct["monthlyGross"] / total_working_days, 2)
                 except Exception as e:
                     print(f"Error calculating p_amount in merged list: {e}")
                     p_amount = round(salary_struct["monthlyGross"] / 30, 2)
+        else:
+            p_amount = next((p["amount"] for p in penalty_types if p["name"] == r["type"]), 0)
 
         r_date_str = None
         if isinstance(r_date, datetime):
@@ -807,6 +843,7 @@ async def run_payroll_processing(db, month: str, year: int):
         half_day_leave_days = 0.0
         full_day_leave_days = 0.0
         monthly_leave_days = 0.0  # Only "annual" type leaves
+        paid_monthly_leave_days = 0.0
         unapproved_absent_days = 0.0
         attendance_present_days = 0.0
  
@@ -825,21 +862,24 @@ async def run_payroll_processing(db, month: str, year: int):
                         attendance_present_days += 0.5 # Worked the other half of the day
                         if l_type in ["annual", "monthly leave", "monthly_leave"]:
                             monthly_leave_days += 0.5
+                        if l_type in ["monthly leave", "monthly_leave"]:
+                            paid_monthly_leave_days += 0.5
                     else:
                         full_day_leave_days += 1.0
                         if l_type in ["annual", "monthly leave", "monthly_leave"]:
                             monthly_leave_days += 1.0
+                        if l_type in ["monthly leave", "monthly_leave"]:
+                            paid_monthly_leave_days += 1.0
                 elif date_str in attendance_dates:
                     attendance_present_days += 1.0
                 else:
                     unapproved_absent_days += 1.0
         
-        # Force all monthly leaves to be unpaid Loss of Pay (LOP) days
         allowed_leaves = 0.0
         total_leaves_taken = full_day_leave_days + half_day_leave_days
         
-        # Calculate Loss of Pay (LOP) days (only unapproved absences and leaves are unpaid LOP)
-        lop_days = total_leaves_taken + unapproved_absent_days
+        # Calculate Loss of Pay (LOP) days (excluding paid monthly leaves)
+        lop_days = max(0.0, total_leaves_taken - paid_monthly_leave_days) + unapproved_absent_days
         actual_worked_days = attendance_present_days
         deducted_leaves = 0.0
         
@@ -883,12 +923,17 @@ async def run_payroll_processing(db, month: str, year: int):
 
         total_bonus = 0
         total_adhoc_deduction = 0
+        penalty_total = 0
         for a in emp_adjustments:
             if a["type"] == "bonus":
                 total_bonus += a["amount"]
             elif a["type"] == "deduction":
-                total_adhoc_deduction += a["amount"]
-                deduction_details.append(f"{a['reason']}: ₹{a.get('amount', 0)}")
+                if "rejected by Team Leader" in a["reason"] or "Work rejected by TL" in a["reason"]:
+                    penalty_total += per_day_gross
+                    deduction_details.append(f"{a['reason']}: ₹{round(per_day_gross, 2)}")
+                else:
+                    total_adhoc_deduction += a["amount"]
+                    deduction_details.append(f"{a['reason']}: ₹{a.get('amount', 0)}")
         
         # Add sales incentive to allowances (previously bonus)
         # We will track it in deduction_details but it will be added to allowances field
@@ -903,18 +948,21 @@ async def run_payroll_processing(db, month: str, year: int):
             rem_month_num = rem_month_map.get(month.capitalize(), 1)
         
         _, rem_num_days = calendar.monthrange(year, rem_month_num)
-        rem_start_dt = datetime(year, rem_month_num, 1, tzinfo=IST)
-        rem_end_dt = datetime(year, rem_month_num, rem_num_days, 23, 59, 59, tzinfo=IST)
+        rem_start_dt_naive = datetime(year, rem_month_num, 1)
+        rem_end_dt_naive = datetime(year, rem_month_num, rem_num_days, 23, 59, 59)
+        rem_start_dt_aware = rem_start_dt_naive.replace(tzinfo=IST)
+        rem_end_dt_aware = rem_end_dt_naive.replace(tzinfo=IST)
         
         remark_query = {
             "employeeId": emp_id,
-            "date": {"$gte": rem_start_dt, "$lte": rem_end_dt},
-            "isDeleted": {"$nin": [True, "true", "True"]}
+            "isDeleted": {"$nin": [True, "true", "True"]},
+            "$or": [
+                {"date": {"$gte": rem_start_dt_naive, "$lte": rem_end_dt_naive}},
+                {"date": {"$gte": rem_start_dt_aware, "$lte": rem_end_dt_aware}}
+            ]
         }
         remarks_cursor = db.remarks.find(remark_query)
         emp_remarks = await remarks_cursor.to_list(length=100)
-        
-        penalty_total = 0
             
         for r in emp_remarks:
             remark_type = r.get("type")
@@ -3594,22 +3642,41 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
         _, num_days = calendar.monthrange(year, month_num)
         
         # Calculate working days in month (excluding Sundays and Holidays)
-        sundays = 0
+        sunday_dates = []
         for d in range(1, num_days + 1):
             if calendar.weekday(year, month_num, d) == 6: # Sunday
-                sundays += 1
+                sunday_dates.append(f"{year}-{str(month_num).zfill(2)}-{str(d).zfill(2)}")
         
+        start_dt_naive = datetime(year, month_num, 1)
+        end_dt_naive = datetime(year, month_num, num_days, 23, 59, 59)
+        start_dt_aware = start_dt_naive.replace(tzinfo=IST)
+        end_dt_aware = end_dt_naive.replace(tzinfo=IST)
+
         # Count Holidays for this employee's company
         emp_company = employee.get("company")
-        start_dt = datetime(year, month_num, 1, tzinfo=IST)
-        end_dt = datetime(year, month_num, num_days, 23, 59, 59, tzinfo=IST)
-        holiday_query = {"date": {"$gte": start_dt, "$lte": end_dt}}
+        holiday_query = {
+            "$or": [
+                {"date": {"$gte": start_dt_naive, "$lte": end_dt_naive}},
+                {"date": {"$gte": start_dt_aware, "$lte": end_dt_aware}}
+            ]
+        }
         if emp_company:
-            holiday_query["$or"] = [{"company": emp_company}, {"company": None}, {"company": ""}]
+            holiday_query["$or"] = [
+                {"$and": [{"company": emp_company}, {"$or": [{"date": {"$gte": start_dt_naive, "$lte": end_dt_naive}}, {"date": {"$gte": start_dt_aware, "$lte": end_dt_aware}}]}]},
+                {"$and": [{"company": {"$in": [None, "", "null"]}}, {"$or": [{"date": {"$gte": start_dt_naive, "$lte": end_dt_naive}}, {"date": {"$gte": start_dt_aware, "$lte": end_dt_aware}}]}]}
+            ]
         
-        holidays_count = await db.holidays.count_documents(holiday_query)
-        total_working_days = max(1, num_days - sundays - holidays_count)
+        holidays_cursor = db.holidays.find(holiday_query)
+        month_holidays = await holidays_cursor.to_list(length=31)
         
+        unique_holidays = 0
+        for h in month_holidays:
+            h_date = h.get("date")
+            h_date_str = h_date.strftime("%Y-%m-%d") if isinstance(h_date, (date, datetime)) else str(h_date)
+            if h_date_str not in sunday_dates:
+                unique_holidays += 1
+                
+        total_working_days = max(1, num_days - len(sunday_dates) - unique_holidays)
         per_day_salary = salary_struct["monthlyGross"] / total_working_days
         reason = f"Daily work report for {report_date} was rejected by Team Leader. Automatic full-day salary deduction applied."
         
