@@ -559,9 +559,31 @@ async def create_asset(asset: schemas.AssetCreate, db=Depends(get_db)): return a
 @app.put("/assets/{asset_id}", response_model=schemas.Asset)
 async def update_asset(asset_id: str, asset_update: schemas.AssetUpdate, db=Depends(get_db)): return await crud.update_asset(db, asset_id, asset_update)
 @app.delete("/assets/{asset_id}")
-async def delete_asset(asset_id: str, db=Depends(get_db)):
-    await crud.delete_asset(db, asset_id)
+async def delete_asset(asset_id: str, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    await crud.delete_asset(db, asset_id, performedBy=performedBy, userName=userName)
     return {"message": "Asset deleted successfully"}
+
+@app.get("/assets/logs")
+async def read_asset_logs(asset_id: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_asset_logs(db, asset_id)
+
+# Asset Category Endpoints
+@app.get("/asset-categories", response_model=List[schemas.AssetCategory])
+async def read_asset_categories(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_asset_categories(db, skip, limit)
+
+@app.post("/asset-categories", response_model=schemas.AssetCategory)
+async def create_asset_category(category: schemas.AssetCategoryCreate, db=Depends(get_db)):
+    return await crud.create_asset_category(db, category)
+
+@app.put("/asset-categories/{category_id}", response_model=schemas.AssetCategory)
+async def update_asset_category(category_id: str, category_update: schemas.AssetCategoryUpdate, db=Depends(get_db)):
+    return await crud.update_asset_category(db, category_id, category_update)
+
+@app.delete("/asset-categories/{category_id}")
+async def delete_asset_category(category_id: str, db=Depends(get_db)):
+    await crud.delete_asset_category(db, category_id)
+    return {"message": "Category deleted successfully"}
 
 @app.get("/expense-claims", response_model=List[schemas.ExpenseClaim])
 async def read_expense_claims(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_expense_claims(db, skip, limit)

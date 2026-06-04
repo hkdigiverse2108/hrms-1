@@ -20,7 +20,7 @@ MONGO_URL = os.getenv("MONGO_URL")
 if not MONGO_URL:
     raise ValueError("MONGO_URL environment variable is not set. Please check your .env or .env.server file.")
 
-MONGO_DB = os.getenv("MONGO_DB")
+MONGO_DB = os.getenv("MONGO_DB", "hrms_db")
 
 ALLOW_INVALID_CERTS = os.getenv("ALLOW_INVALID_CERTS", "true").lower() == "true"
 
@@ -253,6 +253,7 @@ class TimestampedDatabase:
             return TimestampedCollection(item)
         return item
 
+print("DEBUG INFO: MONGO_DB =", MONGO_DB, type(MONGO_DB))
 # Wrap database with dynamic timestamp proxy
 db = TimestampedDatabase(client[MONGO_DB])
 
