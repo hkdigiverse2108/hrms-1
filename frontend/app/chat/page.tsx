@@ -180,7 +180,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
 
 export default function ChatPage() {
   const { user } = useUser();
-  const { ws, lastEvent } = useChatContext();
+  const { ws, lastEvent, unreadCounts, markAsSeen: contextMarkAsSeen, onlineUsers } = useChatContext();
   const { data: apiData, isLoading } = useApi();
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [message, setMessage] = useState("");
@@ -188,10 +188,10 @@ export default function ChatPage() {
   const [currentMessages, setCurrentMessages] = useState<any[]>([]);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [chatSummaries, setChatSummaries] = useState<Record<string, any>>({});
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [forwardingMessage, setForwardingMessage] = useState<any>(null);
+  const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"Personal" | "Groups" | "General" | "Saved">("Personal");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [isSearchingMessages, setIsSearchingMessages] = useState(false);
@@ -585,7 +585,7 @@ export default function ChatPage() {
     const targetId = chatId || selectedChat?.id;
     if (!targetId || !user) return;
     try {
-      await fetch(`${API_URL}/chat/mark-seen/${targetId}/${user.id}`, { method: 'POST' });
+      contextMarkAsSeen(targetId);
     } catch (err) {
       console.error("Error marking as seen:", err);
     }
@@ -611,15 +611,11 @@ export default function ChatPage() {
     if (!chat) return;
     setSelectedChat(chat);
     setCurrentMessages([]);  // Clear stale messages immediately on chat switch
+    setFirstUnreadId(null);
     shouldScrollToBottom.current = true;
     // Force immediate local clear
     const chatId = chat.id || chat.employeeId;
     if (chatId) {
-      setUnreadCounts(prev => {
-        const next = { ...prev };
-        delete next[chatId];
-        return next;
-      });
       markAsSeen(chatId);
     }
   };
@@ -645,6 +641,13 @@ export default function ChatPage() {
           // Filter out optimistic messages to get real message count
           const prevReal = prev.filter(m => !m._optimistic);
           const hasNewMessages = marked.length > prevReal.length;
+
+          if (isInitialLoad) {
+            const firstUnreadIndex = marked.findIndex((m: any) => !m.isMe && (!m.seenBy || !m.seenBy.includes(user.id)));
+            if (firstUnreadIndex !== -1) {
+              setFirstUnreadId(marked[firstUnreadIndex].id);
+            }
+          }
 
           // Notification logic: only when we already had messages and new ones arrived
           if (prevReal.length > 0 && hasNewMessages) {
@@ -1445,10 +1448,11 @@ export default function ChatPage() {
     return employees
       .map((emp: any) => {
         const summary = chatSummaries[emp.id];
+        const isOnline = onlineUsers.has(emp.id || emp.employeeId);
         return {
           id: emp.id || emp.employeeId,
           name: emp.id === user?.id ? `${emp.name} (You)` : emp.name,
-          status: "Online",
+          status: isOnline ? "Online" : "Offline",
           lastMessage: summary?.lastMessage || "Click to start chatting",
           time: summary?.timestamp ? dayjs(summary.timestamp).format("hh:mm A") : "",
           timestamp: summary?.timestamp || 0,
@@ -1462,6 +1466,13 @@ export default function ChatPage() {
         // Pin self-chat to the very top
         if (a.id === user?.id) return -1;
         if (b.id === user?.id) return 1;
+
+        // Unread messages on top
+        const unreadA = unreadCounts[a.id] > 0 ? 1 : 0;
+        const unreadB = unreadCounts[b.id] > 0 ? 1 : 0;
+        if (unreadA !== unreadB) {
+            return unreadB - unreadA;
+        }
 
         // Sort remaining chats by timestamp descending
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
@@ -1728,7 +1739,11 @@ export default function ChatPage() {
                 </div>
               )}
               {chatGroups.length > 0 ? (
-                chatGroups.map((group: any) => (
+                [...chatGroups].sort((a, b) => {
+                  const unreadA = unreadCounts[a.id] > 0 ? 1 : 0;
+                  const unreadB = unreadCounts[b.id] > 0 ? 1 : 0;
+                  return unreadB - unreadA;
+                }).map((group: any) => (
                   <div 
                     key={group.id}
                     onClick={() => handleSelectChat({ ...group, type: 'group' })}
@@ -1810,7 +1825,11 @@ export default function ChatPage() {
                 </div>
               )}
               {chatChannels.length > 0 ? (
-                chatChannels.map((channel: any) => (
+                [...chatChannels].sort((a, b) => {
+                  const unreadA = unreadCounts[a.id] > 0 ? 1 : 0;
+                  const unreadB = unreadCounts[b.id] > 0 ? 1 : 0;
+                  return unreadB - unreadA;
+                }).map((channel: any) => (
                   <div 
                     key={channel.id}
                     onClick={() => handleSelectChat({ ...channel, type: 'general' })}
@@ -2263,6 +2282,16 @@ export default function ChatPage() {
                       <div className="flex justify-center my-4">
                         <span className="px-3 py-1 bg-white border border-border rounded-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider shadow-sm">
                           {dateText}
+                        </span>
+                      </div>
+                    )}
+                    {!messageSearchQuery && msg.id === firstUnreadId && (
+                      <div className="flex justify-center my-4 relative">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-brand-teal/30"></div>
+                        </div>
+                        <span className="relative px-3 py-1 bg-brand-teal/10 text-brand-teal rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                          Unread Messages
                         </span>
                       </div>
                     )}
@@ -3100,7 +3129,7 @@ export default function ChatPage() {
                     setSelectedChat({
                       id: emp.id || emp.employeeId,
                       name: emp.id === user?.id ? `${emp.name} (You)` : emp.name,
-                      status: "Online",
+                      status: onlineUsers.has(emp.id || emp.employeeId) ? "Online" : "Offline",
                       avatar: emp.profilePhoto 
                         ? (emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`)
                         : null,

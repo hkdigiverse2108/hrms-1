@@ -1098,6 +1098,10 @@ async def set_typing_status(chat_id: str, user_id: str, is_typing: bool, db=Depe
     await crud.set_typing_status(db, chat_id, user_id, is_typing)
     return {"status": "ok"}
 
+@app.get("/chat/online-users")
+async def get_online_users(db=Depends(get_db)):
+    return list(ws_manager.active_connections.keys())
+
 @app.get("/chat/typing/{chat_id}")
 async def get_typing_status(chat_id: str, user_id: str, db=Depends(get_db)):
     typing_users = await crud.get_typing_users(db, chat_id, user_id)
@@ -1148,11 +1152,11 @@ async def chat_websocket_endpoint(websocket: WebSocket, user_id: str):
                             }
                             await ws_manager.send_personal_message(chat_id, "typing_status", personal_event_data)
     except WebSocketDisconnect:
-        ws_manager.disconnect(user_id)
+        await ws_manager.disconnect(user_id)
     except Exception as e:
         import logging
         logging.getLogger("websocket").warning(f"WebSocket error for user {user_id}: {e}")
-        ws_manager.disconnect(user_id)
+        await ws_manager.disconnect(user_id)
 
 # Employee Document Endpoints
 @app.post("/employee-documents", response_model=schemas.EmployeeDocument)

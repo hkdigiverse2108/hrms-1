@@ -13,11 +13,13 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections[user_id] = websocket
         logger.info(f"User {user_id} connected via WebSocket")
+        await self.broadcast_all("user_status", {"userId": user_id, "isOnline": True})
 
-    def disconnect(self, user_id: str):
+    async def disconnect(self, user_id: str):
         if user_id in self.active_connections:
             del self.active_connections[user_id]
             logger.info(f"User {user_id} disconnected from WebSocket")
+            await self.broadcast_all("user_status", {"userId": user_id, "isOnline": False})
 
     async def send_personal_message(self, user_id: str, event_type: str, data: dict):
         """Sends a JSON event directly to a specific user if they are currently online."""
@@ -30,11 +32,24 @@ class ConnectionManager:
                 })
             except Exception as e:
                 logger.warning(f"Error sending message to user {user_id}: {e}")
-                self.disconnect(user_id)
+                # We can't await disconnect here synchronously, so just remove them
+                if user_id in self.active_connections:
+                    del self.active_connections[user_id]
 
     async def broadcast_to_group(self, member_ids: List[str], event_type: str, data: dict):
         """Broadcasts a JSON event to a list of group members who are currently online."""
         for member_id in member_ids:
             await self.send_personal_message(member_id, event_type, data)
+
+    async def broadcast_all(self, event_type: str, data: dict):
+        """Broadcasts a JSON event to all currently online users."""
+        for user_id, websocket in list(self.active_connections.items()):
+            try:
+                await websocket.send_json({
+                    "event": event_type,
+                    "data": data
+                })
+            except Exception as e:
+                logger.warning(f"Error sending message to user {user_id}: {e}")
 
 manager = ConnectionManager()

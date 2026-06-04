@@ -15,6 +15,7 @@ interface ChatContextType {
   totalUnreadCount: number;
   lastEvent: ChatEvent | null;
   markAsSeen: (chatId: string) => void;
+  onlineUsers: Set<string>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -23,6 +24,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [lastEvent, setLastEvent] = useState<ChatEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<any>(null);
@@ -64,9 +66,22 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchOnlineUsers = async () => {
+    try {
+      const res = await fetch(`${API_URL}/chat/online-users`);
+      if (res.ok) {
+        const users = await res.json();
+        setOnlineUsers(new Set(users));
+      }
+    } catch (err) {
+      console.error("Error fetching online users:", err);
+    }
+  };
+
   useEffect(() => {
     if (!user || !user.id) return;
     fetchInitialUnreadCounts();
+    fetchOnlineUsers();
     let reconnectTimeout: any;
     let reconnectAttempts = 0;
 
@@ -112,7 +127,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           setLastEvent({ ...payload, _seq: Date.now() });
 
           const { event: eventType, data } = payload;
-          if (eventType === "new_message") {
+          if (eventType === "user_status") {
+            setOnlineUsers(prev => {
+              const next = new Set(prev);
+              if (data.isOnline) {
+                next.add(data.userId);
+              } else {
+                next.delete(data.userId);
+              }
+              return next;
+            });
+          } else if (eventType === "new_message") {
             const isGroupMsg = !!data.groupId;
             const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
             const activeChatId = localStorage.getItem("activeChatId");
@@ -252,7 +277,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id]);
 
   return (
-    <ChatContext.Provider value={{ ws, unreadCounts, totalUnreadCount, lastEvent, markAsSeen }}>
+    <ChatContext.Provider value={{ ws, unreadCounts, totalUnreadCount, lastEvent, markAsSeen, onlineUsers }}>
       {children}
     </ChatContext.Provider>
   );
