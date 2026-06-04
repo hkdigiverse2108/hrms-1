@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronRight,
   Building2,
+  Calendar,
 } from 'lucide-react'
 
 import { useUserContext } from '@/context/UserContext'
@@ -66,9 +67,17 @@ import { useUserContext } from '@/context/UserContext'
      moduleName: 'attendance',
      children: [
        { title: 'Attendance', href: '/attendance' },
-       { title: 'Leave Management', href: '/attendance/leave' },
        { title: 'Late & Penalty', href: '/attendance/late-penalty' },
        { title: 'Shift Management', href: '/attendance/shifts' },
+     ],
+   },
+   {
+     title: 'Leave Requests',
+     href: '/leave',
+     icon: Calendar,
+     moduleName: 'leave',
+     children: [
+       { title: 'All Leave Requests', href: '/leave' },
      ],
    },
    {

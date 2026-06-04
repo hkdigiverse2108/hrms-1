@@ -657,7 +657,7 @@ function HRView({ user, leaves, applications, assets }: { user: any, leaves: any
                   </Badge>
                 )}
               </div>
-              <Link href="/attendance/leave">
+              <Link href="/leave">
                 <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
               </Link>
             </div>
