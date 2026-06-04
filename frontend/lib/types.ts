@@ -106,6 +106,8 @@ export interface JobOpening {
   applications: number
   status: 'open' | 'closed' | 'on-hold'
   postedDate: string
+  experience?: string
+  salaryRange?: string
 }
 
 export interface Application {

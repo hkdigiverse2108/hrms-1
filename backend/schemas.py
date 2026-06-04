@@ -495,6 +495,8 @@ class JobOpeningBase(BaseModel):
     applications: int
     status: str
     postedDate: RobustDate
+    experience: Optional[str] = None
+    salaryRange: Optional[str] = None
 
 class JobOpeningCreate(JobOpeningBase):
     pass
@@ -507,6 +509,8 @@ class JobOpeningUpdate(BaseModel):
     applications: Optional[int] = None
     status: Optional[str] = None
     postedDate: Optional[RobustDate] = None
+    experience: Optional[str] = None
+    salaryRange: Optional[str] = None
 
 class JobOpening(JobOpeningBase):
     id: str
