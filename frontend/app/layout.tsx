@@ -5,6 +5,7 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import { ConfigProvider } from 'antd';
 import { UserProvider } from '@/context/UserContext';
+import { ChatProvider } from '@/context/ChatContext';
 import { ConfirmProvider } from '@/context/ConfirmContext';
 import { Toaster } from "@/components/ui/sonner";
 
@@ -64,9 +65,11 @@ export default function RootLayout({
               }}
             >
               <ConfirmProvider>
-                <AppLayout>
-                  {children}
-                </AppLayout>
+                <ChatProvider>
+                  <AppLayout>
+                    {children}
+                  </AppLayout>
+                </ChatProvider>
                 <Toaster position="top-right" expand={true} richColors />
               </ConfirmProvider>
             </ConfigProvider>

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useChatContext } from "@/context/ChatContext";
 import { API_URL } from "@/lib/config";
 
 type MenuItem = Required<MenuProps>["items"][number];
@@ -51,8 +52,8 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
   const searchParams = useSearchParams();
   const { user } = useUser();
   const { checkPermission, isAdmin, permissions } = usePermissions();
+  const { totalUnreadCount: unreadChatCount } = useChatContext();
   const [settings, setSettings] = useState<any>(null);
-  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   useEffect(() => {
     fetchSettings();
@@ -68,29 +69,6 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       console.error("Error fetching sidebar settings:", err);
     }
   };
-
-  const fetchUnreadChatCount = async () => {
-    if (!user?.id) return;
-    try {
-      const res = await fetch(`${API_URL}/chat/unread-counts/${user.id}`);
-      if (res.ok) {
-        const data = await res.json() as Record<string, number>;
-        const total = Object.values(data).reduce((sum, val) => sum + (val || 0), 0);
-        setUnreadChatCount(total);
-      }
-    } catch (err) {
-      console.error("Error fetching unread chat count:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (user?.id) {
-      fetchUnreadChatCount();
-      const interval = setInterval(fetchUnreadChatCount, 4000);
-      return () => clearInterval(interval);
-    }
-  }, [user?.id]);
-
 
 
   const showClients = () => {
@@ -220,6 +198,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     const invoiceChildren: MenuItem[] = [];
     if (isAdmin || checkPermission('invoice', 'canView')) {
       invoiceChildren.push(getItem(<Link href="/invoice">All Invoices</Link>, "/invoice"));
+      invoiceChildren.push(getItem(<Link href="/invoice/ledger">Invoice Ledger</Link>, "/invoice/ledger"));
       invoiceChildren.push(getItem(<Link href="/invoice/create">Create Invoice</Link>, "/invoice/create"));
       invoiceChildren.push(getItem(<Link href="/invoice/create?type=Proforma">Create Proforma Invoice</Link>, "/invoice/create?type=Proforma"));
     }

@@ -1201,6 +1201,36 @@ async def delete_document_type(type_id: str, db=Depends(get_db)):
     return {"message": "Document type deleted successfully"}
 
 
+# Document Templates Endpoints
+@app.post("/document-templates", response_model=schemas.DocumentTemplate)
+async def create_document_template(template: schemas.DocumentTemplateCreate, db=Depends(get_db)):
+    return await crud.create_document_template(db, template)
+
+@app.get("/document-templates", response_model=List[schemas.DocumentTemplate])
+async def read_document_templates(skip: int = 0, limit: int = 100, db=Depends(get_db)):
+    return await crud.get_document_templates(db, skip=skip, limit=limit)
+
+@app.get("/document-templates/{template_id}", response_model=schemas.DocumentTemplate)
+async def read_document_template(template_id: str, db=Depends(get_db)):
+    template = await crud.get_document_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Document template not found")
+    return template
+
+@app.put("/document-templates/{template_id}", response_model=schemas.DocumentTemplate)
+async def update_document_template(template_id: str, template_update: schemas.DocumentTemplateUpdate, db=Depends(get_db)):
+    updated = await crud.update_document_template(db, template_id, template_update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Document template not found")
+    return updated
+
+@app.delete("/document-templates/{template_id}")
+async def delete_document_template(template_id: str, db=Depends(get_db)):
+    success = await crud.delete_document_template(db, template_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document template not found")
+    return {"message": "Document template deleted successfully"}
+
 # Document Request Endpoints
 @app.post("/document-requests", response_model=schemas.DocumentRequest)
 async def create_document_request(request: schemas.DocumentRequestCreate, db=Depends(get_db)):

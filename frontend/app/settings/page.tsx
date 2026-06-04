@@ -256,6 +256,24 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               </div>
+
+              <div className="mt-6 pt-6 border-t border-slate-100">
+                <div className="flex items-center justify-between p-4 rounded-xl border border-brand-teal/20 bg-[#EAF7F6]/50">
+                  <div className="space-y-0.5">
+                    <Label className="text-[14px] font-bold text-brand-teal">Dynamic Document Templates</Label>
+                    <p className="text-xs text-brand-teal/70 max-w-[400px]">
+                      Manage HTML-based dynamic document templates for the employee Document Generator (e.g. Offer Letters, Certificates).
+                    </p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    className="border-brand-teal/20 text-brand-teal hover:bg-brand-teal hover:text-white"
+                    onClick={() => router.push('/settings/document-templates')}
+                  >
+                    Manage Templates
+                  </Button>
+                </div>
+              </div>
             </Card>
           )}
 

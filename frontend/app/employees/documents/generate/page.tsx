@@ -17,39 +17,6 @@ import Link from 'next/link'
 import dayjs from 'dayjs'
 import { API_URL } from '@/lib/config'
 
-const DOCUMENT_TEMPLATES = [
-  {
-    id: 'offer-letter',
-    name: 'Internship Offer Letter',
-    description: 'Offer letter specifically for internship positions.',
-    fields: ['name', 'gender', 'department', 'stipend', 'startDate', 'endDate']
-  },
-  {
-    id: 'employee-offer-letter',
-    name: 'Employee Offer Letter',
-    description: 'Standard offer letter for full-time employees.',
-    fields: ['name', 'gender', 'designation', 'department', 'salary', 'startDate']
-  },
-  {
-    id: 'completion-certificate',
-    name: 'Internship Completion Certificate',
-    description: 'Official certificate for successful completion of internship period.',
-    fields: ['name', 'gender', 'designation', 'startDate', 'endDate']
-  },
-  {
-    id: 'appointment-letter',
-    name: 'Appointment Letter',
-    description: 'Official appointment letter for full-time employment.',
-    fields: ['name', 'gender', 'designation', 'department', 'workingHours', 'salary', 'noticePeriod', 'startDate']
-  },
-  {
-    id: 'agreement-letter',
-    name: 'NDA & Agreement Letter',
-    description: 'Employment agreement cum non-disclosure agreement.',
-    fields: ['name', 'gender', 'designation', 'salary', 'startDate', 'contactNo']
-  }
-]
-
 export default function DocumentGeneratorPage() {
   const router = useRouter()
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
@@ -66,6 +33,22 @@ export default function DocumentGeneratorPage() {
 
 
   
+  const [documentTemplates, setDocumentTemplates] = useState<any[]>([])
+
+  useEffect(() => {
+    fetch(`${API_URL}/document-templates`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setDocumentTemplates(data)
+        } else {
+          console.error("Expected array for templates, got:", data)
+          setDocumentTemplates([])
+        }
+      })
+      .catch(err => console.error("Error fetching templates", err))
+  }, [])
+
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [selectedEmployee, setSelectedEmployee] = useState<string>('')
   const [requestId, setRequestId] = useState<string>('')
@@ -121,19 +104,19 @@ export default function DocumentGeneratorPage() {
     if (selectedEmployee && selectedEmployee !== 'manual') {
       const emp = employees.find((e: any) => e.id === selectedEmployee)
       if (emp) {
-        setExtraFields(prev => ({
+        setExtraFields((prev: any) => ({
           ...prev,
           name: emp.name || `${emp.firstName} ${emp.lastName}`,
-          gender: emp.gender || 'Male',
-          designation: emp.designation || emp.designationTitle || prev.designation,
-          department: emp.department || emp.departmentName || prev.department,
-          address: emp.address || 'Resident Address, City',
-          contactNo: emp.phone || emp.mobile || '+91 0000000000',
+          gender: (emp as any).gender || 'Male',
+          designation: emp.designation || (emp as any).designationTitle || prev.designation,
+          department: emp.department || (emp as any).departmentName || prev.department,
+          address: (emp as any).address || 'Resident Address, City',
+          contactNo: emp.phone || (emp as any).mobile || '+91 0000000000',
           startDate: emp.joinDate ? dayjs(emp.joinDate).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
         }))
       }
     } else if (selectedEmployee === 'manual') {
-      setExtraFields(prev => ({
+      setExtraFields((prev: any) => ({
         ...prev,
         name: '',
         gender: 'Male',
@@ -151,10 +134,10 @@ export default function DocumentGeneratorPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [includeAcceptance, setIncludeAcceptance] = useState(false)
 
-  const templateData = DOCUMENT_TEMPLATES.find(t => t.id === selectedTemplate)
+  const templateData = documentTemplates.find((t: any) => t.template_id === selectedTemplate)
 
   const isManual = selectedEmployee === 'manual'
-  const currentEmployee = isManual ? {
+  const currentEmployee: any = isManual ? {
     name: extraFields.name || 'Candidate Name',
     firstName: (extraFields.name || 'Candidate').split(' ')[0],
     lastName: (extraFields.name || '').split(' ').slice(1).join(' '),
@@ -175,677 +158,58 @@ export default function DocumentGeneratorPage() {
       return
     }
 
-    const today = dayjs().format('DD MMMM, YYYY')
-    const empName = extraFields.name || currentEmployee.name || `${currentEmployee.firstName} ${currentEmployee.lastName}`
-    const empAddress = currentEmployee.address || 'Resident Address, City'
-    
-    let content = ''
-
-    if (selectedTemplate === 'offer-letter') {
-      const startDateFormatted = dayjs(extraFields.startDate).format('DD/MM/YYYY')
-      const endDateFormatted = dayjs(extraFields.endDate).format('DD/MM/YYYY')
-      const todayFormatted = dayjs().format('DD/MM/YYYY')
-      const genderValue = extraFields.gender || currentEmployee?.gender || 'Male'
-      const honorific = genderValue === 'Female' ? 'Ms.' : 'Mr.'
-
-      content = `
-        <div class="document-preview font-sans p-0 bg-white mx-auto text-black leading-[1.5] relative overflow-hidden" style="width: 210mm; height: 297mm; font-family: Calibri, Arial, sans-serif; font-size: 14px; color: #000000; border: none !important; box-shadow: none !important; outline: none !important;">
-          <!-- Official Header Image -->
-          <div class="w-full h-28 bg-white overflow-hidden relative">
-            <img src="/header.png" alt="Company Header" class="w-[102%] h-[102%] object-fill absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-          </div>
-
-          <div style="padding: 24px 48px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
-              <h2 style="font-size: 18px; font-weight: bold; color: black; margin: 0;">Internship Offer Letter</h2>
-              <p style="font-weight: bold; font-size: 14px; margin: 0;">Date: <span style="font-weight: 500;">${todayFormatted}</span></p>
-            </div>
-
-            <div style="display: flex; justify-content: flex-end;">
-              <div style="text-align: right; color: black; font-size: 14px; line-height: 1.3; font-weight: 500;">
-                <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">HK DigiVerse LLP</p>
-                <p style="margin: 0;">501-502, Silver Trade Center,</p>
-                <p style="margin: 0;">Mota Varachha, Surat - 394101</p>
-                <p style="margin: 0;">Website: <a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db; text-decoration: underline;">HK DigiVerse LLP</a></p>
-                <p style="margin: 0;">Email: <a href="mailto:hr@hkdigiverse.com" style="color: #3498db; text-decoration: underline;">hr@hkdigiverse.com</a></p>
-              </div>
-            </div>
-
-            <div style="margin-bottom: 16px; margin-top: 16px;">
-              <p style="font-weight: bold; color: black; margin-bottom: 2px;">To,</p>
-              <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">${honorific} ${empName}</p>
-            </div>
-
-            <p style="margin-bottom: 12px; font-weight: bold; font-size: 14px; color: black;">Subject: Offer for Internship Position</p>
-
-            <div style="margin-bottom: 12px; color: black; font-size: 14px;">
-              <p style="margin-bottom: 12px;">Dear Candidate,</p>
-              <p style="text-align: justify; line-height: 1.6; margin: 0;">
-                We are pleased to offer you an opportunity to join <span style="font-weight: bold;">HK DigiVerse LLP</span> as an Intern in the <span style="font-weight: bold;">${extraFields.department || 'Developing'}</span> Department.
-              </p>
-            </div>
-
-            <div style="margin-bottom: 16px; color: black; font-size: 14px;">
-              <p style="margin-bottom: 8px;">Your internship details are as follows:</p>
-              <ul style="margin-left: 32px; list-style-type: none; padding: 0;">
-                <li style="display: flex; margin-bottom: 4px;"><span style="font-weight: bold; width: 176px; flex-shrink: 0;">• Position:</span> <span>Intern</span></li>
-                <li style="display: flex; margin-bottom: 4px;"><span style="font-weight: bold; width: 176px; flex-shrink: 0;">• Department:</span> <span>${extraFields.department || 'Developing'}</span></li>
-                <li style="display: flex; margin-bottom: 4px;"><span style="font-weight: bold; width: 176px; flex-shrink: 0;">• Internship Duration:</span> <span>${startDateFormatted} to ${endDateFormatted}</span></li>
-                <li style="display: flex; margin-bottom: 4px;"><span style="font-weight: bold; width: 176px; flex-shrink: 0;">• Working Hours:</span> <span>9:30AM to 6:30PM</span></li>
-                <li style="display: flex; margin-bottom: 4px;"><span style="font-weight: bold; width: 176px; flex-shrink: 0;">• Location:</span> <span>HK DigiVerse LLP, Surat</span></li>
-                <li style="display: flex; margin-bottom: 4px;"><span style="font-weight: bold; width: 176px; flex-shrink: 0;">• Stipend:</span> <span>${extraFields.stipend === 'Unpaid' ? 'Unpaid' : `₹ ${extraFields.stipend || '0'} /- per month`}</span></li>
-              </ul>
-            </div>
-
-            <div style="margin-bottom: 16px; color: black; font-size: 14px; text-align: justify; line-height: 1.6;">
-              <p style="margin-bottom: 12px;">During your internship period, you will be expected to perform your duties sincerely, maintain professional behavior, and follow all company rules and policies.</p>
-              <p style="margin: 0;">Your internship may include training, project work, practical exposure, and performance evaluations. Based on your performance and company requirements, future opportunities may be considered.</p>
-            </div>
-
-            <div style="margin-bottom: 12px; color: black; font-size: 14px;">
-              <p style="margin-bottom: 8px;">Please note the following conditions:</p>
-              <ol style="margin-left: 32px; padding: 0;">
-                <li style="margin-bottom: 4px;">You shall maintain confidentiality regarding all company data and information.</li>
-                <li style="margin-bottom: 4px;">The company reserves the right to terminate the internship at any time in case of misconduct or unsatisfactory performance.</li>
-                <li style="margin-bottom: 4px;">This internship does not guarantee permanent employment with the company.</li>
-              </ol>
-            </div>
-
-            <div style="margin-bottom: 72px; color: black; font-size: 14px;">
-              <p style="margin: 0;">We welcome you to the team and wish you a successful learning experience with us.</p>
-              <p style="margin-top: 12px; margin-bottom: 0;">Sincerely,</p>
-              <div style="margin-top: 12px;">
-                <p style="font-weight: bold; margin: 0;">For HK DigiVerse LLP</p>
-                <div style="margin-top: 32px;">
-                  <p style="margin: 0;">Authorized Signatory</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div class="absolute mb-4 bottom-0 left-0 w-full p-4 bg-white flex justify-center items-center gap-4 text-[14px] font-bold text-[#3498db]">
-            <span>HK DigiVerse LLP</span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
-              <span class="text-[#3498db]">+91 87805 64463</span>
-            </span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-              <span><a href="mailto:hr@hkdigiverse.com" style="color: #3498db;">hr@hkdigiverse.com</a></span>
-            </span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1 uppercase">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
-              <span><a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db;">WWW.HKDIGIVERSE.COM</a></span>
-            </span>
-          </div>
-        </div>
-      `
-    } else if (selectedTemplate === 'employee-offer-letter') {
-      const startDateFormatted = dayjs(extraFields.startDate).format('DD/MM/YYYY')
-      const todayFormatted = dayjs().format('DD/MM/YYYY')
-      const genderValue = extraFields.gender || currentEmployee?.gender || 'Male'
-      const honorific = genderValue === 'Female' ? 'Ms.' : 'Mr.'
-
-      content = `
-        <div class="document-preview font-sans p-0 bg-white mx-auto text-black leading-[1.5] relative overflow-hidden" style="width: 210mm; height: 297mm; font-family: Calibri, Arial, sans-serif; font-size: 14px; color: #000000; border: none !important; box-shadow: none !important; outline: none !important;">
-          <!-- Official Header Image -->
-          <div class="w-full h-28 bg-white overflow-hidden relative">
-            <img src="/header.png" alt="Company Header" class="w-[102%] h-[102%] object-fill absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-          </div>
-
-          <div style="padding: 16px 48px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">
-              <h2 style="font-size: 20px; font-weight: bold; color: black; margin: 0; text-transform: uppercase;">Offer Letter</h2>
-              <p style="font-weight: bold; font-size: 14px; margin: 0;">Date: <span style="font-weight: 500;">${todayFormatted}</span></p>
-            </div>
-
-            <div style="display: flex; justify-content: flex-end;">
-              <div style="text-align: right; color: black; font-size: 14px; line-height: 1.3; font-weight: 500;">
-                <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">HK DigiVerse LLP</p>
-                <p style="margin: 0;">501-502, Silver Trade Center,</p>
-                <p style="margin: 0;">Mota Varachha, Surat - 394101</p>
-                <p style="margin: 0;">Website: <a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db; text-decoration: underline;">HK DigiVerse LLP</a></p>
-                <p style="margin: 0;">Email: hr@hkdigiverse.com</p>
-              </div>
-            </div>
-
-            <div style="margin-bottom: 10px;">
-              <p style="color: black; margin-bottom: 2px;">To,</p>
-              <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">${honorific} ${empName}</p>
-            </div>
-
-            <p style="margin-bottom: 8px; font-weight: bold; font-size: 14px; color: black;">Subject: Offer Letter for the position of <span>${extraFields.designation || currentEmployee?.designation || '__________'}</span></p>
-
-            <div style="margin-bottom: 10px; color: black; font-size: 14px;">
-              <p style="margin-bottom: 8px;">Dear ${empName},</p>
-              <p style="text-align: justify; line-height: 1.5; margin: 0;">
-                We are pleased to offer you the position of <span style="font-weight: bold;">${extraFields.designation || currentEmployee?.designation || '__________'}</span> at <span style="font-weight: bold;">HK DigiVerse LLP</span>. We believe your skills, knowledge, and experience will be a valuable addition to our organization.
-              </p>
-            </div>
-
-            <div style="margin-bottom: 10px; color: black; font-size: 14px;">
-              <p style="margin-bottom: 8px;">Your employment details are as follows:</p>
-              <ul style="margin-left: 24px; list-style-type: disc; padding: 0;">
-                <li style="margin-bottom: 2px;"><span style="font-weight: bold;">Designation:</span> ${extraFields.designation || currentEmployee?.designation || 'Employee'}</li>
-                <li style="margin-bottom: 2px;"><span style="font-weight: bold;">Department:</span> ${extraFields.department || 'Developing'}</li>
-                <li style="margin-bottom: 2px;"><span style="font-weight: bold;">Joining Date:</span> ${startDateFormatted}</li>
-                <li style="margin-bottom: 2px;"><span style="font-weight: bold;">Work Location:</span> Office</li>
-                <li style="margin-bottom: 2px;"><span style="font-weight: bold;">Working Hours:</span> 9:30AM to 6:30PM</li>
-                <li style="margin-bottom: 2px;"><span style="font-weight: bold;">Salary/Stipend:</span> ₹ ${extraFields.salary || '25,000'} per month</li>
-              </ul>
-            </div>
-
-            <div style="margin-bottom: 10px; color: black; font-size: 14px;">
-              <p style="margin-bottom: 8px; font-weight: bold; font-size: 16px;">Terms & Conditions:</p>
-              <ol style="list-style-type: decimal; padding-left: 24px; margin-left: 0;">
-                <li style="margin-bottom: 2px; padding-left: 8px; text-align: justify;">During your employment, you are expected to maintain professionalism, confidentiality, and company ethics.</li>
-                <li style="margin-bottom: 2px; padding-left: 8px; text-align: justify;">Any violation of company policies may result in disciplinary action.</li>
-                <li style="margin-bottom: 2px; padding-left: 8px; text-align: justify;">Either party may terminate employment by providing notice as per company policy.</li>
-                <li style="margin-bottom: 2px; padding-left: 8px; text-align: justify;">You will be required to submit all necessary documents at the time of joining.</li>
-              </ol>
-            </div>
-
-            <p style="margin-bottom: 8px; color: black; font-size: 14px; text-align: justify;">
-              Please sign and return a copy of this letter as a token of your acceptance of the offer.
-            </p>
-
-            <p style="margin-bottom: 8px; color: black; font-size: 14px; text-align: justify;">
-              We are excited to welcome you to the team and look forward to a successful journey together.
-            </p>
-
-            <div style="margin-bottom: 10px; color: black; font-size: 14px;">
-              <p style="margin-bottom: 8px;">Sincerely,</p>
-              <p style="font-weight: bold; margin-bottom: 4px;">HR Department</p>
-              <p style="margin: 0;">HK DigiVerse & IT Consultancy Pvt Ltd.</p>
-            </div>
-
-            <div style="color: black; font-size: 14px; margin-bottom: 0px;">
-              ${includeAcceptance ? `
-              <p style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">Acceptance by Candidate</p>
-              <p style="text-align: justify; line-height: 1.5; margin-bottom: 16px;">
-                I, ______________________, accept the offer for the position of ______________________ at HK DigiVerse &amp; IT Consultancy Pvt Ltd. and agree to abide by the company policies and terms mentioned above.
-              </p>
-              <p style="font-weight: bold; margin-bottom: 5px;">Candidate Signature: ______________________</p>
-              <p style="font-weight: bold; margin: 0;">Date: ______________________</p>
-              ` : ''}
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div class="absolute mb-4 bottom-0 left-0 w-full p-4 bg-white flex justify-center items-center gap-4 text-[14px] font-bold text-[#3498db]">
-            <span>HK DigiVerse LLP</span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
-              <span class="text-[#3498db]">+91 87805 64463</span>
-            </span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-              <span><a href="mailto:hr@hkdigiverse.com" style="color: #3498db;">hr@hkdigiverse.com</a></span>
-            </span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1 uppercase">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
-              <span><a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db;">WWW.HKDIGIVERSE.COM</a></span>
-            </span>
-          </div>
-        </div>
-      `
-    } else if (selectedTemplate === 'completion-certificate') {
-      const startDateFormatted = dayjs(extraFields.startDate).format('DD/MM/YYYY')
-      const endDateFormatted = dayjs(extraFields.endDate).format('DD/MM/YYYY')
-      const todayFormatted = dayjs().format('DD/MM/YYYY')
-      const genderValue = extraFields.gender || currentEmployee?.gender || 'Male'
-      const honorific = genderValue === 'Female' ? 'Ms.' : 'Mr.'
-
-      content = `
-        <div class="document-preview font-sans p-0 bg-white mx-auto text-black leading-[1.5] relative overflow-hidden" style="width: 210mm; height: 297mm; font-family: Calibri, Arial, sans-serif; font-size: 14px; color: #000000; border: none !important; box-shadow: none !important; outline: none !important;">
-          <!-- Official Header Image -->
-          <div class="w-full h-28 bg-white overflow-hidden relative">
-            <img src="/header.png" alt="Company Header" class="w-[102%] h-[102%] object-fill absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-          </div>
-
-          <div style="padding: 24px 48px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
-              <h2 style="font-size: 18px; font-weight: bold; color: black; margin: 0;">Internship Completion Certificate</h2>
-              <p style="font-weight: bold; font-size: 14px; margin: 0;">Date: <span style="font-weight: 500;">${todayFormatted}</span></p>
-            </div>
-
-            <div style="display: flex; justify-content: flex-end;">
-              <div style="text-align: right; color: black; font-size: 14px; line-height: 1.3; font-weight: 500;">
-                <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">HK DigiVerse LLP</p>
-                <p style="margin: 0;">501-502, Silver Trade Center,</p>
-                <p style="margin: 0;">Mota Varachha, Surat - 394101</p>
-                <p style="margin: 0;">Website: <a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db; text-decoration: underline;">HK DigiVerse LLP</a></p>
-                <p style="margin: 0;">Email: <a href="mailto:hr@hkdigiverse.com" style="color: #000000;">hr@hkdigiverse.com</a></p>
-              </div>
-            </div>
-
-            <div style="margin-bottom: 16px;">
-              <p style="color: black; margin-bottom: 4px;">To,</p>
-              <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">${honorific} ${empName}</p>
-            </div>
-
-            <div style="margin-bottom: 16px; color: black; font-size: 14px; text-align: justify; line-height: 1.6;">
-              <p style="margin-bottom: 12px;">
-                This is to certify that <span style="font-weight: bold;">${honorific} ${empName}</span> has successfully completed their internship at <span style="font-weight: bold;">HK DigiVerse LLP</span> as a <span style="font-weight: bold;">${extraFields.designation || currentEmployee?.designation || 'Intern'}</span> from <span style="font-weight: bold;">${startDateFormatted}</span> to <span style="font-weight: bold;">${endDateFormatted}</span>.
-              </p>
-              
-              <p style="margin-bottom: 12px;">
-                During the internship period, they worked on various assignments and projects related to their domain and demonstrated sincerity, dedication, and a willingness to learn. Their performance and conduct throughout the internship were found to be satisfactory.
-              </p>
-              
-              <p style="margin-bottom: 14px;">
-                We appreciate their contribution to the organization and wish them success in their future career and academic endeavors.
-              </p>
-            </div>
-
-            <div style="margin-top: 14px; color: black; font-size: 14px;">
-              <p style="margin: 0;">Sincerely,</p>
-              <div style="margin-top: 12px;">
-                <p style="font-weight: bold; font-size: 16px; margin: 0;">Het Mangukiya</p>
-                <div style="margin-top: 30px; line-height: 1.2;">
-                  <p style="font-weight: 500; margin: 0;">CEO & Founder</p>
-                  <p style="margin: 0;">HK DigiVerse LLP</p>
-                </div>
-                <div style="margin-top: 14px;">
-                  <p style="margin: 0;">(Signature & Company Seal)</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div class="absolute mb-4 bottom-0 left-0 w-full p-4 bg-white flex justify-center items-center gap-4 text-[14px] font-bold text-[#3498db]">
-            <span>HK DigiVerse LLP</span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
-              <span class="text-[#3498db]">+91 87805 64463</span>
-            </span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-              <span><a href="mailto:hr@hkdigiverse.com" style="color: #3498db;">hr@hkdigiverse.com</a></span>
-            </span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1 uppercase">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
-              <span><a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db;">WWW.HKDIGIVERSE.COM</a></span>
-            </span>
-          </div>
-        </div>
-      `
-    } else if (selectedTemplate === 'appointment-letter') {
-      const startDateFormatted = dayjs(extraFields.startDate).format('DD/MM/YYYY')
-      const todayFormatted = dayjs().format('DD/MM/YYYY')
-      const genderValue = extraFields.gender || currentEmployee?.gender || 'Male'
-      const honorific = genderValue === 'Female' ? 'Ms.' : 'Mr.'
-      
-      content = `
-        <div class="document-preview font-sans p-0 bg-white mx-auto text-black leading-[1.5] relative overflow-hidden" style="width: 210mm; height: 297mm; font-family: Calibri, Arial, sans-serif; font-size: 14px; color: #000000; border: none !important; box-shadow: none !important; outline: none !important;">
-          <!-- Official Header Image -->
-          <div class="w-full h-28 bg-white overflow-hidden relative">
-            <img src="/header.png" alt="Company Header" class="w-[102%] h-[102%] object-fill absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-          </div>
-
-          <div style="padding: 24px 48px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
-              <h2 style="font-size: 18px; font-weight: bold; color: black; margin: 0;">Appointment Letter</h2>
-              <p style="font-weight: bold; font-size: 14px; margin: 0;">Date: <span style="font-weight: 500;">${todayFormatted}</span></p>
-            </div>
-
-            <div style="display: flex; justify-content: flex-end;">
-              <div style="text-align: right; color: black; font-size: 14px; line-height: 1.3; font-weight: 500;">
-                <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">HK DigiVerse LLP</p>
-                <p style="margin: 0;">501-502, Silver Trade Center,</p>
-                <p style="margin: 0;">Mota Varachha, Surat - 394101</p>
-                <p style="margin: 0;">Website: <a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db; text-decoration: underline;">HK DigiVerse LLP</a></p>
-                <p style="margin: 0;">Email: <a href="mailto:hr@hkdigiverse.com" style="color: #000000;">hr@hkdigiverse.com</a></p>
-              </div>
-            </div>
-
-            <div style="margin-bottom: 16px;">
-              <p style="color: black; margin-bottom: 4px;">To,</p>
-              <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">${honorific} ${empName}</p>
-            </div>
-
-            <p style="margin-bottom: 12px; font-weight: bold; font-size: 14px; color: black;">Subject: Appointment Letter</p>
-
-            <div style="margin-bottom: 16px; color: black; font-size: 14px; line-height: 1.6;">
-              <p style="margin-bottom: 12px;">Dear <span style="font-weight: bold;">${empName}</span>,</p>
-              <p style="text-align: justify; margin: 0;">
-                We are pleased to appoint you as <span style="font-weight: bold;">${extraFields.designation || currentEmployee?.designation || 'Employee'}</span> at <span style="font-weight: bold;">HK DigiVerse LLP</span> effective from <span style="font-weight: bold;">${startDateFormatted}</span>.
-              </p>
-            </div>
-
-            <div style="margin-bottom: 16px; color: black; font-size: 14px; line-height: 1.6;">
-              <p style="margin-bottom: 12px;">Your employment will be governed by the following terms and conditions:</p>
-              <ol style="margin-left: 16px; padding-left: 24px; list-style-type: decimal;">
-                <li style="padding-left: 8px;"><span style="font-weight: bold;">Designation:</span> ${extraFields.designation || currentEmployee?.designation || 'Employee'}</li>
-                <li style="padding-left: 8px;"><span style="font-weight: bold;">Department:</span> ${extraFields.department || currentEmployee?.department || 'Developing'}</li>
-                <li style="padding-left: 8px;"><span style="font-weight: bold;">Work Location:</span> Office</li>
-                <li style="padding-left: 8px;"><span style="font-weight: bold;">Working Hours:</span> ${extraFields.workingHours || '9:30 AM to 6:30 PM'}</li>
-                <li style="padding-left: 8px;"><span style="font-weight: bold;">Salary:</span> ${extraFields.salary || '25,000'} as discussed and agreed upon.</li>
-                <li style="padding-left: 8px;"><span style="font-weight: bold;">Leave Policy:</span> Leaves will be applicable as per company policies.</li>
-                <li style="text-align: justify; padding-left: 8px;"><span style="font-weight: bold;">Confidentiality:</span> You shall maintain confidentiality regarding company data, clients, and internal processes during and after your employment.</li>
-                <li style="text-align: justify; padding-left: 8px;"><span style="font-weight: bold;">Termination:</span> Either party may terminate this employment by giving ${extraFields.noticePeriod || '30 Days'} notice or salary in lieu thereof, as per company policy.</li>
-                <li style="text-align: justify; padding-left: 8px;"><span style="font-weight: bold;">Company Policies:</span> You are required to comply with all rules, regulations, and policies of the company.</li>
-              </ol>
-            </div>
-
-            <div style="margin-bottom: 16px; color: black; font-size: 14px; text-align: justify; line-height: 1.6;">
-              <p style="margin-bottom: 12px;">You are requested to sign and return a copy of this letter as a token of your acceptance of the above terms and conditions.</p>
-              <p style="margin: 0;">We welcome you to the team and wish you a successful career with us.</p>
-            </div>
-
-            <div style="margin-top: 14px; color: black; font-size: 14px;">
-              <p style="margin: 0;">Sincerely,</p>
-              <div style="margin-top: 12px;">
-                <p style="margin: 0;">For</p>
-                <p style="font-weight: bold; margin: 0;">HK DigiVerse LLP</p>
-                <div style="margin-top: 40px; line-height: 1.2;">
-                  <p style="font-weight: bold; margin: 0;">Het Mangukiya</p>
-                  <p style="margin: 0;">CEO & Founder</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div class="absolute mb-4 bottom-0 left-0 w-full p-4 bg-white flex justify-center items-center gap-4 text-[14px] font-bold text-[#3498db]">
-            <span>HK DigiVerse LLP</span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
-              <span class="text-[#3498db]">+91 87805 64463</span>
-            </span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-              <span><a href="mailto:hr@hkdigiverse.com" style="color: #3498db;">hr@hkdigiverse.com</a></span>
-            </span>
-            <span class="text-gray-300">|</span>
-            <span class="flex items-center gap-1 uppercase">
-              <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
-              <span><a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db;">WWW.HKDIGIVERSE.COM</a></span>
-            </span>
-          </div>
-        </div>
-      `
-    } else if (selectedTemplate === 'agreement-letter') {
-      const startDateFormatted = dayjs(extraFields.startDate).format('DD/MM/YYYY')
-      const todayFormatted = dayjs().format('DD/MM/YYYY')
-      const genderValue = extraFields.gender || currentEmployee?.gender || 'Male'
-      const honorific = genderValue === 'Female' ? 'Ms.' : 'Mr.'
-      
-      content = `
-        <div class="document-preview font-sans p-0 bg-white mx-auto text-black leading-[1.5] relative overflow-hidden" style="width: 210mm; font-family: Calibri, Arial, sans-serif; font-size: 14px; color: #000000; border: none !important; box-shadow: none !important; outline: none !important;">
-          <!-- Page 1 Content -->
-          <div style="height: 297mm; position: relative;">
-            <div class="w-full h-28 bg-white overflow-hidden relative">
-              <img src="/header.png" alt="Company Header" class="w-[102%] h-[102%] object-fill absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-            </div>
-
-            <div style="padding: 24px 48px;">
-              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 24px;">
-                <h2 style="font-size: 16px; font-weight: bold; color: black; margin: 0; max-width: 60%;">EMPLOYMENT AGREEMENT CUM NON-DISCLOSURE AGREEMENT (NDA)</h2>
-                <p style="font-weight: bold; font-size: 14px; margin: 0;">Date: <span style="font-weight: 500;">${todayFormatted}</span></p>
-              </div>
-
-              <div style="display: flex; justify-content: flex-end;">
-                <div style="text-align: right; color: black; font-size: 14px; line-height: 1.3; font-weight: 500;">
-                  <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">HK DigiVerse LLP</p>
-                  <p style="margin: 0;">501-502, Silver Trade Center,</p>
-                  <p style="margin: 0;">Mota Varachha, Surat - 394101</p>
-                  <p style="margin: 0;">Website: <a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db; text-decoration: underline;">HK DigiVerse LLP</a></p>
-                  <p style="margin: 0;">Email: <a href="mailto:hr@hkdigiverse.com" style="color: #000000;">hr@hkdigiverse.com</a></p>
-                </div>
-              </div>
-
-              <div style="margin-bottom: 24px;">
-                <p style="color: black; margin-bottom: 4px;">To,</p>
-                <p style="font-weight: bold; color: black; font-size: 14px; margin: 0;">${honorific} ${empName}</p>
-              </div>
-
-              <p style="margin-bottom: 16px; font-weight: bold; font-size: 14px; color: black; text-transform: uppercase;">EMPLOYMENT AGREEMENT CUM NON-DISCLOSURE AGREEMENT (NDA)</p>
-              <p style="margin-bottom: 16px; text-align: justify;">This Employment Agreement Cum Non-Disclosure Agreement ("Agreement") is made and entered into between:</p>
-
-              <div style="margin-bottom: 16px;">
-                <p style="font-weight: bold; margin-bottom: 8px; font-size: 18px;">Employer:</p>
-                <p style="text-align: justify; margin: 0;">
-                  <span style="font-weight: bold;">HK DigiVerse LLP</span>, having its registered office at 501-502, Silver Trade Center, Mota Varachha, Surat - 394101, Gujarat, India (hereinafter referred to as the "Company").
-                </p>
-              </div>
-
-              <p style="margin-bottom: 16px;">AND</p>
-
-              <div style="margin-bottom: 16px;">
-                <p style="font-weight: bold; margin-bottom: 8px; font-size: 18px;">Employee:</p>
-                <p style="margin-bottom: 4px;"><span style="font-weight: bold;">${honorific} ${empName}</span></p>
-                <p style="margin-bottom: 4px;">Address: _________________________________________</p>
-                <p style="margin-bottom: 16px;">Contact No.: ${extraFields.contactNo || '___________________________'}</p>
-                <p style="margin: 0;">(hereinafter referred to as the "Employee").</p>
-              </div>
-
-              <p style="margin-bottom: 24px;">Both parties agree to the following terms and conditions:</p>
-
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">1. APPOINTMENT</p>
-                <p style="text-align: justify; margin: 0;">
-                  The Company hereby appoints the Employee as <span style="font-weight: bold;">${extraFields.designation || currentEmployee?.designation || 'Employee'}</span> and the Employee agrees to work under the rules, regulations, and policies of the Company.
-                </p>
-              </div>
-
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">2. DATE OF JOINING</p>
-                <p style="margin: 0;">The Employee's date of joining shall be <span style="font-weight: bold;">${startDateFormatted}</span>.</p>
-              </div>
-
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">3. WORKING HOURS</p>
-                <p style="text-align: justify; margin: 0;">
-                  The Employee shall work as per the Company's official working schedule and may be required to work additional hours when necessary for business requirements.
-                </p>
-              </div>
-            </div>
-            <div class="absolute mb-4 bottom-0 left-0 w-full p-4 bg-white flex justify-center items-center gap-4 text-[14px] font-bold text-[#3498db]">
-              <span>HK DigiVerse LLP</span>
-              <span class="text-gray-300">|</span>
-              <span class="flex items-center gap-1">
-                <svg class="w-3.5 h-3.5 text-[#3498db]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
-                <span class="text-[#3498db]">+91 87805 64463</span>
-              </span>
-              <span class="text-gray-300">|</span>
-              <span class="flex items-center gap-1">
-                <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                <span><a href="mailto:hr@hkdigiverse.com" style="color: #3498db;">hr@hkdigiverse.com</a></span>
-              </span>
-              <span class="text-gray-300">|</span>
-              <span class="flex items-center gap-1 uppercase">
-                <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
-                <span><a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db;">WWW.HKDIGIVERSE.COM</a></span>
-              </span>
-            </div>
-          </div>
-
-          <!-- Page 2 Content -->
-          <div style="height: 297mm; position: relative;">
-            <div class="w-full h-28 bg-white overflow-hidden relative">
-              <img src="/header.png" alt="Company Header" class="w-[102%] h-[102%] object-fill absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-            </div>
-            <div style="padding: 24px 48px;">
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">4. SALARY & BENEFITS</p>
-                <ul style="margin-left: 24px; list-style-type: disc; margin-bottom: 0;">
-                  <li>Monthly Salary: ₹ <span style="font-weight: bold;">${extraFields.salary || '___________'}</span></li>
-                  <li>Salary shall be paid subject to statutory deductions and company policies.</li>
-                  <li>Any incentives, bonuses, or allowances shall be governed by Company rules.</li>
-                </ul>
-              </div>
-
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">5. CONFIDENTIALITY / NON-DISCLOSURE</p>
-                <p style="text-align: justify; margin-bottom: 12px;">
-                  The Employee agrees that during and after employment, they shall not disclose, share, copy, misuse, or transfer any confidential information relating to:
-                </p>
-                <ul style="margin-left: 24px; list-style-type: disc; margin-bottom: 12px;">
-                  <li>Clients and customer data</li>
-                  <li>Source code, software, credentials, or systems</li>
-                  <li>Business strategies and operations</li>
-                  <li>Financial information</li>
-                  <li>Marketing plans and internal documents</li>
-                  <li>Any proprietary information of the Company</li>
-                </ul>
-                <p style="text-align: justify; margin: 0;">The Employee shall maintain complete confidentiality of all Company data and materials.</p>
-              </div>
-
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">6. INTELLECTUAL PROPERTY</p>
-                <p style="text-align: justify; margin: 0;">
-                  Any work, design, code, content, software, graphics, documents, ideas, inventions, or materials created by the Employee during employment shall remain the sole property of the Company.
-                </p>
-              </div>
-
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">7. COMPANY ASSETS</p>
-                <p style="text-align: justify; margin-bottom: 12px;">
-                  The Employee shall properly maintain and return all Company property including:
-                </p>
-                <ul style="margin-left: 24px; list-style-type: disc; margin-bottom: 12px;">
-                  <li>Laptop/Desktop</li>
-                  <li>ID Card</li>
-                  <li>Documents</li>
-                  <li>Software Access</li>
-                  <li>Login Credentials</li>
-                  <li>Other official assets</li>
-                </ul>
-                <p style="text-align: justify; margin: 0;">upon resignation or termination.</p>
-              </div>
-
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">8. NOTICE PERIOD</p>
-                <p style="text-align: justify; margin: 0;">
-                  If the Employee leaves employment without serving the required notice period, the Company reserves the right to recover applicable dues as per Company policy.
-                </p>
-              </div>
-            </div>
-            <div class="absolute mb-4 bottom-0 left-0 w-full p-4 bg-white flex justify-center items-center gap-4 text-[14px] font-bold text-[#3498db]">
-              <span>HK DigiVerse LLP</span>
-              <span class="text-gray-300">|</span>
-              <span class="flex items-center gap-1">
-                <svg class="w-3.5 h-3.5 text-[#3498db]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
-                <span class="text-[#3498db]">+91 87805 64463</span>
-              </span>
-              <span class="text-gray-300">|</span>
-              <span class="flex items-center gap-1">
-                <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                <span><a href="mailto:hr@hkdigiverse.com" style="color: #3498db;">hr@hkdigiverse.com</a></span>
-              </span>
-              <span class="text-gray-300">|</span>
-              <span class="flex items-center gap-1 uppercase">
-                <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
-                <span><a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db;">WWW.HKDIGIVERSE.COM</a></span>
-              </span>
-            </div>
-          </div>
-
-          <!-- Page 3 Content -->
-          <div style="height: 297mm; position: relative;">
-            <div class="w-full h-28 bg-white overflow-hidden relative">
-              <img src="/header.png" alt="Company Header" class="w-[102%] h-[102%] object-fill absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-            </div>
-            <div style="padding: 24px 48px;">
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">9. TERMINATION</p>
-                <p style="text-align: justify; margin-bottom: 12px;">
-                  The Company may terminate employment immediately in cases involving:
-                </p>
-                <ul style="margin-left: 24px; list-style-type: disc; margin-bottom: 0;">
-                  <li>Misconduct</li>
-                  <li>Data breach</li>
-                  <li>Confidentiality violation</li>
-                  <li>Fraudulent activity</li>
-                  <li>Poor performance</li>
-                  <li>Unauthorized absence</li>
-                  <li>Violation of Company policies</li>
-                </ul>
-              </div>
-
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">10. NON-COMPETE & NON-SOLICITATION</p>
-                <p style="text-align: justify; margin-bottom: 12px;">
-                  During employment the Employee shall not:
-                </p>
-                <ul style="margin-left: 24px; list-style-type: disc; margin-bottom: 0;">
-                  <li>Directly solicit Company clients or employees</li>
-                  <li>Use Company confidential information for personal/business gain</li>
-                  <li>Misrepresent association with the Company</li>
-                </ul>
-              </div>
-
-              <div style="margin-bottom: 24px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">11. GOVERNING LAW</p>
-                <p style="text-align: justify; margin: 0;">
-                  This Agreement shall be governed under the laws of India and jurisdiction shall remain in Surat, Gujarat.
-                </p>
-              </div>
-
-              <div style="margin-bottom: 20px;">
-                <p style="font-weight: bold; margin-bottom: 8px;">12. ACCEPTANCE</p>
-                <p style="text-align: justify; margin: 0;">
-                  I hereby confirm that I have read, understood, and agreed to all the terms and conditions mentioned above.
-                </p>
-              </div>
-
-              <div style="margin-top: 20px;">
-                <p style="font-weight: bold; font-size: 20px; margin-bottom: 15px;">EMPLOYER</p>
-                <p style="margin-bottom: 10px;">For <span style="font-weight: bold;">HK DigiVerse LLP</span></p>
-                <p style="margin-bottom: 4px;">Authorized Signatory</p>
-                <p>Name: __________________________</p>
-                <p>Designation: _____________________</p>
-                <p style="margin-bottom: 32px;">Signature: _______________________</p>
-
-                <hr style="border: none; border-top: 1px solid #ccc; margin-bottom: 32px;" />
-
-                <p style="font-weight: bold; font-size: 16px; margin-bottom: 20px;">EMPLOYEE</p>
-                <p style="margin-bottom: 20px;">Employee Name: ___________________________</p>
-                <p style="margin-bottom: 20px;">Signature: _______________________________</p>
-                <p style="margin-bottom: 20px;">Date: ____________________________________</p>
-              </div>
-            </div>
-            
-            <div class="absolute mb-4 bottom-0 left-0 w-full p-4 bg-white flex justify-center items-center gap-4 text-[14px] font-bold text-[#3498db]">
-              <span>HK DigiVerse LLP</span>
-              <span class="text-gray-300">|</span>
-              <span class="flex items-center gap-1">
-                <svg class="w-3.5 h-3.5 text-[#3498db]" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
-                <span class="text-[#3498db]">+91 87805 64463</span>
-              </span>
-              <span class="text-gray-300">|</span>
-              <span class="flex items-center gap-1">
-                <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                <span><a href="mailto:hr@hkdigiverse.com" style="color: #3498db;">hr@hkdigiverse.com</a></span>
-              </span>
-              <span class="text-gray-300">|</span>
-              <span class="flex items-center gap-1 uppercase">
-                <svg class="w-3.5 h-3.5 text-[#3498db]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
-                <span><a href="https://www.hkdigiverse.com" target="_blank" style="color: #3498db;">WWW.HKDIGIVERSE.COM</a></span>
-              </span>
-            </div>
-          </div>
-        </div>
-      `
-    } else {
-      content = `<div class="p-20 text-center text-gray-400 font-bold italic">Template content for ${templateData?.name} is under development...</div>`
+    if (!templateData || !templateData.content) {
+      setPreviewContent(`<div class="p-20 text-center text-gray-400 font-bold italic">Template content for ${templateData?.name || 'this template'} is under development...</div>`)
+      toast.success('Document preview generated!')
+      return
     }
 
-    setPreviewContent(content)
+    const todayFormatted = dayjs().format('DD/MM/YYYY')
+    const empName = extraFields.name || currentEmployee.name || `${currentEmployee.firstName} ${currentEmployee.lastName}`
+    const empAddress = currentEmployee.address || 'Resident Address, City'
+    const startDateFormatted = extraFields.startDate ? dayjs(extraFields.startDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
+    const endDateFormatted = extraFields.endDate ? dayjs(extraFields.endDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
+    const genderValue = extraFields.gender || currentEmployee?.gender || 'Male'
+    const honorific = genderValue === 'Female' ? 'Ms.' : 'Mr.'
+
+    let htmlContent = templateData.content
+
+    // Replace basic variables
+    htmlContent = htmlContent.replace(/\{\{todayFormatted\}\}/g, todayFormatted)
+    htmlContent = htmlContent.replace(/\{\{empName\}\}/g, empName)
+    htmlContent = htmlContent.replace(/\{\{empAddress\}\}/g, empAddress)
+    htmlContent = htmlContent.replace(/\{\{startDateFormatted\}\}/g, startDateFormatted)
+    htmlContent = htmlContent.replace(/\{\{endDateFormatted\}\}/g, endDateFormatted)
+    htmlContent = htmlContent.replace(/\{\{genderValue\}\}/g, genderValue)
+    htmlContent = htmlContent.replace(/\{\{honorific\}\}/g, honorific)
+    
+    // Replace all extraFields
+    Object.keys(extraFields).forEach(key => {
+      const regex = new RegExp(`\{\{${key}\}\}`, 'g')
+      htmlContent = htmlContent.replace(regex, extraFields[key] || '')
+    })
+    
+    // Replace all currentEmployee fields
+    Object.keys(currentEmployee).forEach(key => {
+      const regex = new RegExp(`\{\{currentEmployee\.${key}\}\}`, 'g')
+      htmlContent = htmlContent.replace(regex, currentEmployee[key] || '')
+    })
+
+    // Include Acceptance
+    const acceptanceHtml = includeAcceptance ? `
+      <div style="color: black; font-size: 14px; margin-bottom: 0px; margin-top: 40px; border-top: 1px dashed #ccc; padding-top: 20px;">
+        <p style="font-weight: bold; font-size: 16px; margin-bottom: 8px;">Acceptance by Candidate</p>
+        <p style="text-align: justify; line-height: 1.5; margin-bottom: 16px;">
+          I, ______________________, accept the offer and agree to abide by the company policies and terms.
+        </p>
+        <p style="font-weight: bold; margin-bottom: 5px;">Candidate Signature: ______________________</p>
+        <p style="font-weight: bold; margin: 0;">Date: ______________________</p>
+      </div>
+    ` : ''
+    
+    htmlContent = htmlContent.replace(/\{\{includeAcceptance\}\}/g, acceptanceHtml)
+
+    setPreviewContent(htmlContent)
     toast.success('Document preview generated!')
   }
 
@@ -1277,8 +641,8 @@ export default function DocumentGeneratorPage() {
                     <SelectValue placeholder="Select template type..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {DOCUMENT_TEMPLATES.map(t => (
-                      <SelectItem key={t.id} value={t.id}>
+                    {documentTemplates.map(t => (
+                      <SelectItem key={t.id} value={t.template_id}>
                         <div className="flex flex-col text-left py-1">
                           <span className="font-bold text-slate-800">{t.name}</span>
                           <span className="text-[10px] text-slate-400 font-medium">{t.description}</span>
@@ -1324,8 +688,8 @@ export default function DocumentGeneratorPage() {
               <CardContent className="p-6 space-y-6">
                 <div className="grid gap-4">
                   {templateData?.fields
-                    .filter(field => !(selectedEmployee !== 'manual' && field === 'name'))
-                    .map(field => (
+                    .filter((field: string) => !(selectedEmployee !== 'manual' && field === 'name'))
+                    .map((field: string) => (
                     <div key={field} className="space-y-2">
                       <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
                         {field === 'ctc' ? <IndianRupee className="w-3 h-3" /> : 
