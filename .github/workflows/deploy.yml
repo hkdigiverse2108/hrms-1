@@ -39,7 +39,7 @@ jobs:
             npm install
             npm run build
 
-            pm2 restart HRMS-DEV
+            pm2 restart dev-HRMS
           EOF
 
       #################################################
