@@ -90,7 +90,7 @@ export default function RecruitmentPage() {
     if (!user) return
     setReferralsLoading(true)
     try {
-      const isHRorAdmin = isAdmin || checkPermission('hirings', 'canEdit')
+      const isHRorAdmin = isAdmin || user?.role?.toLowerCase() === 'hr' || checkPermission('hirings', 'canEdit')
       const url = isHRorAdmin
         ? `${API_URL}/referrals`
         : `${API_URL}/referrals?employee_id=${user.id || user._id}`
@@ -126,7 +126,7 @@ export default function RecruitmentPage() {
     postedDate: '',
   })
 
-  const isHRorAdmin = isAdmin || checkPermission('hirings', 'canEdit')
+  const isHRorAdmin = isAdmin || user?.role?.toLowerCase() === 'hr' || checkPermission('hirings', 'canEdit')
   const displayedJobs = isHRorAdmin ? jobs : jobs.filter((j) => j.status === 'open')
   const openJobs = displayedJobs.filter((j) => j.status === 'open').length
   const totalApplications = displayedJobs.reduce((sum, j) => sum + j.applications, 0)
