@@ -463,6 +463,16 @@ export default function RemarksPage() {
     return matchesSearch && matchesType && matchesDate && matchesEmployee;
   });
 
+  const visibleRemarks = remarks.filter(r => {
+    if (!canManageRemarks) {
+      return r.employeeId === user?.employeeId || r.employeeId === user?.id;
+    }
+    if (employeeFilter !== "All") {
+      return r.employeeId === employeeFilter || r.employeeName === employeeFilter;
+    }
+    return true;
+  });
+
   const tabRemarks = filteredRemarks.filter(r => activeTab === "deleted" ? r.isDeleted : !r.isDeleted);
 
   const totalPages = Math.ceil(tabRemarks.length / itemsPerPage);
@@ -751,8 +761,8 @@ export default function RemarksPage() {
 
       <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCurrentPage(1); }} className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
-          <TabsTrigger value="active">Active Remarks ({remarks.filter(r => !r.isDeleted).length})</TabsTrigger>
-          <TabsTrigger value="deleted">Deleted Remarks ({remarks.filter(r => r.isDeleted).length})</TabsTrigger>
+          <TabsTrigger value="active">Active Remarks ({visibleRemarks.filter(r => !r.isDeleted).length})</TabsTrigger>
+          <TabsTrigger value="deleted">Deleted Remarks ({visibleRemarks.filter(r => r.isDeleted).length})</TabsTrigger>
         </TabsList>
       </Tabs>
 
