@@ -326,7 +326,7 @@ export default function ProfilePage() {
                     type="file"
                     ref={fileInputRef}
                     className="hidden"
-                    accept="image/*"
+                    accept="image/*,application/pdf"
                     onChange={handleFileChange}
                     disabled={isUploading}
                   />

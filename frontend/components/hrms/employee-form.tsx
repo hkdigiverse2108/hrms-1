@@ -440,7 +440,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept="image/*"
+              accept="image/*,application/pdf"
               onChange={handleFileUpload}
             />
           </div>
