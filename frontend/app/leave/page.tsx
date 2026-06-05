@@ -295,12 +295,6 @@ export default function LeavePage() {
 
     setIsSubmitting(true);
     let duration = calculateLeaveDays(startDate, endDate);
-    if (leaveType === "annual" && duration > 1) {
-      toast.error("You can only request 1 day at a time for Monthly Leave.");
-      setIsSubmitting(false);
-      return;
-    }
-
     if (duration === 1 && (dayType === "First Half" || dayType === "Second Half")) {
       duration = 0.5;
     }
@@ -826,12 +820,7 @@ export default function LeavePage() {
             <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-2 md:pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300">
               <div className="space-y-2">
                 <Label htmlFor="leave-type">Leave Type</Label>
-                <Select value={leaveType} onValueChange={(val) => {
-                  setLeaveType(val);
-                  if (val === "annual") {
-                    setDayType("Full Day");
-                  }
-                }} disabled={isViewOnly}>
+                <Select value={leaveType} onValueChange={setLeaveType} disabled={isViewOnly}>
 
                   <SelectTrigger id="leave-type" className="w-full">
                     <SelectValue placeholder="Select leave type" />
@@ -890,12 +879,8 @@ export default function LeavePage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Full Day">Full Day</SelectItem>
-                      {leaveType !== "annual" && (
-                        <>
-                          <SelectItem value="First Half">First Half</SelectItem>
-                          <SelectItem value="Second Half">Second Half</SelectItem>
-                        </>
-                      )}
+                      <SelectItem value="First Half">First Half</SelectItem>
+                      <SelectItem value="Second Half">Second Half</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

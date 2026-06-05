@@ -31,13 +31,6 @@ import { Input } from "@/components/ui/input";
 import { API_URL } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
@@ -371,12 +364,11 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <Label className="text-sm font-bold">Free Leaves per Month (No Salary Cut)</Label>
                     <div className="flex gap-2">
-                      <Input 
+                      <input 
                         type="number" 
-                        step="0.5"
-                        className="flex-1 h-10 px-3 bg-white border-border text-sm font-bold focus-visible:ring-brand-teal"
+                        className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
                         value={settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1}
-                        onChange={(e) => setSettings({...settings, allowedMonthlyPaidLeaves: parseFloat(e.target.value) || 0})}
+                        onChange={(e) => setSettings({...settings, allowedMonthlyPaidLeaves: parseInt(e.target.value) || 0})}
                         disabled={isUpdating || !isAdmin}
                         min={0}
                       />

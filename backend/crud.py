@@ -2633,8 +2633,85 @@ async def delete_project(db, project_id: str):
         await log_activity(db, "Deleted", "Admin", "N/A", f"Project '{project.get('title')}' was deleted.", projectId=project_id)
     return True
 
+# General Task CRUD
+async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
+    query = {}
+    if role and role.lower() not in ["admin", "hr"] and userId:
+        # User sees tasks assigned to them, or tasks they assigned
+        query["$or"] = [
+            {"assignedToId": userId},
+            {"assignedById": userId}
+        ]
+                
+    cursor = db.tasks.find(query).skip(skip).limit(limit)
+    rows = await cursor.to_list(length=limit)
+    return [fix_id(row) for row in rows]
+
+async def create_task(db, task: schemas.TaskCreate):
+    task_dict = task.dict()
+    performedBy = task_dict.pop("performedBy", "Unknown")
+    userName = task_dict.pop("userName", "Unknown User")
+    
+    # Auto-assign assignedById and Name to the creator if not explicitly passed
+    if not task_dict.get("assignedById"):
+        task_dict["assignedById"] = performedBy
+    if not task_dict.get("assignedByName"):
+        task_dict["assignedByName"] = userName
+    
+    if task_dict.get("assignedToId"):
+        employee = await db.employees.find_one({"_id": ObjectId(task_dict["assignedToId"])})
+        if employee:
+            if not task_dict.get("assignedToName"):
+                task_dict["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+
+    if not task_dict.get("createdDate"):
+        task_dict["createdDate"] = get_now().strftime("%Y-%m-%d")
+        
+    result = await db.tasks.insert_one(task_dict)
+    taskId = str(result.inserted_id)
+    
+    task_dict["_id"] = result.inserted_id
+    await log_activity(db, "Created", performedBy, userName, f"Created a new task '{task_dict.get('title')}'", taskId=taskId)
+    return fix_id(task_dict)
+
+async def update_task(db, task_id: str, task: schemas.TaskUpdate):
+    update_data = {k: v for k, v in task.dict().items() if v is not None}
+    performedBy = update_data.pop("performedBy", "Unknown")
+    userName = update_data.pop("userName", "Unknown User")
+    
+    if update_data.get("assignedToId"):
+        employee = await db.employees.find_one({"_id": ObjectId(update_data["assignedToId"])})
+        if employee and not update_data.get("assignedToName"):
+            update_data["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+
+    if update_data:
+        await db.tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
+        
+        changes = []
+        for k, v in update_data.items():
+            if k == "title": changes.append(f"title to '{v}'")
+            elif k == "description": changes.append(f"description")
+            elif k == "dueDate": changes.append(f"due date to {v}")
+            elif k == "status": changes.append(f"status to '{str(v).capitalize()}'")
+            elif k == "priority": changes.append(f"priority to '{str(v).capitalize()}'")
+            elif k == "assignedToId": changes.append(f"assignee to {update_data.get('assignedToName', 'another employee')}")
+            
+        detail_msg = f"Updated {', '.join(changes)}" if changes else "Updated task details"
+        await log_activity(db, "Updated", performedBy, userName, detail_msg, taskId=task_id)
+        
+    updated = await db.tasks.find_one({"_id": ObjectId(task_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_task(db, task_id: str):
+    task = await db.tasks.find_one({"_id": ObjectId(task_id)})
+    if not task:
+        return False
+        
+    await archive_and_delete_one(db, "tasks", {"_id": ObjectId(task_id)})
+    await log_activity(db, "Deleted", "Admin", "N/A", f"Task '{task.get('title')}' was deleted.", taskId=task_id)
+    return True
+
 # Work Management Task CRUD
-async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
     if role and role.lower() not in ["admin", "hr"] and userId:
         user = await get_employee(db, userId)
@@ -2766,6 +2843,11 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
     if assetId: log_entry["assetId"] = assetId
     
     await db.task_logs.insert_one(log_entry)
+
+async def get_task_activities(db, task_id: str):
+    cursor = db.task_logs.find({"taskId": task_id}).sort("timestamp", -1)
+    logs = await cursor.to_list(length=100)
+    return [fix_id(log) for log in logs]
 
 async def get_application_logs(db, application_id: str):
     cursor = db.task_logs.find({"applicationId": application_id}).sort("timestamp", -1)

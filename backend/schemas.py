@@ -890,6 +890,42 @@ class Project(ProjectBase):
     class Config:
         from_attributes = True
 
+# General Task Schemas
+class TaskBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assignedToId: str # Employee ID
+    assignedToName: Optional[str] = None
+    assignedById: Optional[str] = None # Employee ID who created/assigned the task
+    assignedByName: Optional[str] = None
+    dueDate: Optional[RobustDate] = None
+    status: Optional[str] = "todo" # todo, in-progress, review, completed
+    priority: Optional[str] = "medium" # low, medium, high, urgent
+    remarks: Optional[str] = None
+    createdDate: Optional[RobustDate] = None
+
+class TaskCreate(TaskBase):
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assignedToId: Optional[str] = None
+    assignedToName: Optional[str] = None
+    dueDate: Optional[RobustDate] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    remarks: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class Task(TaskBase):
+    id: str
+
+    class Config:
+        from_attributes = True
+
 # Work Management Task Schemas
 class WMTaskBase(BaseModel):
     title: str
@@ -1036,7 +1072,7 @@ class SystemSettingsBase(BaseModel):
     officeStartTime: Optional[str] = "09:30"
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
-    allowedMonthlyPaidLeaves: Optional[float] = 1.0
+    allowedMonthlyPaidLeaves: Optional[int] = 1
     companyGstin: Optional[str] = "24APQPN3916P1Z4"
     taxInvoicePrefix: Optional[str] = "INV"
     proformaInvoicePrefix: Optional[str] = "PINV"
@@ -1048,7 +1084,7 @@ class SystemSettingsUpdate(BaseModel):
     officeStartTime: Optional[str] = None
     officeEndTime: Optional[str] = None
     lateBufferMins: Optional[int] = None
-    allowedMonthlyPaidLeaves: Optional[float] = None
+    allowedMonthlyPaidLeaves: Optional[int] = None
     companyGstin: Optional[str] = None
     taxInvoicePrefix: Optional[str] = None
     proformaInvoicePrefix: Optional[str] = None
