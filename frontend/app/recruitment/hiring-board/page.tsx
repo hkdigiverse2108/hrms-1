@@ -38,6 +38,7 @@ import {
   DialogTitle, 
   DialogFooter 
 } from '@/components/ui/dialog'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -486,9 +487,6 @@ export default function HiringBoardPage() {
                                               <Edit2 className="w-3.5 h-3.5 mr-2 text-brand-teal" /> Edit
                                             </DropdownMenuItem>
                                           )}
-                                          <DropdownMenuItem className="text-xs py-1.5" onClick={() => window.open(getFullResumeUrl(app.resume), '_blank')}>
-                                            <FileText className="w-3.5 h-3.5 mr-2 text-slate-500" /> Resume
-                                          </DropdownMenuItem>
                                           {(isAdmin || checkPermission('interviews', 'canDelete')) && (
                                             <DropdownMenuItem 
                                               className="text-xs py-1.5 text-rose-600 focus:text-rose-600"
@@ -546,44 +544,60 @@ export default function HiringBoardPage() {
                                     <Clock className="w-3 h-3" /> {new Date(app.appliedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                                   </div>
                                   <div className="flex items-center gap-1">
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-6 w-6 rounded hover:bg-brand-teal/10 hover:text-brand-teal text-slate-400"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        window.open(getFullResumeUrl(app.resume), '_blank')
-                                      }}
-                                    >
-                                      <FileText className="w-3.5 h-3.5" />
-                                    </Button>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-6 w-6 rounded hover:bg-brand-teal/10 hover:text-brand-teal text-slate-400"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            window.open(getFullResumeUrl(app.resume), '_blank')
+                                          }}
+                                        >
+                                          <FileText className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>View Resume</TooltipContent>
+                                    </Tooltip>
+
                                     {app.interviewLink && (
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="h-6 w-6 rounded hover:bg-brand-teal/10 hover:text-brand-teal text-brand-teal"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          window.open(app.interviewLink, '_blank')
-                                        }}
-                                      >
-                                        <ExternalLink className="w-3.5 h-3.5" />
-                                      </Button>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-6 w-6 rounded hover:bg-brand-teal/10 hover:text-brand-teal text-brand-teal"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              window.open(app.interviewLink, '_blank')
+                                            }}
+                                          >
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Join Interview</TooltipContent>
+                                      </Tooltip>
                                     )}
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-6 w-6 rounded hover:bg-brand-teal/10 hover:text-brand-teal text-slate-400 hover:text-brand-teal"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setSelectedLogAppId(app.id)
-                                        fetchAppLogs(app.id)
-                                        setIsLogModalOpen(true)
-                                      }}
-                                      title="View Activity Logs"
-                                    >
-                                      <History className="w-3.5 h-3.5" />
-                                    </Button>
+
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-6 w-6 rounded hover:bg-brand-teal/10 hover:text-brand-teal text-slate-400 hover:text-brand-teal"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedLogAppId(app.id)
+                                            fetchAppLogs(app.id)
+                                            setIsLogModalOpen(true)
+                                          }}
+                                        >
+                                          <History className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>View Activity Logs</TooltipContent>
+                                    </Tooltip>
                                   </div>
                                 </div>
                                 
@@ -707,26 +721,46 @@ export default function HiringBoardPage() {
                 <Label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Resume File</Label>
                 <div 
                   className={cn(
-                    "border-2 border-dashed rounded-xl h-11 px-3 transition-all cursor-pointer flex items-center justify-between gap-2",
-                    selectedFile ? "border-brand-teal bg-brand-teal/5" : "border-gray-200 hover:border-brand-teal/50 hover:bg-gray-50"
+                    "border-2 border-dashed rounded-xl h-11 px-3 transition-all flex items-center justify-between gap-2 bg-white",
+                    (selectedFile || formData.resume) ? "border-emerald-200 bg-emerald-50/25" : "border-gray-200 hover:border-brand-teal/50 hover:bg-gray-50 cursor-pointer"
                   )}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    if (!selectedFile && !formData.resume) {
+                      fileInputRef.current?.click();
+                    }
+                  }}
                 >
                   <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.doc,.docx" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
-                  <span className="text-xs truncate">
-                    {selectedFile ? selectedFile.name : (formData.resume ? formData.resume.split('/').pop() : "Upload Resume")}
+                  <span className="text-xs truncate max-w-[200px]">
+                    {selectedFile || formData.resume ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const url = selectedFile ? URL.createObjectURL(selectedFile) : getFullResumeUrl(formData.resume);
+                          window.open(url, '_blank');
+                        }}
+                        className="text-brand-teal font-semibold hover:underline flex items-center gap-1.5"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        {selectedFile ? selectedFile.name : formData.resume.split('/').pop()}
+                      </button>
+                    ) : (
+                      <span className="text-gray-400">Choose Resume file</span>
+                    )}
                   </span>
                   {selectedFile || formData.resume ? (
                     <X 
-                      className="w-4 h-4 text-rose-500 hover:text-rose-700 cursor-pointer" 
+                      className="w-4 h-4 text-rose-500 hover:text-rose-700 cursor-pointer shrink-0" 
                       onClick={(e) => {
                         e.stopPropagation()
                         setSelectedFile(null)
                         setFormData({...formData, resume: ''})
+                        if (fileInputRef.current) fileInputRef.current.value = '';
                       }}
                     />
                   ) : (
-                    <Upload className="w-4 h-4 text-gray-400" />
+                    <Upload className="w-4 h-4 text-gray-400 shrink-0" />
                   )}
                 </div>
               </div>
@@ -736,10 +770,10 @@ export default function HiringBoardPage() {
               <Label htmlFor="reference" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Reference / Referred By</Label>
               <Input 
                 id="reference" 
-                placeholder="e.g. Employee Name, Website, Friend"
+                placeholder="No reference provided"
                 value={formData.reference}
-                onChange={(e) => setFormData({...formData, reference: e.target.value})}
-                className="h-11"
+                readOnly
+                className="h-11 bg-slate-50 cursor-not-allowed"
               />
             </div>
 
@@ -754,7 +788,7 @@ export default function HiringBoardPage() {
                     <Input 
                       type="date" 
                       id="interviewDate"
-                      min={new Date().toISOString().split('T')[0]}
+                      min={new Date().toLocaleDateString('en-CA')}
                       value={formData.interviewDate}
                       onChange={(e) => setFormData({...formData, interviewDate: e.target.value})}
                     />
@@ -764,6 +798,7 @@ export default function HiringBoardPage() {
                     <Input 
                       type="time" 
                       id="interviewTime"
+                      min={formData.interviewDate === new Date().toLocaleDateString('en-CA') ? new Date().toTimeString().slice(0, 5) : undefined}
                       value={formData.interviewTime}
                       onChange={(e) => setFormData({...formData, interviewTime: e.target.value})}
                     />

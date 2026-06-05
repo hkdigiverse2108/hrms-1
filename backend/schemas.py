@@ -498,6 +498,7 @@ class JobOpeningBase(BaseModel):
     postedDate: RobustDate
     experience: Optional[str] = None
     salaryRange: Optional[str] = None
+    description: Optional[str] = None
 
 class JobOpeningCreate(JobOpeningBase):
     pass
@@ -512,6 +513,7 @@ class JobOpeningUpdate(BaseModel):
     postedDate: Optional[RobustDate] = None
     experience: Optional[str] = None
     salaryRange: Optional[str] = None
+    description: Optional[str] = None
 
 class JobOpening(JobOpeningBase):
     id: str

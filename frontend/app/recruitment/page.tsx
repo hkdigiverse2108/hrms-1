@@ -30,7 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Briefcase, Users, Clock, CheckCircle, MoreHorizontal, Eye, Pencil, Trash2, Loader2, Upload, FileText } from 'lucide-react'
+import { Plus, Briefcase, Users, Clock, CheckCircle, MoreHorizontal, Eye, Pencil, Trash2, Loader2, Upload, FileText, X } from 'lucide-react'
 import type { JobOpening, Department } from '@/lib/types'
 import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { useApi } from '@/hooks/useApi'
@@ -141,7 +141,7 @@ export default function RecruitmentPage() {
         department: job.department,
         location: job.location,
         type: job.type as any,
-        description: '',
+        description: job.description || '',
         applications: job.applications,
         status: job.status,
         postedDate: job.postedDate,
@@ -473,9 +473,10 @@ export default function RecruitmentPage() {
       header: 'Status',
       render: (ref: any) => (
         <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
-          ref.status === 'Hired' ? 'bg-green-100 text-green-700' :
+          ref.status === 'Selected' || ref.status === 'Hired' ? 'bg-green-100 text-green-700' :
           ref.status === 'Contacted' ? 'bg-blue-100 text-blue-700' :
-          ref.status === 'Interviewing' ? 'bg-purple-100 text-purple-700' :
+          ref.status === 'TL Approved' ? 'bg-cyan-100 text-cyan-700' :
+          ref.status === 'Scheduled Interview' || ref.status === 'Interviewing' ? 'bg-purple-100 text-purple-700' :
           ref.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
         }`}>
           {ref.status}
@@ -800,21 +801,46 @@ export default function RecruitmentPage() {
 
             <div className="space-y-2">
               <Label>Upload Resume</Label>
-              <div className="flex items-center gap-3">
-                <Input
-                  id="resume-file-input"
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleResumeUpload}
-                  className="hidden"
-                  disabled={uploadingResume}
-                />
+              <Input
+                id="resume-file-input"
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={handleResumeUpload}
+                className="hidden"
+                disabled={uploadingResume}
+              />
+              
+              {referralFormData.resumeUrl ? (
+                <div className="border border-emerald-200 bg-emerald-50/25 rounded-xl h-11 px-3 flex items-center justify-between gap-2">
+                  <span className="text-xs truncate max-w-[250px]">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`${API_URL}${referralFormData.resumeUrl}`, '_blank');
+                      }}
+                      className="text-brand-teal font-semibold hover:underline flex items-center gap-1.5"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      {referralFormData.resumeUrl.split('/').pop()}
+                    </button>
+                  </span>
+                  <X 
+                    className="w-4 h-4 text-rose-500 hover:text-rose-700 cursor-pointer shrink-0" 
+                    onClick={() => {
+                      setReferralFormData({ ...referralFormData, resumeUrl: '' });
+                      const input = document.getElementById('resume-file-input') as HTMLInputElement;
+                      if (input) input.value = '';
+                    }}
+                  />
+                </div>
+              ) : (
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => document.getElementById('resume-file-input')?.click()}
                   disabled={uploadingResume}
-                  className="w-full flex items-center justify-center gap-2"
+                  className="w-full flex items-center justify-center gap-2 h-11 border-dashed border-2 border-gray-200 hover:border-brand-teal/50 hover:bg-gray-50 bg-white"
                 >
                   {uploadingResume ? (
                     <>
@@ -828,11 +854,6 @@ export default function RecruitmentPage() {
                     </>
                   )}
                 </Button>
-              </div>
-              {referralFormData.resumeUrl && (
-                <p className="text-xs text-emerald-600 mt-1 font-semibold flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5" /> Resume uploaded successfully
-                </p>
               )}
             </div>
 
@@ -867,8 +888,9 @@ export default function RecruitmentPage() {
                 <SelectContent>
                   <SelectItem value="Pending">Pending</SelectItem>
                   <SelectItem value="Contacted">Contacted</SelectItem>
-                  <SelectItem value="Interviewing">Interviewing</SelectItem>
-                  <SelectItem value="Hired">Hired</SelectItem>
+                  <SelectItem value="TL Approved">TL Approved</SelectItem>
+                  <SelectItem value="Scheduled Interview">Scheduled Interview</SelectItem>
+                  <SelectItem value="Selected">Selected</SelectItem>
                   <SelectItem value="Rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>
