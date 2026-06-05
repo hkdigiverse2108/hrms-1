@@ -10,11 +10,15 @@ import dayjs from "dayjs";
 import { Plus, Loader2, Calendar as CalendarIcon, Clock, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function SchedulePage() {
   const { user, getISTNow } = useUserContext();
+  const { checkPermission, isAdmin } = usePermissions();
+  const canAdd = isAdmin || checkPermission('schedule', 'canAdd');
+  const canDeletePerm = isAdmin || checkPermission('schedule', 'canDelete');
   const [currentDate, setCurrentDate] = useState(dayjs(getISTNow()));
   const [schedules, setSchedules] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -147,13 +151,14 @@ export default function SchedulePage() {
         title="Employee Schedule"
         description="View and manage employee availability, meetings, and work blocks."
       >
-        <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Schedule
-            </Button>
-          </DialogTrigger>
+        {canAdd && (
+          <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Schedule
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[450px]">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold">New Schedule Block</DialogTitle>
@@ -266,6 +271,7 @@ export default function SchedulePage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
       </PageHeader>
 
       <div className="bg-white rounded-xl shadow-sm border border-border p-6 min-h-[600px] flex flex-col">
@@ -379,7 +385,7 @@ export default function SchedulePage() {
                           const leftPos = (visualStart / 24) * 100;
                           const width = ((visualEnd - visualStart) / 24) * 100;
 
-                          const canDelete = schedule.createdBy === (user?.id || user?.employeeId);
+                          const canDelete = canDeletePerm || schedule.createdBy === (user?.id || user?.employeeId);
 
                           return (
                             canDelete ? (

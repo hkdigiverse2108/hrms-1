@@ -36,8 +36,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PageHeader } from "@/components/common/PageHeader";
 import { useUser } from "@/hooks/useUser";
+import { usePermissions } from "@/hooks/usePermissions";
 import { API_URL } from "@/lib/config";
 
 // Helper to get status pill style
@@ -84,6 +84,10 @@ const getPriorityColor = (priority: string) => {
 
 export default function TaskManagementPage() {
   const { user } = useUser();
+  const { checkPermission, isAdmin } = usePermissions();
+  const canAdd = isAdmin || checkPermission('personal-tasks', 'canAdd');
+  const canEdit = isAdmin || checkPermission('personal-tasks', 'canEdit');
+  const canDeletePerm = isAdmin || checkPermission('personal-tasks', 'canDelete');
   const { lastEvent } = useChatContext();
   const [tasks, setTasks] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -264,7 +268,7 @@ export default function TaskManagementPage() {
 
   const canDeleteTask = (task: any) => {
     if (!user) return false;
-    return user.role === 'Admin' || user.role === 'HR' || task.assignedById === user.id;
+    return isAdmin || canDeletePerm || task.assignedById === user.id;
   };
 
   const handleUpdateTitle = async (taskId: string) => {
@@ -397,6 +401,7 @@ export default function TaskManagementPage() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           
           {/* Create Task Modal */}
+          {canAdd && (
           <Dialog open={createModalOpen} onOpenChange={(val) => {
             setCreateModalOpen(val);
             if (!val) {
@@ -623,6 +628,7 @@ export default function TaskManagementPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          )}
 
           {/* Logs Modal */}
           <Dialog open={logsModalOpen} onOpenChange={setLogsModalOpen}>
@@ -940,10 +946,11 @@ export default function TaskManagementPage() {
                         </div>
                       ) : (
                         <div 
-                          className="font-semibold text-foreground mb-1 hover:text-brand-teal hover:underline cursor-pointer inline-block"
-                          title="Click to edit task name"
+                          className={`font-semibold text-foreground mb-1 inline-block ${canEdit ? 'hover:text-brand-teal hover:underline cursor-pointer' : ''}`}
+                          title={canEdit ? "Click to edit task name" : ""}
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (!canEdit) return;
                             setEditingTaskId(task.id);
                             setEditTaskTitle(task.title);
                           }}
@@ -968,10 +975,11 @@ export default function TaskManagementPage() {
                         </div>
                       ) : (
                         <div 
-                          className="text-xs text-muted-foreground line-clamp-1 hover:text-brand-teal hover:underline cursor-pointer"
-                          title="Click to edit description"
+                          className={`text-xs text-muted-foreground line-clamp-1 ${canEdit ? 'hover:text-brand-teal hover:underline cursor-pointer' : ''}`}
+                          title={canEdit ? "Click to edit description" : ""}
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (!canEdit) return;
                             setEditingDescId(task.id);
                             setEditTaskDesc(task.description || task.desc || "");
                           }}
@@ -1002,7 +1010,7 @@ export default function TaskManagementPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      <Select defaultValue={task.status} onValueChange={(val) => handleUpdateField(task.id, 'status', val)}>
+                      <Select disabled={!canEdit} defaultValue={task.status} onValueChange={(val) => handleUpdateField(task.id, 'status', val)}>
                         <SelectTrigger className={`h-8 w-[120px] px-2.5 py-1 rounded-md text-xs font-semibold capitalize border focus:ring-0 focus:ring-offset-0 ${getStatusBadge(task.status)}`}>
                           <SelectValue />
                         </SelectTrigger>
@@ -1035,7 +1043,7 @@ export default function TaskManagementPage() {
                       </Select>
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      <Select defaultValue={task.priority} onValueChange={(val) => handleUpdateField(task.id, 'priority', val)}>
+                      <Select disabled={!canEdit} defaultValue={task.priority} onValueChange={(val) => handleUpdateField(task.id, 'priority', val)}>
                         <SelectTrigger className={`h-8 w-[110px] px-2.5 py-1 rounded-md text-xs font-semibold capitalize border focus:ring-0 focus:ring-offset-0 ${getPriorityColor(task.priority)}`}>
                           <SelectValue />
                         </SelectTrigger>
@@ -1068,36 +1076,43 @@ export default function TaskManagementPage() {
                       </Select>
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent hover:border-border transition-colors">
-                            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                            {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
-                          </div>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={task.dueDate ? new Date(task.dueDate) : undefined}
-                            onSelect={(date) => {
-                              if (date) handleUpdateField(task.id, 'dueDate', format(date, "yyyy-MM-dd"));
-                            }}
-                            initialFocus
-                            disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                          />
-                          {task.dueDate && (
-                            <div className="p-2 border-t border-border">
-                              <Button 
-                                variant="ghost" 
-                                className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
-                                onClick={() => handleUpdateField(task.id, 'dueDate', "")}
-                              >
-                                Clear date
-                              </Button>
+                      {canEdit ? (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent hover:border-border transition-colors">
+                              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                              {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
                             </div>
-                          )}
-                        </PopoverContent>
-                      </Popover>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={task.dueDate ? new Date(task.dueDate) : undefined}
+                              onSelect={(date) => {
+                                if (date) handleUpdateField(task.id, 'dueDate', format(date, "yyyy-MM-dd"));
+                              }}
+                              initialFocus
+                              disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                            />
+                            {task.dueDate && (
+                              <div className="p-2 border-t border-border">
+                                <Button 
+                                  variant="ghost" 
+                                  className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                                  onClick={() => handleUpdateField(task.id, 'dueDate', "")}
+                                >
+                                  Clear date
+                                </Button>
+                              </div>
+                            )}
+                          </PopoverContent>
+                        </Popover>
+                      ) : (
+                        <div className="flex items-center gap-2 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent">
+                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                          {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <button 
