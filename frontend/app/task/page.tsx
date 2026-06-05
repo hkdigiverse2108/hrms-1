@@ -150,10 +150,11 @@ export default function TaskManagementPage() {
   };
 
   const handleCreateTask = async () => {
-    if (!newTask.title || newTask.assignedToIds.length === 0) return;
+    if (!newTask.title) return;
     setIsSubmitting(true);
     try {
-      const promises = newTask.assignedToIds.map(assigneeId => {
+      const idsToAssign = newTask.assignedToIds.length > 0 ? newTask.assignedToIds : [null];
+      const promises = idsToAssign.map(assigneeId => {
         return fetch(`${API_URL}/tasks`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -163,7 +164,7 @@ export default function TaskManagementPage() {
             dueDate: newTask.dueDate,
             status: newTask.status,
             priority: newTask.priority,
-            assignedToId: assigneeId,
+            ...(assigneeId ? { assignedToId: assigneeId } : {}),
             performedBy: user?.id,
             userName: user?.name
           })
@@ -177,7 +178,7 @@ export default function TaskManagementPage() {
         setCreateModalOpen(false);
         setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: "todo", priority: "medium" });
         fetchTasks();
-        toast.success(`Task successfully assigned to ${newTask.assignedToIds.length} user(s)!`);
+        toast.success(newTask.assignedToIds.length > 0 ? `Task successfully assigned to ${newTask.assignedToIds.length} user(s)!` : "Task created successfully!");
       } else {
         toast.error("Failed to create some tasks.");
         fetchTasks();
@@ -423,7 +424,7 @@ export default function TaskManagementPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2 col-span-2 sm:col-span-1">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-semibold text-foreground">Assignees <span className="text-red-500">*</span></label>
+                      <label className="text-sm font-semibold text-foreground">Assignees</label>
                       <Select value="" onValueChange={(val) => {
                         if (val.startsWith('dept_')) handleQuickSelect('department', val.replace('dept_', ''));
                         if (val.startsWith('desig_')) handleQuickSelect('designation', val.replace('desig_', ''));
@@ -588,7 +589,7 @@ export default function TaskManagementPage() {
                 <Button 
                   className="bg-brand-teal hover:bg-brand-teal-light text-white" 
                   onClick={handleCreateTask}
-                  disabled={isSubmitting || !newTask.title || newTask.assignedToIds.length === 0}
+                  disabled={isSubmitting || !newTask.title}
                 >
                   {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                   Create task
