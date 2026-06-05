@@ -4557,36 +4557,4 @@ async def delete_asset_category(db, category_id: str):
     await db.asset_categories.delete_one({"_id": ObjectId(category_id)})
     return True
 
-# Schedule CRUD
-async def get_schedules(db, date: str = None, employee_id: str = None):
-    query = {}
-    if date:
-        try:
-            from datetime import datetime as dt_cls
-            parsed_date = dt_cls.strptime(date, "%Y-%m-%d")
-            # Match both string and datetime representations stored in MongoDB
-            query["date"] = {"$in": [date, parsed_date, dt_cls(parsed_date.year, parsed_date.month, parsed_date.day)]}
-        except ValueError:
-            query["date"] = date
-    if employee_id:
-        query["employeeId"] = employee_id
-    cursor = db.schedules.find(query)
-    rows = await cursor.to_list(length=1000)
-    return [fix_id(row) for row in rows]
 
-async def create_schedule(db, schedule: schemas.ScheduleCreate):
-    schedule_dict = schedule.dict()
-    result = await db.schedules.insert_one(schedule_dict)
-    doc = await db.schedules.find_one({"_id": result.inserted_id})
-    return fix_id(doc)
-
-async def update_schedule(db, schedule_id: str, schedule_update: schemas.ScheduleUpdate):
-    update_data = schedule_update.dict(exclude_unset=True)
-    if update_data:
-        await db.schedules.update_one({"_id": ObjectId(schedule_id)}, {"$set": update_data})
-    doc = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
-    return fix_id(doc) if doc else None
-
-async def delete_schedule(db, schedule_id: str):
-    result = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
-    return result.deleted_count > 0

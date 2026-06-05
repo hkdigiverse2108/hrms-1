@@ -173,9 +173,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />));
     }
     
-    if (isAdmin || checkPermission('schedule', 'canView') || true) { // Always show for now, or use true if permissions aren't set
-      menuItems.push(getItem(<Link href="/schedule">Schedule</Link>, "/schedule", <CalendarDays className="w-5 h-5" />));
-    }
+
     
     const workspaceChildren: MenuItem[] = [];
     if (isAdmin || checkPermission('blank-canvas', 'canView')) {
@@ -250,7 +248,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
     if (pathname.startsWith("/workspace")) return [pathname];
     if (pathname.startsWith("/leave")) return ["/leave"];
-    if (pathname.startsWith("/schedule")) return ["/schedule"];
+
     if (pathname.startsWith("/attendance")) return ["/attendance"];
     if (pathname.startsWith("/task")) return ["/task"];
     if (pathname.startsWith("/remarks")) return ["/remarks"];
