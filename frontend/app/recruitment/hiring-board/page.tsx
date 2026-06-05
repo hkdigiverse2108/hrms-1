@@ -265,10 +265,24 @@ export default function HiringBoardPage() {
     if (selectedFile) {
       const fileData = new FormData()
       fileData.append('file', selectedFile)
+      
+      const backendUrl = typeof window !== 'undefined'
+        ? `${window.location.protocol}//${window.location.hostname}:8000`
+        : 'http://127.0.0.1:8000'
+
       try {
-        const uploadRes = await fetch(`${API_URL}/upload`, { method: 'POST', body: fileData })
-        const uploadResult = await uploadRes.json()
-        resumeUrl = uploadResult.url
+        let uploadRes = await fetch(`${backendUrl}/upload`, { method: 'POST', body: fileData }).catch(() => null)
+        
+        if (!uploadRes || !uploadRes.ok) {
+          uploadRes = await fetch(`${API_URL}/upload`, { method: 'POST', body: fileData })
+        }
+        
+        if (uploadRes.ok) {
+          const uploadResult = await uploadRes.json()
+          resumeUrl = uploadResult.url
+        } else {
+          throw new Error("Upload failed")
+        }
       } catch (err) {
         toast.error("Resume upload failed")
         setIsSubmitting(false)
@@ -730,7 +744,7 @@ export default function HiringBoardPage() {
                     }
                   }}
                 >
-                  <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.doc,.docx" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
+                  <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.doc,.docx" onClick={(e) => e.stopPropagation()} onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
                   <span className="text-xs truncate max-w-[200px]">
                     {selectedFile || formData.resume ? (
                       <button
