@@ -4562,10 +4562,12 @@ async def get_schedules(db, date: str = None, employee_id: str = None):
     query = {}
     if date:
         try:
-            from datetime import datetime
-            query["date"] = datetime.strptime(date, "%Y-%m-%d")
+            from datetime import datetime as dt_cls
+            parsed_date = dt_cls.strptime(date, "%Y-%m-%d")
+            # Match both string and datetime representations stored in MongoDB
+            query["date"] = {"$in": [date, parsed_date, dt_cls(parsed_date.year, parsed_date.month, parsed_date.day)]}
         except ValueError:
-            pass
+            query["date"] = date
     if employee_id:
         query["employeeId"] = employee_id
     cursor = db.schedules.find(query)
