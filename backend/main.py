@@ -1523,28 +1523,6 @@ async def delete_invoice(invoice_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"message": "Invoice deleted successfully"}
 
-# Schedule Endpoints
-@app.get("/schedules", response_model=List[schemas.Schedule])
-async def read_schedules(date: Optional[str] = None, employee_id: Optional[str] = None, db=Depends(get_db)):
-    return await crud.get_schedules(db, date=date, employee_id=employee_id)
-
-@app.post("/schedules", response_model=schemas.Schedule)
-async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
-    return await crud.create_schedule(db, schedule)
-
-@app.put("/schedules/{schedule_id}", response_model=schemas.Schedule)
-async def update_schedule(schedule_id: str, schedule_update: schemas.ScheduleUpdate, db=Depends(get_db)):
-    updated = await crud.update_schedule(db, schedule_id, schedule_update)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-    return updated
-
-@app.delete("/schedules/{schedule_id}")
-async def delete_schedule(schedule_id: str, db=Depends(get_db)):
-    success = await crud.delete_schedule(db, schedule_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-    return {"message": "Schedule deleted successfully"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
