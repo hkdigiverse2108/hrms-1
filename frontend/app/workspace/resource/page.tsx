@@ -42,8 +42,9 @@ import { useApi } from "@/hooks/useApi";
 import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
-import { useConfirm } from "@/context/ConfirmContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { TablePagination } from "@/components/common/TablePagination";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -88,6 +89,11 @@ const getCategoryColors = (iconName: string) => {
     case "CreditCard": return "text-amber-600 bg-amber-50 border-amber-100";
     default: return "text-purple-600 bg-purple-50 border-purple-100";
   }
+};
+
+const getCategoryCode = (categoryName: string): string => {
+  const upper = (categoryName || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return upper ? upper.slice(0, 3) : "AST";
 };
 
 export default function ResourceManagementPage() {
@@ -153,12 +159,19 @@ export default function ResourceManagementPage() {
 
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const isEmployeeOnly = !isAdmin && user?.role?.toLowerCase() !== "hr";
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
     if (isEmployeeOnly) {
       setActiveTab("registry");
     }
   }, [isEmployeeOnly]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, typeFilter, employeeFilter]);
 
   const fetchCategories = async () => {
     setCategoriesLoading(true);
@@ -260,29 +273,7 @@ export default function ResourceManagementPage() {
     setFormData(prev => {
       const updated = { ...prev, category: val, name: prev.name || val };
       if (!editingId) {
-        const categoryName = (val || "").trim().toUpperCase();
-        const map: Record<string, string> = {
-          "LAPTOP": "LAP",
-          "PRINTER": "PRT",
-          "MONITOR": "MON",
-          "KEYBOARD": "KEY",
-          "MOUSE": "MSE",
-          "HEADSET": "HDS",
-          "MOBILE": "MOB",
-          "ROUTER": "RTR",
-          "CHAIR": "CHR",
-          "DESK": "DSK",
-          "SOFTWARE": "SFT",
-          "LICENSE": "LIC",
-          "LICENSES": "LIC",
-          "UPS": "UPS",
-          "PC": "DSK"
-        };
-        let code = map[categoryName];
-        if (!code) {
-          const cleaned = categoryName.replace(/[^A-Z]/g, '');
-          code = cleaned.length >= 3 ? cleaned.substring(0, 3) : (cleaned + "SET").substring(0, 3);
-        }
+        const code = getCategoryCode(val);
         const nextNum = allResources.filter((res: any) => res.category === val).length + 1;
         updated.assetId = `HK-${code}-${String(nextNum).padStart(3, '0')}`;
       }
@@ -387,6 +378,7 @@ export default function ResourceManagementPage() {
       if (response.ok) {
         toast.success("Resource deleted successfully");
         apiRefresh();
+        fetchCategories();
         fetchLogs();
       } else {
         // Revert on failure
@@ -431,29 +423,7 @@ export default function ResourceManagementPage() {
 
         if (!editingId) {
           if (!formData.assetId) {
-            const categoryName = (formData.category || "").trim().toUpperCase();
-            const map: Record<string, string> = {
-              "LAPTOP": "LAP",
-              "PRINTER": "PRT",
-              "MONITOR": "MON",
-              "KEYBOARD": "KEY",
-              "MOUSE": "MSE",
-              "HEADSET": "HDS",
-              "MOBILE": "MOB",
-              "ROUTER": "RTR",
-              "CHAIR": "CHR",
-              "DESK": "DSK",
-              "SOFTWARE": "SFT",
-              "LICENSE": "LIC",
-              "LICENSES": "LIC",
-              "UPS": "UPS",
-              "PC": "DSK"
-            };
-            let code = map[categoryName];
-            if (!code) {
-              const cleaned = categoryName.replace(/[^A-Z]/g, '');
-              code = cleaned.length >= 3 ? cleaned.substring(0, 3) : (cleaned + "SET").substring(0, 3);
-            }
+            const code = getCategoryCode(formData.category);
             const nextNum = allResources.filter((res: any) => res.category === formData.category).length + 1 + i;
             payload.assetId = `HK-${code}-${String(nextNum).padStart(3, '0')}`;
           } else {
@@ -505,36 +475,57 @@ export default function ResourceManagementPage() {
   };
 
   const handleDeleteCategory = async (id: string) => {
+    const catToDelete = categories.find(c => c.id === id);
+    const catName = catToDelete?.name;
+    const resourceCount = catName ? allResources.filter((r: any) => r.category === catName).length : 0;
+
     const isConfirmed = await confirm({
       title: "Delete Category",
-      message: "Are you sure you want to delete this category? Asset records utilizing this category will not be deleted, but they may lack a category definition.",
+      message: `Are you sure you want to delete "${catName}"? This will also permanently delete all ${resourceCount} resource(s) in this category.`,
       destructive: true,
-      confirmText: "Delete"
+      confirmText: "Delete All"
     });
     if (!isConfirmed) return;
 
-    // Optimistically hide from UI instantly
+    // Instantly hide category and its resources from UI
     setCategories(prev => prev.filter(cat => cat.id !== id));
+    if (catName) {
+      const idsToRemove = allResources.filter((r: any) => r.category === catName).map((r: any) => r.id);
+      setDeletedResourceIds(prev => [...prev, ...idsToRemove]);
+    }
 
     try {
       const perfBy = user?.id || user?.employeeId || "System";
       const uName = user?.name || "System User";
+
+      // Step 1: Delete all assets for this category using dedicated endpoint
+      if (catName) {
+        await fetch(`${API_URL}/assets/by-category/${encodeURIComponent(catName)}?performedBy=${encodeURIComponent(perfBy)}&userName=${encodeURIComponent(uName)}`, {
+          method: "DELETE",
+        });
+      }
+
+      // Step 2: Delete the category itself
       const response = await fetch(`${API_URL}/asset-categories/${id}?performedBy=${encodeURIComponent(perfBy)}&userName=${encodeURIComponent(uName)}`, {
         method: "DELETE",
       });
 
       if (response.ok) {
-        toast.success("Category deleted successfully");
-        fetchCategories();
+        toast.success(`Category "${catName}" and all its resources deleted.`);
+        // Clear all deleted IDs and do a full fresh fetch
+        setDeletedResourceIds([]);
+        await fetchCategories();
+        apiRefresh();
+        fetchLogs();
       } else {
-        // Revert on failure
         fetchCategories();
+        apiRefresh();
         toast.error("Failed to delete category");
       }
     } catch (error) {
       console.error(error);
-      // Revert on failure
       fetchCategories();
+      apiRefresh();
       toast.error("An error occurred while deleting category");
     }
   };
@@ -550,24 +541,45 @@ export default function ResourceManagementPage() {
       const url = editingCategoryId ? `${API_URL}/asset-categories/${editingCategoryId}` : `${API_URL}/asset-categories`;
       const method = editingCategoryId ? "PUT" : "POST";
 
+      // For new category: use totalItems field as the count to create.
+      // For existing category: use newResourceCount as the count to add on top of actual assets.
+      const countToAdd = editingCategoryId
+        ? (parseInt(newResourceCount) || 0)
+        : (categoryFormData.totalItems || 0);
+      const actualCurrentCount = editingCategoryId
+        ? allResources.filter((r: any) => r.category === categoryFormData.name).length
+        : 0;
+      const finalTotalItems = actualCurrentCount + countToAdd;
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...categoryFormData,
+          totalItems: finalTotalItems,
           performedBy: user?.id || user?.employeeId || "System",
           userName: user?.name || "System User"
         })
       });
 
       if (response.ok) {
-        toast.success(editingCategoryId ? "Category updated successfully" : "Category added successfully");
+        if (countToAdd > 0) {
+          if (editingCategoryId) {
+            toast.success(`Category updated and ${countToAdd} item(s) added to inventory!`);
+          } else {
+            toast.success(`Category created with ${countToAdd} item(s) added to inventory!`);
+          }
+        } else {
+          toast.success(editingCategoryId ? "Category updated successfully" : "Category added successfully");
+        }
+
         setIsAddingCategoryMode(false);
         setEditingCategoryId(null);
         setCategoryFormData(initialCategoryFormState);
         setIsAddingResourceCount(false);
         setNewResourceCount("");
         fetchCategories();
+        apiRefresh();
       } else {
         toast.error(editingCategoryId ? "Failed to update category" : "Failed to add category");
       }
@@ -633,6 +645,11 @@ export default function ResourceManagementPage() {
                         res.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase());
     return matchStatus && matchType && matchEmployee && matchSearch;
   });
+  
+  const paginatedResources = filteredResources.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   // Calculate statistics
   const allocatedCount = allResources.filter((r: any) => r.status === "Allocated").length;
@@ -1031,7 +1048,7 @@ export default function ResourceManagementPage() {
                       {isLoading ? "Loading resources..." : "No resources matching the criteria found."}
                     </td>
                   </tr>
-                ) : filteredResources.map((res: any) => {
+                ) : paginatedResources.map((res: any) => {
                   const matchedCat = categories.find(c => c.name === res.category) || { icon: "Package" };
                   return (
                     <tr 
@@ -1173,6 +1190,15 @@ export default function ResourceManagementPage() {
               </tbody>
             </table>
           </div>
+          
+          <TablePagination 
+            totalItems={filteredResources.length} 
+            itemsPerPage={itemsPerPage} 
+            currentPage={currentPage} 
+            onPageChange={setCurrentPage} 
+            onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+            itemName="resources" 
+          />
         </div>
       )}
 
@@ -1195,80 +1221,42 @@ export default function ResourceManagementPage() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-foreground">Total Resources</label>
-                  <Input 
-                    type="number"
-                    placeholder="e.g. 10" 
-                    value={categoryFormData.totalItems || ""}
-                    onChange={(e) => setCategoryFormData({ ...categoryFormData, totalItems: parseInt(e.target.value) || 0 })}
-                  />
-                </div>
-
-                {(categoryFormData.totalItems || 0) > 0 && (
-                  <div className="pt-1">
-                    {!isAddingResourceCount ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white font-medium text-xs shadow-sm"
-                        onClick={() => {
-                          setIsAddingResourceCount(true);
-                        }}
-                      >
-                        <Plus className="w-3.5 h-3.5 mr-1" />
-                        Add New Resources
-                      </Button>
-                    ) : (
-                      <div className="flex items-center gap-2 border border-brand-teal/20 p-3 rounded-lg bg-brand-teal/5">
-                        <div className="flex-1">
-                          <label className="text-[10px] font-bold text-brand-teal block mb-1">Add New Resource Count</label>
-                          <Input 
-                            type="number"
-                            placeholder="e.g. 5" 
-                            className="h-8 text-xs bg-white"
-                            value={newResourceCount}
-                            onChange={(e) => setNewResourceCount(e.target.value)}
-                          />
-                        </div>
-                        <div className="flex gap-1.5 self-end">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium text-xs h-8 px-3"
-                            onClick={() => {
-                              const countToAdd = parseInt(newResourceCount);
-                              if (isNaN(countToAdd) || countToAdd <= 0) {
-                                toast.error("Please enter a valid count greater than 0");
-                                return;
-                              }
-                              setCategoryFormData({
-                                ...categoryFormData,
-                                totalItems: (categoryFormData.totalItems || 0) + countToAdd
-                              });
-                              setIsAddingResourceCount(false);
-                              setNewResourceCount("");
-                              toast.success(`Added ${countToAdd} to total resources`);
-                            }}
-                          >
-                            Add
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground hover:bg-gray-200/50 text-xs h-8 px-2"
-                            onClick={() => {
-                              setIsAddingResourceCount(false);
-                              setNewResourceCount("");
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+                {!editingCategoryId ? (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-foreground">Total Resources (Count)</label>
+                    <Input 
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 10" 
+                      value={categoryFormData.totalItems || ""}
+                      onChange={(e) => setCategoryFormData({ ...categoryFormData, totalItems: parseInt(e.target.value) || 0 })}
+                    />
+                    <p className="text-[10px] text-muted-foreground">Items will be automatically created in inventory when the category is saved.</p>
                   </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-foreground">Total Resources</label>
+                      <Input 
+                        type="number"
+                        disabled
+                        value={allResources.filter((r: any) => r.category === categoryFormData.name).length}
+                        className="bg-muted cursor-not-allowed"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Current inventory count (read-only).</p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-foreground">Add New Resources (Count)</label>
+                      <Input 
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 5" 
+                        value={newResourceCount}
+                        onChange={(e) => setNewResourceCount(e.target.value)}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Type a number to add new items to the inventory upon category update.</p>
+                    </div>
+                  </>
                 )}
 
                 <div className="space-y-2">
@@ -1327,7 +1315,7 @@ export default function ResourceManagementPage() {
                           {cat.description || "No description provided."}
                         </td>
                         <td className="px-6 py-4 text-sm font-semibold text-foreground">
-                          {cat.totalItems || 0}
+                          {cat.total}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-1">

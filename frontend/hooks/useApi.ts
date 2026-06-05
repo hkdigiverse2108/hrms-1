@@ -73,9 +73,7 @@ export function useApi() {
           setData(prev => {
             const newData = { ...prev };
             results.forEach(res => {
-              if (res.data) {
-                // Ignore empty arrays from API if you want to keep static data (optional)
-                // But generally we should overwrite with API data
+              if (res.data !== null) {
                 (newData as any)[res.key] = res.data;
               }
             });
