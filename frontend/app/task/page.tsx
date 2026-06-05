@@ -153,7 +153,7 @@ export default function TaskManagementPage() {
     if (!newTask.title) return;
     setIsSubmitting(true);
     try {
-      const idsToAssign = newTask.assignedToIds.length > 0 ? newTask.assignedToIds : [null];
+      const idsToAssign = newTask.assignedToIds.length > 0 ? newTask.assignedToIds : [user?.id || null];
       const promises = idsToAssign.map(assigneeId => {
         return fetch(`${API_URL}/tasks`, {
           method: "POST",
@@ -178,7 +178,7 @@ export default function TaskManagementPage() {
         setCreateModalOpen(false);
         setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: "todo", priority: "medium" });
         fetchTasks();
-        toast.success(newTask.assignedToIds.length > 0 ? `Task successfully assigned to ${newTask.assignedToIds.length} user(s)!` : "Task created successfully!");
+        toast.success(newTask.assignedToIds.length > 0 ? `Task successfully assigned to ${newTask.assignedToIds.length} user(s)!` : "Task self-assigned successfully!");
       } else {
         toast.error("Failed to create some tasks.");
         fetchTasks();
