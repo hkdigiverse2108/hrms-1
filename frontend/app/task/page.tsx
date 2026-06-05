@@ -24,6 +24,11 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { format } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -318,8 +323,11 @@ export default function TaskManagementPage() {
   };
 
   // Filter State
-  const [activeStatuses, setActiveStatuses] = useState<string[]>(["To do", "Pending", "In progress"]);
-  const [activePriorities, setActivePriorities] = useState<string[]>(["High", "Medium"]);
+  const [activeStatuses, setActiveStatuses] = useState<string[]>([]);
+  const [activePriorities, setActivePriorities] = useState<string[]>([]);
+  const [activeAssignees, setActiveAssignees] = useState<string[]>([]);
+  const [activeDateRange, setActiveDateRange] = useState<{from: Date | undefined, to?: Date | undefined} | undefined>();
+  const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
 
   const toggleFilter = (state: string[], setState: React.Dispatch<React.SetStateAction<string[]>>, val: string) => {
     if (state.includes(val)) {
@@ -329,7 +337,32 @@ export default function TaskManagementPage() {
     }
   };
 
-  const sortedTasks = [...tasks].sort((a, b) => {
+  const filteredTasks = tasks.filter(task => {
+    const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status);
+    const priorityMatch = activePriorities.length === 0 || activePriorities.includes(task.priority?.toLowerCase() || "");
+    const assigneeMatch = activeAssignees.length === 0 || activeAssignees.includes(task.assignedToId);
+    
+    let dateMatch = true;
+    if (activeDateRange?.from && task.dueDate) {
+      const taskDate = new Date(task.dueDate);
+      taskDate.setHours(0,0,0,0);
+      const from = activeDateRange.from;
+      from.setHours(0,0,0,0);
+      if (activeDateRange.to) {
+        const to = activeDateRange.to;
+        to.setHours(0,0,0,0);
+        dateMatch = taskDate >= from && taskDate <= to;
+      } else {
+        dateMatch = taskDate.getTime() === from.getTime();
+      }
+    } else if (activeDateRange?.from && !task.dueDate) {
+      dateMatch = false; // Filter out tasks with no due date if a date filter is applied
+    }
+    
+    return statusMatch && priorityMatch && assigneeMatch && dateMatch;
+  });
+
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
     const pOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
     if (a.status === 'completed' && b.status !== 'completed') return 1;
     if (a.status !== 'completed' && b.status === 'completed') return -1;
@@ -347,11 +380,6 @@ export default function TaskManagementPage() {
         description="Track and manage all tasks in one simple task page."
       >
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
-          <Button variant="outline" className="shadow-sm font-medium" onClick={() => exportToCSV(tasks, 'tasks')}>
-            <Download className="w-4 h-4 mr-2" />
-            Export PDF
-          </Button>
-
           
           {/* Filters Modal */}
           <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
@@ -371,20 +399,25 @@ export default function TaskManagementPage() {
                 <div className="space-y-3">
                   <label className="text-sm font-semibold text-foreground">Status</label>
                   <div className="flex flex-wrap gap-2">
-                    {["To do", "Pending", "In progress", "Complete"].map(status => {
-                      const isActive = activeStatuses.includes(status);
+                    {[
+                      { value: "todo", label: "To do", dot: "bg-slate-400" },
+                      { value: "pending", label: "Pending", dot: "bg-amber-400" },
+                      { value: "in-progress", label: "In progress", dot: "bg-brand-teal" },
+                      { value: "completed", label: "Completed", dot: "bg-emerald-600" }
+                    ].map(status => {
+                      const isActive = activeStatuses.includes(status.value);
                       return (
                         <div 
-                          key={status}
-                          onClick={() => toggleFilter(activeStatuses, setActiveStatuses, status)}
+                          key={status.value}
+                          onClick={() => toggleFilter(activeStatuses, setActiveStatuses, status.value)}
                           className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors border ${
                             isActive 
                               ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
                               : 'bg-white border-border text-foreground hover:bg-gray-50'
                           }`}
                         >
-                          <span className={`w-2 h-2 rounded-full ${getStatusDot(status)}`}></span>
-                          {status}
+                          <span className={`w-2 h-2 rounded-full ${status.dot}`}></span>
+                          {status.label}
                         </div>
                       )
                     })}
@@ -395,13 +428,13 @@ export default function TaskManagementPage() {
                 <div className="space-y-3">
                   <label className="text-sm font-semibold text-foreground">Priority</label>
                   <div className="flex flex-wrap gap-2">
-                    {["High", "Medium", "Low"].map(priority => {
+                    {["urgent", "high", "medium", "low"].map(priority => {
                       const isActive = activePriorities.includes(priority);
                       return (
                         <div 
                           key={priority}
                           onClick={() => toggleFilter(activePriorities, setActivePriorities, priority)}
-                          className={`px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors border ${
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors border capitalize ${
                             isActive 
                               ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
                               : 'bg-white border-border text-foreground hover:bg-gray-50'
@@ -418,36 +451,114 @@ export default function TaskManagementPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground">Assignee</label>
                   <div className="border border-border rounded-md p-2 flex flex-wrap gap-2 min-h-[42px] items-center bg-white cursor-text">
-                    <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded-md text-xs font-medium text-foreground">
-                      <Avatar className="w-4 h-4">
-                        <AvatarImage src="/placeholder-user.jpg" />
-                      </Avatar>
-                      Sarah Jenkins
-                      <X className="w-3 h-3 text-muted-foreground hover:text-foreground cursor-pointer ml-0.5" />
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded-md text-xs font-medium text-foreground">
-                      <Avatar className="w-4 h-4">
-                        <AvatarImage src="/placeholder-user.jpg" />
-                      </Avatar>
-                      Aisha Rahman
-                      <X className="w-3 h-3 text-muted-foreground hover:text-foreground cursor-pointer ml-0.5" />
-                    </div>
-                    <input type="text" placeholder="Select assignees..." className="flex-1 outline-none text-sm min-w-[120px] bg-transparent" />
+                    {activeAssignees.map(id => {
+                      const emp = employees.find(e => e.id === id);
+                      if (!emp) return null;
+                      return (
+                        <div key={id} className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded-md text-xs font-medium text-foreground">
+                          <Avatar className="w-4 h-4">
+                            <AvatarFallback className="text-[8px] bg-brand-light text-brand-teal font-medium">{emp.firstName[0]}{emp.lastName[0]}</AvatarFallback>
+                          </Avatar>
+                          {emp.firstName} {emp.lastName}
+                          <X 
+                            className="w-3 h-3 text-muted-foreground hover:text-foreground cursor-pointer ml-0.5" 
+                            onClick={() => toggleFilter(activeAssignees, setActiveAssignees, id)}
+                          />
+                        </div>
+                      )
+                    })}
+                    <Popover open={assigneeDropdownOpen} onOpenChange={setAssigneeDropdownOpen}>
+                      <PopoverTrigger asChild>
+                        <button className="flex-1 min-w-[120px] h-6 border-none bg-transparent shadow-none focus:outline-none p-0 text-sm text-muted-foreground text-left">
+                          Select assignees...
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[300px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search names..." />
+                          <CommandList>
+                            <CommandEmpty>No employee found.</CommandEmpty>
+                            <CommandGroup>
+                              {employees.filter(e => !activeAssignees.includes(e.id)).map(emp => (
+                                <CommandItem 
+                                  key={emp.id} 
+                                  value={`${emp.firstName} ${emp.lastName}`}
+                                  onSelect={() => {
+                                    setActiveAssignees([...activeAssignees, emp.id]);
+                                    setAssigneeDropdownOpen(false);
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2 w-full">
+                                    <Avatar className="w-5 h-5">
+                                      <AvatarFallback className="text-[10px] bg-brand-light text-brand-teal font-medium">{emp.firstName[0]}{emp.lastName[0]}</AvatarFallback>
+                                    </Avatar>
+                                    {emp.firstName} {emp.lastName}
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
 
                 {/* Due Date Filter */}
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground">Due Date</label>
-                  <div className="relative">
-                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input className="pl-9 bg-white" placeholder="Apr 19, 2026 - Apr 30, 2026" defaultValue="Apr 19, 2026 - Apr 30, 2026" />
-                  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="date"
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal bg-white h-10",
+                          !activeDateRange && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {activeDateRange?.from ? (
+                          activeDateRange.to ? (
+                            <>
+                              {format(activeDateRange.from, "LLL dd, y")} -{" "}
+                              {format(activeDateRange.to, "LLL dd, y")}
+                            </>
+                          ) : (
+                            format(activeDateRange.from, "LLL dd, y")
+                          )
+                        ) : (
+                          <span>Pick a date range</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="center">
+                      <Calendar
+                        initialFocus
+                        mode="range"
+                        defaultMonth={activeDateRange?.from}
+                        selected={activeDateRange}
+                        onSelect={setActiveDateRange as any}
+                        numberOfMonths={2}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
 
               <div className="flex items-center justify-between mt-4">
-                <Button variant="ghost" className="text-muted-foreground hover:text-foreground font-medium px-2">Clear all</Button>
+                <Button 
+                  variant="ghost" 
+                  className="text-muted-foreground hover:text-foreground font-medium px-2"
+                  onClick={() => {
+                    setActiveStatuses([]);
+                    setActivePriorities([]);
+                    setActiveAssignees([]);
+                    setActiveDateRange(undefined);
+                  }}
+                >
+                  Clear all
+                </Button>
                 <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={() => setFilterModalOpen(false)}>
                   Apply filters
                 </Button>
@@ -456,7 +567,12 @@ export default function TaskManagementPage() {
           </Dialog>
 
           {/* Create Task Modal */}
-          <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+          <Dialog open={createModalOpen} onOpenChange={(val) => {
+            setCreateModalOpen(val);
+            if (!val) {
+              setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: "todo", priority: "medium" });
+            }
+          }}>
             <DialogTrigger asChild>
               <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm">
                 <Plus className="w-4 h-4 mr-2" />
@@ -556,16 +672,29 @@ export default function TaskManagementPage() {
                   
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-foreground">Due date</label>
-                    <div className="relative">
-                      <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input 
-                        type="date"
-                        min={todayStr}
-                        className="pl-9 bg-white" 
-                        value={newTask.dueDate}
-                        onChange={(e) => setNewTask({...newTask, dueDate: e.target.value})}
-                      />
-                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant={"outline"}
+                          className={cn(
+                            "w-full justify-start text-left font-normal bg-white h-10",
+                            !newTask.dueDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {newTask.dueDate ? format(new Date(newTask.dueDate), "PPP") : <span>Pick a date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={newTask.dueDate ? new Date(newTask.dueDate) : undefined}
+                          onSelect={(date) => setNewTask({...newTask, dueDate: date ? format(date, "yyyy-MM-dd") : ""})}
+                          initialFocus
+                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   
                   <div className="space-y-2">
@@ -893,13 +1022,24 @@ export default function TaskManagementPage() {
                       </Select>
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      <Input 
-                        type="date"
-                        min={todayStr}
-                        className="h-8 w-[130px] border-transparent bg-transparent hover:bg-gray-50 text-sm font-medium text-foreground p-1 focus:ring-0 shadow-none cursor-pointer"
-                        value={task.dueDate || ''}
-                        onChange={(e) => handleUpdateField(task.id, 'dueDate', e.target.value)}
-                      />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent hover:border-border transition-colors">
+                            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                            {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
+                          </div>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={task.dueDate ? new Date(task.dueDate) : undefined}
+                            onSelect={(date) => {
+                              if (date) handleUpdateField(task.id, 'dueDate', format(date, "yyyy-MM-dd"));
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <button 
