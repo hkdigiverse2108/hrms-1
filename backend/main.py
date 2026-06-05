@@ -1538,6 +1538,16 @@ async def get_schedules(employeeId: Optional[str] = None, date: Optional[str] = 
 
 @app.post("/schedules", response_model=schemas.Schedule)
 async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
+    # Check for overlaps
+    existing_schedules = await crud.get_schedules(db, employee_id=schedule.employeeId, date_str=schedule.date)
+    if existing_schedules:
+        for existing in existing_schedules:
+            ex_start = existing.get("startTime")
+            ex_end = existing.get("endTime")
+            if ex_start and ex_end:
+                if max(schedule.startTime, ex_start) < min(schedule.endTime, ex_end):
+                    raise HTTPException(status_code=400, detail="Schedule overlaps with an existing schedule for this employee on this date.")
+
     return await crud.create_schedule(db, schedule.model_dump())
 
 @app.put("/schedules/{schedule_id}", response_model=schemas.Schedule)

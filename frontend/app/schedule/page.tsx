@@ -81,6 +81,23 @@ export default function SchedulePage() {
       return;
     }
 
+    // Check for overlap within current schedules if creating for the current date
+    if (form.date === currentDate.format("YYYY-MM-DD")) {
+      const isOverlap = schedules.some((s) => {
+        if (s.employeeId !== form.employeeId) return false;
+        // Overlap condition: max(start1, start2) < min(end1, end2)
+        const maxStart = form.startTime > s.startTime ? form.startTime : s.startTime;
+        const minEnd = form.endTime < s.endTime ? form.endTime : s.endTime;
+        return maxStart < minEnd;
+      });
+
+      if (isOverlap) {
+        toast.error("This schedule overlaps with an existing schedule for this employee.");
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
     try {
       const selectedEmp = employees.find(e => e.id === form.employeeId || e.employeeId === form.employeeId);
       const empName = selectedEmp ? selectedEmp.name : (user?.name || "Unknown");
