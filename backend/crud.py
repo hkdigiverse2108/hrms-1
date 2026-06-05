@@ -1349,6 +1349,11 @@ async def delete_asset(db, asset_id: str, performedBy: str = None, userName: str
     result = await delete_item(db, "assets", asset_id)
     if result:
         await log_activity(db, "Deleted", performedBy or "System", userName or "System User", f"Asset '{asset_name}' ({asset_code}) was deleted from inventory.", assetId=asset_id)
+        if existing and existing.get("category"):
+            await db.asset_categories.update_one(
+                {"name": existing.get("category")},
+                {"$inc": {"totalItems": -1}}
+            )
     return result
 
 async def get_expense_claims(db, skip: int = 0, limit: int = 100): return await get_items(db, "expense_claims", skip, limit)
@@ -4603,6 +4608,9 @@ async def create_asset_category(db, category: schemas.AssetCategoryCreate):
         categoryId=category_id
     )
     
+    # Auto create resources in inventory
+    await sync_category_assets(db, category_dict["name"], category_dict.get("totalItems", 0), performed_by, user_name)
+    
     return category_dict
 
 async def update_asset_category(db, category_id: str, category_update: schemas.AssetCategoryUpdate):
@@ -4636,20 +4644,56 @@ async def update_asset_category(db, category_id: str, category_update: schemas.A
         # If name of the category changed, update category name in all associated assets first
         if "name" in update_data and existing.get("name") != update_data["name"]:
             await db.assets.update_many({"category": existing.get("name")}, {"$set": {"category": update_data["name"]}})
+            
+    # Auto sync/create resources in inventory
+    await sync_category_assets(db, updated_doc["name"], updated_doc.get("totalItems", 0), performed_by, user_name)
         
     return fix_id(updated_doc)
 
 async def delete_asset_category(db, category_id: str, performed_by: str = "System", user_name: str = "System User"):
     existing = await db.asset_categories.find_one({"_id": ObjectId(category_id)})
+    category_name = existing.get("name") if existing else None
+
     if existing:
         await log_activity(
             db,
             "Deleted",
             performed_by,
             user_name,
-            f"Asset Category '{existing.get('name')}' was deleted.",
+            f"Asset Category '{category_name}' was deleted along with all its resources.",
             categoryId=category_id
         )
+
+    # Delete all assets belonging to this category
+    # NOTE: old assets may use "type" field instead of "category" for compatibility
+    if category_name:
+        assets_cursor = db.assets.find({
+            "$or": [
+                {"category": category_name},
+                {"type": category_name}
+            ]
+        })
+        assets = await assets_cursor.to_list(length=None)
+        for asset in assets:
+            asset_id_str = str(asset["_id"])
+            asset_name = asset.get("name", "Unknown Asset")
+            asset_code = asset.get("assetId", "N/A")
+            await log_activity(
+                db,
+                "Deleted",
+                performed_by,
+                user_name,
+                f"Asset '{asset_name}' ({asset_code}) was deleted because its category '{category_name}' was removed.",
+                assetId=asset_id_str
+            )
+        # Delete all matched assets at once
+        await db.assets.delete_many({
+            "$or": [
+                {"category": category_name},
+                {"type": category_name}
+            ]
+        })
+
     await db.asset_categories.delete_one({"_id": ObjectId(category_id)})
     return True
 

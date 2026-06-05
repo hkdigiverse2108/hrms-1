@@ -555,6 +555,17 @@ async def delete_asset(asset_id: str, performedBy: Optional[str] = None, userNam
     await crud.delete_asset(db, asset_id, performedBy=performedBy, userName=userName)
     return {"message": "Asset deleted successfully"}
 
+@app.delete("/assets/by-category/{category_name}")
+async def delete_assets_by_category(category_name: str, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    """Delete all assets belonging to a specific category (handles both 'category' and 'type' fields)."""
+    result = await db.assets.delete_many({
+        "$or": [
+            {"category": category_name},
+            {"type": category_name}
+        ]
+    })
+    return {"deleted": result.deleted_count, "category": category_name}
+
 @app.get("/assets/logs")
 async def read_asset_logs(asset_id: Optional[str] = None, db=Depends(get_db)):
     return await crud.get_asset_logs(db, asset_id)
