@@ -797,7 +797,7 @@ async def get_tasks_api(userId: str = None, role: str = None, skip: int = 0, lim
 @app.post("/tasks", response_model=schemas.Task)
 async def create_task_api(task: schemas.TaskCreate, db=Depends(get_db)):
     new_task = await crud.create_task(db, task)
-    await ws_manager.broadcast_all("task_update", {"taskId": str(new_task.id)})
+    await ws_manager.broadcast_all("task_update", {"taskId": str(new_task.get("id"))})
     return new_task
 
 @app.put("/tasks/{task_id}", response_model=schemas.Task)
