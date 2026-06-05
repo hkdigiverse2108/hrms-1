@@ -93,10 +93,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ]
   },
   {
-    name: 'Review',
+    name: 'Remarks',
     icon: Star,
     modules: [
-      { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
+      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/review' },
     ]
   },
   {
