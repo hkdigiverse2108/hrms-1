@@ -197,7 +197,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
 
     if (isAdmin || checkPermission('review', 'canView')) {
-      menuItems.push(getItem(<Link href="/review">Review</Link>, "/review", <Star className="w-5 h-5" />));
+      menuItems.push(getItem(<Link href="/review">Remarks</Link>, "/review", <Star className="w-5 h-5" />));
     }
 
     const invoiceChildren: MenuItem[] = [];
