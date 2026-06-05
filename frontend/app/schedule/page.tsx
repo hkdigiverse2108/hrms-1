@@ -15,8 +15,7 @@ import {
   Trash2
 } from "lucide-react";
 import { useUserContext } from "@/context/UserContext";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/config";
 
 interface Employee {
   id: string;
@@ -135,7 +134,7 @@ export default function SchedulePage() {
       }
 
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("Error fetching data:", error); alert("Error fetching data: " + error);
     } finally {
       setLoading(false);
     }
