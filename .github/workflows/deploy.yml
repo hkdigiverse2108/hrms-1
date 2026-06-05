@@ -35,6 +35,13 @@ jobs:
             git checkout dev
             git pull origin dev
 
+            # Install backend dependencies
+            if [ -d ".venv" ]; then
+              .venv/bin/pip install -r backend/requirements.txt --quiet
+            elif [ -d "venv" ]; then
+              venv/bin/pip install -r backend/requirements.txt --quiet
+            fi
+
             cd frontend
             npm install
             npm run build
@@ -55,6 +62,13 @@ jobs:
             git fetch origin
             git checkout main
             git pull origin main
+
+            # Install backend dependencies
+            if [ -d ".venv" ]; then
+              .venv/bin/pip install -r backend/requirements.txt --quiet
+            elif [ -d "venv" ]; then
+              venv/bin/pip install -r backend/requirements.txt --quiet
+            fi
 
             cd frontend
             npm install
