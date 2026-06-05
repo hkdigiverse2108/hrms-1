@@ -1531,6 +1531,30 @@ async def delete_invoice(invoice_id: str, db=Depends(get_db)):
     return {"message": "Invoice deleted successfully"}
 
 
+# --- Schedules API ---
+@app.get("/schedules", response_model=List[schemas.Schedule])
+async def get_schedules(employeeId: Optional[str] = None, date: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_schedules(db, employee_id=employeeId, date_str=date)
+
+@app.post("/schedules", response_model=schemas.Schedule)
+async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
+    return await crud.create_schedule(db, schedule.model_dump())
+
+@app.put("/schedules/{schedule_id}", response_model=schemas.Schedule)
+async def update_schedule(schedule_id: str, schedule: schemas.ScheduleUpdate, db=Depends(get_db)):
+    update_data = schedule.model_dump(exclude_unset=True)
+    updated = await crud.update_schedule(db, schedule_id, update_data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return updated
+
+@app.delete("/schedules/{schedule_id}")
+async def delete_schedule(schedule_id: str, db=Depends(get_db)):
+    success = await crud.delete_schedule(db, schedule_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return {"message": "Schedule deleted successfully"}
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
     print(f"Starting HRMS Backend on http://0.0.0.0:{port}")

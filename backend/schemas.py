@@ -1601,4 +1601,37 @@ class DocumentTemplate(DocumentTemplateBase):
     class Config:
         from_attributes = True
 
+# Schedule Schemas
+class ScheduleBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    employeeId: str
+    employeeName: str
+    date: RobustDate
+    startTime: str
+    endTime: str
+    type: str  # e.g., 'meeting', 'busy', 'out_of_office', 'work'
+    attendees: Optional[List[str]] = []
+    createdBy: Optional[str] = None
+
+class ScheduleCreate(ScheduleBase):
+    pass
+
+class ScheduleUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    employeeId: Optional[str] = None
+    employeeName: Optional[str] = None
+    date: Optional[RobustDate] = None
+    startTime: Optional[str] = None
+    endTime: Optional[str] = None
+    type: Optional[str] = None
+    attendees: Optional[List[str]] = None
+
+class Schedule(ScheduleBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+
 

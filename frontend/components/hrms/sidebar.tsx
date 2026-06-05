@@ -81,6 +81,12 @@ import { useUserContext } from '@/context/UserContext'
      ],
    },
    {
+     title: 'Schedule',
+     href: '/schedule',
+     icon: Calendar,
+     moduleName: 'schedule',
+   },
+   {
      title: 'Payroll',
      href: '/payroll',
      icon: IndianRupee,
