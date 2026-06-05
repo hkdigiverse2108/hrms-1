@@ -508,6 +508,17 @@ export default function TaskManagementPage() {
                           initialFocus
                           disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
                         />
+                        {newTask.dueDate && (
+                          <div className="p-2 border-t border-border">
+                            <Button 
+                              variant="ghost" 
+                              className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                              onClick={() => setNewTask({...newTask, dueDate: ""})}
+                            >
+                              Clear date
+                            </Button>
+                          </div>
+                        )}
                       </PopoverContent>
                     </Popover>
                   </div>
@@ -1032,6 +1043,17 @@ export default function TaskManagementPage() {
                             initialFocus
                             disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
                           />
+                          {task.dueDate && (
+                            <div className="p-2 border-t border-border">
+                              <Button 
+                                variant="ghost" 
+                                className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                                onClick={() => handleUpdateField(task.id, 'dueDate', "")}
+                              >
+                                Clear date
+                              </Button>
+                            </div>
+                          )}
                         </PopoverContent>
                       </Popover>
                     </td>
