@@ -1028,7 +1028,7 @@ export default function LeavePage() {
                         <input 
                           id="proof-upload" 
                           type="file" 
-                          accept="image/*"
+                          accept="image/*,application/pdf"
                           className="hidden" 
                           onChange={handleImageUpload}
                           disabled={isUploading}
