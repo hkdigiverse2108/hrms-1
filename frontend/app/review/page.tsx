@@ -256,7 +256,7 @@ export default function ReviewPage() {
   const handleDeleteReview = async (id: string) => {
     const isConfirmed = await confirm({
       title: "Confirm Action",
-      message: "Are you sure you want to delete this review?",
+      message: "Are you sure you want to delete this remark?",
       destructive: true,
       confirmText: "Confirm"
     });
@@ -302,21 +302,21 @@ export default function ReviewPage() {
   return (
     <div className="space-y-6 pb-10">
       <PageHeader 
-        title="Employee Reviews" 
-        description="Review records with department, summary, rating, timestamps, and quick actions."
+        title="Employee Remarks" 
+        description="Remark records with department, summary, rating, timestamps, and quick actions."
       >
         {canAddReviews && (
           <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
             <DialogTrigger asChild>
               <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto mt-4 sm:mt-0">
                 <Plus className="w-4 h-4 mr-2" />
-                New Review
+                New Remark
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
-                <DialogTitle className="text-xl font-bold">Add New Review</DialogTitle>
-                <p className="text-sm text-muted-foreground mt-1">Submit a performance review and rating for an employee.</p>
+                <DialogTitle className="text-xl font-bold">Add New Remark</DialogTitle>
+                <p className="text-sm text-muted-foreground mt-1">Submit a performance remark and rating for an employee.</p>
               </DialogHeader>
               
               <div className="space-y-6 py-4">
@@ -368,7 +368,7 @@ export default function ReviewPage() {
                   <Textarea 
                     value={newReview.summary}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewReview(prev => ({ ...prev, summary: e.target.value }))}
-                    placeholder="Write a detailed performance summary here..." 
+                    placeholder="Write detailed remarks here..." 
                     className="h-32 resize-none bg-white"
                   />
                 </div>
@@ -381,7 +381,7 @@ export default function ReviewPage() {
                   className="bg-brand-teal hover:bg-brand-teal-light text-white font-semibold px-8" 
                   onClick={handleCreateReview}
                 >
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Submit Review"}
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Submit Remark"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -410,7 +410,7 @@ export default function ReviewPage() {
                 <th className="px-6 py-4 w-[80px]">Sr. No.</th>
                 <th className="px-6 py-4">User</th>
                 <th className="px-6 py-4">Department</th>
-                <th className="px-6 py-4">Summary</th>
+                <th className="px-6 py-4">Remarks</th>
                 <th className="px-6 py-4">Rating</th>
                 {(canEditReviews || canDeleteReviews) && <th className="px-6 py-4 text-right">Action</th>}
               </tr>
@@ -420,13 +420,13 @@ export default function ReviewPage() {
                 <tr>
                   <td colSpan={(canEditReviews || canDeleteReviews) ? 6 : 5} className="px-6 py-10 text-center">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
-                    <p className="text-sm text-muted-foreground mt-2">Loading reviews...</p>
+                    <p className="text-sm text-muted-foreground mt-2">Loading remarks...</p>
                   </td>
                 </tr>
               ) : filteredReviews.length === 0 ? (
                 <tr>
                   <td colSpan={(canEditReviews || canDeleteReviews) ? 6 : 5} className="px-6 py-10 text-center text-muted-foreground">
-                    No reviews found.
+                    No remarks found.
                   </td>
                 </tr>
               ) : (
@@ -489,7 +489,7 @@ export default function ReviewPage() {
           currentPage={currentPage} 
           onPageChange={setCurrentPage} 
           onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
-          itemName="reviews" 
+          itemName="remarks" 
         />
       </div>
 
@@ -497,7 +497,7 @@ export default function ReviewPage() {
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">Edit Review</DialogTitle>
+            <DialogTitle className="text-xl font-bold">Edit Remark</DialogTitle>
           </DialogHeader>
           
           {selectedReview && (
