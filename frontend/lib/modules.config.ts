@@ -86,10 +86,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ]
   },
   {
-    name: 'Remarks',
+    name: 'Penalty',
     icon: MessagesSquare,
     modules: [
-      { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
+      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/remarks' },
     ]
   },
   {
