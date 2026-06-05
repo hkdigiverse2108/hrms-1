@@ -4653,4 +4653,41 @@ async def delete_asset_category(db, category_id: str, performed_by: str = "Syste
     await db.asset_categories.delete_one({"_id": ObjectId(category_id)})
     return True
 
+# --- Schedule Operations ---
+async def get_schedules(db, employee_id: str = None, date_str: str = None):
+    query = {}
+    if employee_id:
+        query["employeeId"] = employee_id
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, "%Y-%m-%d")
+            query["date"] = {"$in": [date_str, target_date]}
+        except Exception:
+            query["date"] = date_str
+    cursor = db.schedules.find(query)
+    schedules = await cursor.to_list(length=1000)
+    return [fix_id(s) for s in schedules]
+
+async def create_schedule(db, schedule_data: dict):
+    new_doc = await db.schedules.insert_one(schedule_data)
+    created = await db.schedules.find_one({"_id": new_doc.inserted_id})
+    return fix_id(created)
+
+async def update_schedule(db, schedule_id: str, schedule_data: dict):
+    if not ObjectId.is_valid(schedule_id):
+        return None
+    await db.schedules.update_one(
+        {"_id": ObjectId(schedule_id)},
+        {"$set": schedule_data}
+    )
+    updated = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_schedule(db, schedule_id: str):
+    if not ObjectId.is_valid(schedule_id):
+        return False
+    res = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
+    return res.deleted_count > 0
+
+
 

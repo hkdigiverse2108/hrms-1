@@ -172,7 +172,10 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('leave', 'canView')) {
       menuItems.push(getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />));
     }
-    
+
+    if (user) {
+      menuItems.push(getItem(<Link href="/schedule">Schedule</Link>, "/schedule", <CalendarDays className="w-5 h-5" />));
+    }
 
     
     const workspaceChildren: MenuItem[] = [];
@@ -250,6 +253,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/leave")) return ["/leave"];
 
     if (pathname.startsWith("/attendance")) return ["/attendance"];
+    if (pathname.startsWith("/schedule")) return ["/schedule"];
     if (pathname.startsWith("/task")) return ["/task"];
     if (pathname.startsWith("/remarks")) return ["/remarks"];
     if (pathname.startsWith("/review")) return ["/review"];
