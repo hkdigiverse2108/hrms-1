@@ -1018,9 +1018,10 @@ function EventsSidebar({ user }: { user: any }) {
  
   const fetchEvents = async () => {
     try {
-      const [resEvents, resEmp] = await Promise.all([
+      const [resEvents, resEmp, resSchedules] = await Promise.all([
         fetch(`${API_URL}/events`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/schedules`)
       ]);
       
       let eventsData = [];
@@ -1044,7 +1045,27 @@ function EventsSidebar({ user }: { user: any }) {
         };
       });
 
-      const allCombined = [...eventsData, ...birthdayEvents];
+      let schedulesData = [];
+      if (resSchedules && resSchedules.ok) {
+        schedulesData = await resSchedules.json();
+      }
+
+      const scheduleEvents = schedulesData.map((sched: any) => {
+        const emp = empData.find((e: any) => e.id === sched.employeeId || e._id === sched.employeeId);
+        const empName = emp ? (emp.firstName || emp.name?.split(' ')[0]) : 'Employee';
+        
+        return {
+          id: `schedule-${sched.id || sched._id}`,
+          type: sched.type?.toLowerCase() === 'meeting' ? 'meeting' : 'discussion',
+          title: `${sched.title} (${empName})`,
+          description: sched.description || `Scheduled from ${sched.startTime} to ${sched.endTime}`,
+          date: sched.date,
+          time: `${sched.startTime} - ${sched.endTime}`,
+          isSchedule: true
+        };
+      });
+
+      const allCombined = [...eventsData, ...birthdayEvents, ...scheduleEvents];
       setEvents(allCombined.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     } catch (err) {
       console.error("Error fetching events:", err);
@@ -1260,7 +1281,7 @@ function EventsSidebar({ user }: { user: any }) {
                  <div className="text-[11px] text-gray-400 font-medium">{event.time}</div>
                )}
                
-               {canAddEvents && event.type !== 'birthday' && (
+               {canAddEvents && event.type !== 'birthday' && !event.isSchedule && (
                  <div className="flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => handleEditClick(event)}
