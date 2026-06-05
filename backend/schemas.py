@@ -1561,7 +1561,8 @@ class AssetCategoryBase(BaseModel):
     valuation: Optional[float] = 0.0
 
 class AssetCategoryCreate(AssetCategoryBase):
-    pass
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class AssetCategoryUpdate(BaseModel):
     name: Optional[str] = None
@@ -1569,6 +1570,8 @@ class AssetCategoryUpdate(BaseModel):
     icon: Optional[str] = None
     totalItems: Optional[int] = None
     valuation: Optional[float] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class AssetCategory(AssetCategoryBase):
     id: str

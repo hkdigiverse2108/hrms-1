@@ -2888,7 +2888,7 @@ async def delete_wm_task(db, task_id: str):
     return result.deleted_count > 0
 
 # Activity Log CRUD
-async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None):
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None):
     log_entry = {
         "action": action,
         "performedBy": performedBy,
@@ -2904,8 +2904,17 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
     if monthlyReportId: log_entry["monthlyReportId"] = monthlyReportId
     if applicationId: log_entry["applicationId"] = applicationId
     if assetId: log_entry["assetId"] = assetId
+    if categoryId: log_entry["categoryId"] = categoryId
     
     await db.task_logs.insert_one(log_entry)
+
+async def get_category_logs(db, category_id: str = None):
+    query = {"categoryId": category_id} if category_id else {"categoryId": {"$exists": True}}
+    cursor = db.task_logs.find(query).sort("timestamp", -1)
+    logs = []
+    async for doc in cursor:
+        logs.append(fix_id(doc))
+    return logs
 
 async def get_task_activities(db, task_id: str):
     cursor = db.task_logs.find({"taskId": task_id}).sort("timestamp", -1)
@@ -4517,43 +4526,130 @@ async def delete_document_template(db, template_id: str):
     return result.deleted_count > 0
 # Asset Category CRUD
 async def get_asset_categories(db, skip: int = 0, limit: int = 100):
-    # Seed initial categories if none exist
-    count = await db.asset_categories.count_documents({})
-    if count == 0:
-        initial_categories = [
-            {"name": "PC", "icon": "Laptop", "description": "Laptops, Notebooks, and Personal Computers"},
-            {"name": "CPU", "icon": "Layers", "description": "System unit CPU cabinets and server modules"},
-            {"name": "Monitor", "icon": "Monitor", "description": "Display units, LCD, and LED monitors"},
-            {"name": "Keyboard", "icon": "Keyboard", "description": "Wired and wireless input keyboards"},
-            {"name": "Mouse", "icon": "Mouse", "description": "Wired and wireless optical computer mice"},
-            {"name": "Mousepad", "icon": "ImageIcon", "description": "Standard and extended mouse pads"},
-            {"name": "Parking Card", "icon": "CreditCard", "description": "Security access parking slot cards"},
-            {"name": "Other", "icon": "Package", "description": "Other general hardware resources"}
-        ]
-        await db.asset_categories.insert_many(initial_categories)
-
-    cursor = db.asset_categories.find().skip(skip).limit(limit)
+    cursor = db.asset_categories.find({"is_user_created": True}).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
+async def sync_category_assets(db, category_name: str, total_items: int, performed_by: str = "System", user_name: str = "System User"):
+    # 1. Count existing assets in this category
+    existing_count = await db.assets.count_documents({"category": category_name})
+    if existing_count >= total_items:
+        return
+        
+    # 2. We need to create (total_items - existing_count) new assets
+    to_create = total_items - existing_count
+    
+    # Generate unique assetIds.
+    prefix = "".join([c for c in category_name if c.isalnum()]).upper()[:3]
+    if not prefix:
+        prefix = "AST"
+        
+    for i in range(to_create):
+        index = existing_count + i + 1
+        asset_id = f"HK-{prefix}-{index:03d}"
+        
+        # Make sure assetId is unique in the db
+        while await db.assets.find_one({"assetId": asset_id}):
+            index += 1
+            asset_id = f"HK-{prefix}-{index:03d}"
+            
+        asset_doc = {
+            "assetId": asset_id,
+            "name": f"{category_name} {index}",
+            "category": category_name,
+            "serialNumber": f"SN-{prefix}-{index:04d}",
+            "assignedTo": "",
+            "status": "Available",
+            "condition": "New",
+            "location": "",
+            "purchaseDate": None,
+            "value": 0.0,
+            "description": f"Automatically created resource under category '{category_name}'"
+        }
+        
+        # Insert asset
+        result = await db.assets.insert_one(asset_doc)
+        inserted_id = str(result.inserted_id)
+        
+        # Give individual logs for the inventory
+        await log_activity(
+            db, 
+            "Created", 
+            performed_by, 
+            user_name, 
+            f"Asset '{asset_doc['name']}' ({asset_doc['assetId']}) was automatically created under category '{category_name}'.", 
+            assetId=inserted_id
+        )
+
 async def create_asset_category(db, category: schemas.AssetCategoryCreate):
     category_dict = category.dict()
+    performed_by = category_dict.pop("performedBy", "System") or "System"
+    user_name = category_dict.pop("userName", "System User") or "System User"
+    
+    category_dict["is_user_created"] = True
     result = await db.asset_categories.insert_one(category_dict)
-    category_dict["id"] = str(result.inserted_id)
+    category_id = str(result.inserted_id)
+    category_dict["id"] = category_id
     if "_id" in category_dict:
         category_dict.pop("_id")
+        
+    # Give individual log for the category
+    await log_activity(
+        db,
+        "Created",
+        performed_by,
+        user_name,
+        f"Asset Category '{category_dict['name']}' was created with {category_dict.get('totalItems', 0)} total resources.",
+        categoryId=category_id
+    )
+    
     return category_dict
 
 async def update_asset_category(db, category_id: str, category_update: schemas.AssetCategoryUpdate):
+    existing = await db.asset_categories.find_one({"_id": ObjectId(category_id)})
     update_data = category_update.dict(exclude_unset=True)
+    performed_by = update_data.pop("performedBy", "System") or "System"
+    user_name = update_data.pop("userName", "System User") or "System User"
+    
     await db.asset_categories.update_one(
         {"_id": ObjectId(category_id)},
         {"$set": update_data}
     )
     updated_doc = await db.asset_categories.find_one({"_id": ObjectId(category_id)})
+    
+    # Give individual log for the category
+    if existing:
+        changes = []
+        if "name" in update_data and existing.get("name") != update_data["name"]:
+            changes.append(f"Name changed from '{existing.get('name')}' to '{update_data['name']}'")
+        if "totalItems" in update_data and existing.get("totalItems") != update_data["totalItems"]:
+            changes.append(f"Total Resources changed from {existing.get('totalItems', 0)} to {update_data['totalItems']}")
+        if "description" in update_data and existing.get("description") != update_data["description"]:
+            changes.append("Description updated")
+            
+        if not changes:
+            changes.append("General category details updated")
+            
+        log_details = f"Asset Category '{existing.get('name')}': " + ", ".join(changes)
+        await log_activity(db, "Updated", performed_by, user_name, log_details, categoryId=category_id)
+        
+        # If name of the category changed, update category name in all associated assets first
+        if "name" in update_data and existing.get("name") != update_data["name"]:
+            await db.assets.update_many({"category": existing.get("name")}, {"$set": {"category": update_data["name"]}})
+        
     return fix_id(updated_doc)
 
-async def delete_asset_category(db, category_id: str):
+async def delete_asset_category(db, category_id: str, performed_by: str = "System", user_name: str = "System User"):
+    existing = await db.asset_categories.find_one({"_id": ObjectId(category_id)})
+    if existing:
+        await log_activity(
+            db,
+            "Deleted",
+            performed_by,
+            user_name,
+            f"Asset Category '{existing.get('name')}' was deleted.",
+            categoryId=category_id
+        )
     await db.asset_categories.delete_one({"_id": ObjectId(category_id)})
     return True
 

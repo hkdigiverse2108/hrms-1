@@ -17,16 +17,7 @@ import asyncio
 @asynccontextmanager
 async def lifespan(app):
     # --- Startup ---
-    try:
-        import sys
-        from pathlib import Path
-        root_dir = Path(__file__).resolve().parent.parent
-        if str(root_dir) not in sys.path:
-            sys.path.append(str(root_dir))
-        from scratch.migrate_db_to_objectids import migrate_database
-        asyncio.create_task(migrate_database())
-    except Exception as e:
-        print(f"Error starting background migration: {e}")
+    pass
     
     # Seed the employee_id counter if it doesn't exist yet
     try:
@@ -59,6 +50,7 @@ async def lifespan(app):
     
     yield
     # --- Shutdown (nothing needed for now) ---
+    # Reload trigger: 1
 
 app = FastAPI(title="HRMS API", lifespan=lifespan)
 
@@ -581,9 +573,13 @@ async def update_asset_category(category_id: str, category_update: schemas.Asset
     return await crud.update_asset_category(db, category_id, category_update)
 
 @app.delete("/asset-categories/{category_id}")
-async def delete_asset_category(category_id: str, db=Depends(get_db)):
-    await crud.delete_asset_category(db, category_id)
+async def delete_asset_category(category_id: str, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    await crud.delete_asset_category(db, category_id, performed_by=performedBy, user_name=userName)
     return {"message": "Category deleted successfully"}
+
+@app.get("/asset-categories/logs")
+async def read_category_logs(category_id: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_category_logs(db, category_id)
 
 @app.get("/expense-claims", response_model=List[schemas.ExpenseClaim])
 async def read_expense_claims(skip: int = 0, limit: int = 10000, db=Depends(get_db)): return await crud.get_expense_claims(db, skip, limit)

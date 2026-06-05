@@ -28,7 +28,8 @@ import {
   Archive,
   ArrowLeft,
   FileText,
-  Tag
+  Tag,
+  History
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,13 +107,16 @@ export default function ResourceManagementPage() {
   // Filters state
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [employeeFilter, setEmployeeFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   
   // Dynamic categories and logs
   const [categories, setCategories] = useState<any[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
-  const [logs, setLogs] = useState<any[]>([]);
+  const [inventoryLogs, setInventoryLogs] = useState<any[]>([]);
+  const [categoryLogs, setCategoryLogs] = useState<any[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [deletedResourceIds, setDeletedResourceIds] = useState<string[]>([]);
 
   const initialFormState = {
     assetId: "",
@@ -125,7 +129,8 @@ export default function ResourceManagementPage() {
     value: 0,
     serialNumber: "",
     condition: "Good",
-    location: ""
+    location: "",
+    resourceCount: 1
   };
 
   const initialCategoryFormState = {
@@ -140,6 +145,11 @@ export default function ResourceManagementPage() {
   const [categoryFormData, setCategoryFormData] = useState(initialCategoryFormState);
   const [editingCell, setEditingCell] = useState<{ id: string, field: string } | null>(null);
   const [tempValue, setTempValue] = useState<any>(null);
+  const [isAddingResourceCount, setIsAddingResourceCount] = useState(false);
+  const [newResourceCount, setNewResourceCount] = useState<string>("");
+  const [selectedItemForLogs, setSelectedItemForLogs] = useState<{ type: 'category' | 'resource', id: string, name: string } | null>(null);
+  const [itemLogs, setItemLogs] = useState<any[]>([]);
+  const [itemLogsLoading, setItemLogsLoading] = useState(false);
 
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const isEmployeeOnly = !isAdmin && user?.role?.toLowerCase() !== "hr";
@@ -168,10 +178,16 @@ export default function ResourceManagementPage() {
   const fetchLogs = async () => {
     setLogsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/assets/logs`);
-      if (response.ok) {
-        const data = await response.json();
-        setLogs(data);
+      const [assetsRes, categoriesRes] = await Promise.all([
+        fetch(`${API_URL}/assets/logs`),
+        fetch(`${API_URL}/asset-categories/logs`)
+      ]);
+      
+      if (assetsRes.ok) {
+        setInventoryLogs(await assetsRes.json());
+      }
+      if (categoriesRes.ok) {
+        setCategoryLogs(await categoriesRes.json());
       }
     } catch (error) {
       console.error("Failed to fetch logs:", error);
@@ -194,6 +210,35 @@ export default function ResourceManagementPage() {
     }
   }, [activeTab]);
 
+  const fetchItemLogs = async (type: 'category' | 'resource', id: string) => {
+    setItemLogsLoading(true);
+    try {
+      const url = type === 'category' 
+        ? `${API_URL}/asset-categories/logs?category_id=${id}`
+        : `${API_URL}/assets/logs?asset_id=${id}`;
+        
+      const response = await fetch(url);
+      if (response.ok) {
+        setItemLogs(await response.json());
+      } else {
+        setItemLogs([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch item logs:", error);
+      setItemLogs([]);
+    } finally {
+      setItemLogsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedItemForLogs) {
+      fetchItemLogs(selectedItemForLogs.type, selectedItemForLogs.id);
+    } else {
+      setItemLogs([]);
+    }
+  }, [selectedItemForLogs]);
+
   const handleAssignToChange = (val: string) => {
     const isClear = val === "unassigned" || !val;
     setFormData(prev => ({
@@ -213,7 +258,7 @@ export default function ResourceManagementPage() {
 
   const handleCategoryChange = (val: string) => {
     setFormData(prev => {
-      const updated = { ...prev, category: val };
+      const updated = { ...prev, category: val, name: prev.name || val };
       if (!editingId) {
         const categoryName = (val || "").trim().toUpperCase();
         const map: Record<string, string> = {
@@ -314,7 +359,8 @@ export default function ResourceManagementPage() {
       value: resource.value || 0,
       serialNumber: resource.serialNumber || "",
       condition: resource.condition || "Good",
-      location: resource.location || ""
+      location: resource.location || "",
+      resourceCount: 1
     });
     setIsAddingMode(true);
   };
@@ -328,6 +374,9 @@ export default function ResourceManagementPage() {
     });
     if (!isConfirmed) return;
 
+    // Optimistically hide from UI instantly
+    setDeletedResourceIds(prev => [...prev, id]);
+
     try {
       const perfBy = user?.id || user?.employeeId || "System";
       const uName = user?.name || `${user?.firstName} ${user?.lastName}` || "System User";
@@ -340,10 +389,14 @@ export default function ResourceManagementPage() {
         apiRefresh();
         fetchLogs();
       } else {
+        // Revert on failure
+        setDeletedResourceIds(prev => prev.filter(item => item !== id));
         toast.error("Failed to delete resource");
       }
     } catch (error) {
       console.error(error);
+      // Revert on failure
+      setDeletedResourceIds(prev => prev.filter(item => item !== id));
       toast.error("An error occurred while deleting");
     }
   };
@@ -355,7 +408,8 @@ export default function ResourceManagementPage() {
   };
 
   const handleSaveResource = async () => {
-    if (!formData.name || !formData.category) {
+    const finalName = formData.name || formData.category;
+    if (!finalName || !formData.category) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -365,59 +419,70 @@ export default function ResourceManagementPage() {
       const url = editingId ? `${API_URL}/assets/${editingId}` : `${API_URL}/assets`;
       const method = editingId ? "PUT" : "POST";
       
-      const payload = {
-        ...formData,
-        performedBy: user?.id || user?.employeeId || "System",
-        userName: user?.name || `${user?.firstName} ${user?.lastName}` || "System User"
-      };
+      const count = !editingId ? (formData.resourceCount || 1) : 1;
+      
+      for (let i = 0; i < count; i++) {
+        const payload = {
+          ...formData,
+          name: finalName,
+          performedBy: user?.id || user?.employeeId || "System",
+          userName: user?.name || `${user?.firstName} ${user?.lastName}` || "System User"
+        };
 
-      if (!editingId) {
-        if (!formData.assetId) {
-          const categoryName = (formData.category || "").trim().toUpperCase();
-          const map: Record<string, string> = {
-            "LAPTOP": "LAP",
-            "PRINTER": "PRT",
-            "MONITOR": "MON",
-            "KEYBOARD": "KEY",
-            "MOUSE": "MSE",
-            "HEADSET": "HDS",
-            "MOBILE": "MOB",
-            "ROUTER": "RTR",
-            "CHAIR": "CHR",
-            "DESK": "DSK",
-            "SOFTWARE": "SFT",
-            "LICENSE": "LIC",
-            "LICENSES": "LIC",
-            "UPS": "UPS",
-            "PC": "DSK"
-          };
-          let code = map[categoryName];
-          if (!code) {
-            const cleaned = categoryName.replace(/[^A-Z]/g, '');
-            code = cleaned.length >= 3 ? cleaned.substring(0, 3) : (cleaned + "SET").substring(0, 3);
+        if (!editingId) {
+          if (!formData.assetId) {
+            const categoryName = (formData.category || "").trim().toUpperCase();
+            const map: Record<string, string> = {
+              "LAPTOP": "LAP",
+              "PRINTER": "PRT",
+              "MONITOR": "MON",
+              "KEYBOARD": "KEY",
+              "MOUSE": "MSE",
+              "HEADSET": "HDS",
+              "MOBILE": "MOB",
+              "ROUTER": "RTR",
+              "CHAIR": "CHR",
+              "DESK": "DSK",
+              "SOFTWARE": "SFT",
+              "LICENSE": "LIC",
+              "LICENSES": "LIC",
+              "UPS": "UPS",
+              "PC": "DSK"
+            };
+            let code = map[categoryName];
+            if (!code) {
+              const cleaned = categoryName.replace(/[^A-Z]/g, '');
+              code = cleaned.length >= 3 ? cleaned.substring(0, 3) : (cleaned + "SET").substring(0, 3);
+            }
+            const nextNum = allResources.filter((res: any) => res.category === formData.category).length + 1 + i;
+            payload.assetId = `HK-${code}-${String(nextNum).padStart(3, '0')}`;
+          } else {
+            if (count > 1) {
+              payload.assetId = `${formData.assetId}-${i + 1}`;
+            }
           }
-          const nextNum = allResources.filter((res: any) => res.category === formData.category).length + 1;
-          payload.assetId = `HK-${code}-${String(nextNum).padStart(3, '0')}`;
+          if (!formData.serialNumber) {
+            payload.serialNumber = `SN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+          } else if (count > 1) {
+            payload.serialNumber = `${formData.serialNumber}-${i + 1}`;
+          }
         }
-        if (!formData.serialNumber) {
-          payload.serialNumber = `SN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to save one of the items");
         }
       }
 
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (response.ok) {
-        toast.success(editingId ? "Resource updated successfully" : "Resource added successfully");
-        handleCancel();
-        apiRefresh();
-        fetchLogs();
-      } else {
-        toast.error(editingId ? "Failed to update resource" : "Failed to add resource");
-      }
+      toast.success(editingId ? "Resource updated successfully" : `Successfully added ${count} resource(s)`);
+      handleCancel();
+      apiRefresh();
+      fetchLogs();
     } catch (error) {
       console.error(error);
       toast.error("An error occurred");
@@ -448,8 +513,13 @@ export default function ResourceManagementPage() {
     });
     if (!isConfirmed) return;
 
+    // Optimistically hide from UI instantly
+    setCategories(prev => prev.filter(cat => cat.id !== id));
+
     try {
-      const response = await fetch(`${API_URL}/asset-categories/${id}`, {
+      const perfBy = user?.id || user?.employeeId || "System";
+      const uName = user?.name || "System User";
+      const response = await fetch(`${API_URL}/asset-categories/${id}?performedBy=${encodeURIComponent(perfBy)}&userName=${encodeURIComponent(uName)}`, {
         method: "DELETE",
       });
 
@@ -457,10 +527,14 @@ export default function ResourceManagementPage() {
         toast.success("Category deleted successfully");
         fetchCategories();
       } else {
+        // Revert on failure
+        fetchCategories();
         toast.error("Failed to delete category");
       }
     } catch (error) {
       console.error(error);
+      // Revert on failure
+      fetchCategories();
       toast.error("An error occurred while deleting category");
     }
   };
@@ -479,7 +553,11 @@ export default function ResourceManagementPage() {
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(categoryFormData)
+        body: JSON.stringify({
+          ...categoryFormData,
+          performedBy: user?.id || user?.employeeId || "System",
+          userName: user?.name || "System User"
+        })
       });
 
       if (response.ok) {
@@ -487,6 +565,8 @@ export default function ResourceManagementPage() {
         setIsAddingCategoryMode(false);
         setEditingCategoryId(null);
         setCategoryFormData(initialCategoryFormState);
+        setIsAddingResourceCount(false);
+        setNewResourceCount("");
         fetchCategories();
       } else {
         toast.error(editingCategoryId ? "Failed to update category" : "Failed to add category");
@@ -503,6 +583,8 @@ export default function ResourceManagementPage() {
     setIsAddingCategoryMode(false);
     setEditingCategoryId(null);
     setCategoryFormData(initialCategoryFormState);
+    setIsAddingResourceCount(false);
+    setNewResourceCount("");
   };
 
   if (userLoading || permissionsLoading) {
@@ -535,7 +617,7 @@ export default function ResourceManagementPage() {
     );
   }
 
-  const rawResources = data?.assets || [];
+  const rawResources = (data?.assets || []).filter((r: any) => !deletedResourceIds.includes(r.id));
   const currentUserName = (user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`).trim().toLowerCase();
 
   const allResources = isEmployeeOnly 
@@ -544,11 +626,12 @@ export default function ResourceManagementPage() {
   const filteredResources = allResources.filter((res: any) => {
     const matchStatus = statusFilter === "all" || res.status.toLowerCase() === statusFilter.toLowerCase();
     const matchType = typeFilter === "all" || res.category === typeFilter;
+    const matchEmployee = isEmployeeOnly || employeeFilter === "all" || (res.assignedTo && res.assignedTo.trim().toLowerCase() === employeeFilter.trim().toLowerCase());
     const matchSearch = searchTerm === "" || 
                         res.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
                         res.assetId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         res.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchStatus && matchType && matchSearch;
+    return matchStatus && matchType && matchEmployee && matchSearch;
   });
 
   // Calculate statistics
@@ -612,15 +695,6 @@ export default function ResourceManagementPage() {
           <div className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Package className="w-4 h-4 text-muted-foreground" /> Resource Name <span className="text-red-500">*</span></label>
-                <Input 
-                  placeholder="e.g. Dell XPS 15 Laptop" 
-                  className="bg-white focus-visible:ring-brand-teal" 
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Hash className="w-4 h-4 text-muted-foreground" /> Asset Code (Asset ID)</label>
                 <Input 
                   placeholder="e.g. HK-LAP-001 (auto-generated if empty)" 
@@ -680,31 +754,6 @@ export default function ResourceManagementPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground/80 flex items-center gap-1.5"><CalendarIcon className="w-4 h-4 text-muted-foreground" /> Purchase Date</label>
-                <div className="relative">
-                  <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                  <Input 
-                    type="date"
-                    placeholder="Select date" 
-                    className="bg-white pr-10 focus-visible:ring-brand-teal" 
-                    value={formData.purchaseDate}
-                    onChange={(e) => setFormData({...formData, purchaseDate: e.target.value})}
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Coins className="w-4 h-4 text-muted-foreground" /> Value (Cost Price)</label>
-                <Input 
-                  type="number"
-                  placeholder="0.00" 
-                  className="bg-white focus-visible:ring-brand-teal" 
-                  value={formData.value}
-                  onChange={(e) => setFormData({...formData, value: parseFloat(e.target.value) || 0})}
-                />
-              </div>
-              
-              <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground/80 flex items-center gap-1.5"><Activity className="w-4 h-4 text-muted-foreground" /> Inventory Status</label>
                 <Select value={formData.status} onValueChange={handleStatusChange}>
                   <SelectTrigger className="w-full bg-white focus-visible:ring-brand-teal">
@@ -717,6 +766,20 @@ export default function ResourceManagementPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {!editingId && (
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Plus className="w-4 h-4 text-muted-foreground" /> Resource Count</label>
+                  <Input 
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                    className="bg-white focus-visible:ring-brand-teal" 
+                    value={formData.resourceCount || 1}
+                    onChange={(e) => setFormData({...formData, resourceCount: Math.max(1, parseInt(e.target.value) || 1)})}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -755,12 +818,6 @@ export default function ResourceManagementPage() {
   return (
     <div className="space-y-6 pb-10">
       <PageHeader title="Resource & Inventory Management">
-        {!isEmployeeOnly && (
-          <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm transition-all" onClick={() => setIsAddingMode(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Resource
-          </Button>
-        )}
       </PageHeader>
 
       {/* Tab Navigation */}
@@ -793,7 +850,7 @@ export default function ResourceManagementPage() {
       {activeTab === "overview" && !isEmployeeOnly && (
         <div className="space-y-8 animate-in fade-in-50 duration-200">
           {/* Top Level KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="bg-white border border-border rounded-2xl p-6 shadow-sm flex items-center justify-between group hover:border-brand-teal/30 transition-all hover:shadow-md">
               <div>
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Assets</span>
@@ -802,17 +859,6 @@ export default function ResourceManagementPage() {
               </div>
               <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 transition-transform group-hover:scale-110">
                 <Archive className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="bg-white border border-border rounded-2xl p-6 shadow-sm flex items-center justify-between group hover:border-brand-teal/30 transition-all hover:shadow-md">
-              <div>
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock Valuation</span>
-                <h3 className="text-3xl font-bold text-foreground mt-1">₹{totalValue.toLocaleString('en-IN')}</h3>
-                <span className="text-xs text-emerald-600 font-semibold mt-2 inline-block">Active investments</span>
-              </div>
-              <div className="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center text-emerald-600 transition-transform group-hover:scale-110">
-                <Coins className="w-6 h-6" />
               </div>
             </div>
 
@@ -859,7 +905,6 @@ export default function ResourceManagementPage() {
                       <th className="px-6 py-4 font-bold text-foreground text-center">Available Stock</th>
                       <th className="px-6 py-4 font-bold text-foreground text-center">Allocated (Assigned)</th>
                       <th className="px-6 py-4 font-bold text-foreground text-center">In Maintenance</th>
-                      <th className="px-6 py-4 font-bold text-foreground text-right">Valuation</th>
                       <th className="px-6 py-4 font-bold text-foreground">Allocation Ratio</th>
                     </tr>
                   </thead>
@@ -886,9 +931,6 @@ export default function ResourceManagementPage() {
                           <span className={cat.maintenance > 0 ? "text-amber-700 font-semibold" : "text-muted-foreground"}>
                             {cat.maintenance || "-"}
                           </span>
-                        </td>
-                        <td className="px-6 py-4 text-right font-bold text-foreground text-sm">
-                          ₹{(cat.valuation || cat.valuation_calculated || 0).toLocaleString('en-IN')}
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -928,7 +970,7 @@ export default function ResourceManagementPage() {
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-full sm:w-[140px] bg-gray-50">
-                    <span className="text-muted-foreground mr-1">Status:</span> <SelectValue />
+                    <SelectValue placeholder="Select Status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
@@ -939,7 +981,7 @@ export default function ResourceManagementPage() {
                 </Select>
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
                   <SelectTrigger className="w-full sm:w-[150px] bg-gray-50">
-                    <span className="text-muted-foreground mr-1">Type:</span> <SelectValue />
+                    <SelectValue placeholder="Select Type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
@@ -948,6 +990,24 @@ export default function ResourceManagementPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {!isEmployeeOnly && (
+                  <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px] bg-gray-50">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Employees</SelectItem>
+                      {data?.employees?.map((emp: any) => {
+                        const name = emp.name || `${emp.firstName} ${emp.lastName}`;
+                        return (
+                          <SelectItem key={emp.id} value={name}>
+                            {name}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           </div>
@@ -956,11 +1016,9 @@ export default function ResourceManagementPage() {
             <table className="w-full text-sm text-left whitespace-nowrap">
               <thead className="text-xs text-muted-foreground font-semibold border-b border-border bg-gray-50/50 uppercase tracking-wider">
                 <tr>
-                  <th className="px-6 py-4 font-bold text-foreground">Name</th>
                   <th className="px-6 py-4 font-bold text-foreground">Resource ID</th>
                   <th className="px-6 py-4 font-bold text-foreground">Category</th>
                   <th className="px-6 py-4 font-bold text-foreground text-center">Condition</th>
-                  <th className="px-6 py-4 font-bold text-foreground text-right">Valuation</th>
                   <th className="px-6 py-4 font-bold text-foreground">Status</th>
                   <th className="px-6 py-4 font-bold text-foreground">Assigned To</th>
                   {!isEmployeeOnly && <th className="px-6 py-4 font-bold text-foreground text-right">Actions</th>}
@@ -969,7 +1027,7 @@ export default function ResourceManagementPage() {
               <tbody className="divide-y divide-border">
                 {filteredResources.length === 0 ? (
                   <tr>
-                    <td colSpan={isEmployeeOnly ? 7 : 8} className="px-6 py-10 text-center text-muted-foreground">
+                    <td colSpan={isEmployeeOnly ? 5 : 6} className="px-6 py-10 text-center text-muted-foreground">
                       {isLoading ? "Loading resources..." : "No resources matching the criteria found."}
                     </td>
                   </tr>
@@ -980,20 +1038,7 @@ export default function ResourceManagementPage() {
                       key={res.id} 
                       className="hover:bg-gray-50/30 transition-colors"
                     >
-                      <td className={`px-6 py-4 font-semibold text-foreground text-sm ${!isEmployeeOnly ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} onClick={isEmployeeOnly ? undefined : (e) => { e.stopPropagation(); setEditingCell({ id: res.id, field: 'name' }); setTempValue(res.name); }}>
-                        {editingCell?.id === res.id && editingCell?.field === 'name' ? (
-                          <Input 
-                            value={tempValue} 
-                            onChange={(e) => setTempValue(e.target.value)} 
-                            onBlur={() => handleInlineSave(res.id, 'name', tempValue)}
-                            onKeyDown={(e) => handleKeyDown(e, res.id, 'name')}
-                            autoFocus
-                            className="h-8 py-1 text-sm bg-white"
-                          />
-                        ) : (
-                          res.name
-                        )}
-                      </td>
+
                       <td className={`px-6 py-4 text-xs font-semibold text-muted-foreground font-mono ${!isEmployeeOnly ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} onClick={isEmployeeOnly ? undefined : (e) => { e.stopPropagation(); setEditingCell({ id: res.id, field: 'assetId' }); setTempValue(res.assetId); }}>
                         {editingCell?.id === res.id && editingCell?.field === 'assetId' ? (
                           <Input 
@@ -1043,21 +1088,7 @@ export default function ResourceManagementPage() {
                           </span>
                         )}
                       </td>
-                      <td className={`px-6 py-4 text-right font-bold text-foreground text-sm ${!isEmployeeOnly ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} onClick={isEmployeeOnly ? undefined : (e) => { e.stopPropagation(); setEditingCell({ id: res.id, field: 'value' }); setTempValue(res.value || 0); }}>
-                        {editingCell?.id === res.id && editingCell?.field === 'value' ? (
-                          <Input 
-                            type="number"
-                            value={tempValue} 
-                            onChange={(e) => setTempValue(parseFloat(e.target.value) || 0)} 
-                            onBlur={() => handleInlineSave(res.id, 'value', tempValue)}
-                            onKeyDown={(e) => handleKeyDown(e, res.id, 'value')}
-                            autoFocus
-                            className="h-8 py-1 text-sm bg-white text-right w-24 ml-auto"
-                          />
-                        ) : (
-                          `₹${(res.value || 0).toLocaleString('en-IN')}`
-                        )}
-                      </td>
+
                       <td className={`px-6 py-4 ${!isEmployeeOnly ? 'cursor-pointer hover:bg-gray-50/50' : ''}`} onClick={isEmployeeOnly ? undefined : (e) => { e.stopPropagation(); setEditingCell({ id: res.id, field: 'status' }); setTempValue(res.status); }}>
                         {editingCell?.id === res.id && editingCell?.field === 'status' ? (
                           <Select value={tempValue} onValueChange={(val) => handleInlineSave(res.id, 'status', val)}>
@@ -1112,6 +1143,15 @@ export default function ResourceManagementPage() {
                               variant="ghost" 
                               size="icon" 
                               className="w-8 h-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/50 rounded-lg"
+                              title="View Resource Logs"
+                              onClick={() => setSelectedItemForLogs({ type: 'resource', id: res.id, name: res.name || res.assetId })}
+                            >
+                              <History className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="w-8 h-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/50 rounded-lg"
                               onClick={() => handleEditClick(res)}
                             >
                               <Pencil className="w-4 h-4" />
@@ -1155,6 +1195,81 @@ export default function ResourceManagementPage() {
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-foreground">Total Resources</label>
+                  <Input 
+                    type="number"
+                    placeholder="e.g. 10" 
+                    value={categoryFormData.totalItems || ""}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, totalItems: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+
+                {(categoryFormData.totalItems || 0) > 0 && (
+                  <div className="pt-1">
+                    {!isAddingResourceCount ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white font-medium text-xs shadow-sm"
+                        onClick={() => {
+                          setIsAddingResourceCount(true);
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add New Resources
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2 border border-brand-teal/20 p-3 rounded-lg bg-brand-teal/5">
+                        <div className="flex-1">
+                          <label className="text-[10px] font-bold text-brand-teal block mb-1">Add New Resource Count</label>
+                          <Input 
+                            type="number"
+                            placeholder="e.g. 5" 
+                            className="h-8 text-xs bg-white"
+                            value={newResourceCount}
+                            onChange={(e) => setNewResourceCount(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex gap-1.5 self-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium text-xs h-8 px-3"
+                            onClick={() => {
+                              const countToAdd = parseInt(newResourceCount);
+                              if (isNaN(countToAdd) || countToAdd <= 0) {
+                                toast.error("Please enter a valid count greater than 0");
+                                return;
+                              }
+                              setCategoryFormData({
+                                ...categoryFormData,
+                                totalItems: (categoryFormData.totalItems || 0) + countToAdd
+                              });
+                              setIsAddingResourceCount(false);
+                              setNewResourceCount("");
+                              toast.success(`Added ${countToAdd} to total resources`);
+                            }}
+                          >
+                            Add
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:bg-gray-200/50 text-xs h-8 px-2"
+                            onClick={() => {
+                              setIsAddingResourceCount(false);
+                              setNewResourceCount("");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-foreground">Category Description</label>
@@ -1192,13 +1307,14 @@ export default function ResourceManagementPage() {
                     <tr>
                       <th className="px-6 py-4 font-bold text-foreground">Category</th>
                       <th className="px-6 py-4 font-bold text-foreground">Description</th>
+                      <th className="px-6 py-4 font-bold text-foreground">Total Resources</th>
                       <th className="px-6 py-4 font-bold text-foreground text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {categoryStats.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-6 py-10 text-center text-muted-foreground">
+                        <td colSpan={4} className="px-6 py-10 text-center text-muted-foreground">
                           {categoriesLoading ? "Syncing categories..." : "No categories found. Click 'Add Category' to create one."}
                         </td>
                       </tr>
@@ -1210,8 +1326,20 @@ export default function ResourceManagementPage() {
                         <td className="px-6 py-4 text-xs text-muted-foreground">
                           {cat.description || "No description provided."}
                         </td>
+                        <td className="px-6 py-4 text-sm font-semibold text-foreground">
+                          {cat.totalItems || 0}
+                        </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="w-8 h-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/50 rounded-lg"
+                              title="View Category Logs"
+                              onClick={() => setSelectedItemForLogs({ type: 'category', id: cat.id, name: cat.name })}
+                            >
+                              <History className="w-4 h-4" />
+                            </Button>
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -1240,6 +1368,137 @@ export default function ResourceManagementPage() {
         </div>
       )}
 
+      {activeTab === "history" && !isEmployeeOnly && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in-50 duration-200">
+          {/* Inventory Logs Panel */}
+          <div className="bg-white border border-border rounded-2xl shadow-sm flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-border bg-gray-50/50">
+              <h3 className="text-md font-bold text-foreground flex items-center gap-2">
+                <Archive className="w-5 h-5 text-brand-teal" />
+                Inventory Logs
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Logs for individual resources & inventory updates.</p>
+            </div>
+            
+            <div className="p-6 divide-y divide-border overflow-y-auto max-h-[500px]">
+              {logsLoading ? (
+                <div className="text-center py-10 text-xs text-muted-foreground">Loading logs...</div>
+              ) : inventoryLogs.length === 0 ? (
+                <div className="text-center py-10 text-xs text-muted-foreground">No inventory logs found.</div>
+              ) : (
+                inventoryLogs.map((log: any, idx: number) => (
+                  <div key={log.id || idx} className="py-3 first:pt-0 last:pb-0 text-xs space-y-1">
+                    <div className="flex justify-between items-start">
+                      <span className="font-semibold text-foreground">{log.action}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">{log.timestamp}</span>
+                    </div>
+                    <p className="text-muted-foreground">{log.details}</p>
+                    <div className="text-[10px] text-brand-teal/80 font-medium">
+                      By: {log.userName} ({log.performedBy})
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Category Logs Panel */}
+          <div className="bg-white border border-border rounded-2xl shadow-sm flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-border bg-gray-50/50">
+              <h3 className="text-md font-bold text-foreground flex items-center gap-2">
+                <Layers className="w-5 h-5 text-brand-teal" />
+                Category Logs
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Logs for asset category creation & updates.</p>
+            </div>
+            
+            <div className="p-6 divide-y divide-border overflow-y-auto max-h-[500px]">
+              {logsLoading ? (
+                <div className="text-center py-10 text-xs text-muted-foreground">Loading logs...</div>
+              ) : categoryLogs.length === 0 ? (
+                <div className="text-center py-10 text-xs text-muted-foreground">No category logs found.</div>
+              ) : (
+                categoryLogs.map((log: any, idx: number) => (
+                  <div key={log.id || idx} className="py-3 first:pt-0 last:pb-0 text-xs space-y-1">
+                    <div className="flex justify-between items-start">
+                      <span className="font-semibold text-foreground">{log.action}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">{log.timestamp}</span>
+                    </div>
+                    <p className="text-muted-foreground">{log.details}</p>
+                    <div className="text-[10px] text-brand-teal/80 font-medium">
+                      By: {log.userName} ({log.performedBy})
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedItemForLogs && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-border rounded-2xl shadow-xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-border bg-gray-50/50 flex justify-between items-center">
+              <div>
+                <h3 className="text-md font-bold text-foreground">
+                  Activity Logs: {selectedItemForLogs.name}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5 uppercase tracking-wider font-semibold">
+                  Type: {selectedItemForLogs.type}
+                </p>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-muted-foreground hover:text-foreground h-8 px-2"
+                onClick={() => setSelectedItemForLogs(null)}
+              >
+                Close
+              </Button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto flex-1 divide-y divide-border">
+              {itemLogsLoading ? (
+                <div className="text-center py-12 text-sm text-muted-foreground flex flex-col items-center justify-center gap-2">
+                  <RefreshCw className="w-5 h-5 animate-spin text-brand-teal" />
+                  <span>Loading logs...</span>
+                </div>
+              ) : itemLogs.length === 0 ? (
+                <div className="text-center py-12 text-sm text-muted-foreground">
+                  No activity logs recorded for this item.
+                </div>
+              ) : (
+                itemLogs.map((log: any, idx: number) => (
+                  <div key={log.id || idx} className="py-3.5 first:pt-0 last:pb-0 text-xs space-y-1.5">
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="font-semibold text-foreground text-sm">{log.action}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono bg-gray-100 px-1.5 py-0.5 rounded">{log.timestamp}</span>
+                    </div>
+                    <p className="text-muted-foreground leading-relaxed">{log.details}</p>
+                    <div className="text-[10px] text-brand-teal/80 font-semibold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-brand-teal rounded-full"></span>
+                      Performed by: {log.userName} ({log.performedBy})
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-border flex justify-end bg-gray-50/30">
+              <Button 
+                className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm text-xs px-4 py-2 h-9" 
+                onClick={() => setSelectedItemForLogs(null)}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
