@@ -272,6 +272,11 @@ export default function TaskManagementPage() {
       setEditingTaskId(null);
       return;
     }
+    const originalTask = tasks.find(t => t.id === taskId);
+    if (originalTask && originalTask.title === editTaskTitle) {
+      setEditingTaskId(null);
+      return;
+    }
     
     try {
       const res = await fetch(`${API_URL}/tasks/${taskId}`, {
@@ -298,6 +303,11 @@ export default function TaskManagementPage() {
   };
 
   const handleUpdateDesc = async (taskId: string) => {
+    const originalTask = tasks.find(t => t.id === taskId);
+    if (originalTask && (originalTask.description === editTaskDesc || originalTask.desc === editTaskDesc)) {
+      setEditingDescId(null);
+      return;
+    }
     try {
       const res = await fetch(`${API_URL}/tasks/${taskId}`, {
         method: "PUT",
