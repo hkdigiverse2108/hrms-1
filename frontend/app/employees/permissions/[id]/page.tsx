@@ -57,6 +57,7 @@ const PERMISSION_GROUPS = [
     modules: [
       { moduleName: 'attendance', displayName: 'Attendance', tabUrl: '/attendance' },
       { moduleName: 'leave', displayName: 'Leave', tabUrl: '/leave' },
+      { moduleName: 'schedule', displayName: 'Schedule', tabUrl: '/schedule' },
     ]
   },
   {
@@ -65,6 +66,7 @@ const PERMISSION_GROUPS = [
     modules: [
       { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
       { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
+      { moduleName: 'personal-tasks', displayName: 'Personal Tasks', tabUrl: '/task' },
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
