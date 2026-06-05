@@ -223,7 +223,7 @@ export default function RecruitmentPage() {
     uploadData.append('file', file)
 
     const backendUrl = typeof window !== 'undefined'
-      ? `${window.location.protocol}//127.0.0.1:8000`
+      ? `${window.location.protocol}//${window.location.hostname}:8000`
       : 'http://127.0.0.1:8000'
 
     try {
