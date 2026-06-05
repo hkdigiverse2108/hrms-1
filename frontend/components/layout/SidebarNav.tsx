@@ -173,7 +173,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem(<Link href="/leave">Leave</Link>, "/leave", <Calendar className="w-5 h-5" />));
     }
 
-    if (user) {
+    if (isAdmin || checkPermission('schedule', 'canView')) {
       menuItems.push(getItem(<Link href="/schedule">Schedule</Link>, "/schedule", <CalendarDays className="w-5 h-5" />));
     }
 
@@ -221,7 +221,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       ));
     }
 
-    if (user) {
+    if (isAdmin || checkPermission('personal-tasks', 'canView')) {
       menuItems.push(getItem(
         <Link href="/task">Tasks</Link>,
         "/task",
