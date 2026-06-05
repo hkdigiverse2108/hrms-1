@@ -205,6 +205,7 @@ export default function ChatPage() {
   const [laterTab, setLaterTab] = useState<"In progress" | "Archived" | "Completed">("In progress");
   const [showDeletedNotification, setShowDeletedNotification] = useState(true); // Placeholder for demo, normally would be based on actual deletion events
   const [showNewChat, setShowNewChat] = useState(false);
+  const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
   const [previewImage, setPreviewImage] = useState<{url: string, name: string} | null>(null);
 
   const [chatChannels, setChatChannels] = useState<any[]>([]);
@@ -3117,11 +3118,18 @@ export default function ChatPage() {
               <Input 
                 placeholder="Search colleagues..."
                 className="pl-10 rounded-xl"
-                // Optional: add local search state here
+                value={newChatSearchQuery}
+                onChange={(e) => setNewChatSearchQuery(e.target.value)}
               />
             </div>
             <div className="max-h-[300px] overflow-y-auto space-y-1 pr-2">
-              {employees.map((emp: any) => (
+              {employees.filter((emp: any) => {
+                if (!newChatSearchQuery.trim()) return true;
+                const q = newChatSearchQuery.toLowerCase().trim();
+                const name = (emp.name || "").toLowerCase();
+                const designation = (emp.designation || "").toLowerCase();
+                return name.includes(q) || designation.includes(q);
+              }).map((emp: any) => (
                 <div 
                   key={emp.id}
                   onClick={() => {
