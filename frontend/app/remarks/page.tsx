@@ -324,7 +324,7 @@ export default function RemarksPage() {
   const handleDeleteRemark = async (id: string) => {
     const isConfirmed = await confirm({
       title: "Confirm Action",
-      message: "Are you sure you want to delete this remark?",
+      message: "Are you sure you want to delete this penalty?",
       destructive: true,
       confirmText: "Confirm"
     });
@@ -341,7 +341,7 @@ export default function RemarksPage() {
   const handleRestoreRemark = async (id: string) => {
     const isConfirmed = await confirm({
       title: "Confirm Action",
-      message: "Are you sure you want to restore this remark?",
+      message: "Are you sure you want to restore this penalty?",
       destructive: true,
       confirmText: "Confirm"
     });
@@ -358,7 +358,7 @@ export default function RemarksPage() {
   const handlePermanentDeleteRemark = async (id: string) => {
     const isConfirmed = await confirm({
       title: "Confirm Action",
-      message: "WARNING: Are you sure you want to PERMANENTLY delete this remark? This action cannot be undone.",
+      message: "WARNING: Are you sure you want to PERMANENTLY delete this penalty? This action cannot be undone.",
       destructive: true,
       confirmText: "Confirm"
     });
@@ -552,8 +552,8 @@ export default function RemarksPage() {
   return (
     <div className="space-y-6 pb-10">
       <PageHeader 
-        title="Remarks" 
-        description="Manage employee feedback, warnings, and performance notes."
+        title="Penalty" 
+        description="Manage employee violations, penalties, and warning notes."
       >
         {(canAddRemarks || canEditRemarks) && (
           <div className="flex flex-col sm:flex-row gap-2 mt-4 sm:mt-0">
@@ -572,13 +572,13 @@ export default function RemarksPage() {
                 <DialogTrigger asChild>
                   <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto">
                     <Plus className="w-4 h-4 mr-2" />
-                    New Remark
+                    New Penalty
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[550px]">
                   <DialogHeader>
-                    <DialogTitle className="text-xl font-bold">Add New Remark</DialogTitle>
-                    <p className="text-sm text-muted-foreground mt-1">Create a new feedback, warning, or performance note for an employee.</p>
+                    <DialogTitle className="text-xl font-bold">Add New Penalty</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-1">Create a new penalty, warning, or violation record for an employee.</p>
                   </DialogHeader>
                   
                   <div className="space-y-5 py-4">
@@ -610,21 +610,21 @@ export default function RemarksPage() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-semibold text-foreground">Remark Type</label>
+                      <label className="text-sm font-semibold text-foreground">Penalty Type</label>
                       <Select onValueChange={(val) => {
                         const penalty = penaltyTypes.find(p => p.name === val);
                         if (penalty) {
                           setNewRemark(prev => ({ 
-                            ...prev, 
-                            type: val,
-                            details: `${penalty.name}. Penalty amount of ₹${penalty.amount} applied.` 
+                             ...prev, 
+                             type: val,
+                             details: `${penalty.name}. Penalty amount of ₹${penalty.amount} applied.` 
                           }));
                         } else {
                           setNewRemark(prev => ({ ...prev, type: val }));
                         }
                       }} value={newRemark.type}>
                         <SelectTrigger className="w-full bg-white shadow-sm border-border hover:bg-gray-50/50 transition-colors">
-                          <SelectValue placeholder="Select remark type" />
+                          <SelectValue placeholder="Select penalty type" />
                         </SelectTrigger>
                         <SelectContent>
                           <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Violations & Penalties</div>
@@ -636,11 +636,11 @@ export default function RemarksPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-semibold text-foreground">Remark Details</label>
+                      <label className="text-sm font-semibold text-foreground">Penalty Details</label>
                       <Textarea 
                         value={newRemark.details}
                         onChange={(e) => setNewRemark(prev => ({ ...prev, details: e.target.value }))}
-                        placeholder="Enter detailed description of the remark..." 
+                        placeholder="Enter detailed description of the penalty..." 
                         className="h-32 resize-none bg-white"
                       />
                     </div>
@@ -653,7 +653,7 @@ export default function RemarksPage() {
                       className="w-full sm:w-auto bg-brand-teal hover:bg-brand-teal-light text-white font-semibold" 
                       onClick={handleCreateRemark}
                     >
-                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Send Remark"}
+                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Apply Penalty"}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -665,16 +665,16 @@ export default function RemarksPage() {
 
       <div className="space-y-6">
 
-      {/* Remarks Leaderboard */}
+      {/* Penalty Leaderboard */}
       {leaderboard.length > 0 && (
         <div className="bg-gradient-to-br from-teal-50/60 via-white to-slate-50 border border-slate-200/80 rounded-xl p-5 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-2">
             <div>
               <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-brand-teal animate-pulse"></span>
-                Remarks Leaderboard
+                Penalty Leaderboard
               </h3>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">Public statistics showing top remarks and active penalty counts across the company.</p>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Public statistics showing top violations and active penalty counts across the company.</p>
             </div>
             <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-100 shadow-2xs text-[11px] font-bold text-slate-500 uppercase tracking-wider self-start md:self-auto">
               🏆 Top Penalty Leaderboard
@@ -714,7 +714,7 @@ export default function RemarksPage() {
                   
                   <div className="mt-4 flex items-center justify-between w-full pt-3 border-t border-slate-100 text-xs">
                     <div className="text-left">
-                      <span className="text-[9px] text-muted-foreground uppercase font-extrabold tracking-wider block">Remarks</span>
+                      <span className="text-[9px] text-muted-foreground uppercase font-extrabold tracking-wider block">Violations</span>
                       <span className="font-black text-slate-800 text-sm">{item.count}</span>
                     </div>
                     <div className="text-right">
@@ -733,8 +733,8 @@ export default function RemarksPage() {
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">Edit Remark</DialogTitle>
-            <p className="text-sm text-muted-foreground mt-1">Update employee feedback, warnings, and performance notes.</p>
+            <DialogTitle className="text-xl font-bold">Edit Penalty</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">Update employee violations, penalties, and warning notes.</p>
           </DialogHeader>
           
           {selectedRemark && (
@@ -763,7 +763,7 @@ export default function RemarksPage() {
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Remark Type</label>
+                  <label className="text-sm font-semibold text-foreground">Penalty Type</label>
                   <Select 
                     value={selectedRemark.type} 
                     onValueChange={(val) => setSelectedRemark((prev:any) => ({ ...prev, type: val }))}
@@ -794,7 +794,7 @@ export default function RemarksPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Remark Details</label>
+                <label className="text-sm font-semibold text-foreground">Penalty Details</label>
                 <Textarea 
                   value={selectedRemark.details}
                   onChange={(e) => setSelectedRemark((prev:any) => ({ ...prev, details: e.target.value }))}
@@ -819,8 +819,8 @@ export default function RemarksPage() {
 
       <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCurrentPage(1); }} className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
-          <TabsTrigger value="active">Active Remarks ({visibleRemarks.filter(r => !r.isDeleted).length})</TabsTrigger>
-          <TabsTrigger value="deleted">Deleted Remarks ({visibleRemarks.filter(r => r.isDeleted).length})</TabsTrigger>
+          <TabsTrigger value="active">Active Penalties ({visibleRemarks.filter(r => !r.isDeleted).length})</TabsTrigger>
+          <TabsTrigger value="deleted">Deleted Penalties ({visibleRemarks.filter(r => r.isDeleted).length})</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -916,7 +916,7 @@ export default function RemarksPage() {
                 <th className="px-6 py-4">Date</th>
                 <th className="px-6 py-4">Employee</th>
                 <th className="px-6 py-4">Type</th>
-                <th className="px-6 py-4">Remark Details</th>
+                <th className="px-6 py-4">Penalty Details</th>
                 <th className="px-6 py-4">Added By</th>
                 <th className="px-6 py-4 text-right">Penalty</th>
                 {(canEditRemarks || canDeleteRemarks) && <th className="px-6 py-4 text-right">Action</th>}
@@ -927,13 +927,13 @@ export default function RemarksPage() {
                 <tr>
                   <td colSpan={(canEditRemarks || canDeleteRemarks) ? 7 : 6} className="px-6 py-10 text-center">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
-                    <p className="text-sm text-muted-foreground mt-2">Loading remarks...</p>
+                    <p className="text-sm text-muted-foreground mt-2">Loading penalties...</p>
                   </td>
                 </tr>
               ) : paginatedRemarks.length === 0 ? (
                 <tr>
                   <td colSpan={(canEditRemarks || canDeleteRemarks) ? 7 : 6} className="px-6 py-10 text-center text-muted-foreground">
-                    No remarks found.
+                    No penalties found.
                   </td>
                 </tr>
               ) : (
@@ -982,7 +982,7 @@ export default function RemarksPage() {
                               variant="ghost" 
                               size="icon" 
                               className="h-8 w-8 text-muted-foreground hover:text-green-600" 
-                              title="Restore Remark"
+                              title="Restore Penalty"
                               onClick={() => handleRestoreRemark(remark.id)}
                             >
                               <RotateCcw className="w-3.5 h-3.5" />
@@ -994,7 +994,7 @@ export default function RemarksPage() {
                                   variant="ghost" 
                                   size="icon" 
                                   className="h-8 w-8 text-muted-foreground hover:text-brand-teal" 
-                                  title="Edit Remark"
+                                  title="Edit Penalty"
                                   onClick={() => openEditModal(remark)}
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
@@ -1005,7 +1005,7 @@ export default function RemarksPage() {
                                   variant="ghost" 
                                   size="icon" 
                                   className="h-8 w-8 text-muted-foreground hover:text-red-600" 
-                                  title="Delete Remark"
+                                  title="Delete Penalty"
                                   onClick={() => handleDeleteRemark(remark.id)}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />

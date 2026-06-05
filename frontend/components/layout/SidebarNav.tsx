@@ -193,7 +193,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
     
     if (user) {
-      menuItems.push(getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />));
+      menuItems.push(getItem(<Link href="/remarks">Penalty</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />));
     }
 
     if (isAdmin || checkPermission('review', 'canView')) {
