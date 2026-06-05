@@ -338,6 +338,8 @@ export default function TaskManagementPage() {
   const [activeAssignees, setActiveAssignees] = useState<string[]>([]);
   const [activeDateRange, setActiveDateRange] = useState<{from: Date | undefined, to?: Date | undefined} | undefined>();
   const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+  const [assignedToMe, setAssignedToMe] = useState(false);
+  const [createdByMe, setCreatedByMe] = useState(false);
 
   const toggleFilter = (state: string[], setState: React.Dispatch<React.SetStateAction<string[]>>, val: string) => {
     if (state.includes(val)) {
@@ -369,7 +371,10 @@ export default function TaskManagementPage() {
       dateMatch = false; // Filter out tasks with no due date if a date filter is applied
     }
     
-    return statusMatch && priorityMatch && assigneeMatch && dateMatch;
+    const myAssignedMatch = !assignedToMe || task.assignedToId === user?.id;
+    const myCreatedMatch = !createdByMe || task.assignedById === user?.id;
+
+    return statusMatch && priorityMatch && assigneeMatch && dateMatch && myAssignedMatch && myCreatedMatch;
   });
 
   const sortedTasks = [...filteredTasks].sort((a, b) => {
@@ -698,7 +703,7 @@ export default function TaskManagementPage() {
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
         <div className="p-6 border-b border-border">
           {/* Inline Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 animate-in fade-in slide-in-from-top-2">
             {/* Status Filter */}
             <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Status</label>
@@ -863,6 +868,33 @@ export default function TaskManagementPage() {
                       Clear
                     </Button>
                   )}
+                </div>
+              </div>
+
+              {/* Quick Filters */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Quick Filters</label>
+                <div className="flex flex-col gap-1.5">
+                  <div 
+                    onClick={() => setAssignedToMe(!assignedToMe)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors border w-max ${
+                      assignedToMe 
+                        ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
+                        : 'bg-white border-border text-foreground hover:bg-gray-50'
+                    }`}
+                  >
+                    Assigned to me
+                  </div>
+                  <div 
+                    onClick={() => setCreatedByMe(!createdByMe)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors border w-max ${
+                      createdByMe 
+                        ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
+                        : 'bg-white border-border text-foreground hover:bg-gray-50'
+                    }`}
+                  >
+                    Created by me
+                  </div>
                 </div>
               </div>
             </div>
