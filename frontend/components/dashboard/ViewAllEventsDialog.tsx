@@ -99,7 +99,7 @@ export function ViewAllEventsDialog({
                            <div className="text-[11px] text-gray-400 font-medium">{event.time}</div>
                          )}
                          
-                         {canAddEvents && event.type !== 'birthday' && (
+                         {canAddEvents && event.type !== 'birthday' && !event.isSchedule && (
                            <div className="flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button 
                                 onClick={() => {
