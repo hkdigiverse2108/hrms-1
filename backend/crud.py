@@ -1173,11 +1173,20 @@ async def create_application(db, app: schemas.ApplicationCreate):
     
     result = await create_item(db, "applications", app_dict)
     
+    # Increment the application count for the job opening
+    job_title = app_dict.get("jobTitle")
+    if job_title:
+        await db.job_openings.update_one(
+            {"title": job_title},
+            {"$inc": {"applications": 1}}
+        )
+    
     await log_activity(db, "Created", performedBy, userName, f"Candidate '{app_dict.get('candidateName')}' was added to the system.", applicationId=result["id"])
     
     return result
+
 async def update_application(db, app_id: str, update: schemas.ApplicationUpdate):
-    # Fetch existing to check for status change
+    # Fetch existing to check for status change and job title change
     existing = await db.applications.find_one({"_id": ObjectId(app_id)})
     update_dict = update.dict(exclude_unset=True)
     
@@ -1193,6 +1202,51 @@ async def update_application(db, app_id: str, update: schemas.ApplicationUpdate)
         details = []
         if "status" in update_dict and existing.get("status") != update_dict["status"]:
             details.append(f"Status changed from '{existing.get('status')}' to '{update_dict['status']}'")
+            
+            # Map hiring board stage back to referral status
+            STAGE_TO_REFERRAL_STATUS = {
+                "new": "Contacted",
+                "tl_approved": "TL Approved",
+                "interview": "Scheduled Interview",
+                "selected": "Selected",
+                "rejected": "Rejected"
+            }
+            ref_status = STAGE_TO_REFERRAL_STATUS.get(update_dict["status"])
+            if ref_status:
+                await db.referrals.update_many(
+                    {
+                        "candidateName": existing.get("candidateName"),
+                        "phone": existing.get("phone")
+                    },
+                    {"$set": {"status": ref_status}}
+                )
+
+            # Auto close Job Opening when candidate is selected
+            if update_dict["status"] == "selected":
+                job_title = update_dict.get("jobTitle") or existing.get("jobTitle")
+                if job_title:
+                    await db.job_openings.update_one(
+                        {"title": job_title},
+                        {"$set": {"status": "closed"}}
+                    )
+            # Auto reopen Job Opening when candidate is moved from Selected to Rejected (or other stages)
+            elif existing.get("status") == "selected" and update_dict["status"] != "selected":
+                job_title = update_dict.get("jobTitle") or existing.get("jobTitle")
+                if job_title:
+                    await db.job_openings.update_one(
+                        {"title": job_title},
+                        {"$set": {"status": "open"}}
+                    )
+
+        # Handle job title changes and update counts
+        if "jobTitle" in update_dict and existing.get("jobTitle") != update_dict["jobTitle"]:
+            old_job = existing.get("jobTitle")
+            new_job = update_dict["jobTitle"]
+            if old_job:
+                await db.job_openings.update_one({"title": old_job}, {"$inc": {"applications": -1}})
+            if new_job:
+                await db.job_openings.update_one({"title": new_job}, {"$inc": {"applications": 1}})
+
         if "interviewerId" in update_dict and existing.get("interviewerId") != update_dict["interviewerId"]:
             details.append(f"Interviewer assigned: {update_dict.get('interviewerName')}")
         if "interviewDate" in update_dict and existing.get("interviewDate") != update_dict["interviewDate"]:
@@ -1216,7 +1270,16 @@ async def update_application(db, app_id: str, update: schemas.ApplicationUpdate)
             
     updated_doc = await db.applications.find_one({"_id": ObjectId(app_id)})
     return fix_id(updated_doc)
-async def delete_application(db, app_id: str): return await delete_item(db, "applications", app_id)
+async def delete_application(db, app_id: str):
+    existing = await db.applications.find_one({"_id": ObjectId(app_id)})
+    if existing:
+        job_title = existing.get("jobTitle")
+        if job_title:
+            await db.job_openings.update_one(
+                {"title": job_title},
+                {"$inc": {"applications": -1}}
+            )
+    return await delete_item(db, "applications", app_id)
 
 async def get_interns(db, skip: int = 0, limit: int = 100): return await get_items(db, "interns", skip, limit)
 async def create_intern(db, intern: schemas.InternCreate): return await create_item(db, "interns", intern.dict())
@@ -4326,15 +4389,51 @@ async def get_next_invoice_number(db, invoice_type: str = "Tax Invoice", tax_typ
     return f"{prefix}-{next_num:03d}"
 
 # Referral (Reference) CRUD
+async def resolve_referral_status(db, referral: dict) -> dict:
+    if not referral:
+        return referral
+    # Look for matching application by candidateName and phone
+    app = await db.applications.find_one({
+        "candidateName": referral.get("candidateName"),
+        "phone": referral.get("phone")
+    })
+    if app:
+        STAGE_TO_REFERRAL_STATUS = {
+            "new": "Contacted",
+            "tl_approved": "TL Approved",
+            "interview": "Scheduled Interview",
+            "selected": "Selected",
+            "rejected": "Rejected"
+        }
+        app_status = app.get("status")
+        mapped_status = STAGE_TO_REFERRAL_STATUS.get(app_status)
+        if mapped_status:
+            referral["status"] = mapped_status
+    return referral
+
 async def get_referrals(db, skip: int = 0, limit: int = 10000):
     cursor = db.referrals.find().skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
-    return [fix_id(row) for row in rows]
+    referrals = [fix_id(row) for row in rows]
+    
+    resolved_referrals = []
+    for ref in referrals:
+        resolved = await resolve_referral_status(db, ref)
+        # Only return Pending status referrals for the HR's list
+        if resolved.get("status") == "Pending":
+            resolved_referrals.append(resolved)
+    return resolved_referrals
 
 async def get_employee_referrals(db, employee_id: str, skip: int = 0, limit: int = 10000):
     cursor = db.referrals.find({"referredById": employee_id}).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
-    return [fix_id(row) for row in rows]
+    referrals = [fix_id(row) for row in rows]
+    
+    resolved_referrals = []
+    for ref in referrals:
+        resolved = await resolve_referral_status(db, ref)
+        resolved_referrals.append(resolved)
+    return resolved_referrals
 
 async def create_referral(db, referral: schemas.ReferralCreate):
     referral_dict = referral.dict()
@@ -4346,8 +4445,41 @@ async def create_referral(db, referral: schemas.ReferralCreate):
 
 async def update_referral(db, referral_id: str, referral_update: schemas.ReferralUpdate):
     update_data = referral_update.dict(exclude_unset=True)
+    
+    # Get the existing referral first
+    existing = await db.referrals.find_one({"_id": ObjectId(referral_id)})
+    
     if update_data:
         await db.referrals.update_one({"_id": ObjectId(referral_id)}, {"$set": update_data})
+        
+        # If status is being updated to 'Contacted' and it wasn't already Contacted
+        if existing and update_data.get("status") == "Contacted" and existing.get("status") != "Contacted":
+            # 1. Create a new candidate application in 'new' stage
+            app_data = {
+                "candidateName": existing.get("candidateName"),
+                "email": existing.get("email") or "not_provided@example.com",
+                "phone": existing.get("phone") or "N/A",
+                "status": "new",
+                "appliedDate": get_now().strftime("%Y-%m-%d"),
+                "resume": existing.get("resumeUrl") or "",
+                "jobTitle": existing.get("jobTitle") or "General",
+                "reference": f"Referred by: {existing.get('referredByName')}",
+                "skills": "",
+                "source": "Employee Referral"
+            }
+            # Add to applications collection
+            app_result = await db.applications.insert_one(app_data)
+            
+            # Log the application creation activity
+            await log_activity(
+                db, 
+                "Created", 
+                existing.get("referredById") or "System", 
+                existing.get("referredByName") or "System User", 
+                f"Candidate '{existing.get('candidateName')}' was added automatically via Employee Referral.", 
+                applicationId=str(app_result.inserted_id)
+            )
+            
     doc = await db.referrals.find_one({"_id": ObjectId(referral_id)})
     return fix_id(doc)
 
