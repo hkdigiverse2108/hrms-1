@@ -337,8 +337,8 @@ export default function ViewInvoicePage() {
       <div className="flex justify-center overflow-x-auto py-4">
         <div className="invoice-card-container bg-white border border-border rounded-xl shadow-lg min-h-[1123px] w-[794px] shrink-0 relative overflow-hidden flex flex-col">
           {/* Header Layout */}
-          <div className="px-12 pt-10 pb-4 flex justify-between items-start">
-            <div className="flex gap-2 items-start max-w-[72%]">
+          <div className="px-12 pt-12 pb-5 flex justify-between items-start">
+            <div className="flex gap-4 items-start max-w-[72%]">
               <div className="w-[52px] h-[60px] rounded-lg overflow-hidden shrink-0 mt-5 select-none pointer-events-none relative">
                 <img 
                   src="/logo.png" 
@@ -348,38 +348,32 @@ export default function ViewInvoicePage() {
                 />
               </div>
               <div>
-                <h2 className="text-[#111827] font-bold text-[15px] tracking-tight leading-none">
+                <h2 className="text-[#111827] font-bold text-[17px] tracking-tight leading-snug mb-0.5">
                   Harikrushn DigiVerse LLP
                 </h2>
-                <p className="text-[9.5px] font-semibold text-gray-700 leading-[1.5] tracking-wide">
+                <p className="text-[10.5px] font-semibold text-gray-700 leading-[1.5] tracking-wide">
                   FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA<br />
                   COMPLEX, OPP. BHAGAT NAGAR, VED,<br />
                   GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.<br />
                   Ph: +91 87805 64463 | billing@hkdigiverse.com <br />
                   GSTIN: 24AAXFN3372M1ZK | PAN: AAXFN3372M | LLPIN: ACK-1143 | State: 24
                 </p>
-                {/* <div className="text-[9px] font-semibold text-black leading-none pt-1">
-                  Ph: +91 87805 64463 | billing@hkdigiverse.com
-                </div>
-                <p className="text-[9px] font-semibold text-black leading-none pt-1">
-                  GSTIN: 24AAXFN3372M1ZK | PAN: AAXFN3372M | LLPIN: ACK-1143 | State: 24
-                </p> */}
               </div>
             </div>
 
-            <div className="bg-[#1E60F2] text-white px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider shadow-sm select-none">
+            <div className="bg-[#08304b]/10 text-[#08304b] px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider shadow-sm select-none">
               {invoice.invoiceType ? invoice.invoiceType.toUpperCase() : "TAX INVOICE"}
             </div>
           </div>
 
-          {/* Cobalt Blue Thick Horizontal Accent Divider Line */}
-          <div className="mx-12 h-[2px] bg-[#1E60F2]" />
+          {/* Logo Brand Navy Horizontal Accent Divider Line */}
+          <div className="mx-12 h-[2px] bg-[#08304b]/20" />
 
           {/* Billing & Metadata Row */}
-          <div className="px-12 pt-3 pb-2 space-y-0.5">
+          <div className="px-12 pt-3 pb-2 space-y-1.5">
             {/* Row 1: BILL TO header */}
             <div className="flex justify-between items-end mb-1">
-              <span className="text-[8.5px] font-bold text-gray-500 uppercase tracking-[0.18em] block select-none pointer-events-none">
+              <span className="text-[9.5px] font-bold text-gray-500 uppercase tracking-[0.18em] block select-none pointer-events-none">
                 BILL TO
               </span>
               <div></div>
@@ -387,53 +381,53 @@ export default function ViewInvoicePage() {
 
             {/* Row 2: Client Name & Invoice No. */}
             <div className="flex justify-between items-baseline">
-              <h3 className="font-bold text-[#111827] text-[12px] leading-none">
+              <h3 className="font-bold text-[#111827] text-[14px] leading-none">
                 {invoice.clientName}
               </h3>
-              <div className="flex justify-between w-[185px] text-[10.5px] font-medium text-gray-500">
+              <div className="flex justify-between w-[210px] text-[12px] font-medium text-gray-500">
                 <span className="text-gray-500">Invoice No.</span>
-                <span className="text-[#111827] font-bold text-[11.5px] leading-none">{invoice.invoiceNumber}</span>
+                <span className="text-[#111827] font-bold text-[13px] leading-none">{invoice.invoiceNumber}</span>
               </div>
             </div>
 
             {/* Row 3: Address & Date */}
             <div className="flex justify-between items-baseline">
-              <p className="text-[10.5px] text-gray-700 font-medium leading-[1.2] max-w-[480px]">
+              <p className="text-[12px] text-gray-700 font-medium leading-[1.2] max-w-[480px]">
                 {invoice.clientAddress || ""}
               </p>
-              <div className="flex justify-between w-[185px] text-[10.5px] font-medium text-gray-500">
+              <div className="flex justify-between w-[210px] text-[12px] font-medium text-gray-500">
                 <span className="text-gray-500">Date</span>
-                <span className="text-[#111827] font-bold text-[11.5px] leading-[1.2]">{dayjs(invoice.issueDate).format('YYYY-MM-DD')}</span>
+                <span className="text-[#111827] font-bold text-[13px] leading-[1.2]">{dayjs(invoice.issueDate).format('YYYY-MM-DD')}</span>
               </div>
             </div>
 
             {/* Row 4: Phone & Place of Supply */}
             <div className="flex justify-between items-baseline">
-              <p className="text-[10.5px] text-gray-700 font-medium leading-[1.2]">
+              <p className="text-[12px] text-gray-700 font-medium leading-[1.2]">
                 {invoice.clientPhone ? `Ph: ${invoice.clientPhone}` : ""}
               </p>
-              <div className="flex justify-between w-[185px] text-[10.5px] font-medium text-gray-500">
+              <div className="flex justify-between w-[210px] text-[12px] font-medium text-gray-500">
                 <span className="text-gray-500">Place of Supply</span>
-                <span className="text-[#111827] font-bold text-[11.5px] leading-[1.2]">{placeOfSupply}</span>
+                <span className="text-[#111827] font-bold text-[13px] leading-[1.2]">{placeOfSupply}</span>
               </div>
             </div>
 
             {/* Row 5: GSTIN */}
             {(invoice.clientGstin || (invoice.clientEmail && !invoice.clientEmail.includes('@'))) && (
               <div className="flex justify-between items-baseline">
-                <p className="text-[10.5px] text-gray-700 font-medium leading-[1.2]">
+                <p className="text-[12px] text-gray-700 font-medium leading-[1.2]">
                   GSTIN: {invoice.clientGstin || invoice.clientEmail}
                 </p>
-                <div className="w-[185px]"></div>
+                <div className="w-[210px]"></div>
               </div>
             )}
           </div>
 
           {/* Table Details */}
           <div className="px-12 my-2 mb-0">
-            <table className="w-full text-[10px] font-semibold">
+            <table className="w-full text-[11.5px] font-semibold">
               <thead>
-                <tr className="bg-[#1E60F2] text-white font-bold text-center">
+                <tr className="bg-[#08304b]/10 text-[#08304b] font-bold text-center">
                   <th className="py-1 px-1 text-center w-10 font-bold">S.No</th>
                   <th className="py-1 px-1.5 text-left font-bold pl-2">Product Description</th>
                   <th className="py-1 px-1 w-14 text-center font-bold">SAC</th>
@@ -444,7 +438,7 @@ export default function ViewInvoicePage() {
                   <th className="py-1 px-1 w-22 text-center font-bold">Taxable Amt</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 leading-[0.5]">
+              <tbody className="divide-y divide-slate-100">
                 {invoice.lineItems.map((item: any, idx: number) => {
                   const qty = typeof item.qty === 'number' ? item.qty : (item.rate > 0 ? Math.round(item.amount / item.rate) : 1);
                   const itemDiscount = typeof item.discount === 'number' ? item.discount : 0;
@@ -454,7 +448,7 @@ export default function ViewInvoicePage() {
                     <tr key={idx} className="hover:bg-slate-50/50">
                       <td className="py-2 px-1 text-center text-slate-900 font-medium">{idx + 1}</td>
                       <td className="py-2 px-1.5 text-left pl-2">
-                        <p className="text-slate-800 text-[#111827] text-[11px] whitespace-pre-wrap break-words leading-[1.2]">
+                        <p className="text-slate-800 text-[#111827] text-[12.5px] whitespace-pre-wrap break-words leading-[1.2]">
                           {item.description}
                         </p>
                       </td>
@@ -477,7 +471,7 @@ export default function ViewInvoicePage() {
                 })}
  
                 {/* Total Row */}
-                <tr className="font-bold text-slate-900 border-t-2 border-slate-200 leading-[0.5]">
+                <tr className="font-bold text-slate-900 border-t-2 border-slate-200">
                   <td colSpan={2} className="py-2 px-1.5 text-left pl-2 font-bold">Total</td>
                   <td className="py-2 px-1"></td>
                   <td className="py-2 px-1 text-center text-slate-900">
@@ -500,7 +494,7 @@ export default function ViewInvoicePage() {
 
           {/* Calculations Summary block (Right Aligned) */}
           <div className="flex justify-end px-12">
-            <div className="w-64 space-y-1.5 text-[10.5px] font-medium text-gray-500 pt-2.5">
+            <div className="w-[280px] space-y-1.5 text-[12px] font-medium text-gray-500 pt-2.5">
               <div className="flex justify-between items-center border-b-2 border-slate-300">
                 <span className="text-gray-500">Total Before Tax</span>
                 <span className="text-[#111827] text-slate-900">
@@ -509,7 +503,7 @@ export default function ViewInvoicePage() {
               </div>
               
               {invoice.taxType === "No Tax" ? null : invoice.taxType === "IGST" || (!invoice.taxType && !isGujarat) ? (
-                <div className="flex justify-between items-center leading-[1]">
+                <div className="flex justify-between items-center">
                   <span className="text-gray-500">Add: IGST @ {taxRate}%</span>
                   <span className="text-[#111827] text-slate-900">
                     ₹{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -517,13 +511,13 @@ export default function ViewInvoicePage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex justify-between items-center leading-[1]">
+                  <div className="flex justify-between items-center">
                     <span className="text-gray-500">Add: CGST @ {(taxRate / 2)}%</span>
                     <span className="text-[#111827] text-slate-900">
                       ₹{(taxAmount / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center leading-[1]">
+                  <div className="flex justify-between items-center">
                     <span className="text-gray-500">Add: SGST @ {(taxRate / 2)}%</span>
                     <span className="text-[#111827] text-slate-900">
                       ₹{(taxAmount / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -532,14 +526,14 @@ export default function ViewInvoicePage() {
                 </>
               )}
 
-              <div className="flex justify-between items-center leading-[1]">
+              <div className="flex justify-between items-center">
                 <span className="font-bold text-gray-900">Total Tax Amount</span>
                 <span className="text-[#111827] font-bold">
                   ₹{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
 
-              <div className="flex justify-between items-center leading-[1]">
+              <div className="flex justify-between items-center">
                 <span className="text-gray-500">Round Off</span>
                 <span className="text-[#111827] text-slate-900">
                   {roundOff >= 0 ? '+' : ''}₹{roundOff.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -547,9 +541,9 @@ export default function ViewInvoicePage() {
               </div>
 
               {/* Total After Tax Banner */}
-              <div className="bg-[#1E60F2] text-white flex justify-between items-center px-2 py-2 rounded-sm shadow-sm select-none leading-[0.5]">
-                <span className="font-bold text-[10px] tracking-wider">Total After Tax</span>
-                <span className="font-bold text-[12px]">
+              <div className="bg-[#08304b]/10 text-[#08304b] flex justify-between items-center px-3 py-1 rounded-sm shadow-sm select-none">
+                <span className="font-bold text-[11.5px] tracking-wider">Total After Tax</span>
+                <span className="font-bold text-[14px]">
                   ₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -558,17 +552,17 @@ export default function ViewInvoicePage() {
 
           {/* Amount In Words Banner */}
           <div className="mx-12 my-2.5 bg-[#F1F5F9] border border-slate-200/40 rounded-sm px-4 py-1.5 flex items-center justify-between shadow-sm leading-[1]">
-            <div className="text-[10px] font-medium text-gray-500">
-              Amount In Words: <span className="font-bold text-[#111827] text-[11px] ml-1.5">{amountInWords}</span>
+            <div className="text-[11.5px] font-medium text-gray-500">
+              Amount In Words: <span className="font-bold text-[#111827] text-[12.5px] ml-1.5">{amountInWords}</span>
             </div>
           </div>
 
           {/* Bank Details */}
-          <div className="mx-12 my-1 border border-slate-200 rounded-md px-4 py-1.5 flex flex-col gap-2 bg-white shadow-sm leading-[0.5]">
-            <span className="text-[8px] font-bold text-slate-400 tracking-wider uppercase leading-none">
+          <div className="mx-12 my-3 border border-slate-200 rounded-md px-4 py-2.5 flex flex-col gap-2 bg-white shadow-sm">
+            <span className="text-[9.5px] font-bold text-slate-400 tracking-wider uppercase leading-none">
               BANK DETAILS
             </span>
-            <div className="flex gap-12 text-[10px] text-slate-500 font-medium">
+            <div className="flex gap-12 text-[11.5px] text-slate-500 font-medium">
               <div>
                 Bank: <span className="font-bold text-[#111827] ml-0.5">Axis Bank</span>
               </div>
@@ -582,13 +576,13 @@ export default function ViewInvoicePage() {
           </div>
 
           {/* Terms & Authorized Signatory Row */}
-          <div className="mx-12 mt-2 mb-8 grid grid-cols-2 gap-8 items-end">
+          <div className="mx-12 mt-6 mb-8 grid grid-cols-2 gap-8 items-end">
             {/* Terms and Conditions */}
             <div className="space-y-2">
-              <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
+              <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
                 TERMS & CONDITIONS
               </span>
-              <ol className="list-decimal pl-3.5 text-[9.5px] text-gray-600 font-semibold leading-relaxed">
+              <ol className="list-decimal pl-3.5 text-[11px] text-gray-600 font-semibold leading-relaxed">
                 <li>Payment is due within 3 days of the invoice date.</li>
                 <li>Late payments may incur additional charges.</li>
                 <li>All disputes are subject to Gujarat Jurisdiction.</li>
@@ -596,12 +590,12 @@ export default function ViewInvoicePage() {
             </div>
 
             {/* Signature Block */}
-            <div className="flex flex-col items-center justify-end justify-self-end text-center space-y-1 self-end select-none leading-[0.5]">
+            <div className="flex flex-col items-center justify-end justify-self-end text-center space-y-1 self-end select-none">
               <div className="w-42 border-t-2 border-[#111827]" />
-              <h4 className="font-bold text-[#111827] text-[10px] uppercase tracking-wide leading-none">
+              <h4 className="font-bold text-[#111827] text-[11.5px] uppercase tracking-wide leading-none">
                 MANGUKIYA HET RAJESHBHAI
               </h4>
-              <p className="text-[8px] font-medium text-slate-500 tracking-wide">
+              <p className="text-[9.5px] font-medium text-slate-500 tracking-wide">
                 For Harikrushn DigiVerse LLP
               </p>
             </div>
