@@ -89,7 +89,6 @@ export default function TaskManagementPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [logsModalOpen, setLogsModalOpen] = useState(false);
   const [selectedTaskLogs, setSelectedTaskLogs] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -151,10 +150,11 @@ export default function TaskManagementPage() {
   };
 
   const handleCreateTask = async () => {
-    if (!newTask.title || newTask.assignedToIds.length === 0) return;
+    if (!newTask.title) return;
     setIsSubmitting(true);
     try {
-      const promises = newTask.assignedToIds.map(assigneeId => {
+      const idsToAssign = newTask.assignedToIds.length > 0 ? newTask.assignedToIds : [user?.id || null];
+      const promises = idsToAssign.map(assigneeId => {
         return fetch(`${API_URL}/tasks`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -164,7 +164,7 @@ export default function TaskManagementPage() {
             dueDate: newTask.dueDate,
             status: newTask.status,
             priority: newTask.priority,
-            assignedToId: assigneeId,
+            ...(assigneeId ? { assignedToId: assigneeId } : {}),
             performedBy: user?.id,
             userName: user?.name
           })
@@ -178,7 +178,7 @@ export default function TaskManagementPage() {
         setCreateModalOpen(false);
         setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: "todo", priority: "medium" });
         fetchTasks();
-        toast.success(`Task successfully assigned to ${newTask.assignedToIds.length} user(s)!`);
+        toast.success(newTask.assignedToIds.length > 0 ? `Task successfully assigned to ${newTask.assignedToIds.length} user(s)!` : "Task self-assigned successfully!");
       } else {
         toast.error("Failed to create some tasks.");
         fetchTasks();
@@ -272,6 +272,11 @@ export default function TaskManagementPage() {
       setEditingTaskId(null);
       return;
     }
+    const originalTask = tasks.find(t => t.id === taskId);
+    if (originalTask && originalTask.title === editTaskTitle) {
+      setEditingTaskId(null);
+      return;
+    }
     
     try {
       const res = await fetch(`${API_URL}/tasks/${taskId}`, {
@@ -298,6 +303,11 @@ export default function TaskManagementPage() {
   };
 
   const handleUpdateDesc = async (taskId: string) => {
+    const originalTask = tasks.find(t => t.id === taskId);
+    if (originalTask && (originalTask.description === editTaskDesc || originalTask.desc === editTaskDesc)) {
+      setEditingDescId(null);
+      return;
+    }
     try {
       const res = await fetch(`${API_URL}/tasks/${taskId}`, {
         method: "PUT",
@@ -328,6 +338,8 @@ export default function TaskManagementPage() {
   const [activeAssignees, setActiveAssignees] = useState<string[]>([]);
   const [activeDateRange, setActiveDateRange] = useState<{from: Date | undefined, to?: Date | undefined} | undefined>();
   const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+  const [assignedToMe, setAssignedToMe] = useState(false);
+  const [createdByMe, setCreatedByMe] = useState(false);
 
   const toggleFilter = (state: string[], setState: React.Dispatch<React.SetStateAction<string[]>>, val: string) => {
     if (state.includes(val)) {
@@ -359,7 +371,10 @@ export default function TaskManagementPage() {
       dateMatch = false; // Filter out tasks with no due date if a date filter is applied
     }
     
-    return statusMatch && priorityMatch && assigneeMatch && dateMatch;
+    const myAssignedMatch = !assignedToMe || task.assignedToId === user?.id;
+    const myCreatedMatch = !createdByMe || task.assignedById === user?.id;
+
+    return statusMatch && priorityMatch && assigneeMatch && dateMatch && myAssignedMatch && myCreatedMatch;
   });
 
   const sortedTasks = [...filteredTasks].sort((a, b) => {
@@ -381,191 +396,6 @@ export default function TaskManagementPage() {
       >
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           
-          {/* Filters Modal */}
-          <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="shadow-sm font-medium">
-                <Filter className="w-4 h-4 mr-2" />
-                Filters
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px]">
-              <DialogHeader>
-                <DialogTitle className="text-xl font-bold">Filter tasks</DialogTitle>
-              </DialogHeader>
-              
-              <div className="space-y-6 py-4">
-                {/* Status Filter */}
-                <div className="space-y-3">
-                  <label className="text-sm font-semibold text-foreground">Status</label>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { value: "todo", label: "To do", dot: "bg-slate-400" },
-                      { value: "pending", label: "Pending", dot: "bg-amber-400" },
-                      { value: "in-progress", label: "In progress", dot: "bg-brand-teal" },
-                      { value: "completed", label: "Completed", dot: "bg-emerald-600" }
-                    ].map(status => {
-                      const isActive = activeStatuses.includes(status.value);
-                      return (
-                        <div 
-                          key={status.value}
-                          onClick={() => toggleFilter(activeStatuses, setActiveStatuses, status.value)}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors border ${
-                            isActive 
-                              ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
-                              : 'bg-white border-border text-foreground hover:bg-gray-50'
-                          }`}
-                        >
-                          <span className={`w-2 h-2 rounded-full ${status.dot}`}></span>
-                          {status.label}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Priority Filter */}
-                <div className="space-y-3">
-                  <label className="text-sm font-semibold text-foreground">Priority</label>
-                  <div className="flex flex-wrap gap-2">
-                    {["urgent", "high", "medium", "low"].map(priority => {
-                      const isActive = activePriorities.includes(priority);
-                      return (
-                        <div 
-                          key={priority}
-                          onClick={() => toggleFilter(activePriorities, setActivePriorities, priority)}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors border capitalize ${
-                            isActive 
-                              ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
-                              : 'bg-white border-border text-foreground hover:bg-gray-50'
-                          }`}
-                        >
-                          {priority}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Assignee Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Assignee</label>
-                  <div className="border border-border rounded-md p-2 flex flex-wrap gap-2 min-h-[42px] items-center bg-white cursor-text">
-                    {activeAssignees.map(id => {
-                      const emp = employees.find(e => e.id === id);
-                      if (!emp) return null;
-                      return (
-                        <div key={id} className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded-md text-xs font-medium text-foreground">
-                          <Avatar className="w-4 h-4">
-                            <AvatarFallback className="text-[8px] bg-brand-light text-brand-teal font-medium">{emp.firstName[0]}{emp.lastName[0]}</AvatarFallback>
-                          </Avatar>
-                          {emp.firstName} {emp.lastName}
-                          <X 
-                            className="w-3 h-3 text-muted-foreground hover:text-foreground cursor-pointer ml-0.5" 
-                            onClick={() => toggleFilter(activeAssignees, setActiveAssignees, id)}
-                          />
-                        </div>
-                      )
-                    })}
-                    <Popover open={assigneeDropdownOpen} onOpenChange={setAssigneeDropdownOpen}>
-                      <PopoverTrigger asChild>
-                        <button className="flex-1 min-w-[120px] h-6 border-none bg-transparent shadow-none focus:outline-none p-0 text-sm text-muted-foreground text-left">
-                          Select assignees...
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[300px] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search names..." />
-                          <CommandList>
-                            <CommandEmpty>No employee found.</CommandEmpty>
-                            <CommandGroup>
-                              {employees.filter(e => !activeAssignees.includes(e.id)).map(emp => (
-                                <CommandItem 
-                                  key={emp.id} 
-                                  value={`${emp.firstName} ${emp.lastName}`}
-                                  onSelect={() => {
-                                    setActiveAssignees([...activeAssignees, emp.id]);
-                                    setAssigneeDropdownOpen(false);
-                                  }}
-                                >
-                                  <div className="flex items-center gap-2 w-full">
-                                    <Avatar className="w-5 h-5">
-                                      <AvatarFallback className="text-[10px] bg-brand-light text-brand-teal font-medium">{emp.firstName[0]}{emp.lastName[0]}</AvatarFallback>
-                                    </Avatar>
-                                    {emp.firstName} {emp.lastName}
-                                  </div>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-
-                {/* Due Date Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Due Date</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        id="date"
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal bg-white h-10",
-                          !activeDateRange && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {activeDateRange?.from ? (
-                          activeDateRange.to ? (
-                            <>
-                              {format(activeDateRange.from, "LLL dd, y")} -{" "}
-                              {format(activeDateRange.to, "LLL dd, y")}
-                            </>
-                          ) : (
-                            format(activeDateRange.from, "LLL dd, y")
-                          )
-                        ) : (
-                          <span>Pick a date range</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="center">
-                      <Calendar
-                        initialFocus
-                        mode="range"
-                        defaultMonth={activeDateRange?.from}
-                        selected={activeDateRange}
-                        onSelect={setActiveDateRange as any}
-                        numberOfMonths={2}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-4">
-                <Button 
-                  variant="ghost" 
-                  className="text-muted-foreground hover:text-foreground font-medium px-2"
-                  onClick={() => {
-                    setActiveStatuses([]);
-                    setActivePriorities([]);
-                    setActiveAssignees([]);
-                    setActiveDateRange(undefined);
-                  }}
-                >
-                  Clear all
-                </Button>
-                <Button className="bg-brand-teal hover:bg-brand-teal-light text-white" onClick={() => setFilterModalOpen(false)}>
-                  Apply filters
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
           {/* Create Task Modal */}
           <Dialog open={createModalOpen} onOpenChange={(val) => {
             setCreateModalOpen(val);
@@ -609,7 +439,7 @@ export default function TaskManagementPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2 col-span-2 sm:col-span-1">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-semibold text-foreground">Assignees <span className="text-red-500">*</span></label>
+                      <label className="text-sm font-semibold text-foreground">Assignees</label>
                       <Select value="" onValueChange={(val) => {
                         if (val.startsWith('dept_')) handleQuickSelect('department', val.replace('dept_', ''));
                         if (val.startsWith('desig_')) handleQuickSelect('designation', val.replace('desig_', ''));
@@ -693,6 +523,17 @@ export default function TaskManagementPage() {
                           initialFocus
                           disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
                         />
+                        {newTask.dueDate && (
+                          <div className="p-2 border-t border-border">
+                            <Button 
+                              variant="ghost" 
+                              className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                              onClick={() => setNewTask({...newTask, dueDate: ""})}
+                            >
+                              Clear date
+                            </Button>
+                          </div>
+                        )}
                       </PopoverContent>
                     </Popover>
                   </div>
@@ -774,7 +615,7 @@ export default function TaskManagementPage() {
                 <Button 
                   className="bg-brand-teal hover:bg-brand-teal-light text-white" 
                   onClick={handleCreateTask}
-                  disabled={isSubmitting || !newTask.title || newTask.assignedToIds.length === 0}
+                  disabled={isSubmitting || !newTask.title}
                 >
                   {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                   Create task
@@ -861,8 +702,202 @@ export default function TaskManagementPage() {
       {/* Main Table Container */}
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
         <div className="p-6 border-b border-border">
-          <h2 className="text-lg font-bold text-foreground mb-1">Task overview</h2>
-          <p className="text-sm text-muted-foreground">A single list of all tasks with assignee, status, priority, and due date.</p>
+          {/* Inline Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 animate-in fade-in slide-in-from-top-2">
+            {/* Status Filter */}
+            <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Status</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { value: "todo", label: "To do", dot: "bg-slate-400" },
+                    { value: "pending", label: "Pending", dot: "bg-amber-400" },
+                    { value: "in-progress", label: "In progress", dot: "bg-brand-teal" },
+                    { value: "completed", label: "Completed", dot: "bg-emerald-600" }
+                  ].map(status => {
+                    const isActive = activeStatuses.includes(status.value);
+                    return (
+                      <div 
+                        key={status.value}
+                        onClick={() => toggleFilter(activeStatuses, setActiveStatuses, status.value)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors border ${
+                          isActive 
+                            ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
+                            : 'bg-white border-border text-foreground hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`}></span>
+                        {status.label}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Priority Filter */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Priority</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {["urgent", "high", "medium", "low"].map(priority => {
+                    const isActive = activePriorities.includes(priority);
+                    return (
+                      <div 
+                        key={priority}
+                        onClick={() => toggleFilter(activePriorities, setActivePriorities, priority)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors border capitalize ${
+                          isActive 
+                            ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
+                            : 'bg-white border-border text-foreground hover:bg-gray-50'
+                        }`}
+                      >
+                        {priority}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Assignee Filter */}
+              <div className="space-y-2 lg:col-span-1">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Assignee</label>
+                <div className="border border-border rounded-md p-1.5 flex flex-wrap gap-1.5 min-h-[36px] items-center bg-white cursor-text">
+                  {activeAssignees.map(id => {
+                    const emp = employees.find(e => e.id === id);
+                    if (!emp) return null;
+                    return (
+                      <div key={id} className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded-md text-[11px] font-medium text-foreground">
+                        <Avatar className="w-3.5 h-3.5">
+                          <AvatarFallback className="text-[7px] bg-brand-light text-brand-teal font-medium">{emp.firstName[0]}{emp.lastName[0]}</AvatarFallback>
+                        </Avatar>
+                        {emp.firstName} {emp.lastName}
+                        <X 
+                          className="w-2.5 h-2.5 text-muted-foreground hover:text-foreground cursor-pointer ml-0.5" 
+                          onClick={() => toggleFilter(activeAssignees, setActiveAssignees, id)}
+                        />
+                      </div>
+                    )
+                  })}
+                  <Popover open={assigneeDropdownOpen} onOpenChange={setAssigneeDropdownOpen}>
+                    <PopoverTrigger asChild>
+                      <button className="flex-1 min-w-[100px] h-5 border-none bg-transparent shadow-none focus:outline-none p-0 text-xs text-muted-foreground text-left ml-1">
+                        Select...
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[240px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search names..." />
+                        <CommandList>
+                          <CommandEmpty>No employee found.</CommandEmpty>
+                          <CommandGroup>
+                            {employees.filter(e => !activeAssignees.includes(e.id)).map(emp => (
+                              <CommandItem 
+                                key={emp.id} 
+                                value={`${emp.firstName} ${emp.lastName}`}
+                                onSelect={() => {
+                                  setActiveAssignees([...activeAssignees, emp.id]);
+                                  setAssigneeDropdownOpen(false);
+                                }}
+                              >
+                                <div className="flex items-center gap-2 w-full">
+                                  <Avatar className="w-4 h-4">
+                                    <AvatarFallback className="text-[8px] bg-brand-light text-brand-teal font-medium">{emp.firstName[0]}{emp.lastName[0]}</AvatarFallback>
+                                  </Avatar>
+                                  {emp.firstName} {emp.lastName}
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              {/* Due Date Filter */}
+              <div className="space-y-2 lg:col-span-1 relative">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Due Date</label>
+                <div className="flex items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="date"
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal bg-white h-9 px-2.5 text-xs",
+                          !activeDateRange && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                        {activeDateRange?.from ? (
+                          activeDateRange.to ? (
+                            <>
+                              {format(activeDateRange.from, "LLL dd")} -{" "}
+                              {format(activeDateRange.to, "LLL dd")}
+                            </>
+                          ) : (
+                            format(activeDateRange.from, "LLL dd, y")
+                          )
+                        ) : (
+                          <span>Pick a date range</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="center">
+                      <Calendar
+                        initialFocus
+                        mode="range"
+                        defaultMonth={activeDateRange?.from}
+                        selected={activeDateRange}
+                        onSelect={setActiveDateRange as any}
+                        numberOfMonths={2}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  
+                  {(activeStatuses.length > 0 || activePriorities.length > 0 || activeAssignees.length > 0 || activeDateRange) && (
+                    <Button 
+                      variant="ghost" 
+                      className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 h-9"
+                      onClick={() => {
+                        setActiveStatuses([]);
+                        setActivePriorities([]);
+                        setActiveAssignees([]);
+                        setActiveDateRange(undefined);
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Quick Filters */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Quick Filters</label>
+                <div className="flex flex-col gap-1.5">
+                  <div 
+                    onClick={() => setAssignedToMe(!assignedToMe)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors border w-max ${
+                      assignedToMe 
+                        ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
+                        : 'bg-white border-border text-foreground hover:bg-gray-50'
+                    }`}
+                  >
+                    Assigned to me
+                  </div>
+                  <div 
+                    onClick={() => setCreatedByMe(!createdByMe)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors border w-max ${
+                      createdByMe 
+                        ? 'bg-brand-light/20 border-brand-teal/30 text-brand-teal' 
+                        : 'bg-white border-border text-foreground hover:bg-gray-50'
+                    }`}
+                  >
+                    Created by me
+                  </div>
+                </div>
+              </div>
+            </div>
         </div>
         
         <div className="overflow-x-auto">
@@ -876,8 +911,9 @@ export default function TaskManagementPage() {
               <table className="w-full text-sm text-left whitespace-nowrap">
               <thead className="text-xs text-muted-foreground font-semibold border-b border-border">
                 <tr>
-                  <th className="px-6 py-4 font-medium w-[40%]">Task</th>
+                  <th className="px-6 py-4 font-medium w-[30%]">Task</th>
                   <th className="px-6 py-4 font-medium">Assignee</th>
+                  <th className="px-6 py-4 font-medium">Created by</th>
                   <th className="px-6 py-4 font-medium">Status</th>
                   <th className="px-6 py-4 font-medium">Priority</th>
                   <th className="px-6 py-4 font-medium">Due date</th>
@@ -953,6 +989,16 @@ export default function TaskManagementPage() {
                           </AvatarFallback>
                         </Avatar>
                         <span className="font-medium text-foreground text-sm">{task.assignedToName || task.assignee}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-6 h-6">
+                          <AvatarFallback className="bg-blue-50 text-blue-600 border border-blue-200 text-[10px] font-bold">
+                            {(task.assignedByName || 'System').split(' ').map((n:any) => n[0]).join('').substring(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium text-foreground text-sm">{task.assignedByName || 'System'}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
@@ -1037,7 +1083,19 @@ export default function TaskManagementPage() {
                               if (date) handleUpdateField(task.id, 'dueDate', format(date, "yyyy-MM-dd"));
                             }}
                             initialFocus
+                            disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
                           />
+                          {task.dueDate && (
+                            <div className="p-2 border-t border-border">
+                              <Button 
+                                variant="ghost" 
+                                className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                                onClick={() => handleUpdateField(task.id, 'dueDate', "")}
+                              >
+                                Clear date
+                              </Button>
+                            </div>
+                          )}
                         </PopoverContent>
                       </Popover>
                     </td>

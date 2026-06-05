@@ -2738,7 +2738,7 @@ async def create_task(db, task: schemas.TaskCreate):
     return fix_id(task_dict)
 
 async def update_task(db, task_id: str, task: schemas.TaskUpdate):
-    update_data = {k: v for k, v in task.dict().items() if v is not None}
+    update_data = task.dict(exclude_unset=True)
     performedBy = update_data.pop("performedBy", "Unknown")
     userName = update_data.pop("userName", "Unknown User")
     
