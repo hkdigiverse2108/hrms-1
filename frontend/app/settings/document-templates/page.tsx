@@ -1,13 +1,27 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Loader2, Save, Plus, ArrowLeft, Search, FileText, ChevronRight, Trash2, Edit } from 'lucide-react'
 
-const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false })
+const ReactQuill = dynamic(
+  async () => {
+    const { default: RQ } = await import('react-quill-new');
+    const { Quill } = await import('react-quill-new');
+    if (typeof window !== 'undefined') {
+      window.Quill = Quill;
+      const ImageResize = (await import('quill-image-resize-module-react')).default;
+      Quill.register('modules/imageResize', ImageResize);
+    }
+    return function ForwardedQuill(props: any) {
+      return <RQ {...props} />;
+    }
+  },
+  { ssr: false, loading: () => <div className="h-[300px] flex items-center justify-center text-slate-400">Loading editor...</div> }
+)
 import 'react-quill-new/dist/quill.snow.css'
 import { Input } from '@/components/ui/input'
 import { API_URL } from '@/lib/config'
@@ -23,11 +37,12 @@ interface DocumentTemplate {
   description: string
   fields: string[]
   content: string
+  file_url?: string
 }
 
 const quillModules = {
   toolbar: [
-    [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+    [{ 'header': [1, 2, 3, 4, 5, 6, false] }, { 'size': ['small', false, 'large', 'huge'] }],
     ['bold', 'italic', 'underline', 'strike', 'blockquote'],
     [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
     ['link', 'image'],
@@ -35,6 +50,10 @@ const quillModules = {
     [{ 'color': [] }, { 'background': [] }],
     ['clean']
   ],
+  imageResize: {
+    parchment: typeof window !== 'undefined' ? window.Quill?.import('parchment') : null,
+    modules: ['Resize', 'DisplaySize']
+  }
 }
 
 export default function DocumentTemplatesPage() {
@@ -43,6 +62,9 @@ export default function DocumentTemplatesPage() {
   
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null)
+  const [systemSettings, setSystemSettings] = useState<any>(null)
+  const [estimatedPages, setEstimatedPages] = useState(1)
+  const previewRef = useRef<HTMLDivElement>(null)
   
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -62,7 +84,30 @@ export default function DocumentTemplatesPage() {
 
   useEffect(() => {
     fetchTemplates()
+    fetchSystemSettings()
   }, [])
+
+  const fetchSystemSettings = async () => {
+    try {
+      const res = await fetch(`${API_URL}/system-settings`)
+      if (res.ok) setSystemSettings(await res.json())
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  useEffect(() => {
+    if (!previewRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const height = entry.target.getBoundingClientRect().height;
+        // A4 page height is exactly 297mm. At 96 DPI, this is approx 1122.5px
+        setEstimatedPages(Math.max(1, Math.ceil(height / 1122.5)));
+      }
+    });
+    observer.observe(previewRef.current);
+    return () => observer.disconnect();
+  }, [selectedTemplate?.content, systemSettings])
 
   const fetchTemplates = async () => {
     setLoading(true)
@@ -290,9 +335,43 @@ export default function DocumentTemplatesPage() {
                     )) || <span className="text-slate-400 text-sm">No fields defined</span>}
                   </div>
 
-                  <h3 className="font-bold text-lg mb-4 text-slate-800">Document Content Preview</h3>
-                  <div className="bg-white rounded-xl p-6 text-slate-800 border border-slate-200">
-                    <div dangerouslySetInnerHTML={{ __html: selectedTemplate.content }} className="ql-editor p-0" />
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-lg text-slate-800">Document Content Preview</h3>
+                    <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">
+                      ~{estimatedPages} {estimatedPages === 1 ? 'Page' : 'Pages'}
+                    </span>
+                  </div>
+                  
+                  <div className="bg-slate-50 rounded-xl p-8 border border-slate-200 overflow-hidden flex justify-center">
+                    <div className="relative" style={{ width: '210mm' }}>
+                      <div className="ql-container ql-snow border-none !font-sans">
+                        <div ref={previewRef} className="bg-white shadow-xl shadow-slate-200/50 min-h-[297mm] p-[15mm] transition-all relative border border-slate-100">
+                          {systemSettings?.companyLetterheadUrl && (
+                            <div className="w-full">
+                              <img 
+                                src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
+                                alt="Company Letterhead" 
+                                className="w-full object-contain"
+                              />
+                            </div>
+                          )}
+                          <div dangerouslySetInnerHTML={{ __html: selectedTemplate.content }} className="ql-editor p-0 mt-6" />
+                        </div>
+                      </div>
+                      
+                      {/* Page break indicators */}
+                      {estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
+                        <div 
+                          key={i}
+                          className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex items-center justify-center opacity-70 z-50"
+                          style={{ top: `${(i + 1) * 297}mm` }}
+                        >
+                          <span className="bg-red-50 text-red-500 font-bold text-[10px] px-2 py-0.5 rounded-full absolute -top-2.5 shadow-sm border border-red-200">
+                            Page {i + 2} Break
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -378,17 +457,20 @@ export default function DocumentTemplatesPage() {
             </div>
 
             <div className="space-y-2 flex-1 min-h-[400px] flex flex-col">
-              <Label>Document Content (use {`{{variableName}}`} for dynamic fields)</Label>
-              <div className="flex-1 rounded-xl overflow-hidden border border-slate-200 bg-white" style={{ minHeight: '350px' }}>
-                <ReactQuill 
-                  theme="snow"
-                  modules={quillModules}
-                  value={formData.content}
-                  onChange={(content) => setFormData({...formData, content})}
-                  className="h-full bg-white [&_.ql-editor]:min-h-[300px] [&_.ql-container]:border-b-0 [&_.ql-container]:border-x-0 [&_.ql-container]:rounded-b-xl [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:bg-slate-50"
-                  placeholder="Type your document template here. Use {{variableName}} for dynamic fields like {{empName}}, {{startDate}}, etc."
-                />
+              <div className="flex items-center justify-between">
+                <Label>Document Content (use {`{{variableName}}`} for dynamic fields)</Label>
               </div>
+
+              <div className="flex-1 rounded-xl overflow-hidden border border-slate-200 bg-white" style={{ minHeight: '350px' }}>
+                  <ReactQuill 
+                    theme="snow"
+                    modules={quillModules}
+                    value={formData.content}
+                    onChange={(content) => setFormData({...formData, content})}
+                    className="h-full bg-white [&_.ql-editor]:min-h-[300px] [&_.ql-container]:border-b-0 [&_.ql-container]:border-x-0 [&_.ql-container]:rounded-b-xl [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:bg-slate-50"
+                    placeholder="Type your document template here. Use {{variableName}} for dynamic fields like {{empName}}, {{startDate}}, etc."
+                  />
+                </div>
             </div>
           </div>
           <DialogFooter className="mt-4">
@@ -399,6 +481,11 @@ export default function DocumentTemplatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <style jsx global>{`
+        .ql-editor {
+          /* keeping default size */
+        }
+      `}</style>
     </div>
   )
 }

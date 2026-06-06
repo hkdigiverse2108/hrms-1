@@ -19,7 +19,9 @@ import {
   Clock,
   Timer,
   Save,
-  FileText
+  FileText,
+  Upload,
+  Image as ImageIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -135,7 +137,8 @@ export default function SettingsPage() {
           companyGstin: settings?.companyGstin || "24APQPN3916P1Z4",
           taxInvoicePrefix: settings?.taxInvoicePrefix || "INV",
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
-          noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV"
+          noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
+          companyLetterheadUrl: settings?.companyLetterheadUrl || null
         })
       });
       if (res.ok) {
@@ -147,6 +150,33 @@ export default function SettingsPage() {
     } catch (err) {
       console.error("Error saving settings:", err);
       toast.error("An error occurred while saving settings.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsUpdating(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSettings({ ...settings, companyLetterheadUrl: data.url });
+        toast.success("Letterhead uploaded successfully! Don't forget to click Save Settings.");
+      } else {
+        toast.error("Failed to upload image.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred during upload.");
     } finally {
       setIsUpdating(false);
     }
@@ -425,6 +455,45 @@ export default function SettingsPage() {
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Enter the company's <span className="font-bold text-foreground">GSTIN (Goods and Services Tax Identification Number)</span>. This customized value will be automatically generated and displayed on all employee <span className="text-brand-teal font-bold">payslips</span>.
                     </p>
+                  </div>
+                </div>
+
+                <div className="col-span-1 md:col-span-2 mt-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-brand-teal" /> Company Letterhead
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Upload a wide banner image to be automatically placed at the top of all generated documents (Offer Letters, Certificates, etc.).
+                    </p>
+                    
+                    {settings?.companyLetterheadUrl && (
+                      <div className="relative mb-4 border border-slate-200 rounded-xl overflow-hidden bg-white/50 p-4">
+                        <img 
+                          src={settings.companyLetterheadUrl.startsWith('http') ? settings.companyLetterheadUrl : `${API_URL}${settings.companyLetterheadUrl}`} 
+                          alt="Letterhead Preview" 
+                          className="w-full object-contain max-h-32 rounded border border-slate-100" 
+                        />
+                        <Button 
+                          variant="destructive" 
+                          size="sm" 
+                          className="absolute top-2 right-2 h-7 px-3 text-[10px]"
+                          onClick={() => setSettings({...settings, companyLetterheadUrl: null})}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center gap-4">
+                      <Button asChild variant="outline" className="border-brand-teal text-brand-teal cursor-pointer">
+                        <label>
+                          <Upload className="w-4 h-4 mr-2" />
+                          {settings?.companyLetterheadUrl ? 'Replace Letterhead' : 'Upload Letterhead'}
+                          <input type="file" accept="image/*" className="hidden" onChange={handleLetterheadUpload} disabled={isUpdating} />
+                        </label>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
