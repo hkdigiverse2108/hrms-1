@@ -131,3 +131,11 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Fix for Quill Editor empty paragraphs collapsing in Tailwind environments */
+.ql-editor p {
+  min-height: 1.5em;
+}
+.ql-editor p:has(br:only-child) {
+  min-height: 1.5em;
+}

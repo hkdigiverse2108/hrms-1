@@ -1079,6 +1079,7 @@ class SystemSettingsBase(BaseModel):
     taxInvoicePrefix: Optional[str] = "INV"
     proformaInvoicePrefix: Optional[str] = "PINV"
     noTaxInvoicePrefix: Optional[str] = "NINV"
+    companyLetterheadUrl: Optional[str] = None
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1091,6 +1092,7 @@ class SystemSettingsUpdate(BaseModel):
     taxInvoicePrefix: Optional[str] = None
     proformaInvoicePrefix: Optional[str] = None
     noTaxInvoicePrefix: Optional[str] = None
+    companyLetterheadUrl: Optional[str] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1585,6 +1587,7 @@ class DocumentTemplateBase(BaseModel):
     description: Optional[str] = None
     fields: List[str] = []
     content: str
+    file_url: Optional[str] = None
 
 class DocumentTemplateCreate(DocumentTemplateBase):
     pass
@@ -1595,6 +1598,7 @@ class DocumentTemplateUpdate(BaseModel):
     description: Optional[str] = None
     fields: Optional[List[str]] = None
     content: Optional[str] = None
+    file_url: Optional[str] = None
 
 class DocumentTemplate(DocumentTemplateBase):
     id: str

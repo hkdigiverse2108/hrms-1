@@ -1273,6 +1273,7 @@ async def delete_document_template(template_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Document template not found")
     return {"message": "Document template deleted successfully"}
 
+
 # Document Request Endpoints
 @app.post("/document-requests", response_model=schemas.DocumentRequest)
 async def create_document_request(request: schemas.DocumentRequestCreate, db=Depends(get_db)):

@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import Link from 'next/link'
 import dayjs from 'dayjs'
 import { API_URL } from '@/lib/config'
+import 'react-quill-new/dist/quill.snow.css'
 
 export default function DocumentGeneratorPage() {
   const router = useRouter()
@@ -47,11 +48,18 @@ export default function DocumentGeneratorPage() {
         }
       })
       .catch(err => console.error("Error fetching templates", err))
+      
+    fetch(`${API_URL}/system-settings`)
+      .then(res => res.json())
+      .then(data => setSystemSettings(data))
+      .catch(err => console.error("Error fetching system settings", err))
   }, [])
 
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [selectedEmployee, setSelectedEmployee] = useState<string>('')
   const [requestId, setRequestId] = useState<string>('')
+  const [systemSettings, setSystemSettings] = useState<any>(null)
+  const [estimatedPages, setEstimatedPages] = useState(1)
 
   // Parse query parameters for pre-filling employee and template fields
   useEffect(() => {
@@ -147,7 +155,7 @@ export default function DocumentGeneratorPage() {
     gender: 'Male'
   } : employees.find((e: any) => e.id === selectedEmployee)
 
-  const generatePreview = () => {
+  const generatePreview = async () => {
     if (!selectedTemplate || !selectedEmployee) {
       toast.error('Please select a template and an employee or Manual Entry')
       return
@@ -230,6 +238,19 @@ export default function DocumentGeneratorPage() {
     })
   }, [])
 
+  useEffect(() => {
+    if (!previewRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const height = entry.target.getBoundingClientRect().height;
+        // A4 page height is exactly 297mm. At 96 DPI, this is approx 1122.5px
+        setEstimatedPages(Math.max(1, Math.ceil(height / 1122.5)));
+      }
+    });
+    observer.observe(previewRef.current);
+    return () => observer.disconnect();
+  }, [previewContent, systemSettings, isEditing])
+
   const handleDownloadPDF = async () => {
     setIsDownloading(true)
     try {
@@ -245,42 +266,49 @@ export default function DocumentGeneratorPage() {
       }
 
       // 1. Create a clean clone for capture to prevent "dirty DOM" artifacts
-      const rect = node.getBoundingClientRect()
-      const nodeWidth = rect.width || 800
-      const nodeHeight = rect.height || 1131
-      
       const clone = node.cloneNode(true) as HTMLElement
+      
+      // Force A4 width in pixels (210mm at 96 DPI = ~794px)
+      // This prevents the PDF text from becoming huge if the screen shrank the preview
+      const a4WidthPx = 794
       
       // 2. Setup a temporary isolated container for the clone
       const container = document.createElement('div')
       container.style.position = 'fixed'
       container.style.left = '-10000px'
       container.style.top = '0'
-      container.style.width = `${nodeWidth}px`
-      container.style.height = `${nodeHeight}px`
-      container.style.overflow = 'hidden'
+      container.style.width = `${a4WidthPx}px`
       container.style.background = 'white'
-      container.appendChild(clone)
+      
+      const qlContainer = document.createElement('div')
+      qlContainer.className = 'ql-container ql-snow border-none !font-sans'
+      qlContainer.appendChild(clone)
+      
+      container.appendChild(qlContainer)
       document.body.appendChild(container)
 
       // Ensure the clone has proper dimensions in the isolated container
-      clone.style.width = `${nodeWidth}px`
-      clone.style.height = `${nodeHeight}px`
+      clone.style.width = `${a4WidthPx}px`
       clone.style.margin = '0'
-      clone.style.padding = '0'
       clone.style.position = 'relative'
       clone.style.transform = 'none'
+      clone.style.boxShadow = 'none'
+      
+      // Get the actual height after setting the fixed width
+      const nodeHeight = Math.max(1123, clone.scrollHeight) // 1123px is A4 height
+      container.style.height = `${nodeHeight}px`
+      clone.style.height = `${nodeHeight}px`
 
       const scale = 1.5
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
-        width: nodeWidth * scale,
+        width: a4WidthPx * scale,
         height: nodeHeight * scale,
         cacheBust: true,
         style: {
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
-          width: `${nodeWidth}px`,
+          width: `${a4WidthPx}px`,
           height: `${nodeHeight}px`,
         }
       })
@@ -290,7 +318,7 @@ export default function DocumentGeneratorPage() {
 
       const pdf = new jsPDF('p', 'mm', 'a4')
       const pdfWidth = pdf.internal.pageSize.getWidth()
-      const pdfHeight = (nodeHeight * pdfWidth) / nodeWidth
+      const pdfHeight = (nodeHeight * pdfWidth) / a4WidthPx
       
       const pageHeight = pdf.internal.pageSize.getHeight()
       let heightLeft = pdfHeight
@@ -307,11 +335,12 @@ export default function DocumentGeneratorPage() {
       }
       
       // 4. Map links from the ORIGINAL node (to ensure coordinates are correct)
+      const rect = node.getBoundingClientRect()
       node.querySelectorAll('a').forEach(link => {
         const linkRect = link.getBoundingClientRect()
-        const relX = (linkRect.left - rect.left) / nodeWidth
-        const relY = (linkRect.top - rect.top) / nodeHeight
-        pdf.link(relX * pdfWidth, relY * pdfHeight, (linkRect.width / nodeWidth) * pdfWidth, (linkRect.height / nodeHeight) * pdfHeight, { url: link.href })
+        const relX = (linkRect.left - rect.left) / rect.width
+        const relY = (linkRect.top - rect.top) / rect.height
+        pdf.link(relX * pdfWidth, relY * pdfHeight, (linkRect.width / rect.width) * pdfWidth, (linkRect.height / rect.height) * pdfHeight, { url: link.href })
       })
 
       const rawName = extraFields.name || (currentEmployee ? `${currentEmployee.firstName} ${currentEmployee.lastName}` : 'Employee')
@@ -343,6 +372,13 @@ export default function DocumentGeneratorPage() {
 
     setIsSending(true)
     try {
+      let absoluteUrl = ''
+      let filename = ''
+      
+      const rawName = extraFields.name || (currentEmployee ? `${currentEmployee.firstName} ${currentEmployee.lastName}` : 'Employee')
+      const employeeName = rawName.trim().replace(/\s+/g, '_')
+      const templateLabel = selectedTemplate.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('_')
+      
       const node = document.querySelector('.document-preview') as HTMLElement
       if (!node) {
         toast.error('Please generate a preview first')
@@ -350,52 +386,59 @@ export default function DocumentGeneratorPage() {
         return
       }
 
-      const domtoimage = (window as any).domtoimage
-      const { jsPDF } = (window as any).jspdf
+        const domtoimage = (window as any).domtoimage
+        const { jsPDF } = (window as any).jspdf
 
-      if (!domtoimage || !jsPDF) {
-        toast.error('Libraries not loaded yet. Please wait a second.')
-        setIsSending(false)
-        return
-      }
+        if (!domtoimage || !jsPDF) {
+          toast.error('Libraries not loaded yet. Please wait a second.')
+          setIsSending(false)
+          return
+        }
 
-      // 1. Create a clean clone for capture to prevent "dirty DOM" artifacts
-      const rect = node.getBoundingClientRect()
-      const nodeWidth = rect.width || 800
-      const nodeHeight = rect.height || 1131
+        // 1. Create a clean clone for capture to prevent "dirty DOM" artifacts
+        const clone = node.cloneNode(true) as HTMLElement
       
-      const clone = node.cloneNode(true) as HTMLElement
+      // Force A4 width in pixels (210mm at 96 DPI = ~794px)
+      // This prevents the PDF text from becoming huge if the screen shrank the preview
+      const a4WidthPx = 794
       
       // 2. Setup a temporary isolated container for the clone
       const container = document.createElement('div')
       container.style.position = 'fixed'
       container.style.left = '-10000px'
       container.style.top = '0'
-      container.style.width = `${nodeWidth}px`
-      container.style.height = `${nodeHeight}px`
-      container.style.overflow = 'hidden'
+      container.style.width = `${a4WidthPx}px`
       container.style.background = 'white'
-      container.appendChild(clone)
+      
+      const qlContainer = document.createElement('div')
+      qlContainer.className = 'ql-container ql-snow border-none !font-sans'
+      qlContainer.appendChild(clone)
+      
+      container.appendChild(qlContainer)
       document.body.appendChild(container)
 
       // Ensure the clone has proper dimensions in the isolated container
-      clone.style.width = `${nodeWidth}px`
-      clone.style.height = `${nodeHeight}px`
+      clone.style.width = `${a4WidthPx}px`
       clone.style.margin = '0'
-      clone.style.padding = '0'
       clone.style.position = 'relative'
       clone.style.transform = 'none'
+      clone.style.boxShadow = 'none'
+      
+      // Get the actual height after setting the fixed width
+      const nodeHeight = Math.max(1123, clone.scrollHeight) // 1123px is A4 height
+      container.style.height = `${nodeHeight}px`
+      clone.style.height = `${nodeHeight}px`
 
       const scale = 1.5
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
-        width: nodeWidth * scale,
+        width: a4WidthPx * scale,
         height: nodeHeight * scale,
         cacheBust: true,
         style: {
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
-          width: `${nodeWidth}px`,
+          width: `${a4WidthPx}px`,
           height: `${nodeHeight}px`,
         }
       })
@@ -405,7 +448,7 @@ export default function DocumentGeneratorPage() {
 
       const pdf = new jsPDF('p', 'mm', 'a4')
       const pdfWidth = pdf.internal.pageSize.getWidth()
-      const pdfHeight = (nodeHeight * pdfWidth) / nodeWidth
+      const pdfHeight = (nodeHeight * pdfWidth) / a4WidthPx
       
       const pageHeight = pdf.internal.pageSize.getHeight()
       let heightLeft = pdfHeight
@@ -422,39 +465,37 @@ export default function DocumentGeneratorPage() {
       }
       
       // 4. Map links from the ORIGINAL node
+      const rect = node.getBoundingClientRect()
       node.querySelectorAll('a').forEach(link => {
         const linkRect = link.getBoundingClientRect()
-        const relX = (linkRect.left - rect.left) / nodeWidth
-        const relY = (linkRect.top - rect.top) / nodeHeight
-        pdf.link(relX * pdfWidth, relY * pdfHeight, (linkRect.width / nodeWidth) * pdfWidth, (linkRect.height / nodeHeight) * pdfHeight, { url: link.href })
+        const relX = (linkRect.left - rect.left) / rect.width
+        const relY = (linkRect.top - rect.top) / rect.height
+        pdf.link(relX * pdfWidth, relY * pdfHeight, (linkRect.width / rect.width) * pdfWidth, (linkRect.height / rect.height) * pdfHeight, { url: link.href })
       })
 
-      const rawName = extraFields.name || (currentEmployee ? `${currentEmployee.firstName} ${currentEmployee.lastName}` : 'Employee')
-      const employeeName = rawName.trim().replace(/\s+/g, '_')
-      const templateLabel = selectedTemplate.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('_')
-      const filename = `${templateLabel}_${employeeName}.pdf`
-      
-      // Get PDF Blob
-      const pdfBlob = pdf.output('blob')
-      const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' })
-      
-      const formDataUpload = new FormData()
-      formDataUpload.append('file', pdfFile)
-      
-      // Upload PDF to server
-      const uploadRes = await fetch(`${API_URL}/upload`, {
-        method: 'POST',
-        body: formDataUpload
-      })
-      
-      if (!uploadRes.ok) {
-        throw new Error('Failed to upload generated PDF')
-      }
-      
-      const uploadData = await uploadRes.json()
-      const absoluteUrl = uploadData.url.startsWith('http') 
-        ? uploadData.url 
-        : `${API_URL}${uploadData.url}`
+        filename = `${templateLabel}_${employeeName}.pdf`
+        
+        // Get PDF Blob
+        const pdfBlob = pdf.output('blob')
+        const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' })
+        
+        const formDataUpload = new FormData()
+        formDataUpload.append('file', pdfFile)
+        
+        // Upload PDF to server
+        const uploadRes = await fetch(`${API_URL}/upload`, {
+          method: 'POST',
+          body: formDataUpload
+        })
+        
+        if (!uploadRes.ok) {
+          throw new Error('Failed to upload generated PDF')
+        }
+        
+        const uploadData = await uploadRes.json()
+        absoluteUrl = uploadData.url.startsWith('http') 
+          ? uploadData.url 
+          : `${API_URL}${uploadData.url}`
         
       let matchedRequest = null
       
@@ -798,76 +839,115 @@ export default function DocumentGeneratorPage() {
         <div className="xl:col-span-2 space-y-6">
           <Card className="border-slate-200 shadow-sm rounded-2xl overflow-hidden min-h-[800px] flex flex-col bg-slate-100/50">
              <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-brand-teal/10 flex items-center justify-center">
-                  <FileText className="w-4 h-4 text-brand-teal" />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-brand-teal/10 flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-brand-teal" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800 tracking-tight">Document Preview</h3>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-xs font-medium text-slate-500">
+                        {currentEmployee ? `${currentEmployee.firstName} ${currentEmployee.lastName} (${templateData?.name || 'Template'})` : 'No employee selected'}
+                      </p>
+                      {previewContent && (
+                        <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">
+                          ~{estimatedPages} {estimatedPages === 1 ? 'Page' : 'Pages'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-800 tracking-tight">Document Preview</h3>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" className="font-bold text-slate-500 hover:text-brand-teal" onClick={() => { setPreviewContent(''); setIsEditing(false); }}>
-                  Clear
-                </Button>
-                <Button 
-                  variant={isEditing ? "default" : "outline"}
-                  size="sm"
-                  className={`font-bold gap-2 px-4 h-9 rounded-lg shadow-sm ${isEditing ? 'bg-amber-500 hover:bg-amber-600 text-white border-none' : 'border-amber-200 text-amber-600 hover:bg-amber-50 hover:text-amber-700'}`}
-                  disabled={!previewContent || isDownloading}
-                  onClick={() => {
-                    if (isEditing && previewRef.current) {
-                      setPreviewContent(previewRef.current.innerHTML)
-                    }
-                    setIsEditing(!isEditing)
-                  }}
-                >
-                  {isEditing ? <Save className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
-                  {isEditing ? 'Save Edits' : 'Edit Text'}
-                </Button>
-                <Button 
-                  variant="outline"
-                  className="border-[#3498db] text-[#3498db] hover:bg-[#3498db]/5 font-bold gap-2 px-6 h-9 rounded-lg shadow-sm"
-                  disabled={!previewContent || isDownloading}
-                  onClick={handleDownloadPDF}
-                >
-                  {isDownloading ? (
-                    <><RefreshCw className="w-4 h-4 animate-spin" />Generating...</>
-                  ) : (
-                    <><Download className="w-4 h-4" />Download PDF</>
+                <div className="flex gap-2">
+                  {!templateData?.file_url && (
+                    <Button 
+                      variant={isEditing ? "default" : "outline"}
+                      size="sm"
+                      className={`font-bold gap-2 px-4 h-9 rounded-lg shadow-sm ${isEditing ? 'bg-amber-500 hover:bg-amber-600 text-white border-none' : 'border-amber-200 text-amber-600 hover:bg-amber-50 hover:text-amber-700'}`}
+                      disabled={!previewContent || isDownloading}
+                      onClick={() => {
+                        if (isEditing && previewRef.current) {
+                          setPreviewContent(previewRef.current.innerHTML)
+                        }
+                        setIsEditing(!isEditing)
+                      }}
+                    >
+                      {isEditing ? <Save className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
+                      {isEditing ? 'Save Edits' : 'Edit Text'}
+                    </Button>
                   )}
-                </Button>
-                {selectedEmployee !== 'manual' && (
                   <Button 
-                    className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold gap-2 px-6 h-9 rounded-lg shadow-sm"
-                    disabled={!previewContent || isDownloading || isSending}
-                    onClick={handleSendLetterToEmployee}
+                    variant="outline"
+                    className="border-[#3498db] text-[#3498db] hover:bg-[#3498db]/5 font-bold gap-2 px-6 h-9 rounded-lg shadow-sm"
+                    disabled={!previewContent || isDownloading}
+                    onClick={handleDownloadPDF}
                   >
-                    {isSending ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" />Sending...</>
+                    {isDownloading ? (
+                      <><RefreshCw className="w-4 h-4 animate-spin" />Generating...</>
                     ) : (
-                      <><Send className="w-4 h-4" />Send to Employee</>
+                      <><Download className="w-4 h-4" />Download PDF</>
                     )}
                   </Button>
-                )}
+                  {selectedEmployee !== 'manual' && (
+                    <Button 
+                      className="bg-brand-teal hover:bg-brand-teal/90 text-white font-bold gap-2 px-6 h-9 rounded-lg shadow-sm"
+                      disabled={!previewContent || isDownloading || isSending}
+                      onClick={handleSendLetterToEmployee}
+                    >
+                      {isSending ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" />Sending...</>
+                      ) : (
+                        <><Send className="w-4 h-4" />Send to Employee</>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
+            
 
             <CardContent className="p-8 flex-1 overflow-y-auto scrollbar-hide">
               {previewContent ? (
-                <div 
-                  ref={previewRef}
-                  dangerouslySetInnerHTML={{ __html: previewContent }} 
-                  className={`document-container ${isEditing ? '[&>div]:outline-dashed [&>div]:outline-2 [&>div]:outline-amber-400 [&>div]:cursor-text [&>div]:shadow-2xl' : ''}`}
-                  contentEditable={isEditing}
-                  suppressContentEditableWarning={true}
-                  onBlur={(e) => {
-                    if (isEditing) {
-                      setPreviewContent(e.currentTarget.innerHTML);
-                    }
-                  }}
-                />
+                <div className="mx-auto relative" style={{ width: '210mm' }}>
+                  <div className="ql-container ql-snow border-none !font-sans">
+                    <div 
+                      ref={previewRef}
+                      className={`document-preview bg-white shadow-xl shadow-slate-200/50 min-h-[297mm] p-[15mm] transition-all relative border border-slate-100 ${isEditing ? 'ring-2 ring-amber-400 cursor-text shadow-2xl' : ''}`}
+                    >
+                      {systemSettings?.companyLetterheadUrl && (
+                        <div className="w-full">
+                          <img 
+                            src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
+                            alt="Company Letterhead" 
+                            className="w-full object-contain"
+                          />
+                        </div>
+                      )}
+                      <div 
+                        dangerouslySetInnerHTML={{ __html: previewContent }} 
+                        className="ql-editor p-0 mt-6"
+                        contentEditable={isEditing}
+                        suppressContentEditableWarning={true}
+                        onBlur={(e) => {
+                          if (isEditing) {
+                            setPreviewContent(e.currentTarget.innerHTML);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Page break indicators */}
+                  {estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
+                    <div 
+                      key={i}
+                      className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex items-center justify-center opacity-70 z-50"
+                      style={{ top: `${(i + 1) * 297}mm` }}
+                    >
+                      <span className="bg-red-50 text-red-500 font-bold text-[10px] px-2 py-0.5 rounded-full absolute -top-2.5 shadow-sm border border-red-200">
+                        Page {i + 2} Break
+                      </span>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-4 py-40">
                   <div className="w-20 h-20 rounded-3xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
