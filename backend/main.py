@@ -243,17 +243,7 @@ async def punch_in(employee_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=400, detail="Punch in failed")
     return result
 
-@app.post("/attendance/bulk-generate")
-async def generate_bulk_attendance(request: dict, db=Depends(get_db)):
-    employee_id = request.get("employeeId")
-    month = request.get("month")
-    year = request.get("year")
-    if not all([employee_id, month, year]):
-        raise HTTPException(status_code=400, detail="EmployeeId, month, and year required")
-    result = await crud.generate_bulk_attendance(db, employee_id, month, year)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    return {"message": f"Generated {len(result)} records", "records": result}
+
 
 @app.post("/attendance", response_model=schemas.Attendance)
 async def create_attendance(attendance: schemas.AttendanceCreate, db=Depends(get_db)):
@@ -273,15 +263,7 @@ async def delete_attendance(attendance_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Attendance record not found")
     return {"message": "Attendance record deleted successfully"}
 
-@app.post("/attendance/bulk-delete")
-async def bulk_delete_attendance(request: dict, db=Depends(get_db)):
-    employee_id = request.get("employeeId")
-    month = request.get("month")
-    year = request.get("year")
-    if not all([employee_id, month, year]):
-        raise HTTPException(status_code=400, detail="EmployeeId, month, and year required")
-    deleted_count = await crud.delete_bulk_attendance(db, employee_id, month, year)
-    return {"message": f"Deleted {deleted_count} records", "count": deleted_count}
+
 
 @app.post("/attendance/multi-delete")
 async def delete_multiple_attendance(request: dict, db=Depends(get_db)):

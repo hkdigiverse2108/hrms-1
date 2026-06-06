@@ -63,9 +63,7 @@ export default function AttendancePage() {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [allEmployees, setAllEmployees] = useState<any[]>([]);
-  const [isBulkGenerating, setIsBulkGenerating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -73,11 +71,7 @@ export default function AttendancePage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [bulkForm, setBulkForm] = useState({
-    employeeId: "",
-    month: dayjs(getISTNow()).format("MMMM"),
-    year: dayjs(getISTNow()).format("YYYY")
-  });
+
   const [editForm, setEditForm] = useState<any>({
     id: "",
     date: "",
@@ -305,37 +299,6 @@ export default function AttendancePage() {
     });
   };
 
-  const handleBulkGenerate = async () => {
-    if (!bulkForm.employeeId) {
-      toast.error("Please select an employee");
-      return;
-    }
-    setIsBulkGenerating(true);
-    try {
-      const res = await fetch(`${API_URL}/attendance/bulk-generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: bulkForm.employeeId,
-          month: bulkForm.month,
-          year: parseInt(bulkForm.year)
-        })
-      });
-      if (res.ok) {
-        const result = await res.json();
-        toast.success(result.message);
-        setBulkModalOpen(false);
-        fetchAttendance();
-      } else {
-        toast.error("Failed to generate attendance");
-      }
-    } catch (err) {
-      console.error("Error bulk generating:", err);
-      toast.error("Error connecting to server");
-    } finally {
-      setIsBulkGenerating(false);
-    }
-  };
 
   const handleUpdate = async () => {
     setIsUpdating(true);
@@ -364,44 +327,6 @@ export default function AttendancePage() {
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (!bulkForm.employeeId) {
-      toast.error("Please select an employee");
-      return;
-    }
-    const isConfirmed = await confirm({
-      title: "Confirm Action",
-      message: `Are you sure you want to delete ALL attendance for this employee in ${bulkForm.month} ${bulkForm.year}?`,
-      destructive: true,
-      confirmText: "Confirm"
-    });
-    if (!isConfirmed) return;
-    
-    setIsDeleting(true);
-    try {
-      const res = await fetch(`${API_URL}/attendance/bulk-delete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: bulkForm.employeeId,
-          month: bulkForm.month,
-          year: parseInt(bulkForm.year)
-        })
-      });
-      if (res.ok) {
-        const result = await res.json();
-        toast.success(result.message);
-        setBulkModalOpen(false);
-        fetchAttendance();
-      } else {
-        toast.error("Failed to delete attendance");
-      }
-    } catch (err) {
-      console.error("Error bulk deleting:", err);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
   const handleDelete = async (id: string) => {
     const isConfirmed = await confirm({
@@ -768,85 +693,7 @@ export default function AttendancePage() {
             </Dialog>
           )}
 
-          {canAddAttendance && (
-            <Dialog open={bulkModalOpen} onOpenChange={setBulkModalOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-orange-600 hover:bg-orange-700 text-white font-medium shadow-sm w-full sm:w-auto">
-                <CalendarIcon className="w-4 h-4 mr-2" />
-                Bulk Generate
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[400px]">
-              <DialogHeader>
-                <DialogTitle className="text-xl font-bold">Bulk Generate Attendance</DialogTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Generate mock attendance records for testing purposes for the whole month.
-                </p>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Select Employee</label>
-                  <Select value={bulkForm.employeeId} onValueChange={(val) => setBulkForm({...bulkForm, employeeId: val})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose Employee" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allEmployees.map(emp => (
-                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Month</label>
-                    <Select value={bulkForm.month} onValueChange={(val) => setBulkForm({...bulkForm, month: val})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                          <SelectItem key={m} value={m}>{m}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Year</label>
-                    <Select value={bulkForm.year} onValueChange={(val) => setBulkForm({...bulkForm, year: val})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["2024", "2025", "2026"].map(y => (
-                          <SelectItem key={y} value={y}>{y}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                <Button variant="outline" className="sm:flex-1" onClick={() => setBulkModalOpen(false)}>Cancel</Button>
-                <Button 
-                  variant="destructive" 
-                  className="sm:flex-1" 
-                  onClick={handleBulkDelete}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Clear Month"}
-                </Button>
-                <Button 
-                  className="bg-orange-600 hover:bg-orange-700 text-white sm:flex-1" 
-                  onClick={handleBulkGenerate}
-                  disabled={isBulkGenerating}
-                >
-                  {isBulkGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Generate Data"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
+
       </div>
     </PageHeader>
  
