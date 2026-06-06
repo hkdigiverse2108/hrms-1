@@ -1255,27 +1255,29 @@ export default function ResourceManagementPage() {
                       />
                       <p className="text-[10px] text-muted-foreground">Current inventory count (read-only).</p>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-foreground">Add New Resources (Count)</label>
-                      <Input 
-                        type="number"
-                        min="0"
-                        placeholder="e.g. 5" 
-                        value={newResourceCount}
-                        onChange={(e) => setNewResourceCount(e.target.value)}
-                      />
-                      <p className="text-[10px] text-muted-foreground">Type a number to add new items to the inventory upon category update.</p>
-                    </div>
-                    <div className="space-y-2 mt-4">
-                      <label className="text-xs font-bold text-foreground">Remove Resources (Count)</label>
-                      <Input 
-                        type="number"
-                        min="0"
-                        placeholder="e.g. 2" 
-                        value={removeResourceCount}
-                        onChange={(e) => setRemoveResourceCount(e.target.value)}
-                      />
-                      <p className="text-[10px] text-muted-foreground">Type a number to deduct items from the inventory upon category update.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-foreground">Add New Resources (Count)</label>
+                        <Input 
+                          type="number"
+                          min="0"
+                          placeholder="e.g. 5" 
+                          value={newResourceCount}
+                          onChange={(e) => setNewResourceCount(e.target.value)}
+                        />
+                        <p className="text-[10px] text-muted-foreground">Type a number to add new items to the inventory upon category update.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-foreground">Remove Resources (Count)</label>
+                        <Input 
+                          type="number"
+                          min="0"
+                          placeholder="e.g. 2" 
+                          value={removeResourceCount}
+                          onChange={(e) => setRemoveResourceCount(e.target.value)}
+                        />
+                        <p className="text-[10px] text-muted-foreground">Type a number to deduct items from the inventory upon category update.</p>
+                      </div>
                     </div>
                   </>
                 )}
