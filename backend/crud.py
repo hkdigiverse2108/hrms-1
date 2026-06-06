@@ -685,8 +685,8 @@ async def run_payroll_processing(db, month: str, year: int):
     
     for emp in employees:
         emp_id = emp["id"]
-        # Skip inactive employees to avoid generating unnecessary payroll records
-        if emp.get("status", "").lower() == "inactive":
+        # Skip inactive and admin employees to avoid generating unnecessary payroll records
+        if emp.get("status", "").lower() == "inactive" or emp.get("role", "").lower() == "admin":
             await db.payroll.delete_many({"employeeId": emp_id, "month": month, "year": year})
             continue
         # Get salary structure
