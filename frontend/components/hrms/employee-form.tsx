@@ -23,6 +23,7 @@ import { useApi } from '@/hooks/useApi'
 import { Save, Plus, Loader2, Image as ImageIcon, X, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { Checkbox } from '@/components/ui/checkbox'
 import { API_URL, getAvatarUrl } from '@/lib/config'
 import { toast } from "sonner";
 
@@ -56,6 +57,7 @@ export interface EmployeeFormData {
   status: string
   gender: string
   position: string
+  requiredDocuments: string[]
 }
 
 interface EmployeeFormProps {
@@ -95,6 +97,7 @@ const defaultFormData: EmployeeFormData = {
   status: 'active',
   gender: 'Male',
   position: 'Intern',
+  requiredDocuments: [],
 }
 
 export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: EmployeeFormProps) {
@@ -103,6 +106,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const designations = data?.designations || []
   const roles = data?.roles || []
   const relations = data?.relations || []
+  const documentTypes = data?.documentTypes || []
   
   const [formData, setFormData] = useState<EmployeeFormData>(defaultFormData)
   const [showPassword, setShowPassword] = useState(false)
@@ -443,6 +447,47 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
               accept="image/*,application/pdf"
               onChange={handleFileUpload}
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Required Documents Checklist Section */}
+      <div className="space-y-6 pt-6 max-w-4xl border-t border-gray-100">
+        <div className="flex items-start gap-4">
+          <Label className="w-44 text-left font-medium text-gray-700 pt-3">
+            Required Documents:
+          </Label>
+          <div className="flex-1 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {documentTypes.map((docType: any) => {
+                const isChecked = formData.requiredDocuments?.includes(docType.name)
+                return (
+                  <div key={docType.id} className="flex items-center space-x-3 p-3 rounded-xl border border-gray-100 hover:border-brand-teal/30 hover:bg-gray-50 transition-colors">
+                    <Checkbox
+                      id={`doc-${docType.id}`}
+                      checked={isChecked}
+                      onCheckedChange={(checked) => {
+                        const currentDocs = formData.requiredDocuments || []
+                        if (checked) {
+                          handleChange('requiredDocuments', [...currentDocs, docType.name] as any)
+                        } else {
+                          handleChange('requiredDocuments', currentDocs.filter((name: string) => name !== docType.name) as any)
+                        }
+                      }}
+                      className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                    />
+                    <Label htmlFor={`doc-${docType.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer text-gray-700">
+                      {docType.name}
+                    </Label>
+                  </div>
+                )
+              })}
+              {documentTypes.length === 0 && (
+                <div className="col-span-full text-gray-500 text-sm italic">
+                  No document types available. Please add some in the Admin Settings.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

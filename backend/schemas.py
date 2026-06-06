@@ -187,6 +187,7 @@ class EmployeeBase(BaseModel):
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
+    requiredDocuments: Optional[List[str]] = []
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -223,6 +224,7 @@ class EmployeeUpdate(BaseModel):
     profilePhoto: Optional[str] = None
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
+    requiredDocuments: Optional[List[str]] = None
 
 class Employee(EmployeeBase):
     id: str

@@ -18,7 +18,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useApi } from '@/hooks/useApi'
-import { Building2, Landmark, Users2, Clock, ShieldCheck, CreditCard, UserCircle } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Building2, Landmark, Users2, Clock, ShieldCheck, CreditCard, UserCircle, FileText } from 'lucide-react'
 
 interface EmployeeModalProps {
   open: boolean
@@ -38,6 +39,7 @@ export function EmployeeModal({
   const { data } = useApi()
   const departments = data?.departments || []
   const designations = data?.designations || []
+  const documentTypes = data?.documentTypes || []
 
   const initialData = {
     firstName: '',
@@ -66,6 +68,7 @@ export function EmployeeModal({
     status: 'active',
     workingHoursStart: '09:30 AM',
     workingHoursEnd: '06:30 PM',
+    requiredDocuments: [],
   }
 
   const [formData, setFormData] = useState<any>(initialData)
@@ -423,6 +426,41 @@ export function EmployeeModal({
                   className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Required Documents Checklist */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+            <SectionTitle icon={FileText} title="Required Documents Checklist" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {documentTypes.map((docType: any) => {
+                const isChecked = formData.requiredDocuments?.includes(docType.name)
+                return (
+                  <div key={docType.id} className="flex items-center space-x-3 p-3 rounded-xl border border-slate-100 hover:border-brand-teal/30 hover:bg-slate-50 transition-colors">
+                    <Checkbox
+                      id={`doc-${docType.id}`}
+                      checked={isChecked}
+                      onCheckedChange={(checked) => {
+                        const currentDocs = formData.requiredDocuments || []
+                        if (checked) {
+                          setFormData({ ...formData, requiredDocuments: [...currentDocs, docType.name] })
+                        } else {
+                          setFormData({ ...formData, requiredDocuments: currentDocs.filter((name: string) => name !== docType.name) })
+                        }
+                      }}
+                      className="data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal"
+                    />
+                    <Label htmlFor={`doc-${docType.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer text-slate-700">
+                      {docType.name}
+                    </Label>
+                  </div>
+                )
+              })}
+              {documentTypes.length === 0 && (
+                <div className="col-span-full text-slate-500 text-sm italic">
+                  No document types available. Please add some in the Admin Settings.
+                </div>
+              )}
             </div>
           </div>
 

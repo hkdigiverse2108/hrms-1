@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil, Eye } from 'lucide-react'
+import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil, Eye, CheckCircle2 } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useRouter } from 'next/navigation'
@@ -295,8 +295,7 @@ export default function EmployeeDocumentsPage() {
   }
 
   const handleSave = async () => {
-    const isDeposit = formData.documentName?.includes('Deposite')
-    if (!formData.employeeId || !formData.documentName || (!isDeposit && !formData.fileUrl)) {
+    if (!formData.employeeId || !formData.documentName) {
       toast.error('Please fill all required fields')
       return
     }
@@ -323,7 +322,7 @@ export default function EmployeeDocumentsPage() {
       })
 
       if (response.ok) {
-        toast.success(editingId ? 'Document updated successfully' : 'Document uploaded successfully')
+        toast.success(editingId ? 'Document updated successfully' : 'Document added successfully')
         refresh()
         setModalOpen(false)
         setEditingId(null)
@@ -450,13 +449,14 @@ export default function EmployeeDocumentsPage() {
       </span>
     )},
     { key: 'status' as const, header: 'Status', render: (record: any) => {
-      const allowedStatuses = ['Accepted', 'Rejected', 'Returned to Employee'];
+      const allowedStatuses = ['Accepted', 'Rejected', 'Returned to Employee', 'Pending to Submit'];
       const displayStatus = allowedStatuses.includes(record.status) ? record.status : 'Pending';
       return (
         <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
           displayStatus === 'Accepted' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
           displayStatus === 'Returned to Employee' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
           displayStatus === 'Rejected' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+          displayStatus === 'Pending to Submit' ? 'bg-gray-100 text-gray-500 border border-gray-300' :
           'bg-amber-50 text-amber-700 border border-amber-200'
         }`}>
           {displayStatus}
@@ -465,11 +465,42 @@ export default function EmployeeDocumentsPage() {
     }},
   ]
 
+  const handleMarkSubmitted = async (record: any) => {
+    try {
+      const payload = {
+        employeeId: record.employeeId,
+        employeeName: record.employeeName,
+        documentName: record.documentName,
+        fileUrl: 'N/A',
+        fileName: 'N/A',
+        uploadDate: new Date().toISOString().split('T')[0],
+        status: 'Accepted'
+      }
+      
+      const response = await fetch(`${API_URL}/employee-documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      
+      if (response.ok) {
+        toast.success('Document marked as submitted')
+        refresh()
+      } else {
+        toast.error('Failed to mark document as submitted')
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error('Error occurred')
+    }
+  }
+
   const actions = (record: any) => {
     const hasEdit = isAdmin || checkPermission('employee-documents', 'canEdit')
     const hasDelete = isAdmin || checkPermission('employee-documents', 'canDelete')
     const isDeposit = record.documentName?.includes('Deposite')
     const hasFile = record.fileUrl && record.fileUrl !== 'N/A'
+    const isPendingSubmit = record.isPendingSubmit
 
     return (
       <div className="flex items-center gap-2">
@@ -478,17 +509,23 @@ export default function EmployeeDocumentsPage() {
             <Eye className="h-4 w-4" />
           </Button>
         )}
-        {(!isDeposit || hasFile) && (
+        {isPendingSubmit && isAdminOrHR && (
+          <Button variant="ghost" size="sm" className="text-emerald-600 font-bold border border-emerald-200 hover:bg-emerald-50 bg-white" onClick={() => handleMarkSubmitted(record)} title="Mark as Submitted">
+            <CheckCircle2 className="h-4 w-4 mr-1" />
+            Mark Submitted
+          </Button>
+        )}
+        {hasFile && !isPendingSubmit && (
           <Button variant="ghost" size="icon" onClick={() => window.open(record.fileUrl, '_blank')} title="View Document File">
             <ExternalLink className="h-4 w-4" />
           </Button>
         )}
-        {hasEdit && (
+        {hasEdit && !isPendingSubmit && (
           <Button variant="ghost" size="icon" className="text-brand-teal" onClick={() => handleEdit(record)}>
             <Pencil className="h-4 w-4" />
           </Button>
         )}
-        {hasDelete && (
+        {hasDelete && !isPendingSubmit && (
           <Button variant="ghost" size="icon" className="text-rose-500" onClick={() => handleDelete(record.id)}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -500,7 +537,61 @@ export default function EmployeeDocumentsPage() {
   const [filterType, setFilterType] = useState<string>('all')
   const [filterEmployee, setFilterEmployee] = useState<string>('all')
 
-  const filteredDocuments = documents.filter((doc: any) => {
+  const allDocumentsWithPlaceholders = () => {
+    const combined: any[] = [];
+    
+    if (!isAdminOrHR) {
+      // For employees, ONLY show the required documents list
+      const relevantEmployees = employees.filter((e: any) => e.id === user?.id || e.employeeId === user?.employeeId);
+      relevantEmployees.forEach((emp: any) => {
+        const requiredDocs = emp.requiredDocuments || [];
+        requiredDocs.forEach((reqDoc: string) => {
+          const exists = documents.find((d: any) => d.employeeId === emp.id && d.documentName === reqDoc);
+          if (exists) {
+            combined.push(exists);
+          } else {
+            combined.push({
+              id: `pending-${emp.id}-${reqDoc}`,
+              employeeId: emp.id,
+              employeeName: emp.name,
+              documentName: reqDoc,
+              uploadDate: '-',
+              status: 'Pending to Submit',
+              isPendingSubmit: true
+            });
+          }
+        });
+      });
+      return combined;
+    }
+
+    // For Admin/HR, show all existing documents PLUS placeholders
+    combined.push(...documents);
+    const relevantEmployees = filterEmployee !== 'all' ? employees.filter((e: any) => e.id === filterEmployee) : employees;
+    relevantEmployees.forEach((emp: any) => {
+      const requiredDocs = emp.requiredDocuments || [];
+      requiredDocs.forEach((reqDoc: string) => {
+        const exists = documents.find((d: any) => d.employeeId === emp.id && d.documentName === reqDoc);
+        if (!exists) {
+          combined.push({
+            id: `pending-${emp.id}-${reqDoc}`,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            documentName: reqDoc,
+            uploadDate: '-',
+            status: 'Pending to Submit',
+            isPendingSubmit: true
+          });
+        }
+      });
+    });
+    
+    return combined;
+  };
+
+  const processedDocuments = allDocumentsWithPlaceholders();
+
+  const filteredDocuments = processedDocuments.filter((doc: any) => {
     if (!isAdminOrHR) {
       if (doc.employeeId !== user?.id && doc.employeeId !== user?.employeeId) {
         return false
@@ -616,7 +707,7 @@ export default function EmployeeDocumentsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Employee Documents" description="Manage submitted employee records and request official company letters.">
-        {activeMainTab === 'submitted' && (isAdmin || checkPermission('employee-documents', 'canAdd')) && (
+        {activeMainTab === 'submitted' && isAdminOrHR && (
           <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={() => {
             setEditingId(null);
             setFormData({
@@ -633,7 +724,7 @@ export default function EmployeeDocumentsPage() {
             setModalOpen(true);
           }}>
             <Plus className="mr-2 h-4 w-4" />
-            Upload Document
+            Add Document
           </Button>
         )}
         {activeMainTab === 'requests' && !isAdminOrHR && (
@@ -683,7 +774,7 @@ export default function EmployeeDocumentsPage() {
             <DataTable
               data={filteredDocuments}
               columns={columns}
-              actions={actions}
+              actions={isAdminOrHR ? actions : undefined}
               searchKey={isAdminOrHR ? "employeeName" : undefined}
               searchPlaceholder="Search by employee name..."
               extraFilters={
@@ -704,19 +795,21 @@ export default function EmployeeDocumentsPage() {
                     </div>
                   )}
 
-                  <div className="w-48">
-                    <Select value={filterType} onValueChange={setFilterType}>
-                      <SelectTrigger className="h-9 border-slate-200 bg-slate-50/30 text-xs font-semibold">
-                        <SelectValue placeholder="All Types" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
-                        {documentTypes.map(type => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {isAdminOrHR && (
+                    <div className="w-48">
+                      <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger className="h-9 border-slate-200 bg-slate-50/30 text-xs font-semibold">
+                          <SelectValue placeholder="All Types" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          {documentTypes.map((t: any) => (
+                            <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </>
               }
             />
@@ -792,11 +885,11 @@ export default function EmployeeDocumentsPage() {
         )}
       </Tabs>
 
-      {/* Upload Document Modal (Tab 1) */}
+      {/* Add Document Modal (Tab 1) */}
       <Dialog open={modalOpen} onOpenChange={(open) => { setModalOpen(open); if(!open) setEditingId(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Employee Document' : 'Upload Employee Document'}</DialogTitle>
+            <DialogTitle>{editingId ? 'Edit Employee Document' : 'Add Employee Document'}</DialogTitle>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-6 py-4">
@@ -856,62 +949,6 @@ export default function EmployeeDocumentsPage() {
             </div>
 
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Select Document</Label>
-                <div className="flex items-center gap-2">
-                  <Input 
-                    type="file" 
-                    className="flex-1"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      
-                      if (file.size > 512 * 1024 * 1024) {
-                        toast.error('File size cannot exceed 512 MB')
-                        e.target.value = ''
-                        return
-                      }
-                      
-                      setIsSubmitting(true)
-                      const formDataUpload = new FormData()
-                      formDataUpload.append('file', file)
-                      
-                      try {
-                        const response = await fetch(`${API_URL}/upload`, {
-                          method: 'POST',
-                          body: formDataUpload,
-                        })
-                        
-                        if (response.ok) {
-                          const data = await response.json()
-                          const absoluteUrl = data.url.startsWith('http') 
-                            ? data.url 
-                            : `${API_URL}${data.url}`
-                          
-                          setFormData({
-                            ...formData, 
-                            fileUrl: absoluteUrl, 
-                            fileName: file.name
-                          })
-                          toast.success('File uploaded successfully')
-                        } else {
-                          toast.error('Failed to upload file')
-                        }
-                      } catch (error) {
-                        console.error('Upload error:', error)
-                        toast.error('Error uploading file')
-                      } finally {
-                        setIsSubmitting(false)
-                      }
-                    }}
-                  />
-                </div>
-                {formData.fileName && (
-                  <p className="text-[10px] text-brand-teal font-medium">Selected: {formData.fileName}</p>
-                )}
-                <p className="text-[10px] text-slate-400 font-medium tracking-tight">Upload official documents, certificates, or IDs.</p>
-              </div>
-
               {isAdminOrHR && (
                 <>
                   <div className="space-y-2 animate-in fade-in duration-200">
@@ -940,7 +977,7 @@ export default function EmployeeDocumentsPage() {
             <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button className="bg-brand-teal hover:bg-brand-teal/90" onClick={handleSave} disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              {editingId ? 'Update Document' : 'Upload & Save'}
+              {editingId ? 'Update Document' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>

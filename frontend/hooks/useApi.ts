@@ -41,7 +41,8 @@ export function useApi() {
           { key: 'holidays', url: '/holidays' },
           { key: 'kpiRecords', url: '/kpi-records' },
           { key: 'employeeDocuments', url: '/employee-documents' },
-          { key: 'employeeDailyReports', url: '/employee-daily-reports' }
+          { key: 'employeeDailyReports', url: '/employee-daily-reports' },
+          { key: 'documentTypes', url: '/document-types' }
         ];
 
         const token = localStorage.getItem('token');
