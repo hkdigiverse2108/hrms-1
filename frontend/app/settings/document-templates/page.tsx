@@ -347,7 +347,7 @@ export default function DocumentTemplatesPage() {
                       <div className="ql-container ql-snow border-none !font-sans">
                         <div ref={previewRef} className="bg-white shadow-xl shadow-slate-200/50 min-h-[297mm] p-[15mm] transition-all relative border border-slate-100">
                           {systemSettings?.companyLetterheadUrl && (
-                            <div className="w-full">
+                            <div className="-mt-[15mm] -mx-[15mm] mb-[10mm]">
                               <img 
                                 src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
                                 alt="Company Letterhead" 
