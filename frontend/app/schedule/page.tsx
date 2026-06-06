@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm } from "antd";
 import dayjs from "dayjs";
-import { Plus, Loader2, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -41,6 +41,7 @@ export default function SchedulePage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -647,10 +648,22 @@ export default function SchedulePage() {
           </div>
 
           {/* Employee List */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Employees</h3>
-            <div className="space-y-1">
-              {employees.map((emp, idx) => {
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="px-4 pt-4 pb-2 border-b border-border/50">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Employees</h3>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search employees..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-brand-teal transition-all"
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-1">
+              {employees.filter(emp => emp.name.toLowerCase().includes(employeeSearch.toLowerCase())).map((emp, idx) => {
                 const color = EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
                 const isChecked = selectedEmployeeIds.includes(String(emp.id));
                 const isCurrentUser = user && (String(emp.id) === String(user.id || user.employeeId) || String(emp.employeeId) === String(user.id || user.employeeId));
