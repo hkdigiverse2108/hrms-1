@@ -174,11 +174,13 @@ export default function PayrollPage() {
       header: 'Deposit Info',
       render: (record: Payroll) => {
         if (!isAdminOrHR) {
+          const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId)
           return (
             <div className="flex flex-col text-xs">
+              {emp?.securityDepositExempt && <span className="text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded w-max mb-1 text-[10px]">Exempt/Submitted</span>}
               {record.securityDeposit ? <span className="text-rose-500">Deducted: {formatCurrency(record.securityDeposit)}</span> : null}
               {record.returnedDeposit ? <span className="text-emerald-500">Returned: {formatCurrency(record.returnedDeposit)}</span> : null}
-              {!record.securityDeposit && !record.returnedDeposit && <span className="text-slate-400">-</span>}
+              {!record.securityDeposit && !record.returnedDeposit && !emp?.securityDepositExempt && <span className="text-slate-400">-</span>}
             </div>
           )
         }
@@ -208,13 +210,18 @@ export default function PayrollPage() {
         const previouslyCollected = empPayrolls.reduce((sum, p) => sum + (p.securityDeposit || 0), 0)
         const previouslyReturned = empPayrolls.reduce((sum, p) => sum + (p.returnedDeposit || 0), 0)
         
-        const remainingToCollect = Math.max(0, target - previouslyCollected)
+        const isExempt = emp?.securityDepositExempt === true
+        const remainingToCollect = isExempt ? 0 : Math.max(0, target - previouslyCollected)
         const isReturned = record.returnedDeposit ? record.returnedDeposit > 0 : false
 
         return (
           <div className="flex flex-col gap-1.5 min-w-[140px]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between text-[10px]">
-              <span className="text-slate-500">Target: {target}</span>
+              {isExempt ? (
+                <span className="text-amber-600 font-bold bg-amber-50 px-1 py-0.5 rounded">Exempt/Submitted</span>
+              ) : (
+                <span className="text-slate-500">Target: {target}</span>
+              )}
               <span className="text-slate-500">Coll: {previouslyCollected + (record.securityDeposit || 0)}</span>
             </div>
             <Input
@@ -222,7 +229,7 @@ export default function PayrollPage() {
               placeholder="Deduct Amt"
               defaultValue={record.securityDeposit || ''}
               className="h-7 text-[11px] px-2 py-1 bg-white border-slate-200 focus-visible:ring-brand-teal"
-              disabled={isReturned || remainingToCollect === 0}
+              disabled={isReturned || remainingToCollect === 0 || isExempt}
               onBlur={async (e) => {
                 let val = Number(e.target.value)
                 if (val > remainingToCollect) {

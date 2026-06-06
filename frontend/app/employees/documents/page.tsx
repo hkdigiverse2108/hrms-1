@@ -54,11 +54,13 @@ export default function EmployeeDocumentsPage() {
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false)
   const [ledgerLoading, setLedgerLoading] = useState(false)
   const [ledgerData, setLedgerData] = useState<any>({
+    employeeId: '',
     employeeName: '',
     target: 10000,
     paid: 0,
     remaining: 10000,
-    transactions: []
+    transactions: [],
+    exempt: false
   })
 
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false)
@@ -123,12 +125,16 @@ export default function EmployeeDocumentsPage() {
 
         const remaining = Math.max(0, target - totalPaid)
         
+        const emp = employees.find((e: any) => e.id === record.employeeId)
+        
         setLedgerData({
+          employeeId: record.employeeId,
           employeeName: record.employeeName,
           target,
           paid: totalPaid,
           remaining,
-          transactions
+          transactions,
+          exempt: emp?.securityDepositExempt || false
         })
       }
     } catch (error) {
@@ -1226,12 +1232,43 @@ export default function EmployeeDocumentsPage() {
       <Dialog open={isLedgerModalOpen} onOpenChange={setIsLedgerModalOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <FileText className="w-5 h-5 text-brand-teal" /> Security Deposit Statement
-            </DialogTitle>
-            <p className="text-xs text-slate-500 font-semibold">
-              Installment tracking ledger for <span className="text-slate-900 font-black">{ledgerData.employeeName}</span>
-            </p>
+            <div className="flex justify-between items-start">
+              <div>
+                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-brand-teal" /> Security Deposit Statement
+                </DialogTitle>
+                <p className="text-xs text-slate-500 font-semibold mt-1">
+                  Installment tracking ledger for <span className="text-slate-900 font-black">{ledgerData.employeeName}</span>
+                </p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer bg-amber-50 hover:bg-amber-100 transition-colors px-3 py-1.5 rounded-lg border border-amber-200 shadow-sm">
+                <input
+                  type="checkbox"
+                  checked={ledgerData.exempt}
+                  onChange={async (e) => {
+                    const newExempt = e.target.checked
+                    setLedgerData(prev => ({ ...prev, exempt: newExempt }))
+                    try {
+                      const res = await fetch(`${API_URL}/employees/${ledgerData.employeeId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ securityDepositExempt: newExempt })
+                      })
+                      if (res.ok) {
+                        toast.success(newExempt ? "Deposit marked as Exempt" : "Deposit exemption removed")
+                        fetchEmployees()
+                      } else {
+                        toast.error("Failed to update exemption status")
+                      }
+                    } catch (err) {
+                      toast.error("Error updating exemption")
+                    }
+                  }}
+                  className="w-4 h-4 text-brand-teal rounded border-amber-300 focus:ring-brand-teal"
+                />
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Mark as Exempt</span>
+              </label>
+            </div>
           </DialogHeader>
 
           {ledgerLoading ? (

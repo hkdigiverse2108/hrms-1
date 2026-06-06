@@ -188,6 +188,7 @@ class EmployeeBase(BaseModel):
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
     requiredDocuments: Optional[List[str]] = []
+    securityDepositExempt: Optional[bool] = False
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -225,6 +226,7 @@ class EmployeeUpdate(BaseModel):
     customStatus: Optional[str] = None
     customEmoji: Optional[str] = None
     requiredDocuments: Optional[List[str]] = None
+    securityDepositExempt: Optional[bool] = None
 
 class Employee(EmployeeBase):
     id: str
