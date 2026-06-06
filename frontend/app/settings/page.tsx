@@ -139,6 +139,7 @@ export default function SettingsPage() {
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
           noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
           companyLetterheadUrl: settings?.companyLetterheadUrl || null,
+          companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
           invoiceColor2: settings?.invoiceColor2 || "#08304b"
         })
@@ -156,7 +157,7 @@ export default function SettingsPage() {
       setIsUpdating(false);
     }
   };
-
+ 
   const handleLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -173,6 +174,33 @@ export default function SettingsPage() {
         const data = await res.json();
         setSettings({ ...settings, companyLetterheadUrl: data.url });
         toast.success("Letterhead uploaded successfully! Don't forget to click Save Settings.");
+      } else {
+        toast.error("Failed to upload image.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred during upload.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsUpdating(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSettings({ ...settings, companySignatureUrl: data.url });
+        toast.success("Signature uploaded successfully! Don't forget to click Save Settings.");
       } else {
         toast.error("Failed to upload image.");
       }
@@ -493,6 +521,45 @@ export default function SettingsPage() {
                           <Upload className="w-4 h-4 mr-2" />
                           {settings?.companyLetterheadUrl ? 'Replace Letterhead' : 'Upload Letterhead'}
                           <input type="file" accept="image/*" className="hidden" onChange={handleLetterheadUpload} disabled={isUpdating} />
+                        </label>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-span-1 md:col-span-2 mt-6 border-t border-slate-100 pt-6 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-brand-teal" /> Authorized Signature for Invoices
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Upload an image of the authorized signature to be displayed on all company invoices.
+                    </p>
+                    
+                    {settings?.companySignatureUrl && (
+                      <div className="relative mb-4 border border-slate-200 rounded-xl overflow-hidden bg-white/50 p-4 max-w-xs">
+                        <img 
+                          src={settings.companySignatureUrl.startsWith('http') ? settings.companySignatureUrl : `${API_URL}${settings.companySignatureUrl}`} 
+                          alt="Signature Preview" 
+                          className="max-h-20 object-contain rounded border border-slate-100" 
+                        />
+                        <Button 
+                          variant="destructive" 
+                          size="sm" 
+                          className="absolute top-2 right-2 h-7 px-3 text-[10px]"
+                          onClick={() => setSettings({...settings, companySignatureUrl: null})}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center gap-4">
+                      <Button asChild variant="outline" className="border-brand-teal text-brand-teal cursor-pointer">
+                        <label>
+                          <Upload className="w-4 h-4 mr-2" />
+                          {settings?.companySignatureUrl ? 'Replace Signature' : 'Upload Signature'}
+                          <input type="file" accept="image/*" className="hidden" onChange={handleSignatureUpload} disabled={isUpdating} />
                         </label>
                       </Button>
                     </div>

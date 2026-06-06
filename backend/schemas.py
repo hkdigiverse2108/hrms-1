@@ -1082,6 +1082,7 @@ class SystemSettingsBase(BaseModel):
     invoiceColor1: Optional[str] = "#08304b"
     invoiceColor2: Optional[str] = "#08304b"
     companyLetterheadUrl: Optional[str] = None
+    companySignatureUrl: Optional[str] = None
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1097,6 +1098,7 @@ class SystemSettingsUpdate(BaseModel):
     invoiceColor1: Optional[str] = None
     invoiceColor2: Optional[str] = None
     companyLetterheadUrl: Optional[str] = None
+    companySignatureUrl: Optional[str] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str

@@ -651,6 +651,15 @@ export default function ViewInvoicePage() {
 
             {/* Signature Block */}
             <div className="flex flex-col items-center justify-end justify-self-end text-center space-y-1 self-end select-none">
+              {settings?.companySignatureUrl && (
+                <div className="relative mb-1 overflow-hidden max-h-16 w-36 flex items-center justify-center pointer-events-none">
+                  <img 
+                    src={settings.companySignatureUrl.startsWith('http') ? settings.companySignatureUrl : `${API_URL}${settings.companySignatureUrl}`} 
+                    alt="Authorized Signature" 
+                    className="max-h-16 object-contain" 
+                  />
+                </div>
+              )}
               <div className="w-44 h-[2px] bg-black" />
               <h4 className="font-bold text-[#111827] text-[11.5px] uppercase tracking-wide leading-none">
                 MANGUKIYA HET RAJESHBHAI
