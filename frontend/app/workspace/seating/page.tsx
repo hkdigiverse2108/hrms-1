@@ -1358,9 +1358,27 @@ export default function SeatingArrangementPage() {
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <p className="text-xs italic text-slate-400">No PCs on this desk.</p>
                   )}
+                </div>
+
+                {/* Danger Zone */}
+                <div className="border-t border-slate-100 pt-4 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerConfirm(
+                        "Delete Desk",
+                        `Are you sure you want to delete ${editingDesk.name || `Desk ${editingDesk.id}`}?`,
+                        () => {
+                          handleDeleteDesk(editingDesk.id);
+                        }
+                      );
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-all flex items-center justify-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete Desk & All Associated Seats
+                  </button>
                 </div>
               </div>
 
