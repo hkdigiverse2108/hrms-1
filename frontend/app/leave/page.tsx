@@ -1635,9 +1635,55 @@ export default function LeavePage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
+                            { item.status === 'Pending' ? (
+                               <div className="flex gap-2 justify-end">
+                                 {canEditLeave && (
+                                   <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0 text-brand-teal hover:bg-brand-light"
+                                    onClick={() => handleEdit(item)}
+                                    title="Edit Request"
+                                   >
+                                     <Pencil className="w-4 h-4" />
+                                   </Button>
+                                 )}
+                                 {canDeleteLeave && (
+                                   <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
+                                    onClick={() => handleCancelInitiate(item.id)}
+                                    title="Cancel Request"
+                                   >
+                                     <X className="w-4 h-4" />
+                                   </Button>
+                                 )}
+                                 {!canEditLeave && !canDeleteLeave && (
+                                   <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0 text-brand-teal hover:bg-brand-light"
+                                    onClick={() => handleView(item)}
+                                    title="View Details"
+                                   >
+                                     <Eye className="w-4 h-4" />
+                                   </Button>
+                                 )}
+                               </div>
+                            ) : (
+                               <div className="flex justify-end">
+                                 <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="h-8 w-8 p-0 text-brand-teal hover:bg-brand-light"
+                                  onClick={() => handleView(item)}
+                                  title="View Details"
+                                 >
+                                   <Eye className="w-4 h-4" />
+                                 </Button>
+                               </div>
+                            )}
                           </td>
                         </tr>
                       );
