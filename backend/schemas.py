@@ -789,6 +789,7 @@ class ClientBase(BaseModel):
     email: str
     phone: str
     address: Optional[str] = None
+    gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = "active"
     services: Optional[str] = None
@@ -821,6 +822,7 @@ class ClientUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
+    gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = None
     services: Optional[str] = None

@@ -633,7 +633,12 @@ export default function DocumentGeneratorPage() {
               </button>
             </div>
             <div class="py-10 flex justify-center">
-              ${previewContent}
+              <div class="document-preview bg-white min-h-[297mm] w-[210mm] p-[15mm] border border-slate-100">
+                ${systemSettings?.companyLetterheadUrl ? `<div class="-mt-[15mm] -mx-[15mm] mb-[10mm]"><img src="${systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`}" class="w-full object-contain" /></div>` : ''}
+                <div class="ql-editor p-0">
+                  ${previewContent}
+                </div>
+              </div>
             </div>
           </body>
         </html>
@@ -913,7 +918,7 @@ export default function DocumentGeneratorPage() {
                       className={`document-preview bg-white shadow-xl shadow-slate-200/50 min-h-[297mm] p-[15mm] transition-all relative border border-slate-100 ${isEditing ? 'ring-2 ring-amber-400 cursor-text shadow-2xl' : ''}`}
                     >
                       {systemSettings?.companyLetterheadUrl && (
-                        <div className="w-full">
+                        <div className="-mt-[15mm] -mx-[15mm] mb-[10mm]">
                           <img 
                             src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
                             alt="Company Letterhead" 

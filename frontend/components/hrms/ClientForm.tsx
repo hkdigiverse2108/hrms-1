@@ -16,6 +16,7 @@ export interface ClientFormData {
   email?: string;
   phone: string;
   address: string;
+  gstin?: string;
   department: string;
   status: string;
   services?: string;
@@ -45,6 +46,7 @@ const defaultFormData: ClientFormData = {
   email: "",
   phone: "",
   address: "",
+  gstin: "",
   department: "",
   status: "active",
   services: "",
@@ -137,6 +139,14 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
             <div className="space-y-2">
               <Label htmlFor="email" className="text-xs font-bold uppercase text-slate-500">Email Address (Optional)</Label>
               <Input id="email" type="email" placeholder="e.g. client@example.com" value={formData.email || ""} onChange={(e) => handleChange("email", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="address" className="text-xs font-bold uppercase text-slate-500">Address (Optional)</Label>
+              <Input id="address" placeholder="e.g. 123 Main St, City" value={formData.address || ""} onChange={(e) => handleChange("address", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="gstin" className="text-xs font-bold uppercase text-slate-500">GSTIN (Optional)</Label>
+              <Input id="gstin" placeholder="e.g. 22AAAAA0000A1Z5" value={formData.gstin || ""} onChange={(e) => handleChange("gstin", e.target.value)} />
             </div>
           </div>
 
