@@ -379,6 +379,7 @@ class PayrollBase(BaseModel):
     deductions: float
     penalty: float = 0
     securityDeposit: Optional[float] = 0.0
+    returnedDeposit: Optional[float] = 0.0
     netSalary: float
     status: str
     deductionRemarks: str = ""
@@ -399,7 +400,6 @@ class SalaryStructureBase(BaseModel):
     esi: float
     professionalTax: float
     tds: float
-    securityDeposit: Optional[float] = 0.0
     monthlyGross: float
 
 class SalaryStructureCreate(SalaryStructureBase):

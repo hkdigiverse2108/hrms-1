@@ -87,6 +87,7 @@ export interface Payroll {
   deductions: number
   penalty: number
   securityDeposit?: number
+  returnedDeposit?: number
   netSalary: number
   status: 'processed' | 'pending' | 'paid'
   totalWorkingDays: number

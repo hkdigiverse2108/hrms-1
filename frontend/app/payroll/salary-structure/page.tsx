@@ -37,7 +37,6 @@ export default function SalaryStructurePage() {
     esi: 0,
     professionalTax: 0,
     tds: 0,
-    securityDeposit: 0,
     monthlyGross: 0,
   })
 
@@ -70,7 +69,6 @@ export default function SalaryStructurePage() {
       esi: 0,
       professionalTax: 0,
       tds: 0,
-      securityDeposit: 0,
       monthlyGross: 0,
     })
 
@@ -87,7 +85,6 @@ export default function SalaryStructurePage() {
         esi: existing.esi,
         professionalTax: existing.professionalTax,
         tds: existing.tds,
-        securityDeposit: existing.securityDeposit || 0,
         monthlyGross: existing.monthlyGross,
       })
     }
@@ -246,10 +243,6 @@ export default function SalaryStructurePage() {
               <div className="space-y-2">
                 <Label>Income Tax (TDS)</Label>
                 <Input type="number" value={formData.tds} onChange={(e) => setFormData({...formData, tds: Number(e.target.value)})} />
-              </div>
-              <div className="space-y-2">
-                <Label>Security Deposit</Label>
-                <Input type="number" value={formData.securityDeposit || 0} onChange={(e) => setFormData({...formData, securityDeposit: Number(e.target.value)})} />
               </div>
             </div>
           </div>
