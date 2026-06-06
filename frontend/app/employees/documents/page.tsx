@@ -590,7 +590,28 @@ export default function EmployeeDocumentsPage() {
       : (filterEmployee !== 'all' ? employees.filter((e: any) => e.id === filterEmployee) : employees);
       
     relevantEmployees.forEach((emp: any) => {
-      const requiredDocs = emp.requiredDocuments || [];
+      let requiredDocs = emp.requiredDocuments || [];
+      
+      // Fix for corrupted live data where requiredDocuments might be a string or array of characters
+      if (typeof requiredDocs === 'string') {
+        try {
+          requiredDocs = JSON.parse(requiredDocs);
+          if (!Array.isArray(requiredDocs)) requiredDocs = [];
+        } catch {
+          requiredDocs = [];
+        }
+      } else if (Array.isArray(requiredDocs) && requiredDocs.length > 5 && requiredDocs[0] === '[') {
+        try {
+          const joinedStr = requiredDocs.join('');
+          const parsed = JSON.parse(joinedStr);
+          if (Array.isArray(parsed)) {
+            requiredDocs = parsed;
+          }
+        } catch {
+          // Fallback
+        }
+      }
+
       requiredDocs.forEach((reqDoc: string) => {
         const exists = documents.find((d: any) => d.employeeId === emp.id && d.documentName === reqDoc);
         if (exists) {

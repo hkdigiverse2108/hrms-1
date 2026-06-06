@@ -75,7 +75,13 @@ export function EmployeeModal({
 
   useEffect(() => {
     if (employee) {
-      setFormData({ ...initialData, ...employee })
+      let reqDocs = employee.requiredDocuments || []
+      if (typeof reqDocs === 'string') {
+        try { reqDocs = JSON.parse(reqDocs); if (!Array.isArray(reqDocs)) reqDocs = []; } catch { reqDocs = []; }
+      } else if (Array.isArray(reqDocs) && reqDocs.length > 5 && reqDocs[0] === '[') {
+        try { const parsed = JSON.parse(reqDocs.join('')); if (Array.isArray(parsed)) reqDocs = parsed; } catch {}
+      }
+      setFormData({ ...initialData, ...employee, requiredDocuments: reqDocs })
     } else {
       setFormData(initialData)
     }
