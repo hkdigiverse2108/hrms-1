@@ -1281,6 +1281,7 @@ class EmployeeDocumentBase(BaseModel):
     softCopySubmitted: Optional[str] = "No"
     hardCopySubmitted: Optional[str] = "No"
     adminAcceptance: Optional[str] = "Pending"
+    logs: Optional[list] = []
 
 class EmployeeDocumentCreate(EmployeeDocumentBase):
     pass
@@ -1294,6 +1295,8 @@ class EmployeeDocumentUpdate(BaseModel):
     softCopySubmitted: Optional[str] = None
     hardCopySubmitted: Optional[str] = None
     adminAcceptance: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class EmployeeDocument(EmployeeDocumentBase):
     id: str

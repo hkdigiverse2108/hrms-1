@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil, Eye, CheckCircle2 } from 'lucide-react'
+import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil, Eye, CheckCircle2, History } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useRouter } from 'next/navigation'
@@ -59,6 +59,9 @@ export default function EmployeeDocumentsPage() {
     remaining: 10000,
     transactions: []
   })
+
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false)
+  const [selectedRecordLogs, setSelectedRecordLogs] = useState<any[]>([])
 
   const handleViewLedger = async (record: any) => {
     setIsLedgerModalOpen(true)
@@ -508,7 +511,9 @@ export default function EmployeeDocumentsPage() {
           fileUrl: 'N/A',
           fileName: 'N/A',
           uploadDate: new Date().toISOString().split('T')[0],
-          status: newStatus
+          status: newStatus,
+          userName: user?.name || 'System',
+          performedBy: user?.id || user?.employeeId || 'System'
         }
         
         const response = await fetch(`${API_URL}/employee-documents`, {
@@ -531,7 +536,9 @@ export default function EmployeeDocumentsPage() {
           fileUrl: record.fileUrl || 'N/A',
           fileName: record.fileName || 'N/A',
           uploadDate: record.uploadDate,
-          status: newStatus
+          status: newStatus,
+          userName: user?.name || 'System',
+          performedBy: user?.id || user?.employeeId || 'System'
         }
         
         const response = await fetch(`${API_URL}/employee-documents/${record.id}`, {
@@ -579,6 +586,16 @@ export default function EmployeeDocumentsPage() {
             <Trash2 className="h-4 w-4" />
           </Button>
         )}
+        <Button variant="ghost" size="icon" className="text-blue-500" onClick={() => {
+          if (record.isPendingSubmit) {
+            toast.error("No logs for pending documents");
+            return;
+          }
+          setSelectedRecordLogs(record.logs || []);
+          setIsLogsModalOpen(true);
+        }}>
+          <History className="h-4 w-4" />
+        </Button>
       </div>
     )
   }
@@ -1264,7 +1281,31 @@ export default function EmployeeDocumentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
+      {/* Logs Modal */}
+      <Dialog open={isLogsModalOpen} onOpenChange={setIsLogsModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Status Change Logs</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto mt-2 pr-2">
+            {!selectedRecordLogs || selectedRecordLogs.length === 0 ? (
+              <p className="text-sm text-gray-500">No logs available for this document.</p>
+            ) : (
+              selectedRecordLogs.map((log, index) => (
+                <div key={index} className="flex justify-between items-center text-sm border-b pb-2">
+                  <div>
+                    <p className="font-semibold text-gray-800">{log.changedBy}</p>
+                    <p className="text-xs text-gray-500 mt-1">Changed from <span className="font-medium text-gray-700">{log.oldStatus}</span> to <span className="font-medium text-gray-700">{log.newStatus}</span></p>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {new Date(log.timestamp).toLocaleString()}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* Add/Edit Document Type Modal */}
       <Dialog open={isTypeModalOpen} onOpenChange={(open) => { setIsTypeModalOpen(open); if(!open) setEditingType(null); }}>
         <DialogContent className="max-w-md">

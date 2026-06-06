@@ -3667,7 +3667,30 @@ async def update_employee_document(db, doc_id: str, doc_update: schemas.Employee
         doc = await db.employee_documents.find_one({"_id": ObjectId(doc_id)})
         return fix_id(doc)
     
+    # Extract actor info if provided
+    performed_by = update_data.pop("performedBy", None)
+    user_name = update_data.pop("userName", None)
+    
+    existing_doc = await db.employee_documents.find_one({"_id": ObjectId(doc_id)})
+    
+    # Check for status change
+    log_entry = None
+    if "status" in update_data and existing_doc:
+        old_status = existing_doc.get("status")
+        new_status = update_data["status"]
+        if old_status != new_status:
+            log_entry = {
+                "oldStatus": old_status,
+                "newStatus": new_status,
+                "changedBy": user_name or performed_by or "System",
+                "timestamp": get_now().isoformat()
+            }
+            
     await db.employee_documents.update_one({"_id": ObjectId(doc_id)}, {"$set": update_data})
+    
+    if log_entry:
+        await db.employee_documents.update_one({"_id": ObjectId(doc_id)}, {"$push": {"logs": log_entry}})
+        
     doc = await db.employee_documents.find_one({"_id": ObjectId(doc_id)})
     return fix_id(doc)
 
