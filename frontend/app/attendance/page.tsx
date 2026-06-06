@@ -117,11 +117,7 @@ export default function AttendancePage() {
   useEffect(() => {
     if (getISTNow().getTime() !== new Date().getTime()) {
       const now = getISTNow();
-      setBulkForm(prev => ({
-        ...prev,
-        month: dayjs(now).format("MMMM"),
-        year: dayjs(now).format("YYYY")
-      }));
+
       setCreateForm(prev => ({
         ...prev,
         date: dayjs(now).format("YYYY-MM-DD")
