@@ -161,7 +161,7 @@ export default function EmployeeDocumentsPage() {
     uploadDate: new Date().toISOString().split('T')[0],
     isReceived: 'Yes',
     isOtherSelected: false,
-    status: 'Pending'
+    status: 'Pending to Submit'
   })
 
   const [docTypes, setDocTypes] = useState<any[]>([])
@@ -336,7 +336,7 @@ export default function EmployeeDocumentsPage() {
           uploadDate: new Date().toISOString().split('T')[0],
           isReceived: 'Yes',
           isOtherSelected: false,
-          status: 'Pending'
+          status: 'Pending to Submit'
         })
       }
     } catch (error) {
@@ -355,6 +355,11 @@ export default function EmployeeDocumentsPage() {
       confirmText: "Confirm"
     });
     if (!isConfirmed) return
+    
+    if (id.startsWith('pending-')) {
+      toast.error('Cannot delete a required document placeholder directly. Remove it from the employee\'s Required Documents checklist instead.');
+      return;
+    }
     
     try {
       const response = await fetch(`${API_URL}/employee-documents/${id}`, {
@@ -436,7 +441,7 @@ export default function EmployeeDocumentsPage() {
       uploadDate: record.uploadDate,
       isReceived: record.documentName?.includes('Received: Yes') ? 'Yes' : 'No',
       isOtherSelected: !documentTypes.includes(record.documentName?.split(' - Received:')[0] || ''),
-      status: record.status || 'Pending'
+      status: record.status || 'Pending to Submit'
     })
     setModalOpen(true)
   }
@@ -450,8 +455,8 @@ export default function EmployeeDocumentsPage() {
       </span>
     )},
     { key: 'status' as const, header: 'Status', render: (record: any) => {
-      const allowedStatuses = ['Accepted', 'Rejected', 'Returned to Employee', 'Pending to Submit', 'Pending'];
-      const displayStatus = allowedStatuses.includes(record.status) ? record.status : 'Pending';
+      const allowedStatuses = ['Accepted', 'Rejected', 'Returned to Employee', 'Pending to Submit'];
+      const displayStatus = allowedStatuses.includes(record.status) ? record.status : 'Pending to Submit';
       
       const badgeClass = displayStatus === 'Accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                          displayStatus === 'Returned to Employee' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
@@ -473,12 +478,11 @@ export default function EmployeeDocumentsPage() {
             value={displayStatus} 
             onValueChange={(val) => handleStatusUpdate(record, val)}
           >
-            <SelectTrigger className={`h-7 w-[130px] px-2 py-0 rounded text-[10px] font-black uppercase border focus:ring-0 ${badgeClass}`}>
+            <SelectTrigger className={`h-7 w-[160px] px-2 py-0 rounded text-[10px] font-black uppercase border focus:ring-0 ${badgeClass}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {record.isPendingSubmit && <SelectItem value="Pending to Submit" className="text-[10px] font-bold">Pending to Submit</SelectItem>}
-              <SelectItem value="Pending" className="text-[10px] font-bold">Pending</SelectItem>
+              <SelectItem value="Pending to Submit" className="text-[10px] font-bold">Pending to Submit</SelectItem>
               <SelectItem value="Accepted" className="text-[10px] font-bold text-emerald-600">Accepted</SelectItem>
               <SelectItem value="Rejected" className="text-[10px] font-bold text-rose-600">Rejected</SelectItem>
               <SelectItem value="Returned to Employee" className="text-[10px] font-bold text-indigo-600">Returned to Employee</SelectItem>
@@ -570,7 +574,7 @@ export default function EmployeeDocumentsPage() {
             <ExternalLink className="h-4 w-4" />
           </Button>
         )}
-        {hasDelete && !isPendingSubmit && (
+        {hasDelete && (
           <Button variant="ghost" size="icon" className="text-rose-500" onClick={() => handleDelete(record.id)}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -773,7 +777,7 @@ export default function EmployeeDocumentsPage() {
               uploadDate: new Date().toISOString().split('T')[0],
               isReceived: 'Yes',
               isOtherSelected: false,
-              status: 'Pending'
+              status: 'Pending to Submit'
             });
             setModalOpen(true);
           }}>
