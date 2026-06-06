@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  Filter, 
   Search, 
   X, 
   MessageSquare, 
@@ -10,11 +9,21 @@ import {
   FileText, 
   Clock, 
   Users,
-  History,
   ChevronLeft,
   Loader2,
   Eye,
-  ImageIcon
+  ImageIcon,
+  Calendar,
+  Inbox,
+  Briefcase,
+  Paperclip,
+  TrendingUp,
+  Info,
+  RotateCcw,
+  UserCheck,
+  UserX,
+  FileSpreadsheet,
+  Trash2
 } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -24,7 +33,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TablePagination } from "@/components/common/TablePagination";
 import { DatePicker } from "antd";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
@@ -39,6 +52,25 @@ dayjs.extend(relativeTime);
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 
+// Helper to determine background/text colors for fallback avatars based on name hash
+const getAvatarColorClass = (name: string) => {
+  const code = (name || "E").charCodeAt(0) % 5;
+  switch (code) {
+    case 0: return "bg-indigo-50 text-indigo-600 border border-indigo-100/60";
+    case 1: return "bg-emerald-50 text-emerald-600 border border-emerald-100/60";
+    case 2: return "bg-amber-50 text-amber-600 border border-amber-100/60";
+    case 3: return "bg-rose-50 text-rose-600 border border-rose-100/60";
+    default: return "bg-cyan-50 text-cyan-600 border border-cyan-100/60";
+  }
+};
+
+// Helper to parse leave request duration from string (e.g., "1 Day", "0.5 Days", "2.5 Days")
+const parseDuration = (durationStr: string): number => {
+  if (!durationStr) return 0;
+  const cleaned = durationStr.replace(/[^\d.]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+};
 
 export default function LeaveRequestsPage() {
   const router = useRouter();
@@ -46,6 +78,7 @@ export default function LeaveRequestsPage() {
   const [requests, setRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
 
   useEffect(() => {
     if (!permissionsLoading) {
@@ -55,21 +88,36 @@ export default function LeaveRequestsPage() {
     }
   }, [permissionsLoading, isAdmin, router, checkPermission]);
 
-
-  const [isMobileDetailView, setIsMobileDetailView] = useState(false);
-  const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
-  const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
-  const [approveReason, setApproveReason] = useState("");
-  const [cancelReason, setCancelReason] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [timeFilter, setTimeFilter] = useState("today"); // "today" | "custom"
-  const [filterDate, setFilterDate] = useState(dayjs());
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
+
+  // Filters State
+  const [selectedEmployee, setSelectedEmployee] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+  const [filterDateRange, setFilterDateRange] = useState<any>(null);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [tabFilter, setTabFilter] = useState("pending"); // "pending" | "approved" | "past" | "all"
+
+  // Memoize unique employees from requests list
+  const uniqueEmployees = React.useMemo(() => {
+    const map = new Map();
+    requests.forEach((req) => {
+      if (req.employee_id && req.employee_name) {
+        map.set(req.employee_id, {
+          id: req.employee_id,
+          name: req.employee_name,
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [requests]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   const searchParams = useSearchParams();
   const targetId = searchParams.get('id');
 
@@ -80,10 +128,8 @@ export default function LeaveRequestsPage() {
   useEffect(() => {
     if (targetId && requests.length > 0) {
       setSelectedId(targetId);
-      // If we are looking for a specific request, we should probably show "All" 
-      // or at least ensure the date filter doesn't hide it.
-      // For now, let's switch to All Requests to be safe.
-      setTimeFilter("all");
+      setTabFilter("all");
+      setDetailsModalOpen(true);
     }
   }, [targetId, requests.length]);
 
@@ -98,10 +144,8 @@ export default function LeaveRequestsPage() {
         // Handle targetId from URL immediately
         if (targetId) {
           setSelectedId(targetId);
-          setTimeFilter("all");
-        } else if (data.length > 0 && !selectedId) {
-          // Default selection if no targetId (Optional: based on previous user request, I disabled this, but keeping logic for clarity)
-          // setSelectedId(data[0].id);
+          setTabFilter("all");
+          setDetailsModalOpen(true);
         }
       }
     } catch (err) {
@@ -141,9 +185,7 @@ export default function LeaveRequestsPage() {
       if (res.ok) {
         toast.success(`Request ${newStatus.toLowerCase()} successfully`);
         fetchRequests();
-        setApproveModalOpen(false);
         setRejectModalOpen(false);
-        setCancelModalOpen(false);
       } else {
         toast.error("Failed to update status");
       }
@@ -155,25 +197,44 @@ export default function LeaveRequestsPage() {
     }
   };
 
-
+  const handleDelete = async (id: string) => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`${API_URL}/leaves/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        toast.success("Leave request deleted successfully");
+        fetchRequests();
+      } else {
+        toast.error("Failed to delete leave request");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      toast.error("Error deleting leave request");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const selectedReq = requests.find((r) => r.id === selectedId);
 
   const getStatusInfo = (status: string) => {
     switch (status) {
-      case 'Approved': return { color: 'bg-green-500', text: 'text-green-600' };
-      case 'Rejected': return { color: 'bg-red-500', text: 'text-red-600' };
-      case 'Cancelled': return { color: 'bg-amber-500', text: 'text-amber-600' };
+      case 'Approved': return { color: 'bg-emerald-500', text: 'text-emerald-600' };
+      case 'Rejected': return { color: 'bg-rose-500', text: 'text-rose-600' };
+      case 'Cancelled': return { color: 'bg-slate-400', text: 'text-slate-500' };
       default: return { color: 'bg-brand-teal', text: 'text-brand-teal' };
     }
   };
 
-
-  const handleSelect = (id: string) => {
-    setSelectedId(id);
-    setIsMobileDetailView(true);
+  const handleReset = () => {
+    setSelectedEmployee("all");
+    setFilterType("all");
+    setFilterDateRange(null);
+    setFilterStatus("all");
+    setCurrentPage(1);
   };
-
 
   if (permissionsLoading) {
     return (
@@ -183,610 +244,652 @@ export default function LeaveRequestsPage() {
     );
   }
 
+  // Helper to filter all requests in memory
+  const getFilteredRequests = () => {
+    return requests.filter((req) => {
+      // 1. Tab Filter
+      if (tabFilter === "pending") {
+        if (req.status?.toLowerCase() !== "pending") return false;
+      } else if (tabFilter === "approved") {
+        const isApproved = req.status === "Approved";
+        const isFutureOrToday = req.end_date ? dayjs(req.end_date, "DD-MM-YYYY").isSameOrAfter(dayjs(), 'day') : true;
+        if (!isApproved || !isFutureOrToday) return false;
+      } else if (tabFilter === "past") {
+        const isRejectedOrCancelled = req.status === "Rejected" || req.status === "Cancelled";
+        const isApprovedPast = req.status === "Approved" && req.end_date && dayjs(req.end_date, "DD-MM-YYYY").isBefore(dayjs(), 'day');
+        if (!isRejectedOrCancelled && !isApprovedPast) return false;
+      }
+
+      // 2. Employee Dropdown Filter
+      if (selectedEmployee !== "all") {
+        if (req.employee_id !== selectedEmployee) return false;
+      }
+
+      // 3. Leave Type Filter
+      if (filterType !== "all") {
+        const typeMatch = req.type?.toLowerCase().includes(filterType.toLowerCase());
+        if (!typeMatch) return false;
+      }
+
+      // 4. Date Range Filter
+      if (filterDateRange && filterDateRange.length === 2) {
+        const filterStart = filterDateRange[0].startOf('day');
+        const filterEnd = filterDateRange[1].endOf('day');
+        const reqStart = dayjs(req.start_date, "DD-MM-YYYY").startOf('day');
+        const reqEnd = dayjs(req.end_date, "DD-MM-YYYY").endOf('day');
+        const isOverlap = reqStart.isSameOrBefore(filterEnd) && reqEnd.isSameOrAfter(filterStart);
+        if (!isOverlap) return false;
+      }
+
+      // 5. Status Filter (Only when on 'All' tab)
+      if (tabFilter === "all" && filterStatus !== "all") {
+        if (req.status?.toLowerCase() !== filterStatus.toLowerCase()) return false;
+      }
+
+      return true;
+    });
+  };
+
+  const filteredRequests = getFilteredRequests();
+  const paginatedRequests = filteredRequests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Quick stats values
+  const totalCount = requests.length;
+  const pendingCountTotal = requests.filter(r => r.status?.toLowerCase() === 'pending').length;
+  const approvedCountTotal = requests.filter(r => r.status === 'Approved').length;
+  const rejectedCountTotal = requests.filter(r => r.status === 'Rejected' || r.status === 'Cancelled').length;
+
   return (
-    <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-8rem)] overflow-hidden">
+    <div className="space-y-6">
       
-      {/* LEFT COLUMN: LIST */}
-      <div className={`w-full lg:w-[350px] shrink-0 flex flex-col border border-border bg-white rounded-xl overflow-hidden shadow-sm ${isMobileDetailView ? 'hidden lg:flex' : 'flex'}`}>
-        
-        {/* Header */}
-        <div className="p-4 border-b border-border bg-white z-10 shrink-0">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-lg text-foreground">Leave Requests</h2>
+      {/* HEADER SECTION */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-transparent">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2.5">
+            <Calendar className="w-6 h-6 text-brand-teal" />
+            <span>Employee Leave Requests</span>
+          </h1>
+          <p className="text-sm text-slate-500 font-medium mt-1">
+            Review, filter, and approve time-off and leave requests submitted by all organization members.
+          </p>
+        </div>
+      </div>
+
+      {/* QUICK STATS ROW */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Pending Review Card */}
+        <button 
+          onClick={() => { setTabFilter("pending"); setCurrentPage(1); }}
+          className={`text-left p-6 rounded-2xl border flex items-center gap-4.5 transition-all duration-300 cursor-pointer active:scale-98 select-none bg-white
+            ${tabFilter === "pending" 
+              ? "border-slate-300 shadow-sm" 
+              : "border-slate-100 hover:border-slate-200 hover:shadow-2xs"
+            }`}
+        >
+          <div className="p-3.5 rounded-xl shrink-0 bg-amber-50 text-amber-600">
+            <Clock className="w-6 h-6" />
           </div>
-          
-          <div className="grid grid-cols-2 gap-2 mb-6">
-            <button 
-              onClick={() => {
-                setTimeFilter("today");
-                setFilterDate(dayjs());
-              }}
-              className={`h-10 text-[11px] font-bold rounded-lg border transition-all flex items-center justify-center gap-2 ${timeFilter === 'today' ? 'bg-brand-teal text-white border-brand-teal shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-brand-teal hover:text-brand-teal'}`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Today</span>
-            </button>
-            
-            <div className={`h-10 px-2 rounded-lg border transition-all flex items-center ${timeFilter === 'custom' ? 'bg-white border-brand-teal shadow-sm' : 'bg-gray-50/50 border-slate-200'}`}>
-              <DatePicker 
-                value={filterDate}
-                onChange={(date) => {
-                  if (date) {
-                    setFilterDate(date);
-                    setTimeFilter("custom");
-                  }
-                }}
-                allowClear={false}
-                variant="borderless"
-                className="w-full h-8 text-[11px] font-bold p-0"
-                format="DD-MM-YYYY"
-              />
-            </div>
+          <div className="flex flex-col">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Pending Review</span>
+            <span className="text-3xl font-black font-sans leading-none mt-1 text-slate-800">{pendingCountTotal}</span>
+          </div>
+        </button>
+
+        {/* Approved Leaves Card */}
+        <button 
+          onClick={() => { setTabFilter("approved"); setCurrentPage(1); }}
+          className={`text-left p-6 rounded-2xl border flex items-center gap-4.5 transition-all duration-300 cursor-pointer active:scale-98 select-none bg-white
+            ${tabFilter === "approved" 
+              ? "border-slate-300 shadow-sm" 
+              : "border-slate-100 hover:border-slate-200 hover:shadow-2xs"
+            }`}
+        >
+          <div className="p-3.5 rounded-xl shrink-0 bg-emerald-50 text-emerald-600">
+            <Check className="w-6 h-6" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Approved Leaves</span>
+            <span className="text-3xl font-black font-sans leading-none mt-1 text-slate-800">{approvedCountTotal}</span>
+          </div>
+        </button>
+
+        {/* Rejected/Cancelled Card */}
+        <button 
+          onClick={() => { setTabFilter("all"); setFilterStatus("Rejected"); setCurrentPage(1); }}
+          className={`text-left p-6 rounded-2xl border flex items-center gap-4.5 transition-all duration-300 cursor-pointer active:scale-98 select-none bg-white
+            ${tabFilter === "all" && filterStatus === "Rejected" 
+              ? "border-slate-300 shadow-sm" 
+              : "border-slate-100 hover:border-slate-200 hover:shadow-2xs"
+            }`}
+        >
+          <div className="p-3.5 rounded-xl shrink-0 bg-rose-50 text-rose-600">
+            <X className="w-6 h-6" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Rejected / Cancelled</span>
+            <span className="text-3xl font-black font-sans leading-none mt-1 text-slate-800">{rejectedCountTotal}</span>
+          </div>
+        </button>
+
+        {/* Total Requests Card */}
+        <button 
+          onClick={() => { setTabFilter("all"); setFilterStatus("all"); setCurrentPage(1); }}
+          className={`text-left p-6 rounded-2xl border flex items-center gap-4.5 transition-all duration-300 cursor-pointer active:scale-98 select-none bg-white
+            ${tabFilter === "all" && filterStatus === "all" 
+              ? "border-slate-300 shadow-sm" 
+              : "border-slate-100 hover:border-slate-200 hover:shadow-2xs"
+            }`}
+        >
+          <div className="p-3.5 rounded-xl shrink-0 bg-indigo-50 text-indigo-600">
+            <Users className="w-6 h-6" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Total Requests</span>
+            <span className="text-3xl font-black font-sans leading-none mt-1 text-slate-800">{totalCount}</span>
+          </div>
+        </button>
+      </div>
+
+      {/* FILTER BAR SECTION */}
+      <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs">
+        <div className={`grid grid-cols-1 ${tabFilter === "all" ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4 items-end`}>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700">Filter Employee</label>
+            <Select value={selectedEmployee} onValueChange={(val) => { setSelectedEmployee(val); setCurrentPage(1); }}>
+              <SelectTrigger className="h-10 bg-slate-50/50 border-slate-200 rounded-xl text-xs font-sans">
+                <SelectValue placeholder="All Employees" />
+              </SelectTrigger>
+              <SelectContent className="font-sans max-h-60 overflow-y-auto">
+                <SelectItem value="all">All Employees</SelectItem>
+                {uniqueEmployees.map((emp: any) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search requests..." 
-              className="pl-9 bg-gray-50/50 border-border"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700">Leave Type</label>
+            <Select value={filterType} onValueChange={(val) => { setFilterType(val); setCurrentPage(1); }}>
+              <SelectTrigger className="h-10 bg-slate-50/50 border-slate-200 rounded-xl text-xs font-sans">
+                <SelectValue placeholder="Select Leave Type" />
+              </SelectTrigger>
+              <SelectContent className="font-sans">
+                <SelectItem value="all">All Leave Types</SelectItem>
+                <SelectItem value="annual">Monthly Leave</SelectItem>
+                <SelectItem value="sick">Sick Leave</SelectItem>
+                <SelectItem value="casual">Casual Leave</SelectItem>
+                <SelectItem value="unpaid">Unpaid Leave</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {tabFilter === "all" && (
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700">Status</label>
+              <Select value={filterStatus} onValueChange={(val) => { setFilterStatus(val); setCurrentPage(1); }}>
+                <SelectTrigger className="h-10 bg-slate-50/50 border-slate-200 rounded-xl text-xs font-sans">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent className="font-sans">
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Approved">Approved</SelectItem>
+                  <SelectItem value="Rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700 block">Leave Period Range</label>
+            <DatePicker.RangePicker 
+              className="w-full h-10 border border-slate-200 bg-slate-50/50 hover:border-slate-300 rounded-xl transition-colors focus-within:border-brand-teal focus-within:ring-1 focus-within:ring-brand-teal/20 font-sans" 
+              format="DD-MM-YYYY"
+              value={filterDateRange}
+              onChange={(dates) => { setFilterDateRange(dates); setCurrentPage(1); }}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div 
-              onClick={() => {
-                const next = statusFilter === 'Pending' ? null : 'Pending';
-                setStatusFilter(next);
-                if (next) setTimeFilter("all");
-                else {
-                  setTimeFilter("today");
-                  setFilterDate(dayjs());
-                }
-              }}
-              className={`cursor-pointer border-2 rounded-lg p-3 transition-all ${statusFilter === 'Pending' ? 'bg-brand-teal text-white border-brand-teal shadow-md' : 'bg-brand-light/40 border-brand-teal/10 hover:border-brand-teal/30'}`}
-            >
-              <div className={`text-xl font-bold ${statusFilter === 'Pending' ? 'text-white' : 'text-foreground'}`}>
-                {requests.filter(r => r.status?.toLowerCase() === 'pending').length}
-              </div>
-              <div className={`text-xs font-bold ${statusFilter === 'Pending' ? 'text-white/90' : 'text-muted-foreground'}`}>Pending</div>
-            </div>
-            <div 
-              onClick={() => {
-                const next = statusFilter === 'Approved' ? null : 'Approved';
-                setStatusFilter(next);
-                if (next) setTimeFilter("all");
-                else {
-                  setTimeFilter("today");
-                  setFilterDate(dayjs());
-                }
-              }}
-              className={`cursor-pointer border-2 rounded-lg p-3 transition-all ${statusFilter === 'Approved' ? 'bg-brand-teal text-white border-brand-teal shadow-md' : 'bg-gray-50 border-border hover:border-brand-teal'}`}
-            >
-              <div className={`text-xl font-bold ${statusFilter === 'Approved' ? 'text-white' : 'text-foreground'}`}>
-                {requests.filter(r => r.status?.toLowerCase() === 'approved').length}
-              </div>
-              <div className={`text-xs font-bold ${statusFilter === 'Approved' ? 'text-white/90' : 'text-muted-foreground'}`}>Approved</div>
-            </div>
+          <div className="flex gap-2">
+            <Button onClick={handleReset} variant="outline" className="flex-1 h-10 border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-xs rounded-xl active:scale-95 transition-all">
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reset Filters
+            </Button>
           </div>
         </div>
-
-        {/* List */}
-        <div className="flex-1 overflow-y-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center p-8">
-              <Loader2 className="w-6 h-6 animate-spin text-brand-teal" />
-            </div>
-          ) : requests.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">
-              No leave requests found
-            </div>
-          ) : requests
-              .filter((req) => {
-                const matchesStatus = statusFilter ? req.status?.toLowerCase() === statusFilter.toLowerCase() : true;
-                if (!matchesStatus) return false;
-
-                const matchesSearch = req.employee_name?.toLowerCase().includes(searchTerm.toLowerCase());
-                if (!matchesSearch) return false;
-
-                // If a status filter (Pending/Approved) is active, show ALL requests for that status regardless of date
-                if (statusFilter) return true;
-
-                if (timeFilter === "all") return true;
-                if (!req.start_date || !req.end_date) return false;
-                const targetDate = filterDate.startOf('day');
-                const start = dayjs(req.start_date, "DD-MM-YYYY").startOf('day');
-                const end = dayjs(req.end_date, "DD-MM-YYYY").endOf('day');
-                return targetDate.isSameOrAfter(start) && targetDate.isSameOrBefore(end);
-              })
-              .map((req) => (
-            <div 
-              key={req.id}
-              onClick={() => handleSelect(req.id)}
-              className={`p-4 border-b border-border cursor-pointer transition-colors relative ${
-                selectedId === req.id 
-                  ? 'bg-brand-light/20 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-brand-teal' 
-                  : 'hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-brand-light text-brand-teal text-xs font-semibold">
-                      {req.employee_name.split(' ').map((n: string) => n[0]).join('')}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="font-semibold text-sm text-foreground">{req.employee_name}</span>
-                </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full 
-                  ${req.status === 'Approved' ? 'bg-green-100 text-green-700' : 
-                    req.status === 'Rejected' ? 'bg-red-100 text-red-700' : 
-                    req.status === 'Cancelled' ? 'bg-amber-100 text-amber-700' : 
-                    'bg-brand-light text-brand-teal'}`}>
-                  {req.status}
-                </span>
-              </div>
-              
-              <div className="pl-11">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${getStatusInfo(req.status).color}`}></span>
-                  <span className="text-sm font-medium text-foreground capitalize">{req.type}</span>
-                  <span className="text-sm text-muted-foreground">({req.duration})</span>
-                  {req.proof_image && (
-                    <span 
-                      className="inline-flex items-center justify-center p-0.5 bg-brand-light border border-brand-teal/20 text-brand-teal rounded"
-                      title="Proof Image Attached"
-                    >
-                      <ImageIcon className="w-3 h-3" />
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground">{req.start_date} - {req.end_date}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
       </div>
 
-      {/* RIGHT COLUMN: DETAILS */}
-      <div className={`flex-1 flex flex-col min-h-0 overflow-y-auto bg-transparent ${!isMobileDetailView ? 'hidden lg:flex' : 'flex'}`}>
+      {/* TABS & DATA TABLE */}
+      <Tabs value={tabFilter} onValueChange={(val) => { setTabFilter(val); setCurrentPage(1); }} className="w-full">
+        <TabsList className="bg-transparent border-b border-slate-100 w-full justify-start rounded-none p-0 h-auto space-x-6 overflow-x-auto flex-nowrap [&::-webkit-scrollbar]:hidden">
+          <TabsTrigger 
+            value="pending" 
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-slate-400 data-[state=active]:bg-transparent px-1 py-3.5 data-[state=active]:shadow-none font-bold text-xs capitalize cursor-pointer transition-all"
+          >
+            Pending
+          </TabsTrigger>
+          <TabsTrigger 
+            value="approved" 
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-slate-400 data-[state=active]:bg-transparent px-1 py-3.5 data-[state=active]:shadow-none font-bold text-xs capitalize cursor-pointer transition-all"
+          >
+            Approved
+          </TabsTrigger>
+          <TabsTrigger 
+            value="all" 
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-slate-400 data-[state=active]:bg-transparent px-1 py-3.5 data-[state=active]:shadow-none font-bold text-xs capitalize cursor-pointer transition-all"
+          >
+            All
+          </TabsTrigger>
+        </TabsList>
         
-        {!selectedReq ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-            <div className="bg-gray-50 rounded-full p-6 mb-4">
-              <FileText className="w-12 h-12 text-gray-300" />
-            </div>
-            <h3 className="text-lg font-bold text-foreground mb-2">No Request Selected</h3>
-            <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-              Select a leave request from the list on the left to view full details and take action.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Mobile Back Button */}
-            <div className="lg:hidden mb-4">
-              <Button variant="outline" size="sm" onClick={() => setIsMobileDetailView(false)}>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back to List
-              </Button>
-            </div>
+        <TabsContent value={tabFilter} className="mt-6 bg-white border border-slate-100 rounded-2xl shadow-xs overflow-hidden">
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left whitespace-nowrap">
+              <thead className="text-[11px] text-slate-500 font-bold bg-slate-50/50 border-b border-slate-100 tracking-wider">
+                <tr>
+                  <th className="px-6 py-4 font-bold text-center">Sr. No.</th>
+                  <th className="px-6 py-4 font-bold">Employee</th>
+                  <th className="px-6 py-4 font-bold">Leave Type</th>
+                  <th className="px-6 py-4 font-bold">Leave Period</th>
+                  <th className="px-6 py-4 font-bold text-center">Duration</th>
+                  <th className="px-6 py-4 font-bold">Submitted</th>
+                  <th className="px-6 py-4 font-bold">Status</th>
+                  <th className="px-6 py-4 font-bold">Approver / Reviewer</th>
+                  <th className="px-6 py-4 text-right"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
+                        <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+                        <span className="text-xs font-semibold">Loading leaves from database...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedRequests.length > 0 ? (
+                  paginatedRequests.map((item, index) => {
+                    const avatarColor = getAvatarColorClass(item.employee_name);
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
+                        
+                        {/* Serial Number */}
+                        <td className="px-6 py-4 text-center font-bold text-slate-400 font-sans">
+                          {String((currentPage - 1) * itemsPerPage + index + 1).padStart(2, '0')}
+                        </td>
+                        
+                        {/* Employee Details */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="w-9 h-9 border border-slate-100 shrink-0">
+                              <AvatarFallback className={`font-bold text-xs ${avatarColor}`}>
+                                {item.employee_name.split(' ').map((n: string) => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col text-left">
+                              <span className="text-[13px] font-extrabold text-slate-800 leading-tight">
+                                {item.employee_name}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
 
-            {/* Detail Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <div className="flex items-center gap-4">
-                <Avatar className="w-14 h-14 border border-border">
-                  <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-lg">
-                    {selectedReq.employee_name.split(' ').map((n: string) => n[0]).join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">REQUEST #{selectedReq.id.slice(-6)}</div>
-                  <h1 className="text-2xl font-bold text-foreground leading-none mb-1">{selectedReq.employee_name}</h1>
-                  <p className="text-sm text-muted-foreground">Employee ID: {selectedReq.employee_id}</p>
+                        {/* Leave Type */}
+                        <td className="px-6 py-4">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold text-slate-600 bg-slate-100 rounded-md cursor-pointer hover:bg-slate-200 transition-colors">
+                                  {item.type}
+                                  <Info className="w-3 h-3 text-slate-400 shrink-0" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs font-sans text-xs">
+                                <p className="leading-relaxed">{item.reason || "No reason specified."}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </td>
+
+                        {/* Leave Period */}
+                        <td className="px-6 py-4 text-slate-600 text-xs">
+                          <div className="flex items-center gap-1.5 font-sans">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{item.start_date} to {item.end_date}</span>
+                          </div>
+                        </td>
+
+                        {/* Duration */}
+                        <td className="px-6 py-4 text-center font-bold text-slate-800 font-sans">
+                          {item.duration}
+                        </td>
+
+                        {/* Submitted On */}
+                        <td className="px-6 py-4 text-slate-500 text-xs font-sans">
+                          {item.requested_on}
+                        </td>
+
+                        {/* Status badge / selector */}
+                        <td className="px-6 py-4">
+                          {(isAdmin || checkPermission('leave-requests', 'canEdit')) ? (
+                            <Select 
+                              value={item.status} 
+                              onValueChange={(val) => {
+                                if (val === 'Rejected') {
+                                  setRejectingId(item.id);
+                                  setRejectReason("");
+                                  setRejectModalOpen(true);
+                                } else if (val === 'Cancelled') {
+                                  handleDelete(item.id);
+                                } else {
+                                  handleStatusUpdate(item.id, val);
+                                }
+                              }}
+                            >
+                              <SelectTrigger className={`!h-8 w-[105px] pl-3.5 pr-2.5 text-[10px] font-bold rounded-full border border-slate-200 bg-white uppercase tracking-wider cursor-pointer shadow-3xs font-sans focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 flex items-center justify-between leading-none
+                                ${item.status === 'Approved' ? 'text-emerald-600' : 
+                                  item.status === 'Rejected' ? 'text-rose-600' : 
+                                  item.status === 'Cancelled' ? 'text-slate-500' : 
+                                  'text-amber-600'}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="font-sans text-[10px] font-semibold uppercase tracking-wider">
+                                <SelectItem value="Pending" className="text-amber-600 focus:text-amber-600">Pending</SelectItem>
+                                <SelectItem value="Approved" className="text-emerald-600 focus:text-emerald-600">Approved</SelectItem>
+                                <SelectItem value="Rejected" className="text-rose-600 focus:text-rose-600">Rejected</SelectItem>
+                                <SelectItem value="Cancelled" className="text-slate-500 focus:text-slate-500">Cancelled</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className={`inline-flex items-center justify-center h-8 px-3.5 text-[10px] font-bold rounded-full border border-slate-200 uppercase tracking-wider w-[105px]
+                              ${item.status === 'Approved' ? 'text-emerald-600' : 
+                                item.status === 'Rejected' ? 'text-rose-600' : 
+                                item.status === 'Cancelled' ? 'text-slate-500' : 
+                                'text-amber-600'}`}>
+                              {item.status}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Reviewer / Approved By */}
+                        <td className="px-6 py-4">
+                          {item.status === 'Approved' || item.status === 'Rejected' || item.status === 'Cancelled' ? (
+                            item.approved_by ? (
+                              <div className="flex items-center gap-2.5">
+                                <Avatar className="w-7 h-7 border border-slate-100">
+                                  <AvatarImage src={getAvatarUrl(item.approved_by_photo)} className="object-cover" />
+                                  <AvatarFallback className="bg-slate-100 text-slate-600 font-bold text-[10px]">
+                                    {item.approved_by.split(' ').map((n: string) => n[0]).join('')}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex flex-col">
+                                  <span className="text-[12px] font-extrabold text-slate-800 leading-tight">
+                                    {item.approved_by}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 font-semibold uppercase">
+                                    {item.approved_by_role || 'HR'}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-xs italic">Reviewed</span>
+                            )
+                          ) : (
+                            <span className="text-slate-400/70 text-xs italic flex items-center gap-1 font-sans">
+                              <Clock className="w-3.5 h-3.5 animate-pulse" />
+                              Awaiting Action
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Inline Actions */}
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                            
+                            {/* View Details button */}
+                            <button 
+                              type="button"
+                              className="h-8 w-8 bg-slate-50 hover:bg-brand-teal hover:text-white text-slate-500 border border-slate-200 rounded-full cursor-pointer transition-all duration-200 flex items-center justify-center shadow-xs"
+                              title="View Details"
+                              onClick={() => {
+                                setSelectedId(item.id);
+                                setDetailsModalOpen(true);
+                              }}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+
+                          </div>
+                        </td>
+
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-16 text-center text-slate-400 font-sans">
+                      <div className="flex flex-col items-center justify-center p-8 gap-2.5">
+                        <Inbox className="w-10 h-10 text-slate-300" />
+                        <span className="text-xs font-semibold">No requests match the active filters</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Pagination Component */}
+          {filteredRequests.length > 0 && (
+            <TablePagination 
+              totalItems={filteredRequests.length}
+              itemsPerPage={itemsPerPage}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              itemName="requests"
+            />
+          )}
+
+        </TabsContent>
+      </Tabs>
+
+      {/* DETAILS MODAL DIALOG */}
+      <Dialog open={detailsModalOpen} onOpenChange={(open) => {
+        setDetailsModalOpen(open);
+        if (!open) setSelectedId(null);
+      }}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col p-6 rounded-2xl font-sans">
+          
+          {selectedReq ? (() => {
+            return (
+              <>
+                <DialogHeader className="shrink-0 pb-3 border-b border-slate-100">
+                  <DialogTitle className="text-lg font-bold text-slate-800 flex items-center justify-between pr-6">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-10 h-10 border border-slate-100 shadow-xs">
+                        <AvatarFallback className={`font-bold text-xs ${getAvatarColorClass(selectedReq.employee_name)}`}>
+                          {selectedReq.employee_name.split(' ').map((n: string) => n[0]).join('')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col text-left">
+                        <span className="font-extrabold text-slate-800 text-base leading-tight">{selectedReq.employee_name}</span>
+                        <span className="text-[10px] text-slate-400 font-semibold mt-0.5">Ref: #{selectedReq.id.slice(-6).toUpperCase()}</span>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center justify-center h-8 px-3.5 text-[10px] font-bold rounded-full border border-slate-200 uppercase tracking-wider w-[105px]
+                      ${selectedReq.status === 'Approved' ? 'text-emerald-600' : 
+                        selectedReq.status === 'Rejected' ? 'text-rose-600' : 
+                        selectedReq.status === 'Cancelled' ? 'text-slate-500' : 
+                        'text-amber-600'}`}>
+                      {selectedReq.status}
+                    </span>
+                  </DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-5 py-4 overflow-y-auto flex-1 pr-1">
+                  
+                  {/* Parameter Grid */}
+                  <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Leave Type</span>
+                      <span className="text-xs font-extrabold text-slate-700 capitalize mt-0.5">{selectedReq.type}</span>
+                    </div>
+
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Duration</span>
+                      <span className="text-xs font-extrabold text-slate-700 mt-0.5">{selectedReq.duration}</span>
+                    </div>
+
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Date Period</span>
+                      <span className="text-xs font-extrabold text-slate-700 mt-0.5">{selectedReq.start_date} to {selectedReq.end_date}</span>
+                    </div>
+
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Submitted On</span>
+                      <span className="text-xs font-extrabold text-slate-700 mt-0.5">{selectedReq.requested_on}</span>
+                    </div>
+                  </div>
+
+                  {/* Reason Section */}
+                  <div className="text-left space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Employee Reason</span>
+                    <p className="text-xs text-slate-700 font-semibold leading-relaxed">
+                      {selectedReq.reason || "No reason specified."}
+                    </p>
+                  </div>
+
+                  {/* Approval / Rejection Reason notes */}
+                  {selectedReq.status === 'Approved' && selectedReq.approve_reason && (
+                    <div className="text-left space-y-1 pt-2 border-t border-slate-100">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Approval Notes</span>
+                      <p className="text-xs text-slate-700 font-semibold leading-relaxed italic">
+                        "{selectedReq.approve_reason}"
+                      </p>
+                    </div>
+                  )}
+                  {selectedReq.status === 'Rejected' && selectedReq.reject_reason && (
+                    <div className="text-left space-y-1 pt-2 border-t border-slate-100">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rejection Reason</span>
+                      <p className="text-xs text-rose-700 font-semibold leading-relaxed italic">
+                        "{selectedReq.reject_reason}"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Proof Attachment */}
+                  {selectedReq.proof_image && (
+                    <div className="text-left space-y-2 pt-2 border-t border-slate-100">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Attachment</span>
+                      <a 
+                        href={selectedReq.proof_image.startsWith('http') ? selectedReq.proof_image : `${API_URL}${selectedReq.proof_image}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer shadow-3xs"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Open Attached Document
+                      </a>
+                    </div>
+                  )}
+
                 </div>
-              </div>
-              
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                {(isAdmin || checkPermission('leave-requests', 'canEdit')) && (
-                  <>
-                    {selectedReq.status === 'Pending' && (
+
+                <DialogFooter className="shrink-0 pt-3 border-t border-slate-100 flex gap-2 justify-end mt-2">
+                  <Button variant="outline" onClick={() => setDetailsModalOpen(false)} className="rounded-xl border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Close</Button>
+                  
+                  {selectedReq.status === 'Pending' && (isAdmin || checkPermission('leave-requests', 'canEdit')) && (
+                    <>
                       <Button 
                         variant="outline" 
                         disabled={isUpdating}
                         onClick={() => {
                           setRejectingId(selectedReq.id);
                           setRejectReason("");
+                          setDetailsModalOpen(false);
                           setRejectModalOpen(true);
                         }}
-                        className="flex-1 sm:flex-none text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 font-medium"
+                        className="border-slate-200 text-slate-700 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 font-bold text-xs rounded-xl transition-colors"
                       >
-                        <X className="w-4 h-4 mr-2" />
+                        <X className="w-3.5 h-3.5 mr-1" />
                         Reject
                       </Button>
-                    )}
-                    {selectedReq.status === 'Approved' && (
                       <Button 
-                        variant="outline" 
                         disabled={isUpdating}
                         onClick={() => {
-                          setCancellingId(selectedReq.id);
-                          setCancelReason("");
-                          setCancelModalOpen(true);
+                          handleStatusUpdate(selectedReq.id, 'Approved');
+                          setDetailsModalOpen(false);
                         }}
-                        className="flex-1 sm:flex-none text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 font-medium"
+                        className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
                       >
-                        <X className="w-4 h-4 mr-2" />
-                        Cancel Leave
+                        <Check className="w-3.5 h-3.5 mr-1" />
+                        Approve
                       </Button>
-                    )}
+                    </>
+                  )}
+                  {selectedReq.status === 'Approved' && (isAdmin || checkPermission('leave-requests', 'canEdit')) && (
+                    <Button 
+                      variant="outline" 
+                      disabled={isUpdating}
+                      onClick={() => {
+                        handleDelete(selectedReq.id);
+                        setDetailsModalOpen(false);
+                      }}
+                      className="border-slate-200 text-slate-700 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 font-bold text-xs rounded-xl transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5 mr-1" />
+                      Cancel Leave
+                    </Button>
+                  )}
+                </DialogFooter>
+              </>
+            );
+          })() : null}
 
-                    <Dialog open={cancelModalOpen} onOpenChange={(open) => { setCancelModalOpen(open); if (open) setCancelReason(""); }}>
-                      <DialogContent className="sm:max-w-[450px]">
-                        <DialogHeader>
-                          <DialogTitle className="text-xl font-bold text-amber-600 flex items-center gap-2">
-                            <X className="w-5 h-5 text-amber-600" />
-                            Cancel Leave Request
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-2">
-                          <p className="text-sm text-muted-foreground">
-                            Please provide a reason (optional) for cancelling this approved leave request. The employee will be notified automatically.
-                          </p>
-                          
-                          <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-4 mb-4">
-                            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-amber-100">
-                              <Avatar className="w-10 h-10">
-                                <AvatarFallback className="bg-amber-100 text-amber-700 font-bold">
-                                  {selectedReq.employee_name.split(' ').map((n: string) => n[0]).join('')}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <div className="font-semibold text-foreground text-sm">{selectedReq.employee_name}</div>
-                                <div className="text-xs text-muted-foreground">Employee Request</div>
-                              </div>
-                            </div>
-                            <div className="flex justify-between items-center text-sm">
-                              <div className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                                <span className="font-semibold text-foreground capitalize">{selectedReq.type} ({selectedReq.duration})</span>
-                              </div>
-                              <span className="text-muted-foreground">{selectedReq.start_date} - {selectedReq.end_date}</span>
-                            </div>
-                          </div>
+        </DialogContent>
+      </Dialog>
 
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium text-foreground">Cancellation Reason (Optional)</label>
-                            <Textarea 
-                              value={cancelReason}
-                              onChange={(e) => setCancelReason(e.target.value)}
-                              placeholder="Please write the reason for cancelling the leave request..." 
-                              className="resize-none h-24 text-sm bg-white"
-                            />
-                          </div>
-                        </div>
-                        <DialogFooter className="gap-2 sm:gap-2 mt-4">
-                          <Button variant="outline" onClick={() => setCancelModalOpen(false)}>Cancel</Button>
-                          <Button 
-                            disabled={isUpdating}
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-medium" 
-                            onClick={() => handleStatusUpdate(cancellingId || selectedReq.id, 'Cancelled', cancelReason)}
-                          >
-                            {isUpdating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <X className="w-4 h-4 mr-2" />}
-                            Confirm Cancellation
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </>
-                )}
+      {/* QUICK STATUS UPDATE ACTION CONFIRM DIALOGS */}
 
-                {(isAdmin || checkPermission('leave-requests', 'canEdit')) && selectedReq.status === 'Pending' && (
-                  <>
-                    <Dialog open={approveModalOpen} onOpenChange={(open) => { setApproveModalOpen(open); if (open) setApproveReason(""); }}>
-                      <DialogTrigger asChild>
-                        <Button 
-                          disabled={isUpdating}
-                          className="flex-1 sm:flex-none bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm"
-                        >
-                          <Check className="w-4 h-4 mr-2" />
-                          Approve
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[450px]">
-                        <DialogHeader>
-                          <DialogTitle className="text-xl font-bold">Approve Leave Request</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-2">
-                          <p className="text-sm text-muted-foreground">
-                            Review the details below before confirming. The employee will be notified automatically.
-                          </p>
-                          
-                          <div className="bg-gray-50 border border-border rounded-lg p-4 mb-4">
-                            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-border">
-                              <Avatar className="w-10 h-10">
-                                <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
-                                  {selectedReq.employee_name.split(' ').map((n: string) => n[0]).join('')}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <div className="font-semibold text-foreground text-sm">{selectedReq.employee_name}</div>
-                                <div className="text-xs text-muted-foreground">Employee Request</div>
-                              </div>
-                            </div>
-                            <div className="flex justify-between items-center text-sm">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-1.5 h-1.5 rounded-full ${getStatusInfo(selectedReq.status).color}`}></span>
-                                <span className="font-semibold text-foreground capitalize">{selectedReq.type} ({selectedReq.duration})</span>
-                              </div>
-                              <span className="text-muted-foreground">{selectedReq.start_date} - {selectedReq.end_date}</span>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium text-foreground">Add a note (Optional)</label>
-                            <Textarea 
-                              value={approveReason}
-                              onChange={(e) => setApproveReason(e.target.value)}
-                              placeholder="Have a great vacation!" 
-                              className="resize-none h-24 text-sm bg-white"
-                            />
-                          </div>
-
-                          <div className="flex items-start gap-2 pt-2">
-                            <Checkbox id="notify" defaultChecked className="mt-0.5 data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal" />
-                            <label htmlFor="notify" className="text-sm text-foreground font-medium cursor-pointer">
-                              Notify the employee about this decision
-                            </label>
-                          </div>
-                        </div>
-                        <DialogFooter className="gap-2 sm:gap-2 mt-4">
-                          <Button variant="outline" onClick={() => setApproveModalOpen(false)}>Cancel</Button>
-                          <Button 
-                            disabled={isUpdating}
-                            className="bg-brand-teal hover:bg-brand-teal-light text-white" 
-                            onClick={() => handleStatusUpdate(selectedReq.id, 'Approved', approveReason)}
-                          >
-                            {isUpdating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
-                            Confirm Approval
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-
-                    <Dialog open={rejectModalOpen} onOpenChange={(open) => { setRejectModalOpen(open); if (open) setRejectReason(""); }}>
-                      <DialogContent className="sm:max-w-[450px]">
-                        <DialogHeader>
-                          <DialogTitle className="text-xl font-bold text-red-600 flex items-center gap-2">
-                            <X className="w-5 h-5 text-red-600" />
-                            Reject Leave Request
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-2">
-                          <p className="text-sm text-muted-foreground">
-                            Please provide a reason (optional) for rejecting this leave request. The employee will be notified automatically.
-                          </p>
-                          
-                          <div className="bg-red-50/50 border border-red-100 rounded-lg p-4 mb-4">
-                            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-red-100">
-                              <Avatar className="w-10 h-10">
-                                <AvatarFallback className="bg-red-100 text-red-700 font-bold">
-                                  {selectedReq.employee_name.split(' ').map((n: string) => n[0]).join('')}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <div className="font-semibold text-foreground text-sm">{selectedReq.employee_name}</div>
-                                <div className="text-xs text-muted-foreground">Employee Request</div>
-                              </div>
-                            </div>
-                            <div className="flex justify-between items-center text-sm">
-                              <div className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                                <span className="font-semibold text-foreground capitalize">{selectedReq.type} ({selectedReq.duration})</span>
-                              </div>
-                              <span className="text-muted-foreground">{selectedReq.start_date} - {selectedReq.end_date}</span>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium text-foreground">Rejection Reason (Optional)</label>
-                            <Textarea 
-                              value={rejectReason}
-                              onChange={(e) => setRejectReason(e.target.value)}
-                              placeholder="Please write the reason for rejecting the leave request..." 
-                              className="resize-none h-24 text-sm bg-white"
-                            />
-                          </div>
-                        </div>
-                        <DialogFooter className="gap-2 sm:gap-2 mt-4">
-                          <Button variant="outline" onClick={() => setRejectModalOpen(false)}>Cancel</Button>
-                          <Button 
-                            disabled={isUpdating}
-                            className="bg-red-600 hover:bg-red-700 text-white font-medium" 
-                            onClick={() => handleStatusUpdate(rejectingId || selectedReq.id, 'Rejected', rejectReason)}
-                          >
-                            {isUpdating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <X className="w-4 h-4 mr-2" />}
-                            Confirm Rejection
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </>
-                )}
-
-              </div>
+      {/* REJECT CONFIRM DIALOG */}
+      <Dialog open={rejectModalOpen} onOpenChange={(open) => { setRejectModalOpen(open); if (open) setRejectReason(""); }}>
+        <DialogContent className="sm:max-w-[450px] rounded-2xl font-sans">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-red-700 border-b border-slate-50 pb-2 flex items-center gap-2">
+              <X className="w-5 h-5 text-red-600 bg-red-50 rounded-full p-0.5" />
+              Reject Leave Request
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700">Rejection Reason <span className="text-rose-500">*</span></label>
+              <Textarea 
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Specify the reason for rejection (required)..." 
+                className="resize-none h-20 text-xs bg-white border-slate-200 rounded-xl focus:border-brand-teal focus:ring-brand-teal/20"
+              />
             </div>
-
-            {/* Content Cards */}
-            <div className="space-y-6 pb-6">
-              
-              {/* Request Details Card */}
-              <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
-                <div className="flex items-center gap-2 mb-6">
-                  <FileText className="w-5 h-5 text-brand-teal" />
-                  <h3 className="font-bold text-foreground text-lg">Request Details</h3>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-y-6 gap-x-4 mb-6">
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Leave Type</div>
-                    <div className="flex items-center gap-2">
-                      <span className={`w-1.5 h-1.5 rounded-full ${getStatusInfo(selectedReq.status).color}`}></span>
-                      <span className="font-medium text-foreground capitalize">{selectedReq.type}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Duration</div>
-                    <div className="font-medium text-foreground">{selectedReq.duration}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Dates</div>
-                    <div className="font-medium text-foreground">{selectedReq.start_date} - {selectedReq.end_date}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Submitted</div>
-                    <div className="font-medium text-foreground">{selectedReq.requested_on}</div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Reason / Notes</div>
-                  <div className="bg-brand-light/30 border border-brand-teal/10 rounded-lg p-4 text-sm text-foreground/80 leading-relaxed">
-                    {selectedReq.reason}
-                  </div>
-                </div>
-
-                {selectedReq.proof_image && (
-                  <div className="mt-6">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Proof of Leave</div>
-                    <div className="group relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50 transition-all hover:shadow-md duration-300 max-w-md">
-                      <img 
-                        src={selectedReq.proof_image.startsWith('http') ? selectedReq.proof_image : `${API_URL}${selectedReq.proof_image}`} 
-                        alt="Leave Proof" 
-                        className="w-full max-h-[220px] object-cover"
-                      />
-                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <a 
-                          href={selectedReq.proof_image.startsWith('http') ? selectedReq.proof_image : `${API_URL}${selectedReq.proof_image}`} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="bg-white hover:bg-slate-100 text-slate-800 px-3.5 py-1.5 rounded-lg text-xs font-bold shadow transition-all flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          View Full Image
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                {/* Balance Context */}
-                <div className="bg-white border border-border rounded-xl p-6 shadow-sm flex flex-col">
-                  <div className="flex items-center gap-2 mb-6">
-                    <Clock className="w-5 h-5 text-brand-teal" />
-                    <h3 className="font-bold text-foreground text-lg">Current Status</h3>
-                  </div>
-                  
-                  <div className="flex-1">
-                    <div className="text-xl font-bold text-foreground mb-1">Status: {selectedReq.status}</div>
-                    <div className="text-sm text-muted-foreground mt-2">
-                      {selectedReq.status === 'Approved' && selectedReq.approved_by ? (
-                        <div className="flex flex-col gap-3 mt-3">
-                          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-border">
-                            <Avatar className="w-10 h-10 rounded-md">
-                              <AvatarImage src={getAvatarUrl(selectedReq.approved_by_photo)} className="object-cover" />
-                              <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
-                                {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-bold text-foreground">Approved by {selectedReq.approved_by}</span>
-                              <span className="text-xs text-muted-foreground">{selectedReq.approved_by_role || 'Admin'}</span>
-                            </div>
-                          </div>
-                          {selectedReq.approve_reason && (
-                            <div className="p-3 bg-green-50/50 rounded-lg border border-green-100 text-sm animate-in fade-in slide-in-from-top-1 duration-200">
-                              <span className="font-bold text-green-800 block mb-1">Approval Note:</span>
-                              <span className="text-green-700 leading-relaxed">{selectedReq.approve_reason}</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : selectedReq.status === 'Rejected' ? (
-                        <div className="flex flex-col gap-3 mt-3">
-                          {selectedReq.approved_by && (
-                            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-border">
-                              <Avatar className="w-10 h-10 rounded-md">
-                                <AvatarImage src={getAvatarUrl(selectedReq.approved_by_photo)} className="object-cover" />
-                                <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
-                                  {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex flex-col">
-                                <span className="text-sm font-bold text-foreground">Rejected by {selectedReq.approved_by}</span>
-                                <span className="text-xs text-muted-foreground">{selectedReq.approved_by_role || 'Admin'}</span>
-                              </div>
-                            </div>
-                          )}
-                          {selectedReq.reject_reason && (
-                            <div className="p-3 bg-rose-50/50 rounded-lg border border-rose-100 text-sm">
-                              <span className="font-bold text-rose-800 block mb-1">Reason for Rejection:</span>
-                              <span className="text-rose-700 leading-relaxed">{selectedReq.reject_reason}</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : selectedReq.status === 'Cancelled' ? (
-                        <div className="flex flex-col gap-3 mt-3">
-                          {selectedReq.approved_by && (
-                            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-border">
-                              <Avatar className="w-10 h-10 rounded-md">
-                                <AvatarImage src={getAvatarUrl(selectedReq.approved_by_photo)} className="object-cover" />
-                                <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
-                                  {selectedReq.approved_by.split(' ').map((n: string) => n[0]).join('')}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex flex-col">
-                                <span className="text-sm font-bold text-foreground">Cancelled by {selectedReq.approved_by}</span>
-                                <span className="text-xs text-muted-foreground">{selectedReq.approved_by_role || 'Admin'}</span>
-                              </div>
-                            </div>
-                          )}
-                          {selectedReq.reject_reason && (
-                            <div className="p-3 bg-amber-50/50 rounded-lg border border-amber-100 text-sm">
-                              <span className="font-bold text-amber-800 block mb-1">Reason for Cancellation:</span>
-                              <span className="text-amber-700 leading-relaxed">{selectedReq.reject_reason}</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : selectedReq.status === 'Pending' ? (
-                        `This request was submitted on ${selectedReq.requested_on}.`
-                      ) : (
-                        `This request is ${selectedReq.status.toLowerCase()}.`
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Info Card */}
-                <div className="bg-white border border-border rounded-xl p-6 shadow-sm flex flex-col">
-                  <div className="flex items-center gap-2 mb-6">
-                    <Users className="w-5 h-5 text-brand-teal" />
-                    <h3 className="font-bold text-foreground text-lg">Employee Info</h3>
-                  </div>
-                  
-                  <div className="flex-1">
-                    <p className="text-sm text-muted-foreground">
-                      Employee ID: <span className="font-bold text-foreground">{selectedReq.employee_id}</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+          </div>
+          <DialogFooter className="gap-2 mt-4 border-t border-slate-50 pt-3">
+            <Button variant="outline" onClick={() => setRejectModalOpen(false)} className="rounded-xl border-slate-200 text-xs font-semibold">Cancel</Button>
+            <Button 
+              disabled={isUpdating || !rejectReason.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl disabled:opacity-50 disabled:cursor-not-allowed" 
+              onClick={() => handleStatusUpdate(rejectingId || "", 'Rejected', rejectReason)}
+            >
+              {isUpdating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <X className="w-3.5 h-3.5 mr-1" />}
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
 
     </div>
