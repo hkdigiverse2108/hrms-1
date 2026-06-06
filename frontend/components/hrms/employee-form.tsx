@@ -144,9 +144,20 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           } else if (k === 'requiredDocuments') {
             let reqDocs: any = value;
             if (typeof reqDocs === 'string') {
-              try { reqDocs = JSON.parse(reqDocs); if (!Array.isArray(reqDocs)) reqDocs = []; } catch { reqDocs = []; }
-            } else if (Array.isArray(reqDocs) && reqDocs.length > 5 && reqDocs[0] === '[') {
-              try { const parsed = JSON.parse(reqDocs.join('')); if (Array.isArray(parsed)) reqDocs = parsed; } catch {}
+              try {
+                if (reqDocs.trim().startsWith('[')) reqDocs = JSON.parse(reqDocs);
+                else reqDocs = reqDocs.split(',').map((s: string) => s.trim()).filter(Boolean);
+              } catch { reqDocs = []; }
+            } else if (Array.isArray(reqDocs) && reqDocs.length > 0) {
+              const isArrayOfChars = reqDocs.every((x: any) => typeof x === 'string' && x.length === 1);
+              if (isArrayOfChars && reqDocs.length > 1) {
+                const joinedStr = reqDocs.join('');
+                if (joinedStr.trim().startsWith('[')) {
+                  try { const parsed = JSON.parse(joinedStr); if (Array.isArray(parsed)) reqDocs = parsed; } catch {}
+                } else {
+                  reqDocs = joinedStr.split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
+              }
             }
             sanitizedData[k] = (Array.isArray(reqDocs) ? reqDocs : []) as any;
           } else if (typeof value === 'object' && value !== null) {

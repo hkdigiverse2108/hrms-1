@@ -595,20 +595,30 @@ export default function EmployeeDocumentsPage() {
       // Fix for corrupted live data where requiredDocuments might be a string or array of characters
       if (typeof requiredDocs === 'string') {
         try {
-          requiredDocs = JSON.parse(requiredDocs);
+          if (requiredDocs.trim().startsWith('[')) {
+            requiredDocs = JSON.parse(requiredDocs);
+          } else {
+            requiredDocs = requiredDocs.split(',').map(s => s.trim()).filter(Boolean);
+          }
           if (!Array.isArray(requiredDocs)) requiredDocs = [];
         } catch {
           requiredDocs = [];
         }
-      } else if (Array.isArray(requiredDocs) && requiredDocs.length > 5 && requiredDocs[0] === '[') {
-        try {
+      } else if (Array.isArray(requiredDocs) && requiredDocs.length > 0) {
+        // Check if it's an array of single characters
+        const isArrayOfChars = requiredDocs.every((x: any) => typeof x === 'string' && x.length === 1);
+        if (isArrayOfChars && requiredDocs.length > 1) {
           const joinedStr = requiredDocs.join('');
-          const parsed = JSON.parse(joinedStr);
-          if (Array.isArray(parsed)) {
-            requiredDocs = parsed;
+          if (joinedStr.trim().startsWith('[')) {
+            try {
+              const parsed = JSON.parse(joinedStr);
+              if (Array.isArray(parsed)) {
+                requiredDocs = parsed;
+              }
+            } catch {}
+          } else {
+            requiredDocs = joinedStr.split(',').map((s: string) => s.trim()).filter(Boolean);
           }
-        } catch {
-          // Fallback
         }
       }
 
