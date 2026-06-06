@@ -449,51 +449,105 @@ export default function EmployeeDocumentsPage() {
       </span>
     )},
     { key: 'status' as const, header: 'Status', render: (record: any) => {
-      const allowedStatuses = ['Accepted', 'Rejected', 'Returned to Employee', 'Pending to Submit'];
+      const allowedStatuses = ['Accepted', 'Rejected', 'Returned to Employee', 'Pending to Submit', 'Pending'];
       const displayStatus = allowedStatuses.includes(record.status) ? record.status : 'Pending';
+      
+      const badgeClass = displayStatus === 'Accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                         displayStatus === 'Returned to Employee' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                         displayStatus === 'Rejected' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                         displayStatus === 'Pending to Submit' ? 'bg-gray-100 text-gray-500 border-gray-300' :
+                         'bg-amber-50 text-amber-700 border-amber-200';
+
+      if (!isAdminOrHR) {
+        return (
+          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${badgeClass}`}>
+            {displayStatus}
+          </span>
+        );
+      }
+
       return (
-        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-          displayStatus === 'Accepted' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-          displayStatus === 'Returned to Employee' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
-          displayStatus === 'Rejected' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-          displayStatus === 'Pending to Submit' ? 'bg-gray-100 text-gray-500 border border-gray-300' :
-          'bg-amber-50 text-amber-700 border border-amber-200'
-        }`}>
-          {displayStatus}
-        </span>
+        <div onClick={(e) => e.stopPropagation()}>
+          <Select 
+            value={displayStatus} 
+            onValueChange={(val) => handleStatusUpdate(record, val)}
+          >
+            <SelectTrigger className={`h-7 w-[130px] px-2 py-0 rounded text-[10px] font-black uppercase border focus:ring-0 ${badgeClass}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {record.isPendingSubmit && <SelectItem value="Pending to Submit" className="text-[10px] font-bold">Pending to Submit</SelectItem>}
+              <SelectItem value="Pending" className="text-[10px] font-bold">Pending</SelectItem>
+              <SelectItem value="Accepted" className="text-[10px] font-bold text-emerald-600">Accepted</SelectItem>
+              <SelectItem value="Rejected" className="text-[10px] font-bold text-rose-600">Rejected</SelectItem>
+              <SelectItem value="Returned to Employee" className="text-[10px] font-bold text-indigo-600">Returned to Employee</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       );
     }},
   ]
 
-  const handleMarkSubmitted = async (record: any) => {
+  const handleStatusUpdate = async (record: any, newStatus: string) => {
+    // Prevent updating a pending to submit to itself or doing redundant work
+    if (newStatus === record.status) return;
+
     try {
-      const payload = {
-        employeeId: record.employeeId,
-        employeeName: record.employeeName,
-        documentName: record.documentName,
-        fileUrl: 'N/A',
-        fileName: 'N/A',
-        uploadDate: new Date().toISOString().split('T')[0],
-        status: 'Accepted'
-      }
-      
-      const response = await fetch(`${API_URL}/employee-documents`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      
-      if (response.ok) {
-        toast.success('Document marked as submitted')
-        refresh()
+      if (record.isPendingSubmit) {
+        if (newStatus === 'Pending to Submit') return;
+        
+        const payload = {
+          employeeId: record.employeeId,
+          employeeName: record.employeeName,
+          documentName: record.documentName,
+          fileUrl: 'N/A',
+          fileName: 'N/A',
+          uploadDate: new Date().toISOString().split('T')[0],
+          status: newStatus
+        }
+        
+        const response = await fetch(`${API_URL}/employee-documents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        
+        if (response.ok) {
+          toast.success(`Document marked as ${newStatus}`)
+          refresh()
+        } else {
+          toast.error('Failed to update document status')
+        }
       } else {
-        toast.error('Failed to mark document as submitted')
+        const payload = {
+          employeeId: record.employeeId,
+          employeeName: record.employeeName,
+          documentName: record.documentName,
+          fileUrl: record.fileUrl || 'N/A',
+          fileName: record.fileName || 'N/A',
+          uploadDate: record.uploadDate,
+          status: newStatus
+        }
+        
+        const response = await fetch(`${API_URL}/employee-documents/${record.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        
+        if (response.ok) {
+          toast.success(`Document status updated to ${newStatus}`)
+          refresh()
+        } else {
+          toast.error('Failed to update document status')
+        }
       }
     } catch (error) {
       console.error(error)
       toast.error('Error occurred')
     }
   }
+
 
   const actions = (record: any) => {
     const hasEdit = isAdmin || checkPermission('employee-documents', 'canEdit')
@@ -509,20 +563,10 @@ export default function EmployeeDocumentsPage() {
             <Eye className="h-4 w-4" />
           </Button>
         )}
-        {isPendingSubmit && isAdminOrHR && (
-          <Button variant="ghost" size="sm" className="text-emerald-600 font-bold border border-emerald-200 hover:bg-emerald-50 bg-white" onClick={() => handleMarkSubmitted(record)} title="Mark as Submitted">
-            <CheckCircle2 className="h-4 w-4 mr-1" />
-            Mark Submitted
-          </Button>
-        )}
+
         {hasFile && !isPendingSubmit && (
           <Button variant="ghost" size="icon" onClick={() => window.open(record.fileUrl, '_blank')} title="View Document File">
             <ExternalLink className="h-4 w-4" />
-          </Button>
-        )}
-        {hasEdit && !isPendingSubmit && (
-          <Button variant="ghost" size="icon" className="text-brand-teal" onClick={() => handleEdit(record)}>
-            <Pencil className="h-4 w-4" />
           </Button>
         )}
         {hasDelete && !isPendingSubmit && (
@@ -540,39 +584,17 @@ export default function EmployeeDocumentsPage() {
   const allDocumentsWithPlaceholders = () => {
     const combined: any[] = [];
     
-    if (!isAdminOrHR) {
-      // For employees, ONLY show the required documents list
-      const relevantEmployees = employees.filter((e: any) => e.id === user?.id || e.employeeId === user?.employeeId);
-      relevantEmployees.forEach((emp: any) => {
-        const requiredDocs = emp.requiredDocuments || [];
-        requiredDocs.forEach((reqDoc: string) => {
-          const exists = documents.find((d: any) => d.employeeId === emp.id && d.documentName === reqDoc);
-          if (exists) {
-            combined.push(exists);
-          } else {
-            combined.push({
-              id: `pending-${emp.id}-${reqDoc}`,
-              employeeId: emp.id,
-              employeeName: emp.name,
-              documentName: reqDoc,
-              uploadDate: '-',
-              status: 'Pending to Submit',
-              isPendingSubmit: true
-            });
-          }
-        });
-      });
-      return combined;
-    }
-
-    // For Admin/HR, show all existing documents PLUS placeholders
-    combined.push(...documents);
-    const relevantEmployees = filterEmployee !== 'all' ? employees.filter((e: any) => e.id === filterEmployee) : employees;
+    const relevantEmployees = (!isAdminOrHR) 
+      ? employees.filter((e: any) => e.id === user?.id || e.employeeId === user?.employeeId)
+      : (filterEmployee !== 'all' ? employees.filter((e: any) => e.id === filterEmployee) : employees);
+      
     relevantEmployees.forEach((emp: any) => {
       const requiredDocs = emp.requiredDocuments || [];
       requiredDocs.forEach((reqDoc: string) => {
         const exists = documents.find((d: any) => d.employeeId === emp.id && d.documentName === reqDoc);
-        if (!exists) {
+        if (exists) {
+          combined.push(exists);
+        } else {
           combined.push({
             id: `pending-${emp.id}-${reqDoc}`,
             employeeId: emp.id,
@@ -804,7 +826,7 @@ export default function EmployeeDocumentsPage() {
                         <SelectContent>
                           <SelectItem value="all">All Types</SelectItem>
                           {documentTypes.map((t: any) => (
-                            <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
+                            <SelectItem key={t.id || t._id || t.name} value={t.name}>{t.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
