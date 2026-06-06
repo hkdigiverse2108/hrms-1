@@ -30,9 +30,13 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { API_URL } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+
+import { INDIAN_STATES } from "@/lib/constants";
+
 
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
@@ -134,14 +138,24 @@ export default function SettingsPage() {
           officeEndTime: settings?.officeEndTime || "18:30",
           lateBufferMins: settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10,
           allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1,
-          companyGstin: settings?.companyGstin || "24APQPN3916P1Z4",
+          companyGstin: settings?.companyGstin || "",
+          companyAddress: settings?.companyAddress || "",
+          companyPhone: settings?.companyPhone || "",
+          companyEmail: settings?.companyEmail || "",
+          companyPan: settings?.companyPan || "",
+          companyLlpin: settings?.companyLlpin || "",
+          companyState: settings?.companyState || "",
+          bankName: settings?.bankName || "",
+          bankAccountNumber: settings?.bankAccountNumber || "",
+          bankIfscCode: settings?.bankIfscCode || "",
           taxInvoicePrefix: settings?.taxInvoicePrefix || "INV",
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
           noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
           companyLetterheadUrl: settings?.companyLetterheadUrl || null,
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
-          invoiceColor2: settings?.invoiceColor2 || "#08304b"
+          invoiceColor2: settings?.invoiceColor2 || "#08304b",
+          defaultSac: settings?.defaultSac || ""
         })
       });
       if (res.ok) {
@@ -465,30 +479,157 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-6">
+                {/* General Info & Address */}
                 <div className="space-y-4">
+                  <h4 className="text-sm font-bold text-brand-teal uppercase tracking-wider">General & Address Details</h4>
+                  
                   <div className="space-y-2">
-                    <Label className="text-sm font-bold text-foreground">Company GSTIN</Label>
-                    <Input 
-                      type="text" 
-                      className="w-full bg-white border-border font-semibold uppercase focus-visible:ring-brand-teal"
-                      placeholder="e.g. 24APQPN3916P1Z4"
-                      value={settings?.companyGstin || ""}
-                      onChange={(e) => setSettings({...settings, companyGstin: e.target.value})}
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Company Address (for Invoice Header)</Label>
+                    <Textarea 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal min-h-[80px]"
+                      placeholder="Enter company's physical address"
+                      value={settings?.companyAddress || ""}
+                      onChange={(e) => setSettings({...settings, companyAddress: e.target.value})}
                       disabled={isUpdating || !isAdmin}
                     />
                   </div>
-                </div>
 
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/30">
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      Enter the company's <span className="font-bold text-foreground">GSTIN (Goods and Services Tax Identification Number)</span>. This customized value will be automatically generated and displayed on all employee <span className="text-brand-teal font-bold">payslips</span>.
-                    </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">Company Phone</Label>
+                      <Input 
+                        type="text" 
+                        className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                        placeholder="e.g. +91 87805 64463"
+                        value={settings?.companyPhone || ""}
+                        onChange={(e) => setSettings({...settings, companyPhone: e.target.value})}
+                        disabled={isUpdating || !isAdmin}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">Company Email</Label>
+                      <Input 
+                        type="email" 
+                        className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                        placeholder="e.g. billing@hkdigiverse.com"
+                        value={settings?.companyEmail || ""}
+                        onChange={(e) => setSettings({...settings, companyEmail: e.target.value})}
+                        disabled={isUpdating || !isAdmin}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="col-span-1 md:col-span-2 mt-4 space-y-4">
+                <hr className="border-slate-100" />
+
+                {/* Tax & ID Registrations */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold text-brand-teal uppercase tracking-wider">Tax & Registration IDs</h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">Company GSTIN</Label>
+                      <Input 
+                        type="text" 
+                        className="w-full bg-white border-border font-semibold uppercase focus-visible:ring-brand-teal"
+                        placeholder="e.g. 24AAXFN3372M1ZK"
+                        value={settings?.companyGstin || ""}
+                        onChange={(e) => setSettings({...settings, companyGstin: e.target.value})}
+                        disabled={isUpdating || !isAdmin}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">Company PAN</Label>
+                      <Input 
+                        type="text" 
+                        className="w-full bg-white border-border font-semibold uppercase focus-visible:ring-brand-teal"
+                        placeholder="e.g. AAXFN3372M"
+                        value={settings?.companyPan || ""}
+                        onChange={(e) => setSettings({...settings, companyPan: e.target.value})}
+                        disabled={isUpdating || !isAdmin}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">Company LLPIN</Label>
+                      <Input 
+                        type="text" 
+                        className="w-full bg-white border-border font-semibold uppercase focus-visible:ring-brand-teal"
+                        placeholder="e.g. ACK-1143"
+                        value={settings?.companyLlpin || ""}
+                        onChange={(e) => setSettings({...settings, companyLlpin: e.target.value})}
+                        disabled={isUpdating || !isAdmin}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">State / UT Code</Label>
+                      <select 
+                        className="w-full h-10 px-3 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer font-medium text-slate-700"
+                        value={settings?.companyState || ""}
+                        onChange={(e) => setSettings({...settings, companyState: e.target.value})}
+                        disabled={isUpdating || !isAdmin}
+                      >
+                        <option value="">Select State...</option>
+                        {INDIAN_STATES.map((state) => (
+                          <option key={state.code} value={state.code}>
+                            {state.code} - {state.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Note: Changing GSTIN updates the generated invoices.
+                  </p>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                {/* Bank Details */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold text-brand-teal uppercase tracking-wider">Invoice Bank Details</h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">Bank Name</Label>
+                      <Input 
+                        type="text" 
+                        className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                        placeholder="e.g. Axis Bank"
+                        value={settings?.bankName || ""}
+                        onChange={(e) => setSettings({...settings, bankName: e.target.value})}
+                        disabled={isUpdating || !isAdmin}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">Account Number</Label>
+                      <Input 
+                        type="text" 
+                        className="w-full bg-white border-border focus-visible:ring-brand-teal font-mono"
+                        placeholder="e.g. 924020057377415"
+                        value={settings?.bankAccountNumber || ""}
+                        onChange={(e) => setSettings({...settings, bankAccountNumber: e.target.value})}
+                        disabled={isUpdating || !isAdmin}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">IFSC Code</Label>
+                      <Input 
+                        type="text" 
+                        className="w-full bg-white border-border focus-visible:ring-brand-teal font-mono uppercase"
+                        placeholder="e.g. UTIB0002891"
+                        value={settings?.bankIfscCode || ""}
+                        onChange={(e) => setSettings({...settings, bankIfscCode: e.target.value})}
+                        disabled={isUpdating || !isAdmin}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                {/* Letterhead & Signature Uploads */}
+                <div className="space-y-6">
                   <div className="space-y-2">
                     <Label className="text-sm font-bold text-foreground flex items-center gap-2">
                       <ImageIcon className="w-4 h-4 text-brand-teal" /> Company Letterhead
@@ -525,10 +666,8 @@ export default function SettingsPage() {
                       </Button>
                     </div>
                   </div>
-                </div>
 
-                <div className="col-span-1 md:col-span-2 mt-6 border-t border-slate-100 pt-6 space-y-4">
-                  <div className="space-y-2">
+                  <div className="border-t border-slate-100 pt-6 space-y-2">
                     <Label className="text-sm font-bold text-foreground flex items-center gap-2">
                       <ImageIcon className="w-4 h-4 text-brand-teal" /> Authorized Signature for Invoices
                     </Label>

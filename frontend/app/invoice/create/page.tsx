@@ -18,14 +18,18 @@ import { cn } from "@/lib/utils";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import dayjs from "dayjs";
+import { INDIAN_STATES } from "@/lib/constants";
 
 interface LineItem {
   id: number;
   description: string;
+  sac?: string;
   rate: string;
   qty: string;
   discount: string;
+  discountType?: "percentage" | "amount";
   amount: number;
+  isAmountEditable?: boolean;
 }
 
 export default function CreateInvoicePage() {
@@ -37,6 +41,7 @@ export default function CreateInvoicePage() {
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [clientGstin, setClientGstin] = useState("");
+  const [clientState, setClientState] = useState("");
   const [clientDepartment, setClientDepartment] = useState("Billing Department");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceType, setInvoiceType] = useState("Tax Invoice");
@@ -51,11 +56,13 @@ export default function CreateInvoicePage() {
   const [isCgstEditable, setIsCgstEditable] = useState(false);
   const [isSgstEditable, setIsSgstEditable] = useState(false);
   const [isRoundedTotalEditable, setIsRoundedTotalEditable] = useState(false);
+  const [isDiscountEditable, setIsDiscountEditable] = useState(false);
+  const [companyState, setCompanyState] = useState("24");
   const [roundedTotalInput, setRoundedTotalInput] = useState("");
   const [notes, setNotes] = useState("1. Payment is due within 3 days of the invoice date.\n2. Late payments may incur additional charges.\n3. All disputes are subject to Gujarat Jurisdiction.");
 
   const [items, setItems] = useState<LineItem[]>([
-    { id: 1, description: "", rate: "", qty: "", discount: "", amount: 0.00 }
+    { id: 1, description: "", sac: "", rate: "", qty: "", discount: "", discountType: "amount", amount: 0.00 }
   ]);
 
   const [clients, setClients] = useState<any[]>([]);
@@ -72,12 +79,27 @@ export default function CreateInvoicePage() {
     }
   }, [searchParams]);
 
-  // Generate default dates and fetch clients on mount
+  // Generate default dates, fetch clients and settings on mount
   useEffect(() => {
     const today = dayjs();
     setIssueDate(today.format("YYYY-MM-DD"));
     fetchClients();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch(`${API_URL}/system-settings`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.companyState) {
+          setCompanyState(data.companyState);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching settings:", err);
+    }
+  };
 
   const fetchClients = async () => {
     try {
@@ -122,16 +144,41 @@ export default function CreateInvoicePage() {
   }, [invoiceType, taxType]);
 
   // Adjust tax type based on payment mode
+  // Adjust tax type based on payment mode and client state code / address
   useEffect(() => {
     if (paymentMode === "Cash" || paymentMode === "Other Account") {
       setTaxType("No Tax");
     } else {
-      setTaxType((prev) => prev === "No Tax" ? "CGST+SGST" : prev);
+      let isSameState = true;
+      if (clientState) {
+        isSameState = clientState === companyState;
+      } else if (clientGstin && /^\d{2}/.test(clientGstin.trim())) {
+        const clientStateCode = clientGstin.trim().substring(0, 2);
+        isSameState = clientStateCode === String(companyState);
+      } else if (clientAddress) {
+        const stateMap: { [key: string]: string } = {
+          "01": "jammu", "02": "himachal", "03": "punjab", "04": "chandigarh",
+          "05": "uttarakhand", "06": "haryana", "07": "delhi", "08": "rajasthan",
+          "09": "uttar pradesh", "10": "bihar", "11": "sikkim", "12": "arunachal",
+          "13": "nagaland", "14": "manipur", "15": "mizoram", "16": "tripura",
+          "17": "meghalaya", "18": "assam", "19": "west bengal", "20": "jharkhand",
+          "21": "odisha", "22": "chhattisgarh", "23": "madhya pradesh", "24": "gujarat",
+          "25": "daman", "26": "dadra", "27": "maharashtra", "29": "karnataka",
+          "30": "goa", "31": "lakshadweep", "32": "kerala", "33": "tamil nadu",
+          "34": "puducherry", "35": "andaman", "36": "telangana", "37": "andhra pradesh",
+          "38": "ladakh"
+        };
+        const companyStateName = stateMap[companyState];
+        if (companyStateName) {
+          isSameState = clientAddress.toLowerCase().includes(companyStateName);
+        }
+      }
+      setTaxType(isSameState ? "CGST+SGST" : "IGST");
     }
-  }, [paymentMode]);
+  }, [paymentMode, clientGstin, clientAddress, companyState, clientState]);
 
   const addItem = () => {
-    setItems([...items, { id: Date.now(), description: "", rate: "0.00", qty: "1", discount: "0", amount: 0.00 }]);
+    setItems([...items, { id: Date.now(), description: "", sac: "", rate: "0.00", qty: "1", discount: "0", discountType: "amount", amount: 0.00 }]);
   };
 
   const removeItem = (id: number) => {
@@ -140,7 +187,7 @@ export default function CreateInvoicePage() {
     }
   };
 
-  const updateItemField = (id: number, field: keyof LineItem, value: string) => {
+  const updateItemField = (id: number, field: keyof LineItem, value: any) => {
     setItems(items.map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
@@ -148,6 +195,24 @@ export default function CreateInvoicePage() {
           const qtyVal = parseFloat(field === "qty" ? value : item.qty) || 0.0;
           const rateVal = parseFloat(field === "rate" ? value : item.rate) || 0.0;
           updated.amount = qtyVal * rateVal;
+        } else if (field === "amount") {
+          const netAmt = parseFloat(value) || 0.0;
+          const discountVal = parseFloat(item.discount) || 0.0;
+          let grossAmt = netAmt;
+          if (item.discountType === "amount") {
+            grossAmt = netAmt + discountVal;
+          } else {
+            const pct = discountVal / 100;
+            if (pct < 1) {
+              grossAmt = netAmt / (1 - pct);
+            }
+          }
+          updated.amount = grossAmt;
+          
+          const qtyVal = parseFloat(item.qty) || 1.0;
+          if (qtyVal > 0) {
+            updated.rate = (grossAmt / qtyVal).toFixed(2);
+          }
         }
         return updated;
       }
@@ -162,15 +227,20 @@ export default function CreateInvoicePage() {
   const taxRate = cgstRate + sgstRate + igstRate;
   
   const totalDiscountAmount = items.reduce((acc, item) => {
-    const pct = parseFloat(item.discount) || 0;
-    return acc + (item.amount * (pct / 100));
+    const val = parseFloat(item.discount) || 0;
+    if (item.discountType === "amount") {
+      return acc + val;
+    } else {
+      return acc + (item.amount * (val / 100));
+    }
   }, 0);
   const taxableAmount = subtotal - totalDiscountAmount;
   const cgstAmount = taxableAmount * (cgstRate / 100);
   const sgstAmount = taxableAmount * (sgstRate / 100);
   const igstAmount = taxableAmount * (igstRate / 100);
   const taxAmount = cgstAmount + sgstAmount + igstAmount;
-  const actualTotal = taxableAmount + taxAmount;
+  const additionalDiscount = parseFloat(discount) || 0;
+  const actualTotal = taxableAmount + taxAmount - additionalDiscount;
 
   // Calculate roundOff and totalDue based on roundedTotalInput
   const roundedTotal = roundedTotalInput !== "" ? (parseFloat(roundedTotalInput) || 0) : Math.round(actualTotal);
@@ -233,24 +303,28 @@ export default function CreateInvoicePage() {
         clientAddress: clientAddress || null,
         clientEmail: clientEmail.trim() || null,
         clientGstin: clientGstin.trim() || null,
+        clientState: clientState || "",
         clientPhone: clientPhone || null,
         clientDepartment: clientDepartment || null,
         invoiceNumber,
         invoiceType,
         issueDate: dayjs(issueDate).format("MMM DD, YYYY"),
         lineItems: items.map(item => {
-          const pct = parseFloat(item.discount) || 0.0;
-          const itemDiscountAmt = item.amount * (pct / 100);
+          const val = parseFloat(item.discount) || 0.0;
+          const itemDiscountAmt = item.discountType === "amount" ? val : item.amount * (val / 100);
           
           return {
             description: item.description,
+            sac: item.sac || "",
             rate: parseFloat(item.rate) || 0.0,
             amount: item.amount,
             qty: parseFloat(item.qty) || 1.0,
-            discount: itemDiscountAmt
+            discount: itemDiscountAmt,
+            discountRate: val,
+            discountType: item.discountType || "amount"
           };
         }),
-        discount: 0,
+        discount: parseFloat(discount) || 0,
         tax: taxRate,
         taxType: taxType,
         paymentMode: paymentMode,
@@ -325,6 +399,7 @@ export default function CreateInvoicePage() {
                       setClientEmail("");
                       setClientPhone("");
                       setClientDepartment("");
+                      setClientState("");
                     }}
                     className="text-xs font-bold text-brand-teal hover:underline"
                   >
@@ -359,6 +434,7 @@ export default function CreateInvoicePage() {
                         setClientGstin("");
                         setClientPhone("");
                         setClientDepartment("");
+                        setClientState("");
                       } else {
                         setClientName(val);
                         const found = clients.find(c => (c.companyName || c.name) === val);
@@ -368,12 +444,14 @@ export default function CreateInvoicePage() {
                           setClientGstin(found.gstin || "");
                           setClientPhone(found.phone || "");
                           setClientDepartment(found.department || "Billing Department");
+                          setClientState(found.state || "");
                         } else {
                           setClientAddress("");
                           setClientEmail("");
                           setClientGstin("");
                           setClientPhone("");
                           setClientDepartment("");
+                          setClientState("");
                         }
                       }
                     }}
@@ -404,6 +482,21 @@ export default function CreateInvoicePage() {
                     placeholder="Enter client address" 
                     className="bg-white border-border h-11 font-medium text-slate-700" 
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">State / UT (Optional)</label>
+                  <select
+                    value={clientState}
+                    onChange={(e) => setClientState(e.target.value)}
+                    className="w-full px-3 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer h-11 font-medium text-slate-700"
+                  >
+                    <option value="">Select State...</option>
+                    {INDIAN_STATES.map((state) => (
+                      <option key={state.code} value={state.code}>
+                        {state.code} - {state.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground">Client Department</label>
@@ -483,66 +576,132 @@ export default function CreateInvoicePage() {
           </div>
           <div className="p-6 space-y-6">
             <div className="hidden md:grid grid-cols-12 gap-4 text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
-              <div className="col-span-5">Item Description</div>
+              <div className="col-span-4">Item Description</div>
+              <div className="col-span-1 text-center">SAC</div>
               <div className="col-span-1 text-center">Qty</div>
               <div className="col-span-2 text-center">Rate (₹)</div>
-              <div className="col-span-2 text-center">Disc. (%)</div>
+              <div className="col-span-2 text-center">Discount</div>
               <div className="col-span-2 text-right pr-12">Amount</div>
             </div>
 
-            {items.map((item) => (
-              <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start relative">
-                <div className="col-span-12 md:col-span-5">
-                  <Input 
-                    placeholder="Enter product/service name" 
-                    value={item.description}
-                    onChange={(e) => updateItemField(item.id, "description", e.target.value)}
-                    className="bg-white font-bold border-border text-slate-700" 
-                  />
-                </div>
-                <div className="col-span-6 md:col-span-1">
-                  <Input 
-                    value={item.qty}
-                    onChange={(e) => updateItemField(item.id, "qty", e.target.value)}
-                    placeholder="0"
-                    className="bg-white font-bold border-border text-center text-slate-700" 
-                  />
-                </div>
-                <div className="col-span-6 md:col-span-2">
-                  <Input 
-                    value={item.rate}
-                    onChange={(e) => updateItemField(item.id, "rate", e.target.value)}
-                    placeholder="0.00"
-                    className="bg-white font-bold border-border text-center text-slate-700" 
-                  />
-                </div>
-                <div className="col-span-6 md:col-span-2">
-                  <Input 
-                    value={item.discount}
-                    onChange={(e) => updateItemField(item.id, "discount", e.target.value)}
-                    placeholder="0.00"
-                    className="bg-white font-bold border-border text-center text-slate-700" 
-                  />
-                </div>
-                <div className="col-span-12 md:col-span-2 flex items-center justify-between gap-4">
-                  <div className="flex-1 text-right font-extrabold text-slate-800 pt-2.5">
-                    ₹ {item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            {items.map((item) => {
+              const discountVal = parseFloat(item.discount) || 0;
+              const itemDiscount = item.discountType === "amount" ? discountVal : item.amount * (discountVal / 100);
+              const netAmount = item.amount - itemDiscount;
+
+              return (
+                <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start relative">
+                  <div className="col-span-12 md:col-span-4">
+                    <Input 
+                      placeholder="Enter product/service name" 
+                      value={item.description}
+                      onChange={(e) => updateItemField(item.id, "description", e.target.value)}
+                      className="bg-white font-bold border-border text-slate-700" 
+                    />
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => removeItem(item.id)}
-                    className={cn(
-                      "h-10 w-10 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-full",
-                      items.length === 1 && "opacity-30 cursor-not-allowed"
+                  <div className="col-span-6 md:col-span-1">
+                    <Input 
+                      placeholder="SAC" 
+                      value={item.sac || ""}
+                      onChange={(e) => updateItemField(item.id, "sac", e.target.value)}
+                      className="bg-white font-bold border-border text-center text-slate-700" 
+                    />
+                  </div>
+                  <div className="col-span-6 md:col-span-1">
+                    <Input 
+                      value={item.qty}
+                      onChange={(e) => updateItemField(item.id, "qty", e.target.value)}
+                      placeholder="0"
+                      className="bg-white font-bold border-border text-center text-slate-700" 
+                    />
+                  </div>
+                  <div className="col-span-6 md:col-span-2">
+                    <Input 
+                      value={item.rate}
+                      onChange={(e) => updateItemField(item.id, "rate", e.target.value)}
+                      placeholder="0.00"
+                      className="bg-white font-bold border-border text-center text-slate-700" 
+                    />
+                  </div>
+                  <div className="col-span-6 md:col-span-2">
+                    <div className="flex border border-border rounded-md overflow-hidden bg-white shadow-xs focus-within:ring-1 focus-within:ring-brand-teal focus-within:border-brand-teal h-9 w-full">
+                      <input 
+                        type="text"
+                        value={item.discount}
+                        onChange={(e) => updateItemField(item.id, "discount", e.target.value)}
+                        placeholder="0.00"
+                        className="bg-transparent font-bold text-center text-slate-700 w-full h-full px-2 outline-none border-0 text-sm focus:ring-0" 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newType = item.discountType === "amount" ? "percentage" : "amount";
+                          updateItemField(item.id, "discountType", newType);
+                        }}
+                        className="px-2.5 bg-slate-50 border-l border-border text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-700 select-none shrink-0 transition-colors h-full flex items-center justify-center cursor-pointer"
+                      >
+                        {item.discountType === "amount" ? "₹" : "%"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="col-span-12 md:col-span-2 flex items-center justify-between gap-4">
+                    {item.isAmountEditable ? (
+                      <input 
+                        type="number"
+                        value={item.amount === 0 ? "" : item.amount}
+                        onChange={(e) => updateItemField(item.id, "amount", parseFloat(e.target.value) || 0)}
+                        onBlur={() => updateItemField(item.id, "isAmountEditable", false)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            item.isAmountEditable = false; // We can set state through updated or just trigger onBlur
+                            updateItemField(item.id, "isAmountEditable", false);
+                          }
+                        }}
+                        autoFocus
+                        className="w-full h-9 border border-border rounded-md text-right font-extrabold text-slate-800 px-2 focus:outline-none focus:ring-1 focus:ring-brand-teal focus:border-brand-teal" 
+                      />
+                    ) : (
+                      <div 
+                        onClick={() => updateItemField(item.id, "isAmountEditable", true)}
+                        className="flex-1 text-right font-extrabold text-slate-800 pt-2.5 cursor-pointer hover:text-brand-teal transition-colors select-none"
+                      >
+                        ₹ {netAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </div>
                     )}
-                    disabled={items.length === 1}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => removeItem(item.id)}
+                      className={cn(
+                        "h-10 w-10 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-full shrink-0",
+                        items.length === 1 && "opacity-30 cursor-not-allowed"
+                      )}
+                      disabled={items.length === 1}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
+              );
+            })}
+
+            {/* Totals Row */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center py-3 border-t border-b border-slate-100 font-bold text-slate-800 text-sm">
+              <div className="col-span-12 md:col-span-4 text-left pl-2">Total</div>
+              <div className="hidden md:block md:col-span-1"></div>
+              <div className="col-span-6 md:col-span-1 text-center">
+                {items.reduce((acc, item) => acc + (parseFloat(item.qty) || 0), 0)}
               </div>
-            ))}
+              <div className="col-span-6 md:col-span-2 text-center">
+                ₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
+              <div className="col-span-6 md:col-span-2 text-center">
+                ₹ {totalDiscountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
+              <div className="col-span-6 md:col-span-2 text-right pr-12 font-extrabold text-slate-900">
+                ₹ {taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
 
             <Button 
               variant="outline" 
@@ -567,12 +726,8 @@ export default function CreateInvoicePage() {
               <div className="lg:col-span-5">
                 <div className="bg-gray-50/50 rounded-xl p-6 border border-border space-y-4">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground font-semibold">Subtotal</span>
-                    <span className="text-slate-800 font-extrabold">₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground font-semibold">Total Discount</span>
-                    <span className="text-slate-800 font-extrabold">₹ {totalDiscountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-muted-foreground font-semibold">Total Before Tax</span>
+                    <span className="text-slate-800 font-extrabold">₹ {taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm pt-2">
                     <span className="text-muted-foreground font-semibold">Tax Options</span>
@@ -669,10 +824,41 @@ export default function CreateInvoicePage() {
                       </div>
                     </div>
                   )}
-                  {/* Actual Total */}
+                  {/* Additional Discount */}
                   <div className="flex items-center justify-between text-sm border-t border-dashed border-border pt-3 mt-1">
-                    <span className="text-muted-foreground font-semibold">Actual Total</span>
-                    <span className="text-slate-800 font-extrabold">₹ {actualTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-muted-foreground font-semibold">Additional Discount (₹)</span>
+                    <div>
+                      {isDiscountEditable ? (
+                        <div className="w-24">
+                          <Input 
+                            value={discount}
+                            onChange={(e) => setDiscount(e.target.value)}
+                            onBlur={() => setIsDiscountEditable(false)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                setIsDiscountEditable(false);
+                              }
+                            }}
+                            autoFocus
+                            placeholder="0.00"
+                            className="bg-white h-9 text-right font-extrabold text-slate-700" 
+                          />
+                        </div>
+                      ) : (
+                        <span 
+                          onClick={() => setIsDiscountEditable(true)}
+                          className="text-slate-800 font-extrabold cursor-pointer hover:text-brand-teal transition-colors select-none"
+                        >
+                          ₹ {(parseFloat(discount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Total Tax Amount */}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground font-semibold">Total Tax Amount</span>
+                    <span className="text-slate-800 font-extrabold">₹ {taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
 
                   {/* Rounded Total Input */}

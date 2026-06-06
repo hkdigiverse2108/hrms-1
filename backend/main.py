@@ -13,6 +13,7 @@ import holidays as pyholidays
 from websocket import manager as ws_manager
 
 import asyncio
+print("MAIN PATH:", __file__, flush=True)
 
 @asynccontextmanager
 async def lifespan(app):
@@ -766,6 +767,7 @@ async def create_client(client: schemas.ClientCreate, db=Depends(get_db)):
 
 @app.put("/clients/{client_id}", response_model=schemas.Client)
 async def update_client(client_id: str, client_update: schemas.ClientUpdate, db=Depends(get_db)):
+    print("DEBUG: update_client incoming payload:", client_update.dict(exclude_unset=True))
     return await crud.update_client(db, client_id, client_update)
 
 @app.delete("/clients/{client_id}")

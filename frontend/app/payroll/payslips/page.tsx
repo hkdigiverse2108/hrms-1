@@ -1155,7 +1155,6 @@ function PayslipContent() {
               onUpdate={handleUpdate}
               onDelete={handleDelete}
               payslipNumber={getPayslipNumber(record, allPayrolls)}
-              companyGstin={settings?.companyGstin}
             />
           ))}
         </div>
@@ -1168,7 +1167,6 @@ function PayslipContent() {
             employee={employees.find(e => e.id === downloadingRecord.employeeId)}
             numberToWords={numberToWords}
             payslipNumber={getPayslipNumber(downloadingRecord, allPayrolls)}
-            companyGstin={settings?.companyGstin}
           />
         </div>
       )}

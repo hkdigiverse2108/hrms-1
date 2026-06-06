@@ -789,6 +789,7 @@ class ClientBase(BaseModel):
     email: str
     phone: str
     address: Optional[str] = None
+    state: Optional[str] = ""
     gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = "active"
@@ -822,6 +823,7 @@ class ClientUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
+    state: Optional[str] = None
     gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = None
@@ -1077,7 +1079,16 @@ class SystemSettingsBase(BaseModel):
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
     allowedMonthlyPaidLeaves: Optional[int] = 1
-    companyGstin: Optional[str] = "24APQPN3916P1Z4"
+    companyGstin: Optional[str] = "24AAXFN3372M1ZK"
+    companyAddress: Optional[str] = "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA."
+    companyPhone: Optional[str] = "+91 87805 64463"
+    companyEmail: Optional[str] = "billing@hkdigiverse.com"
+    companyPan: Optional[str] = "AAXFN3372M"
+    companyLlpin: Optional[str] = "ACK-1143"
+    companyState: Optional[str] = "24"
+    bankName: Optional[str] = "Axis Bank"
+    bankAccountNumber: Optional[str] = "924020057377415"
+    bankIfscCode: Optional[str] = "UTIB0002891"
     taxInvoicePrefix: Optional[str] = "INV"
     proformaInvoicePrefix: Optional[str] = "PINV"
     noTaxInvoicePrefix: Optional[str] = "NINV"
@@ -1085,6 +1096,7 @@ class SystemSettingsBase(BaseModel):
     invoiceColor2: Optional[str] = "#08304b"
     companyLetterheadUrl: Optional[str] = None
     companySignatureUrl: Optional[str] = None
+    defaultSac: Optional[str] = ""
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1094,6 +1106,15 @@ class SystemSettingsUpdate(BaseModel):
     lateBufferMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
     companyGstin: Optional[str] = None
+    companyAddress: Optional[str] = None
+    companyPhone: Optional[str] = None
+    companyEmail: Optional[str] = None
+    companyPan: Optional[str] = None
+    companyLlpin: Optional[str] = None
+    companyState: Optional[str] = None
+    bankName: Optional[str] = None
+    bankAccountNumber: Optional[str] = None
+    bankIfscCode: Optional[str] = None
     taxInvoicePrefix: Optional[str] = None
     proformaInvoicePrefix: Optional[str] = None
     noTaxInvoicePrefix: Optional[str] = None
@@ -1101,6 +1122,7 @@ class SystemSettingsUpdate(BaseModel):
     invoiceColor2: Optional[str] = None
     companyLetterheadUrl: Optional[str] = None
     companySignatureUrl: Optional[str] = None
+    defaultSac: Optional[str] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1461,10 +1483,13 @@ class TimeRecovery(TimeRecoveryBase):
 class InvoiceLineItem(BaseModel):
     description: str
     subDescription: Optional[str] = None
+    sac: Optional[str] = ""
     rate: float
     amount: float
     qty: Optional[float] = None
     discount: Optional[float] = None
+    discountRate: Optional[float] = 0.0
+    discountType: Optional[str] = "amount"
 
 class InvoiceBase(BaseModel):
     clientName: str
@@ -1473,6 +1498,7 @@ class InvoiceBase(BaseModel):
     clientPhone: Optional[str] = None
     clientDepartment: Optional[str] = None
     clientGstin: Optional[str] = None
+    clientState: Optional[str] = ""
     invoiceNumber: str
     issueDate: str
     dueDate: Optional[str] = None
@@ -1497,6 +1523,7 @@ class InvoiceUpdate(BaseModel):
     clientPhone: Optional[str] = None
     clientDepartment: Optional[str] = None
     clientGstin: Optional[str] = None
+    clientState: Optional[str] = None
     invoiceNumber: Optional[str] = None
     issueDate: Optional[str] = None
     dueDate: Optional[str] = None
