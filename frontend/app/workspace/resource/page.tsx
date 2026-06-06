@@ -153,6 +153,7 @@ export default function ResourceManagementPage() {
   const [tempValue, setTempValue] = useState<any>(null);
   const [isAddingResourceCount, setIsAddingResourceCount] = useState(false);
   const [newResourceCount, setNewResourceCount] = useState<string>("");
+  const [removeResourceCount, setRemoveResourceCount] = useState<string>("");
   const [selectedItemForLogs, setSelectedItemForLogs] = useState<{ type: 'category' | 'resource', id: string, name: string } | null>(null);
   const [itemLogs, setItemLogs] = useState<any[]>([]);
   const [itemLogsLoading, setItemLogsLoading] = useState(false);
@@ -541,15 +542,19 @@ export default function ResourceManagementPage() {
       const url = editingCategoryId ? `${API_URL}/asset-categories/${editingCategoryId}` : `${API_URL}/asset-categories`;
       const method = editingCategoryId ? "PUT" : "POST";
 
-      // For new category: use totalItems field as the count to create.
-      // For existing category: use newResourceCount as the count to add on top of actual assets.
       const countToAdd = editingCategoryId
         ? (parseInt(newResourceCount) || 0)
         : (categoryFormData.totalItems || 0);
+        
+      const countToRemove = editingCategoryId
+        ? (parseInt(removeResourceCount) || 0)
+        : 0;
+
       const actualCurrentCount = editingCategoryId
         ? allResources.filter((r: any) => r.category === categoryFormData.name).length
         : 0;
-      const finalTotalItems = actualCurrentCount + countToAdd;
+        
+      const finalTotalItems = Math.max(0, actualCurrentCount + countToAdd - countToRemove);
 
       const response = await fetch(url, {
         method,
@@ -563,9 +568,12 @@ export default function ResourceManagementPage() {
       });
 
       if (response.ok) {
-        if (countToAdd > 0) {
+        if (countToAdd > 0 || countToRemove > 0) {
           if (editingCategoryId) {
-            toast.success(`Category updated and ${countToAdd} item(s) added to inventory!`);
+            let msg = "Category updated.";
+            if (countToAdd > 0) msg += ` ${countToAdd} item(s) added.`;
+            if (countToRemove > 0) msg += ` ${countToRemove} item(s) removed.`;
+            toast.success(msg);
           } else {
             toast.success(`Category created with ${countToAdd} item(s) added to inventory!`);
           }
@@ -578,6 +586,7 @@ export default function ResourceManagementPage() {
         setCategoryFormData(initialCategoryFormState);
         setIsAddingResourceCount(false);
         setNewResourceCount("");
+        setRemoveResourceCount("");
         fetchCategories();
         apiRefresh();
       } else {
@@ -597,6 +606,7 @@ export default function ResourceManagementPage() {
     setCategoryFormData(initialCategoryFormState);
     setIsAddingResourceCount(false);
     setNewResourceCount("");
+    setRemoveResourceCount("");
   };
 
   if (userLoading || permissionsLoading) {
@@ -1255,6 +1265,17 @@ export default function ResourceManagementPage() {
                         onChange={(e) => setNewResourceCount(e.target.value)}
                       />
                       <p className="text-[10px] text-muted-foreground">Type a number to add new items to the inventory upon category update.</p>
+                    </div>
+                    <div className="space-y-2 mt-4">
+                      <label className="text-xs font-bold text-foreground">Remove Resources (Count)</label>
+                      <Input 
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 2" 
+                        value={removeResourceCount}
+                        onChange={(e) => setRemoveResourceCount(e.target.value)}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Type a number to deduct items from the inventory upon category update.</p>
                     </div>
                   </>
                 )}

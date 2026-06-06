@@ -4581,7 +4581,27 @@ async def get_asset_categories(db, skip: int = 0, limit: int = 100):
 async def sync_category_assets(db, category_name: str, total_items: int, performed_by: str = "System", user_name: str = "System User"):
     # 1. Count existing assets in this category
     existing_count = await db.assets.count_documents({"category": category_name})
-    if existing_count >= total_items:
+    
+    if existing_count > total_items:
+        to_delete = existing_count - total_items
+        # Find unallocated assets to delete (status = "Available")
+        cursor = db.assets.find({"category": category_name, "status": "Available"}).limit(to_delete)
+        assets_to_delete = await cursor.to_list(length=to_delete)
+        
+        for asset in assets_to_delete:
+            asset_id_str = str(asset["_id"])
+            await log_activity(
+                db, 
+                "Deleted", 
+                performed_by, 
+                user_name, 
+                f"Asset '{asset.get('name')}' ({asset.get('assetId')}) was automatically removed because category '{category_name}' capacity was reduced.", 
+                assetId=asset_id_str
+            )
+            await db.assets.delete_one({"_id": asset["_id"]})
+        return
+
+    if existing_count == total_items:
         return
         
     # 2. We need to create (total_items - existing_count) new assets
