@@ -429,6 +429,29 @@ export default function EmployeeDocumentsPage() {
     }
   }
 
+  const handleDeleteRequest = async (id: string) => {
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: 'Are you sure you want to delete this document request?',
+      destructive: true,
+      confirmText: "Confirm"
+    });
+    if (!isConfirmed) return
+
+    try {
+      const response = await fetch(`${API_URL}/document-requests/${id}`, { method: 'DELETE' })
+      if (response.ok) {
+        toast.success('Document request deleted')
+        fetchRequests()
+      } else {
+        toast.error('Failed to delete document request')
+      }
+    } catch (error) {
+      console.error('Error deleting document request:', error)
+      toast.error('Failed to delete document request')
+    }
+  }
+
   const handleDeleteType = async (id: string) => {
     const isConfirmed = await confirm({
       title: "Confirm Action",
@@ -777,6 +800,9 @@ export default function EmployeeDocumentsPage() {
         {record.status === 'Rejected' && (
           <span className="text-xs text-rose-600 font-bold uppercase">Rejected</span>
         )}
+        <Button variant="ghost" size="icon" className="text-rose-500 hover:text-rose-700 hover:bg-rose-50" onClick={() => handleDeleteRequest(record.id)} title="Delete Request">
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
     )
   }
