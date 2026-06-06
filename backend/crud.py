@@ -4741,7 +4741,7 @@ async def delete_asset_category(db, category_id: str, performed_by: str = "Syste
     return True
 
 # --- Schedule Operations ---
-async def get_schedules(db, employee_id: str = None, date_str: str = None):
+async def get_schedules(db, employee_id: str = None, date_str: str = None, date_from: str = None, date_to: str = None):
     query = {}
     if employee_id:
         query["employeeId"] = employee_id
@@ -4751,6 +4751,20 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None):
             query["date"] = {"$in": [date_str, target_date]}
         except Exception:
             query["date"] = date_str
+    elif date_from and date_to:
+        try:
+            start = datetime.strptime(date_from, "%Y-%m-%d")
+            end = datetime.strptime(date_to, "%Y-%m-%d")
+            # Build list of all date variants (string + datetime) for each day in range
+            date_variants = []
+            current = start
+            while current <= end:
+                date_variants.append(current.strftime("%Y-%m-%d"))
+                date_variants.append(current)
+                current += timedelta(days=1)
+            query["date"] = {"$in": date_variants}
+        except Exception:
+            pass
     cursor = db.schedules.find(query)
     schedules = await cursor.to_list(length=1000)
     return [fix_id(s) for s in schedules]
