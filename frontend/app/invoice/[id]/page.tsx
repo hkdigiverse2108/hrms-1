@@ -44,6 +44,34 @@ function convertNumberToWords(num: number): string {
   return words;
 }
 
+function getGradientContrastColor(color1: string, color2: string): string {
+  const parseHex = (hexColor: string) => {
+    const hex = (hexColor || "#08304b").replace('#', '');
+    if (hex.length === 3) {
+      return {
+        r: parseInt(hex[0] + hex[0], 16),
+        g: parseInt(hex[1] + hex[1], 16),
+        b: parseInt(hex[2] + hex[2], 16)
+      };
+    }
+    return {
+      r: parseInt(hex.substr(0, 2), 16) || 0,
+      g: parseInt(hex.substr(2, 2), 16) || 0,
+      b: parseInt(hex.substr(4, 2), 16) || 0
+    };
+  };
+
+  const c1 = parseHex(color1);
+  const c2 = parseHex(color2);
+
+  const r = (c1.r + c2.r) / 2;
+  const g = (c1.g + c2.g) / 2;
+  const b = (c1.b + c2.b) / 2;
+
+  const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return (yiq >= 140) ? '#111827' : '#ffffff';
+}
+
 export default function ViewInvoicePage() {
   const router = useRouter();
   const params = useParams();
@@ -53,7 +81,23 @@ export default function ViewInvoicePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
   const { confirm } = useConfirm();
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch(`${API_URL}/system-settings`);
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching settings:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     // Dynamic import/load of external PDF dependencies
@@ -247,6 +291,10 @@ export default function ViewInvoicePage() {
     );
   }
 
+  const color1 = settings?.invoiceColor1 || "#08304b";
+  const color2 = settings?.invoiceColor2 || "#08304b";
+  const textColor = getGradientContrastColor(color1, color2);
+
   const getStatusStyles = (status: string) => {
     switch (status) {
       case "Paid": return "bg-emerald-50 text-[#15803D] border-emerald-100";
@@ -361,13 +409,19 @@ export default function ViewInvoicePage() {
               </div>
             </div>
 
-            <div className="bg-[#08304b]/10 text-[#08304b] px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider shadow-sm select-none">
+            <div 
+              className="px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider shadow-sm select-none"
+              style={{ background: `linear-gradient(135deg, ${color1}, ${color2})`, color: textColor }}
+            >
               {invoice.invoiceType ? invoice.invoiceType.toUpperCase() : "TAX INVOICE"}
             </div>
           </div>
 
           {/* Logo Brand Navy Horizontal Accent Divider Line */}
-          <div className="mx-12 h-[2px] bg-[#08304b]/20" />
+          <div 
+            className="mx-12 h-[2px]" 
+            style={{ background: `linear-gradient(90deg, ${color1}, ${color2})`, opacity: 0.3 }}
+          />
 
           {/* Billing & Metadata Row */}
           <div className="px-12 pt-3 pb-2 space-y-1.5">
@@ -427,15 +481,18 @@ export default function ViewInvoicePage() {
           <div className="px-12 my-2 mb-0">
             <table className="w-full text-[11.5px] font-semibold">
               <thead>
-                <tr className="bg-[#08304b]/10 text-[#08304b] font-bold text-center">
-                  <th className="py-1 px-1 text-center w-10 font-bold">S.No</th>
-                  <th className="py-1 px-1.5 text-left font-bold pl-2">Product Description</th>
-                  <th className="py-1 px-1 w-14 text-center font-bold">SAC</th>
-                  <th className="py-1 px-1 w-10 text-center font-bold">Qty</th>
-                  <th className="py-1 px-1 w-20 text-center font-bold">Rate</th>
-                  <th className="py-1 px-1 w-20 text-center font-bold">Amount</th>
-                  <th className="py-1 px-1 w-20 text-center font-bold">Disc.</th>
-                  <th className="py-1 px-1 w-22 text-center font-bold">Taxable Amt</th>
+                <tr 
+                  className="font-bold text-center"
+                  style={{ background: `linear-gradient(135deg, ${color1}, ${color2})`, color: textColor }}
+                >
+                  <th className="py-1 px-1 text-center w-10 font-bold" style={{ color: textColor }}>S.No</th>
+                  <th className="py-1 px-1.5 text-left font-bold pl-2" style={{ color: textColor }}>Product Description</th>
+                  <th className="py-1 px-1 w-14 text-center font-bold" style={{ color: textColor }}>SAC</th>
+                  <th className="py-1 px-1 w-10 text-center font-bold" style={{ color: textColor }}>Qty</th>
+                  <th className="py-1 px-1 w-20 text-center font-bold" style={{ color: textColor }}>Rate</th>
+                  <th className="py-1 px-1 w-20 text-center font-bold" style={{ color: textColor }}>Amount</th>
+                  <th className="py-1 px-1 w-20 text-center font-bold" style={{ color: textColor }}>Disc.</th>
+                  <th className="py-1 px-1 w-22 text-center font-bold" style={{ color: textColor }}>Taxable Amt</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -541,9 +598,12 @@ export default function ViewInvoicePage() {
               </div>
 
               {/* Total After Tax Banner */}
-              <div className="bg-[#08304b]/10 text-[#08304b] flex justify-between items-center px-3 py-1 rounded-sm shadow-sm select-none">
-                <span className="font-bold text-[11.5px] tracking-wider">Total After Tax</span>
-                <span className="font-bold text-[14px]">
+              <div 
+                className="flex justify-between items-center px-3 py-1 rounded-sm shadow-sm select-none"
+                style={{ background: `linear-gradient(135deg, ${color1}, ${color2})`, color: textColor }}
+              >
+                <span className="font-bold text-[11.5px] tracking-wider" style={{ color: textColor }}>Total After Tax</span>
+                <span className="font-bold text-[14px]" style={{ color: textColor }}>
                   ₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -591,7 +651,7 @@ export default function ViewInvoicePage() {
 
             {/* Signature Block */}
             <div className="flex flex-col items-center justify-end justify-self-end text-center space-y-1 self-end select-none">
-              <div className="w-42 border-t-2 border-[#111827]" />
+              <div className="w-44 h-[2px] bg-black" />
               <h4 className="font-bold text-[#111827] text-[11.5px] uppercase tracking-wide leading-none">
                 MANGUKIYA HET RAJESHBHAI
               </h4>

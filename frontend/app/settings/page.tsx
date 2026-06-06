@@ -135,7 +135,9 @@ export default function SettingsPage() {
           companyGstin: settings?.companyGstin || "24APQPN3916P1Z4",
           taxInvoicePrefix: settings?.taxInvoicePrefix || "INV",
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
-          noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV"
+          noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
+          invoiceColor1: settings?.invoiceColor1 || "#08304b",
+          invoiceColor2: settings?.invoiceColor2 || "#08304b"
         })
       });
       if (res.ok) {
@@ -483,6 +485,63 @@ export default function SettingsPage() {
                       disabled={isUpdating || user?.role !== 'Admin'}
                       placeholder="e.g. NINV"
                     />
+                  </div>
+                </div>
+                
+                <div className="col-span-1 md:col-span-2 border-t border-slate-100 pt-6 mt-4">
+                  <Label className="text-sm font-bold text-foreground block mb-2">Invoice Theme Gradient</Label>
+                  <p className="text-xs text-muted-foreground mb-4">Choose two colors to customize the gradient background of invoice badges, table headers, and total banners.</p>
+                  
+                  <div className="flex flex-wrap items-center gap-6">
+                    <div className="flex items-center gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-muted-foreground">Color 1 (Start)</Label>
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="color" 
+                            className="w-10 h-10 rounded-lg cursor-pointer border border-border p-1 bg-white"
+                            value={settings?.invoiceColor1 || "#08304b"}
+                            onChange={(e) => setSettings({...settings, invoiceColor1: e.target.value})}
+                            disabled={isUpdating || user?.role !== 'Admin'}
+                          />
+                          <input 
+                            type="text" 
+                            className="w-24 h-10 px-2 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-xs font-mono uppercase"
+                            value={settings?.invoiceColor1 || "#08304b"}
+                            onChange={(e) => setSettings({...settings, invoiceColor1: e.target.value})}
+                            disabled={isUpdating || user?.role !== 'Admin'}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-muted-foreground">Color 2 (End)</Label>
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="color" 
+                            className="w-10 h-10 rounded-lg cursor-pointer border border-border p-1 bg-white"
+                            value={settings?.invoiceColor2 || "#08304b"}
+                            onChange={(e) => setSettings({...settings, invoiceColor2: e.target.value})}
+                            disabled={isUpdating || user?.role !== 'Admin'}
+                          />
+                          <input 
+                            type="text" 
+                            className="w-24 h-10 px-2 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-xs font-mono uppercase"
+                            value={settings?.invoiceColor2 || "#08304b"}
+                            onChange={(e) => setSettings({...settings, invoiceColor2: e.target.value})}
+                            disabled={isUpdating || user?.role !== 'Admin'}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Gradient Preview Box */}
+                    <div className="flex-1 min-w-[200px] h-[52px] rounded-lg border border-border relative flex items-center justify-center font-bold text-white text-xs select-none shadow-sm"
+                      style={{ background: `linear-gradient(135deg, ${settings?.invoiceColor1 || '#08304b'}, ${settings?.invoiceColor2 || '#08304b'})` }}>
+                      TAX INVOICE GRADIENT PREVIEW
+                    </div>
                   </div>
                 </div>
               </div>

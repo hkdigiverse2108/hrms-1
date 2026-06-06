@@ -3112,7 +3112,9 @@ async def get_system_settings(db):
             "allowedMonthlyPaidLeaves": 1,
             "companyGstin": "24APQPN3916P1Z4",
             "taxInvoicePrefix": "INV",
-            "proformaInvoicePrefix": "PINV"
+            "proformaInvoicePrefix": "PINV",
+            "invoiceColor1": "#08304b",
+            "invoiceColor2": "#08304b"
         }
         result = await db.system_settings.insert_one(default_settings)
         settings = await db.system_settings.find_one({"_id": result.inserted_id})
