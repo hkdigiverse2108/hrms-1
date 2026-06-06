@@ -1079,6 +1079,9 @@ class SystemSettingsBase(BaseModel):
     taxInvoicePrefix: Optional[str] = "INV"
     proformaInvoicePrefix: Optional[str] = "PINV"
     noTaxInvoicePrefix: Optional[str] = "NINV"
+    invoiceColor1: Optional[str] = "#08304b"
+    invoiceColor2: Optional[str] = "#08304b"
+    companyLetterheadUrl: Optional[str] = None
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
