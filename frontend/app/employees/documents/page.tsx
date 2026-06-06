@@ -24,6 +24,7 @@ import { useUser } from '@/hooks/useUser'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
 import { useConfirm } from "@/context/ConfirmContext";
+import DocumentTemplatesPage from '@/app/settings/document-templates/page'
 
 export default function EmployeeDocumentsPage() {
   const { confirm } = useConfirm();
@@ -768,7 +769,7 @@ export default function EmployeeDocumentsPage() {
       </PageHeader>
 
       <Tabs value={activeMainTab} onValueChange={(val: any) => setActiveMainTab(val)} className="w-full">
-        <TabsList className={`grid w-full p-1 bg-slate-100/80 rounded-xl ${isAdminOrHR ? 'grid-cols-3 max-w-[600px]' : 'grid-cols-2 max-w-[400px]'}`}>
+        <TabsList className={`grid w-full p-1 bg-slate-100/80 rounded-xl ${isAdminOrHR ? 'grid-cols-4 max-w-[800px]' : 'grid-cols-2 max-w-[400px]'}`}>
           <TabsTrigger 
             value="submitted" 
             className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
@@ -787,6 +788,14 @@ export default function EmployeeDocumentsPage() {
               className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
             >
               Document Types
+            </TabsTrigger>
+          )}
+          {isAdminOrHR && (
+            <TabsTrigger 
+              value="templates" 
+              className="font-bold data-[state=active]:bg-brand-teal data-[state=active]:text-white transition-all duration-200"
+            >
+              Document Templates
             </TabsTrigger>
           )}
         </TabsList>
@@ -902,6 +911,14 @@ export default function EmployeeDocumentsPage() {
                 searchKey="name"
                 searchPlaceholder="Search by document type..."
               />
+            </div>
+          </TabsContent>
+        )}
+
+        {isAdminOrHR && (
+          <TabsContent value="templates" className="mt-6 h-full">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[600px]">
+              <DocumentTemplatesPage />
             </div>
           </TabsContent>
         )}

@@ -301,9 +301,6 @@ export default function DocumentTemplatesPage() {
         {/* Left Side: Templates List */}
         <div className="xl:col-span-1 border-r border-slate-200 bg-white flex flex-col h-full">
           <div className="p-6 border-b border-slate-100">
-            <Button variant="ghost" className="mb-4 text-slate-500 h-8 px-2 text-xs" onClick={() => router.push('/settings')}>
-              <ArrowLeft className="w-4 h-4 mr-2" /> Back to Settings
-            </Button>
             <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center justify-between">
               <span className="flex items-center gap-2"><FileText className="w-5 h-5 text-brand-teal" /> Templates</span>
               <Button size="sm" className="bg-brand-teal hover:bg-brand-teal/90" onClick={openCreateModal}>
