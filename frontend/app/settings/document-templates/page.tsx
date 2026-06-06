@@ -15,6 +15,16 @@ const ReactQuill = dynamic(
       window.Quill = Quill;
       const ImageResize = (await import('quill-image-resize-module-react')).default;
       Quill.register('modules/imageResize', ImageResize);
+      
+      const Parchment = Quill.import('parchment');
+      const StyleAttributor = Parchment.StyleAttributor || Quill.import('attributors/style/align').constructor;
+      const BlockScope = Parchment.Scope ? Parchment.Scope.BLOCK : 2; // Fallback to 2 if Scope is undefined
+
+      const LineHeightStyle = new StyleAttributor('lineHeight', 'line-height', {
+        scope: BlockScope,
+        whitelist: ['0.5', '1.0', '1.15', '1.5', '2.0', '2.5', '3.0']
+      });
+      Quill.register(LineHeightStyle, true);
     }
     return function ForwardedQuill(props: any) {
       return <RQ {...props} />;
@@ -42,12 +52,18 @@ interface DocumentTemplate {
 
 const quillModules = {
   toolbar: [
-    [{ 'header': [1, 2, 3, 4, 5, 6, false] }, { 'size': ['small', false, 'large', 'huge'] }],
-    ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-    [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
-    ['link', 'image'],
-    [{ 'align': [] }],
+    [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
+    [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+    ['bold', 'italic', 'underline', 'strike'],
     [{ 'color': [] }, { 'background': [] }],
+    [{ 'lineHeight': ['0.5', '1.0', '1.15', '1.5', '2.0', '2.5', '3.0'] }],
+    [{ 'script': 'sub'}, { 'script': 'super' }],
+    ['blockquote', 'code-block'],
+    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'indent': '-1'}, { 'indent': '+1' }],
+    [{ 'direction': 'rtl' }],
+    [{ 'align': [] }],
+    ['link', 'image', 'video'],
     ['clean']
   ],
   imageResize: {
@@ -74,6 +90,10 @@ export default function DocumentTemplatesPage() {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   
+  const [isLiveEditing, setIsLiveEditing] = useState(false)
+  const [liveContent, setLiveContent] = useState('')
+  const [savingLive, setSavingLive] = useState(false)
+
   const [formData, setFormData] = useState({
     template_id: '',
     name: '',
@@ -173,6 +193,42 @@ export default function DocumentTemplatesPage() {
       toast.error('Error saving template')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const startLiveEditing = () => {
+    if (!selectedTemplate) return
+    setLiveContent(selectedTemplate.content || '')
+    setIsLiveEditing(true)
+  }
+
+  const saveLiveEditing = async () => {
+    if (!selectedTemplate) return
+    setSavingLive(true)
+    try {
+      const payload = {
+        template_id: selectedTemplate.template_id,
+        name: selectedTemplate.name,
+        description: selectedTemplate.description,
+        fields: selectedTemplate.fields,
+        content: liveContent
+      }
+      const response = await fetch(`${API_URL}/document-templates/${selectedTemplate.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (response.ok) {
+        toast.success('Template content updated')
+        setIsLiveEditing(false)
+        fetchTemplates()
+      } else {
+        toast.error('Failed to update template content')
+      }
+    } catch (error) {
+      toast.error('Error saving template content')
+    } finally {
+      setSavingLive(false)
     }
   }
 
@@ -311,16 +367,34 @@ export default function DocumentTemplatesPage() {
                   </p>
                 </div>
                 <div className="flex gap-3">
-                  <Button variant="ghost" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteTemplate(selectedTemplate.id)}>
-                    <Trash2 className="w-4 h-4 mr-2" /> Delete
-                  </Button>
-                  <Button 
-                    className="bg-brand-teal hover:bg-brand-teal/90 text-white px-8 font-bold shadow-lg shadow-brand-teal/20" 
-                    onClick={() => openEditModal(selectedTemplate)}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit Template
-                  </Button>
+                  {isLiveEditing ? (
+                    <>
+                      <Button variant="outline" onClick={() => setIsLiveEditing(false)}>
+                        Cancel
+                      </Button>
+                      <Button 
+                        className="bg-brand-teal hover:bg-brand-teal/90 text-white px-8 font-bold shadow-lg shadow-brand-teal/20" 
+                        onClick={saveLiveEditing}
+                        disabled={savingLive}
+                      >
+                        {savingLive ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                        Save Content
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="ghost" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteTemplate(selectedTemplate.id)}>
+                        <Trash2 className="w-4 h-4 mr-2" /> Delete
+                      </Button>
+                      <Button 
+                        className="bg-brand-teal hover:bg-brand-teal/90 text-white px-8 font-bold shadow-lg shadow-brand-teal/20" 
+                        onClick={() => openEditModal(selectedTemplate)}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit Template Settings
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -347,7 +421,7 @@ export default function DocumentTemplatesPage() {
                       <div className="ql-container ql-snow border-none !font-sans">
                         <div ref={previewRef} className="bg-white shadow-xl shadow-slate-200/50 min-h-[297mm] p-[15mm] transition-all relative border border-slate-100">
                           {systemSettings?.companyLetterheadUrl && (
-                            <div className="w-full">
+                            <div className="-mt-[15mm] -mx-[15mm] mb-[10mm]">
                               <img 
                                 src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
                                 alt="Company Letterhead" 
@@ -355,7 +429,25 @@ export default function DocumentTemplatesPage() {
                               />
                             </div>
                           )}
-                          <div dangerouslySetInnerHTML={{ __html: selectedTemplate.content }} className="ql-editor p-0 mt-6" />
+                          
+                          {isLiveEditing ? (
+                            <div className="relative mt-6 -mx-4 group">
+                              <ReactQuill 
+                                theme="snow"
+                                modules={quillModules}
+                                value={liveContent}
+                                onChange={setLiveContent}
+                                className="bg-transparent [&_.ql-editor]:min-h-[500px] [&_.ql-container]:border-none [&_.ql-toolbar]:sticky [&_.ql-toolbar]:top-4 [&_.ql-toolbar]:bg-white/95 [&_.ql-toolbar]:backdrop-blur [&_.ql-toolbar]:border [&_.ql-toolbar]:border-slate-200 [&_.ql-toolbar]:rounded-xl [&_.ql-toolbar]:shadow-lg [&_.ql-toolbar]:z-[100] [&_.ql-toolbar]:mb-6"
+                              />
+                            </div>
+                          ) : (
+                            <div 
+                              onClick={startLiveEditing}
+                              dangerouslySetInnerHTML={{ __html: selectedTemplate.content || '<div class="text-slate-400 italic">Click here to add document content...</div>' }} 
+                              className="ql-editor p-0 mt-6 cursor-text hover:bg-amber-50/50 hover:ring-2 hover:ring-brand-teal/20 transition-all rounded-lg min-h-[300px]" 
+                              title="Click to edit document content directly"
+                            />
+                          )}
                         </div>
                       </div>
                       
