@@ -1522,8 +1522,8 @@ async def delete_invoice(invoice_id: str, db=Depends(get_db)):
 
 # --- Schedules API ---
 @app.get("/schedules", response_model=List[schemas.Schedule])
-async def get_schedules(employeeId: Optional[str] = None, date: Optional[str] = None, db=Depends(get_db)):
-    return await crud.get_schedules(db, employee_id=employeeId, date_str=date)
+async def get_schedules(employeeId: Optional[str] = None, date: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_schedules(db, employee_id=employeeId, date_str=date, date_from=date_from, date_to=date_to)
 
 @app.post("/schedules", response_model=schemas.Schedule)
 async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
