@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Calendar, User, FileText } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { Textarea } from "@/components/ui/textarea";
+import { INDIAN_STATES } from "@/lib/constants";
+
 
 export interface ClientFormData {
   name: string;
@@ -17,6 +19,7 @@ export interface ClientFormData {
   phone: string;
   address: string;
   gstin?: string;
+  state?: string;
   department: string;
   status: string;
   services?: string;
@@ -47,6 +50,7 @@ const defaultFormData: ClientFormData = {
   phone: "",
   address: "",
   gstin: "",
+  state: "",
   department: "",
   status: "active",
   services: "",
@@ -86,6 +90,13 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
   React.useEffect(() => {
     fetchEmployees();
   }, []);
+
+  React.useEffect(() => {
+    setFormData({
+      ...defaultFormData,
+      ...initialData,
+    });
+  }, [initialData]);
 
   const fetchEmployees = async () => {
     try {
@@ -143,6 +154,20 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
             <div className="space-y-2">
               <Label htmlFor="address" className="text-xs font-bold uppercase text-slate-500">Address (Optional)</Label>
               <Input id="address" placeholder="e.g. 123 Main St, City" value={formData.address || ""} onChange={(e) => handleChange("address", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="state" className="text-xs font-bold uppercase text-slate-500">State / UT (Optional)</Label>
+              <Select value={formData.state || "none"} onValueChange={(v) => handleChange("state", v === "none" ? "" : v)}>
+                <SelectTrigger className="bg-white border-border"><SelectValue placeholder="Select State..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select State...</SelectItem>
+                  {INDIAN_STATES.map((state) => (
+                    <SelectItem key={state.code} value={state.code}>
+                      {state.code} - {state.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="gstin" className="text-xs font-bold uppercase text-slate-500">GSTIN (Optional)</Label>

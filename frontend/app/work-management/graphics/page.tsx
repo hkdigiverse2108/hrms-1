@@ -207,6 +207,11 @@ export default function GraphicsClientsPage() {
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-[10px] text-slate-400 flex items-center gap-1"><Mail className="w-2.5 h-2.5" /> {client.email}</span>
                             <span className="text-[10px] text-slate-400 flex items-center gap-1"><Phone className="w-2.5 h-2.5" /> {client.phone}</span>
+                            {client.state && (
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-slate-50 text-slate-600 border-slate-200">
+                                State: {client.state}
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       </td>

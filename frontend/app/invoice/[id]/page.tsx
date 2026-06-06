@@ -304,7 +304,7 @@ export default function ViewInvoicePage() {
     }
   };
 
-  const discountRate = invoice.discount || 0;
+  const additionalDiscount = invoice.discount || 0;
   const taxRate = invoice.tax || 0;
   
   const discountAmount = invoice.lineItems.reduce((acc: number, item: any) => {
@@ -316,9 +316,46 @@ export default function ViewInvoicePage() {
 
   const amountInWords = convertNumberToWords(invoice.total);
   const clientAddress = invoice.clientAddress || "";
-  const isGujarat = !clientAddress || /gujarat/i.test(clientAddress);
-  const placeOfSupply = isGujarat ? "Gujarat" : (clientAddress.split(',').pop()?.replace(/[\d\s-]/g, '').trim() || "Gujarat");
-  const roundOff = invoice.total - (taxableAmount + taxAmount);
+  const companyState = settings?.companyState || "24";
+  
+  const stateMap: { [key: string]: string } = {
+    "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh",
+    "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan",
+    "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh",
+    "13": "Nagaland", "14": "Manipur", "15": "Mizoram", "16": "Tripura",
+    "17": "Meghalaya", "18": "Assam", "19": "West Bengal", "20": "Jharkhand",
+    "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
+    "25": "Daman and Diu", "26": "Dadra and Nagar Haveli", "27": "Maharashtra", "29": "Karnataka",
+    "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu",
+    "34": "Puducherry", "35": "Andaman and Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh",
+    "38": "Ladakh"
+  };
+  
+  const companyStateName = stateMap[companyState] || "Gujarat";
+  
+  let isSameState = true;
+  if (invoice.clientState) {
+    isSameState = invoice.clientState === companyState;
+  } else if (invoice.clientGstin && /^\d{2}/.test(invoice.clientGstin.trim())) {
+    isSameState = invoice.clientGstin.trim().substring(0, 2) === String(companyState);
+  } else if (clientAddress) {
+    isSameState = clientAddress.toLowerCase().includes(companyStateName.toLowerCase());
+  }
+  
+  let placeOfSupply = companyStateName;
+  if (invoice.clientState && stateMap[invoice.clientState]) {
+    placeOfSupply = stateMap[invoice.clientState];
+  } else if (!isSameState && clientAddress) {
+    const foundState = Object.values(stateMap).find(stateName => 
+      clientAddress.toLowerCase().includes(stateName.toLowerCase())
+    );
+    if (foundState) {
+      placeOfSupply = foundState;
+    } else {
+      placeOfSupply = clientAddress.split(',').pop()?.replace(/[\d\s-]/g, '').trim() || companyStateName;
+    }
+  }
+  const roundOff = invoice.total - (taxableAmount + taxAmount - additionalDiscount);
 
   return (
     <div className="space-y-6 pb-20">
@@ -399,12 +436,17 @@ export default function ViewInvoicePage() {
                 <h2 className="text-[#111827] font-bold text-[17px] tracking-tight leading-snug mb-0.5">
                   Harikrushn DigiVerse LLP
                 </h2>
-                <p className="text-[10.5px] font-semibold text-gray-700 leading-[1.5] tracking-wide">
-                  FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA<br />
-                  COMPLEX, OPP. BHAGAT NAGAR, VED,<br />
-                  GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.<br />
-                  Ph: +91 87805 64463 | billing@hkdigiverse.com <br />
-                  GSTIN: 24AAXFN3372M1ZK | PAN: AAXFN3372M | LLPIN: ACK-1143 | State: 24
+                <p className="text-[10.5px] font-semibold text-gray-700 leading-[1.5] tracking-wide whitespace-pre-wrap">
+                  {settings?.companyAddress || (
+                    <>
+                      FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA<br />
+                      COMPLEX, OPP. BHAGAT NAGAR, VED,<br />
+                      GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.
+                    </>
+                  )}
+                  <br />
+                  Ph: {settings?.companyPhone || "+91 87805 64463"} | {settings?.companyEmail || "billing@hkdigiverse.com"} <br />
+                  GSTIN: {settings?.companyGstin || "24AAXFN3372M1ZK"} | PAN: {settings?.companyPan || "AAXFN3372M"} | LLPIN: {settings?.companyLlpin || "ACK-1143"} | State: {settings?.companyState || "24"}
                 </p>
               </div>
             </div>
@@ -509,7 +551,7 @@ export default function ViewInvoicePage() {
                           {item.description}
                         </p>
                       </td>
-                      <td className="py-2 px-1 text-center text-slate-900">998361</td>
+                      <td className="py-2 px-1 text-center text-slate-900">{item.sac || settings?.defaultSac || ""}</td>
                       <td className="py-2 px-1 text-center text-slate-900">{qty}</td>
                       <td className="py-2 px-1 text-center text-slate-900">
                         {item.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -518,7 +560,7 @@ export default function ViewInvoicePage() {
                         {item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-2 px-1 text-center text-slate-900">
-                        {itemDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {item.discountType === "amount" ? `₹${(item.discountRate || itemDiscount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : `${item.discountRate !== undefined ? item.discountRate : ((item.amount ? (itemDiscount / item.amount) * 100 : 0).toFixed(0))}%`}
                       </td>
                       <td className="py-2 px-1 text-end font-bold text-[#111827]">
                         {itemTaxableAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -559,7 +601,7 @@ export default function ViewInvoicePage() {
                 </span>
               </div>
               
-              {invoice.taxType === "No Tax" ? null : invoice.taxType === "IGST" || (!invoice.taxType && !isGujarat) ? (
+              {invoice.taxType === "No Tax" ? null : invoice.taxType === "IGST" || (!invoice.taxType && !isSameState) ? (
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">Add: IGST @ {taxRate}%</span>
                   <span className="text-[#111827] text-slate-900">
@@ -589,6 +631,15 @@ export default function ViewInvoicePage() {
                   ₹{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
+
+              {additionalDiscount > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Less: Additional Discount</span>
+                  <span className="text-[#111827] text-slate-900 font-bold">
+                    -₹{additionalDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
 
               <div className="flex justify-between items-center">
                 <span className="text-gray-500">Round Off</span>
@@ -624,13 +675,13 @@ export default function ViewInvoicePage() {
             </span>
             <div className="flex gap-12 text-[11.5px] text-slate-500 font-medium">
               <div>
-                Bank: <span className="font-bold text-[#111827] ml-0.5">Axis Bank</span>
+                Bank: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankName || "Axis Bank"}</span>
               </div>
               <div>
-                A/c: <span className="font-bold text-[#111827] ml-0.5">924020057377415</span>
+                A/c: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankAccountNumber || "924020057377415"}</span>
               </div>
               <div>
-                IFSC: <span className="font-bold text-[#111827] ml-0.5">UTIB0002891</span>
+                IFSC: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankIfscCode || "UTIB0002891"}</span>
               </div>
             </div>
           </div>
@@ -651,6 +702,15 @@ export default function ViewInvoicePage() {
 
             {/* Signature Block */}
             <div className="flex flex-col items-center justify-end justify-self-end text-center space-y-1 self-end select-none">
+              {settings?.companySignatureUrl && (
+                <div className="relative mb-1 overflow-hidden max-h-16 w-36 flex items-center justify-center pointer-events-none">
+                  <img 
+                    src={settings.companySignatureUrl.startsWith('http') ? settings.companySignatureUrl : `${API_URL}${settings.companySignatureUrl}`} 
+                    alt="Authorized Signature" 
+                    className="max-h-16 object-contain" 
+                  />
+                </div>
+              )}
               <div className="w-44 h-[2px] bg-black" />
               <h4 className="font-bold text-[#111827] text-[11.5px] uppercase tracking-wide leading-none">
                 MANGUKIYA HET RAJESHBHAI

@@ -21,6 +21,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { TablePagination } from "@/components/common/TablePagination";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
+import { INDIAN_STATES } from "@/lib/constants";
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -436,6 +437,15 @@ export default function ClientsPage() {
                                   }>
                                     {client[col.key] === "on-hold" ? "On Hold" : client[col.key] || (col.key === 'status' ? 'active' : 'No')}
                                   </Badge>
+                                ) : col.key === 'phone' ? (
+                                  <div className="flex flex-col">
+                                    <span>{client[col.key] || "-"}</span>
+                                    {client.state && (
+                                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-slate-50 text-slate-600 border-slate-200 mt-0.5 w-fit">
+                                        State: {client.state}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 ) : (
                                   client[col.key] || (col.type === 'number' ? '0' : "-")
                                 )}
@@ -515,6 +525,14 @@ export default function ClientsPage() {
                           <Phone className="w-4 h-4" />
                           {client.phone}
                         </div>
+                        {client.state && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span className="font-semibold text-brand-teal text-[11px] uppercase tracking-wide">State:</span>
+                            <span className="text-slate-700 font-bold">
+                              {INDIAN_STATES.find(s => s.code === client.state)?.name || client.state}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between pt-2">

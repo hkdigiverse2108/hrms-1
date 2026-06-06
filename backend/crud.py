@@ -3110,11 +3110,21 @@ async def get_system_settings(db):
             "officeEndTime": "18:30",
             "lateBufferMins": 10,
             "allowedMonthlyPaidLeaves": 1,
-            "companyGstin": "24APQPN3916P1Z4",
+            "companyGstin": "24AAXFN3372M1ZK",
+            "companyAddress": "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.",
+            "companyPhone": "+91 87805 64463",
+            "companyEmail": "billing@hkdigiverse.com",
+            "companyPan": "AAXFN3372M",
+            "companyLlpin": "ACK-1143",
+            "companyState": "24",
+            "bankName": "Axis Bank",
+            "bankAccountNumber": "924020057377415",
+            "bankIfscCode": "UTIB0002891",
             "taxInvoicePrefix": "INV",
             "proformaInvoicePrefix": "PINV",
             "invoiceColor1": "#08304b",
-            "invoiceColor2": "#08304b"
+            "invoiceColor2": "#08304b",
+            "defaultSac": ""
         }
         result = await db.system_settings.insert_one(default_settings)
         settings = await db.system_settings.find_one({"_id": result.inserted_id})
