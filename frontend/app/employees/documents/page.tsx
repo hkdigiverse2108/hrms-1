@@ -37,6 +37,7 @@ export default function EmployeeDocumentsPage() {
   const employees = data?.employees || []
   const documents = data?.employeeDocuments || []
   const [loading, setLoading] = useState(false)
+  const [payrolls, setPayrolls] = useState<any[]>([])
 
   useEffect(() => {
     if (!permissionsLoading) {
@@ -200,9 +201,21 @@ export default function EmployeeDocumentsPage() {
   }
 
   useEffect(() => {
+    const fetchPayrolls = async () => {
+      try {
+        const response = await fetch(`${API_URL}/payroll`)
+        if (response.ok) {
+          setPayrolls(await response.json())
+        }
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    
     if (user) {
       fetchRequests()
       fetchDocTypes()
+      fetchPayrolls()
     }
   }, [user, isAdminOrHR])
 
@@ -458,6 +471,26 @@ export default function EmployeeDocumentsPage() {
       </span>
     )},
     { key: 'status' as const, header: 'Status', render: (record: any) => {
+      const isDeposit = record.documentName?.includes('Deposite') || record.documentName?.includes('Deposit');
+      if (isDeposit) {
+        let target = 10000
+        if (record.documentName?.includes('Intern - 2000')) target = 2000
+        else if (record.documentName?.includes('Employee - 10000')) target = 10000
+        else {
+          const match = record.documentName?.match(/(\d+)/)
+          if (match) target = Number(match[0])
+        }
+        
+        const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId)
+        const collected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0)
+        
+        if (collected >= target) {
+          return <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase border bg-emerald-50 text-emerald-700 border-emerald-200">Deposit Collected</span>
+        } else {
+          return <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase border bg-amber-50 text-amber-700 border-amber-200">Collected: {collected} / {target}</span>
+        }
+      }
+
       const allowedStatuses = ['Accepted', 'Rejected', 'Returned to Employee', 'Pending to Submit'];
       const displayStatus = allowedStatuses.includes(record.status) ? record.status : 'Pending to Submit';
       
@@ -886,8 +919,8 @@ export default function EmployeeDocumentsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Types</SelectItem>
-                          {documentTypes.map((t: any) => (
-                            <SelectItem key={t.id || t._id || t.name} value={t.name}>{t.name}</SelectItem>
+                          {documentTypes.map((t: string) => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

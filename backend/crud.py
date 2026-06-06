@@ -184,7 +184,6 @@ async def sync_employee_salary_to_structure(db, employee_id: str, salary_amount:
                 "esi": 0.0,
                 "professionalTax": 0.0,
                 "tds": 0.0,
-                "securityDeposit": 0.0,
                 "monthlyGross": salary_amount
             }
             await db.salary_structures.insert_one(new_structure)
@@ -686,6 +685,10 @@ async def run_payroll_processing(db, month: str, year: int):
     
     for emp in employees:
         emp_id = emp["id"]
+        # Skip inactive employees to avoid generating unnecessary payroll records
+        if emp.get("status", "").lower() == "inactive":
+            await db.payroll.delete_many({"employeeId": emp_id, "month": month, "year": year})
+            continue
         # Get salary structure
         salary = await get_salary_structure_by_employee(db, emp_id)
         if not salary:
@@ -980,11 +983,15 @@ async def run_payroll_processing(db, month: str, year: int):
                 penalty_total += p_amount
                 deduction_details.append(f"{r['type']} ({r_date_str}): ₹{p_amount}")
         
-        deposit_deduction = salary.get("securityDeposit", 0.0) or 0.0
+        # Fetch existing payroll to preserve custom security deposit and return amounts
+        existing_payroll = await db.payroll.find_one({"employeeId": emp_id, "month": month, "year": year})
+        deposit_deduction = existing_payroll.get("securityDeposit", 0.0) if existing_payroll else 0.0
+        returned_deposit = existing_payroll.get("returnedDeposit", 0.0) if existing_payroll else 0.0
+        
         if deposit_deduction > 0:
             deduction_details.append(f"Security Deposit: ₹{deposit_deduction}")
 
-        net_salary = (salary["monthlyGross"] - lop_amount + total_bonus + incentive_amount - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + deposit_deduction)
+        net_salary = (salary["monthlyGross"] - lop_amount + total_bonus + incentive_amount + returned_deposit - total_adhoc_deduction - penalty_total) - (salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + deposit_deduction)
         
         payroll_record = {
             "employeeId": emp_id,
@@ -1002,8 +1009,9 @@ async def run_payroll_processing(db, month: str, year: int):
             "deductions": salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + lop_amount + total_adhoc_deduction + penalty_total + deposit_deduction,
             "penalty": penalty_total,
             "securityDeposit": deposit_deduction,
+            "returnedDeposit": returned_deposit,
             "netSalary": round(net_salary, 2),
-            "status": "processed",
+            "status": existing_payroll.get("status", "processed") if existing_payroll else "processed",
             "deductionRemarks": "; ".join(deduction_details)
         }
         

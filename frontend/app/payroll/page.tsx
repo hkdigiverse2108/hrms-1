@@ -28,6 +28,8 @@ import { Input } from '@/components/ui/input'
 
 export default function PayrollPage() {
   const [payroll, setPayroll] = useState<Payroll[]>([])
+  const [documents, setDocuments] = useState<any[]>([])
+  const [employees, setEmployees] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState('May')
@@ -46,18 +48,19 @@ export default function PayrollPage() {
   const fetchPayroll = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`${API_URL}/payroll`)
-      if (response.ok) {
-        setPayroll(await response.json())
-      }
+      const [payRes, docRes, empRes] = await Promise.all([
+        fetch(`${API_URL}/payroll`),
+        fetch(`${API_URL}/employee-documents`),
+        fetch(`${API_URL}/employees`)
+      ])
+      if (payRes.ok) setPayroll(await payRes.json())
+      if (docRes.ok) setDocuments(await docRes.json())
+      if (empRes.ok) setEmployees(await empRes.json())
     } catch (error) {
-      console.error('Error fetching payroll:', error)
+      console.error('Error fetching payroll data:', error)
     } finally {
       setIsLoading(false)
     }
-    // Wait, I should probably filter by selected month/year or let the backend do it
-    // For now, I'll fetch all and filter client-side for UX
-    setIsLoading(false)
   }
 
   const filteredPayroll = payroll.filter(p => p.month === selectedMonth && String(p.year) === selectedYear)
@@ -165,6 +168,125 @@ export default function PayrollPage() {
       render: (record: Payroll) => (
         <span className="font-bold text-slate-900">{formatCurrency(record.netSalary)}</span>
       ),
+    },
+    {
+      key: 'depositInfo' as const,
+      header: 'Deposit Info',
+      render: (record: Payroll) => {
+        if (!isAdminOrHR) {
+          return (
+            <div className="flex flex-col text-xs">
+              {record.securityDeposit ? <span className="text-rose-500">Deducted: {formatCurrency(record.securityDeposit)}</span> : null}
+              {record.returnedDeposit ? <span className="text-emerald-500">Returned: {formatCurrency(record.returnedDeposit)}</span> : null}
+              {!record.securityDeposit && !record.returnedDeposit && <span className="text-slate-400">-</span>}
+            </div>
+          )
+        }
+
+        const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId)
+        let depositReqStr = ""
+        if (emp && emp.requiredDocuments) {
+           const fullStr = JSON.stringify(emp.requiredDocuments)
+           const match = fullStr.match(/[^"\\]*(?:Deposit|Deposite)[^"\\]*/i)
+           if (match) depositReqStr = match[0]
+        }
+
+        const empDocs = documents.filter(d => d.employeeId === record.employeeId && (d.documentName?.includes('Deposite') || d.documentName?.includes('Deposit')))
+        if (empDocs.length === 0 && !depositReqStr) return <span className="text-xs text-slate-400">N/A</span>
+        
+        let target = 10000
+        const targetDocName = empDocs.length > 0 ? empDocs[0].documentName : depositReqStr
+        
+        if (targetDocName?.includes('Intern - 2000')) target = 2000
+        else if (targetDocName?.includes('Employee - 10000')) target = 10000
+        else {
+          const match = targetDocName?.match(/(\d+)/)
+          if (match) target = Number(match[0])
+        }
+
+        const empPayrolls = payroll.filter(p => p.employeeId === record.employeeId && p.id !== record.id)
+        const previouslyCollected = empPayrolls.reduce((sum, p) => sum + (p.securityDeposit || 0), 0)
+        const previouslyReturned = empPayrolls.reduce((sum, p) => sum + (p.returnedDeposit || 0), 0)
+        
+        const remainingToCollect = Math.max(0, target - previouslyCollected)
+        const isReturned = record.returnedDeposit ? record.returnedDeposit > 0 : false
+
+        return (
+          <div className="flex flex-col gap-1.5 min-w-[140px]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-slate-500">Target: {target}</span>
+              <span className="text-slate-500">Coll: {previouslyCollected + (record.securityDeposit || 0)}</span>
+            </div>
+            <Input
+              type="number"
+              placeholder="Deduct Amt"
+              defaultValue={record.securityDeposit || ''}
+              className="h-7 text-[11px] px-2 py-1 bg-white border-slate-200 focus-visible:ring-brand-teal"
+              disabled={isReturned || remainingToCollect === 0}
+              onBlur={async (e) => {
+                let val = Number(e.target.value)
+                if (val > remainingToCollect) {
+                  toast.error(`Cannot exceed target. Max remaining: ${remainingToCollect}`)
+                  val = remainingToCollect
+                  e.target.value = String(val)
+                }
+                if (val !== (record.securityDeposit || 0)) {
+                  try {
+                    const response = await fetch(`${API_URL}/payroll/${record.id}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ securityDeposit: val }),
+                    })
+                    if (response.ok) {
+                      toast.success(`Deposit deduction updated`)
+                      // Recalculate net salary by re-running process or doing a generic backend recalculation endpoint
+                      // But since our backend currently doesn't recalculate on PUT, we can just trigger process for this month again
+                      await fetch(`${API_URL}/payroll/process`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ month: selectedMonth, year: Number(selectedYear) })
+                      })
+                      fetchPayroll()
+                    }
+                  } catch (error) {
+                    toast.error('Failed to update deduction')
+                  }
+                }
+              }}
+            />
+            <label className="flex items-center gap-1 text-[10px] text-slate-600 mt-1 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={isReturned}
+                onChange={async (e) => {
+                  const returned = e.target.checked
+                  const returnAmount = returned ? previouslyCollected + (record.securityDeposit || 0) : 0
+                  
+                  try {
+                    const response = await fetch(`${API_URL}/payroll/${record.id}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ returnedDeposit: returnAmount }),
+                    })
+                    if (response.ok) {
+                      toast.success(returned ? `Returning ${returnAmount}` : `Cancelled return`)
+                      await fetch(`${API_URL}/payroll/process`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ month: selectedMonth, year: Number(selectedYear) })
+                      })
+                      fetchPayroll()
+                    }
+                  } catch (error) {
+                    toast.error('Failed to update return deposit')
+                  }
+                }}
+              />
+              Return Deposit
+            </label>
+          </div>
+        )
+      }
     },
     {
       key: 'paymentMode' as const,
