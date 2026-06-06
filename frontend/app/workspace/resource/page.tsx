@@ -554,6 +554,16 @@ export default function ResourceManagementPage() {
         ? allResources.filter((r: any) => r.category === categoryFormData.name).length
         : 0;
         
+      const availableCurrentCount = editingCategoryId
+        ? allResources.filter((r: any) => r.category === categoryFormData.name && r.status === "Available").length
+        : 0;
+
+      if (countToRemove > availableCurrentCount) {
+        toast.error(`Cannot remove ${countToRemove} items. Only ${availableCurrentCount} unassigned items are currently available.`);
+        setIsSaving(false);
+        return;
+      }
+        
       const finalTotalItems = Math.max(0, actualCurrentCount + countToAdd - countToRemove);
 
       const response = await fetch(url, {
