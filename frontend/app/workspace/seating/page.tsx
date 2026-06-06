@@ -734,7 +734,7 @@ export default function SeatingArrangementPage() {
         ) : viewMode === "standard" ? (
           <>
             {/* Legend */}
-            <div className="absolute top-4 right-6 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm flex flex-col gap-2 z-10 text-sm font-medium">
+            <div className="absolute top-4 right-6 bg-white/90 backdrop-blur-md px-3 py-2 rounded-lg shadow-md flex flex-col gap-2 z-[100] text-sm font-medium border border-border/50">
               <div 
                 onClick={handleClearAllSeats}
                 className={cn(
