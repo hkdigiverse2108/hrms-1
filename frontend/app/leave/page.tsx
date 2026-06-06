@@ -219,9 +219,7 @@ export default function LeavePage() {
   const fetchLeaves = async () => {
     setIsLoading(true);
     try {
-      const endpoint = user?.role === "Admin" || user?.role === "HR" 
-        ? `${API_URL}/leaves` 
-        : `${API_URL}/leaves/employee/${user?.id}`;
+      const endpoint = `${API_URL}/leaves/employee/${user?.id}`;
       
       const res = await fetch(endpoint);
       if (res.ok) {
@@ -825,7 +823,7 @@ export default function LeavePage() {
           }}>
 
 
-            {canAddLeave && (
+            {canAddLeave && user?.role !== 'Admin' && (
               <DialogTrigger asChild>
                 <Button className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium shadow-sm w-full sm:w-auto">
                   <Plus className="w-4 h-4 mr-2" />
@@ -1093,6 +1091,7 @@ export default function LeavePage() {
       </PageHeader>
 
       {/* Cards Row */}
+      {user?.role !== 'Admin' && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Monthly Leave Card */}
         <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
@@ -1232,8 +1231,10 @@ export default function LeavePage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Filter Section */}
+      {user?.role !== 'Admin' && (
       <div className="bg-white border border-border rounded-xl p-5 shadow-sm mt-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div className="space-y-2">
@@ -1291,23 +1292,28 @@ export default function LeavePage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Main Content Tabs */}
       <div className="bg-transparent mt-8">
-        <Tabs defaultValue="history" className="w-full" onValueChange={setActiveTab}>
+        <Tabs defaultValue={user?.role === 'Admin' ? 'public' : 'history'} className="w-full" onValueChange={setActiveTab}>
           <TabsList className="bg-transparent border-b border-border w-full justify-start rounded-none p-0 h-auto space-x-4 sm:space-x-6 overflow-x-auto flex-nowrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            <TabsTrigger 
-              value="history" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-muted-foreground data-[state=active]:bg-transparent px-1 py-3 data-[state=active]:shadow-none font-medium"
-            >
-              Leave History
-            </TabsTrigger>
-            <TabsTrigger 
-              value="upcoming" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-muted-foreground data-[state=active]:bg-transparent px-1 py-3 data-[state=active]:shadow-none font-medium"
-            >
-              Upcoming Time Off
-            </TabsTrigger>
+            {user?.role !== 'Admin' && (
+              <>
+                <TabsTrigger 
+                  value="history" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-muted-foreground data-[state=active]:bg-transparent px-1 py-3 data-[state=active]:shadow-none font-medium"
+                >
+                  Leave History
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="upcoming" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-brand-teal data-[state=active]:text-brand-teal text-muted-foreground data-[state=active]:bg-transparent px-1 py-3 data-[state=active]:shadow-none font-medium"
+                >
+                  Upcoming Time Off
+                </TabsTrigger>
+              </>
+            )}
             {(user?.role === 'Admin' || user?.role === 'HR') && (
               <TabsTrigger 
                 value="public" 
