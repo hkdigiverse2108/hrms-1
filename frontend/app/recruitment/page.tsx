@@ -705,8 +705,9 @@ export default function RecruitmentPage() {
                 <Label>Applications Count</Label>
                 <Input
                   type="number"
+                  min="0"
                   value={formData.applications}
-                  onChange={(e) => setFormData({ ...formData, applications: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => setFormData({ ...formData, applications: Math.max(0, parseInt(e.target.value) || 0) })}
                 />
               </div>
               <div className="space-y-2">

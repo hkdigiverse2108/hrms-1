@@ -647,7 +647,7 @@ export default function AttendancePage() {
                       <label className="text-sm font-medium text-foreground">Recorded Break-In</label>
                       <TimePicker 
                         className="w-full h-9" 
-                        format="hh:mm:ss A" 
+                        format="hh:mm A" 
                         use12Hours 
                         showNow={false}
                         value={recoveryForm.recordedBreakIn ? dayjs(`2000-01-01 ${recoveryForm.recordedBreakIn}`, "YYYY-MM-DD HH:mm:ss") : null}
@@ -658,7 +658,7 @@ export default function AttendancePage() {
                       <label className="text-sm font-medium text-foreground">Actual Break-Out Time</label>
                       <TimePicker 
                         className="w-full h-9" 
-                        format="hh:mm:ss A" 
+                        format="hh:mm A" 
                         use12Hours 
                         showNow={false}
                         value={recoveryForm.actualBreakOut ? dayjs(`2000-01-01 ${recoveryForm.actualBreakOut}`, "YYYY-MM-DD HH:mm:ss") : null}
