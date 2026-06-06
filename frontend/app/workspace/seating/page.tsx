@@ -1358,6 +1358,8 @@ export default function SeatingArrangementPage() {
                         </div>
                       ))}
                     </div>
+                  ) : (
+                    <p className="text-xs italic text-slate-400">No PCs on this desk.</p>
                   )}
                 </div>
 
