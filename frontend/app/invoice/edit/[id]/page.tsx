@@ -391,18 +391,8 @@ export default function EditInvoicePage() {
                         const found = clients.find(c => (c.companyName || c.name) === val);
                         if (found) {
                           setClientAddress(found.address || "");
-                          if (found.email) {
-                            if (found.email.includes('@')) {
-                              setClientEmail(found.email);
-                              setClientGstin("");
-                            } else {
-                              setClientGstin(found.email);
-                              setClientEmail("");
-                            }
-                          } else {
-                            setClientEmail("");
-                            setClientGstin("");
-                          }
+                          setClientEmail(found.email || "");
+                          setClientGstin(found.gstin || "");
                           setClientPhone(found.phone || "");
                           setClientDepartment(found.department || "Billing Department");
                         } else {
