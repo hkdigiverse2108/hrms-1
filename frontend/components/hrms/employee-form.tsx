@@ -138,14 +138,22 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         
         if (value !== undefined && value !== null) {
           if (k === 'salary') {
-            sanitizedData[k] = String(value)
+            sanitizedData[k] = String(value) as any
           } else if (k === 'password') {
-            sanitizedData[k] = String(value)
+            sanitizedData[k] = String(value) as any
+          } else if (k === 'requiredDocuments') {
+            let reqDocs: any = value;
+            if (typeof reqDocs === 'string') {
+              try { reqDocs = JSON.parse(reqDocs); if (!Array.isArray(reqDocs)) reqDocs = []; } catch { reqDocs = []; }
+            } else if (Array.isArray(reqDocs) && reqDocs.length > 5 && reqDocs[0] === '[') {
+              try { const parsed = JSON.parse(reqDocs.join('')); if (Array.isArray(parsed)) reqDocs = parsed; } catch {}
+            }
+            sanitizedData[k] = (Array.isArray(reqDocs) ? reqDocs : []) as any;
           } else if (typeof value === 'object' && value !== null) {
             // Handle if backend returns an object for a field (e.g., department: {name: '...'})
-            sanitizedData[k] = String((value as any).name || (value as any).title || (value as any).label || JSON.stringify(value))
+            sanitizedData[k] = String((value as any).name || (value as any).title || (value as any).label || JSON.stringify(value)) as any
           } else {
-            sanitizedData[k] = String(value)
+            sanitizedData[k] = String(value) as any
           }
         } else {
           sanitizedData[k] = (defaultFormData as any)[k] || ''
