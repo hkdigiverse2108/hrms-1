@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, Plus, Sun, Thermometer, Clock, MoreHorizontal, PartyPopper, Church, Briefcase, Flag, Gift, ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, Eye, Download, Search, RotateCcw, UploadCloud, ImageIcon, X, Paperclip, Check, Globe } from "lucide-react";
+import { CalendarIcon, Plus, Sun, Thermometer, Clock, MoreHorizontal, PartyPopper, Church, Briefcase, Flag, Gift, ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, Eye, Download, Search, RotateCcw, UploadCloud, ImageIcon, X, Paperclip, Check, Globe, Info } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
 
 import { TablePagination } from "@/components/common/TablePagination";
@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DatePicker } from "antd";
 import { toast } from "sonner";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 import dayjs from "dayjs";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
@@ -886,17 +887,25 @@ export default function LeavePage() {
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2">
-                <Label htmlFor="reason">Reason</Label>
-                <Textarea 
-                  id="reason" 
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Reason for leave..." 
-                  className="resize-none min-h-[80px]" 
-                  readOnly={isViewOnly}
-                />
-              </div>
+              {isViewOnly ? (
+                <div className="text-left space-y-1 pt-2">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Employee Reason</span>
+                  <p className="text-xs text-slate-700 font-semibold leading-relaxed">
+                    {reason || "No reason specified."}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="reason">Reason</Label>
+                  <Textarea 
+                    id="reason" 
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Reason for leave..." 
+                    className="resize-none min-h-[80px]" 
+                  />
+                </div>
+              )}
 
               {isViewOnly && viewStatus === 'Rejected' && (
                 <div className="bg-rose-50 border border-rose-100 rounded-lg p-3.5 flex flex-col gap-1.5 mt-4">
@@ -1317,15 +1326,19 @@ export default function LeavePage() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-700">{item.type}</span>
-                              <button 
-                                type="button"
-                                onClick={() => handleView(item)}
-                                title={item.reason ? `Reason: ${item.reason} (Click to view full details)` : "Click to view full details"}
-                                className="text-slate-400 hover:text-brand-teal hover:bg-slate-100 p-1 rounded-full transition-all focus:outline-none cursor-pointer flex items-center justify-center shrink-0"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold text-slate-600 bg-slate-100 rounded-md cursor-pointer hover:bg-slate-200 transition-colors">
+                                      {item.type}
+                                      <Info className="w-3 h-3 text-slate-400 shrink-0" />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs font-sans text-xs">
+                                    <p className="leading-relaxed">{item.reason || "No reason specified."}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               {item.proof_image && (
                                 <span 
                                   className="inline-flex items-center justify-center p-1 bg-brand-light border border-brand-teal/20 text-brand-teal rounded cursor-pointer hover:bg-brand-teal hover:text-white transition-colors"
@@ -1509,7 +1522,19 @@ export default function LeavePage() {
                               <div className="p-1.5 bg-brand-light rounded-md">
                                 <Icon className="w-4 h-4 text-brand-teal" />
                               </div>
-                              <span className="font-bold text-slate-700">{item.type}</span>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold text-slate-600 bg-slate-100 rounded-md cursor-pointer hover:bg-slate-200 transition-colors">
+                                      {item.type}
+                                      <Info className="w-3 h-3 text-slate-400 shrink-0" />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs font-sans text-xs">
+                                    <p className="leading-relaxed">{item.reason || "No reason specified."}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               {item.proof_image && (
                                 <span 
                                   className="inline-flex items-center justify-center p-1 bg-brand-light border border-brand-teal/20 text-brand-teal rounded cursor-pointer hover:bg-brand-teal hover:text-white transition-colors"

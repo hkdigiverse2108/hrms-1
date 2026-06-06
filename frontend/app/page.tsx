@@ -798,7 +798,7 @@ function EmployeeView({
                   </div>
                   <div>
                     <h3 className="font-bold text-xl text-[#111827] leading-tight">{userName}</h3>
-                    <p className="text-sm text-gray-500 font-medium">{user?.designation || 'HR Manager'}</p>
+                    <p className="text-sm text-gray-500 font-medium">{user?.designation || user?.role || 'Employee'}</p>
                   </div>
                 </div>
               </div>

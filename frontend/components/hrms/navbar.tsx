@@ -88,7 +88,7 @@ export function HRMSNavbar() {
   };
  
   const userName = user?.name || "Guest";
-  const designation = user?.designation || "Employee";
+  const designation = user?.designation || user?.role || "Employee";
   const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase();
   const showUserInfo = mounted && !isLoading;
  
