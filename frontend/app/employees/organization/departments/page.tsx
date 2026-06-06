@@ -26,7 +26,7 @@ import type { Department } from '@/lib/types'
 import { usePermissions } from '@/hooks/usePermissions'
 
 export default function DepartmentsPage() {
-  const { data, isLoading: apiLoading, refresh } = useApi()
+  const { data, isLoading: apiLoading, refreshItem } = useApi()
   const { checkPermission, isAdmin } = usePermissions()
   const [departments, setDepartments] = useState<Department[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -63,7 +63,7 @@ export default function DepartmentsPage() {
         body: JSON.stringify(deptForm),
       })
       if (res.ok) {
-        refresh()
+        refreshItem('departments')
         setModalOpen(false)
       }
     } catch (err) {
@@ -78,7 +78,7 @@ export default function DepartmentsPage() {
     try {
       const res = await fetch(`${API_URL}/departments/${itemToDelete.id}`, { method: 'DELETE' })
       if (res.ok) {
-        refresh()
+        refreshItem('departments')
         setDeleteDialogOpen(false)
         setItemToDelete(null)
       }

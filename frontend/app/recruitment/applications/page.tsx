@@ -32,7 +32,7 @@ import { useConfirm } from "@/context/ConfirmContext";
 
 export default function ApplicationsPage() {
   const { confirm } = useConfirm();
-  const { data, isLoading, refresh } = useApi()
+  const { data, isLoading, refreshItem } = useApi()
   const [applications, setApplications] = useState<Application[]>([])
   const [selectedApp, setSelectedApp] = useState<Application | null>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
@@ -57,7 +57,7 @@ export default function ApplicationsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       })
-      if (response.ok) refresh()
+      if (response.ok) refreshItem('applications')
     } catch (error) {
       console.error('Error updating status:', error)
     }
@@ -153,7 +153,7 @@ export default function ApplicationsPage() {
       const response = await fetch(`${API_URL}/applications/${id}`, {
         method: 'DELETE',
       })
-      if (response.ok) refresh()
+      if (response.ok) refreshItem('applications')
     } catch (error) {
       console.error('Error deleting application:', error)
     }

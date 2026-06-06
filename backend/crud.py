@@ -1422,6 +1422,7 @@ async def create_holidays_bulk(db, payload: schemas.HolidayBulkCreate):
     return {"inserted": len(result.inserted_ids)}
 async def update_holiday(db, holiday_id: str, update: schemas.HolidayUpdate): return await update_item(db, "holidays", holiday_id, update.dict(exclude_unset=True))
 async def delete_holiday(db, holiday_id: str): return await delete_item(db, "holidays", holiday_id)
+async def delete_all_holidays(db): return await db.holidays.delete_many({})
 
 async def get_kpi_records(db, skip: int = 0, limit: int = 100): return await get_items(db, "kpi_records", skip, limit)
 async def create_kpi_record(db, kpi: schemas.KPICreate): return await create_item(db, "kpi_records", kpi.dict())

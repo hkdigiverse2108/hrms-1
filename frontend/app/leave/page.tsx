@@ -621,6 +621,30 @@ export default function LeavePage() {
     }
   };
 
+  const handleDeleteAllHolidays = async () => {
+    const isConfirmed = await confirm({
+      title: "Delete All Holidays",
+      message: "Are you sure you want to delete ALL public holidays? This action cannot be undone.",
+      destructive: true,
+      confirmText: "Delete All"
+    });
+    if (!isConfirmed) return;
+    try {
+      const res = await fetch(`${API_URL}/holidays`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        toast.success("All holidays deleted successfully");
+        fetchHolidays();
+        setHolidaysPage(1);
+      } else {
+        toast.error("Failed to delete all holidays");
+      }
+    } catch (err) {
+      toast.error("Failed to delete all holidays");
+    }
+  };
+
   const getHolidayIcon = (name: string) => {
     if (name.includes("New Year")) return PartyPopper;
     if (name.includes("Independence")) return Flag;
@@ -1817,6 +1841,17 @@ export default function LeavePage() {
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
+
+                    {user?.role === 'Admin' && holidays.length > 0 && (
+                      <Button 
+                        variant="destructive" 
+                        className="h-9" 
+                        onClick={handleDeleteAllHolidays}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete All
+                      </Button>
+                    )}
                     </>
                   )}
                 </div>

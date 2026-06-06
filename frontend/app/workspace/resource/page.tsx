@@ -98,8 +98,19 @@ const getCategoryCode = (categoryName: string): string => {
 
 export default function ResourceManagementPage() {
   const { user, isLoading: userLoading } = useUser();
-  const { data, isLoading, refresh: apiRefresh } = useApi();
+  const { data, isLoading, refresh: apiRefresh, updateData } = useApi();
   const { confirm } = useConfirm();
+
+  const refreshAssets = async () => {
+    try {
+      const response = await fetch(`${API_URL}/assets`);
+      if (response.ok) {
+        updateData('assets', await response.json());
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
   
   const [activeTab, setActiveTab] = useState<"overview" | "registry" | "categories" | "history">("overview");
   const [isAddingMode, setIsAddingMode] = useState(false);
@@ -317,7 +328,7 @@ export default function ResourceManagementPage() {
 
       if (response.ok) {
         toast.success("Asset updated successfully");
-        apiRefresh();
+        refreshAssets();
         fetchLogs();
       } else {
         toast.error("Failed to update asset");
@@ -378,7 +389,7 @@ export default function ResourceManagementPage() {
 
       if (response.ok) {
         toast.success("Resource deleted successfully");
-        apiRefresh();
+        refreshAssets();
         fetchCategories();
         fetchLogs();
       } else {
@@ -452,7 +463,7 @@ export default function ResourceManagementPage() {
 
       toast.success(editingId ? "Resource updated successfully" : `Successfully added ${count} resource(s)`);
       handleCancel();
-      apiRefresh();
+      refreshAssets();
       fetchLogs();
     } catch (error) {
       console.error(error);
@@ -516,17 +527,17 @@ export default function ResourceManagementPage() {
         // Clear all deleted IDs and do a full fresh fetch
         setDeletedResourceIds([]);
         await fetchCategories();
-        apiRefresh();
+        refreshAssets();
         fetchLogs();
       } else {
         fetchCategories();
-        apiRefresh();
+        refreshAssets();
         toast.error("Failed to delete category");
       }
     } catch (error) {
       console.error(error);
       fetchCategories();
-      apiRefresh();
+      refreshAssets();
       toast.error("An error occurred while deleting category");
     }
   };
@@ -598,7 +609,7 @@ export default function ResourceManagementPage() {
         setNewResourceCount("");
         setRemoveResourceCount("");
         fetchCategories();
-        apiRefresh();
+        refreshAssets();
       } else {
         toast.error(editingCategoryId ? "Failed to update category" : "Failed to add category");
       }

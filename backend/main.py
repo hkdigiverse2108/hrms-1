@@ -609,6 +609,12 @@ async def update_holiday(holiday_id: str, holiday: schemas.HolidayUpdate, db=Dep
 async def delete_holiday(holiday_id: str, db=Depends(get_db)):
     await crud.delete_holiday(db, holiday_id)
     return {"message": "Holiday deleted"}
+
+@app.delete("/holidays")
+async def delete_all_holidays(db=Depends(get_db)):
+    await crud.delete_all_holidays(db)
+    return {"message": "All holidays deleted"}
+
 import urllib.request
 
 GOOGLE_ICS_MAP = {

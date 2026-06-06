@@ -32,7 +32,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ActivityLogDialog } from '@/components/common/ActivityLogDialog'
 
 export default function DailyProgressPage() {
-  const { data, refresh } = useApi()
+  const { data, refreshItem } = useApi()
   const { user } = useUser()
   const router = useRouter()
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions()
@@ -137,7 +137,7 @@ export default function DailyProgressPage() {
 
       if (response.ok) {
         toast.success(`Work ${newStatus.toLowerCase()} successfully`)
-        refresh()
+        refreshItem('employeeDailyReports')
       }
     } catch (error) {
       console.error('Error updating status:', error)
@@ -186,7 +186,7 @@ export default function DailyProgressPage() {
         toast.success('Note saved successfully')
         setNoteRecord(null)
         setNoteText('')
-        refresh()
+        refreshItem('employeeDailyReports')
       } else {
         toast.error('Failed to save note')
       }

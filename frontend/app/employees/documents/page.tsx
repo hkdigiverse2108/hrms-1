@@ -33,7 +33,7 @@ export default function EmployeeDocumentsPage() {
   const { user } = useUser()
   const isHR = user?.role?.toLowerCase() === 'hr';
   const isAdminOrHR = isAdmin || isHR;
-  const { data, refresh } = useApi()
+  const { data, refreshItem } = useApi()
   const employees = data?.employees || []
   const documents = data?.employeeDocuments || []
   const [loading, setLoading] = useState(false)
@@ -340,7 +340,7 @@ export default function EmployeeDocumentsPage() {
 
       if (response.ok) {
         toast.success(editingId ? 'Document updated successfully' : 'Document added successfully')
-        refresh()
+        refreshItem('employeeDocuments')
         setModalOpen(false)
         setEditingId(null)
         setFormData({
@@ -383,7 +383,7 @@ export default function EmployeeDocumentsPage() {
       })
       if (response.ok) {
         toast.success('Document deleted')
-        refresh()
+        refreshItem('employeeDocuments')
       }
     } catch (error) {
       toast.error('Failed to delete document')
@@ -557,7 +557,7 @@ export default function EmployeeDocumentsPage() {
         
         if (response.ok) {
           toast.success(`Document marked as ${newStatus}`)
-          refresh()
+          refreshItem('documentTypes')
         } else {
           toast.error('Failed to update document status')
         }
@@ -582,7 +582,7 @@ export default function EmployeeDocumentsPage() {
         
         if (response.ok) {
           toast.success(`Document status updated to ${newStatus}`)
-          refresh()
+          refreshItem('documentTypes')
         } else {
           toast.error('Failed to update document status')
         }

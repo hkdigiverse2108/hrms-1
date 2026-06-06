@@ -44,7 +44,7 @@ export default function RecruitmentPage() {
   const { confirm } = useConfirm();
   const router = useRouter()
   const { user } = useUser()
-  const { data, isLoading: apiLoading, refresh } = useApi()
+  const { data, isLoading: apiLoading, refreshItem } = useApi()
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions()
   const [jobs, setJobs] = useState<JobOpening[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -175,14 +175,14 @@ export default function RecruitmentPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
         })
-        if (response.ok) refresh()
+        if (response.ok) refreshItem('jobOpenings')
       } else {
         const response = await fetch(`${API_URL}/job-openings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
         })
-        if (response.ok) refresh()
+        if (response.ok) refreshItem('jobOpenings')
       }
       setModalOpen(false)
     } catch (error) {
