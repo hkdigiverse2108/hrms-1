@@ -640,6 +640,7 @@ export default function AttendancePage() {
                     format="MMMM D, YYYY"
                     value={dayjs(recoveryForm.date)}
                     onChange={(date) => setRecoveryForm({...recoveryForm, date: date ? date.format("YYYY-MM-DD") : ""})}
+                    getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
                   />
                 </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -652,6 +653,7 @@ export default function AttendancePage() {
                         showNow={false}
                         value={recoveryForm.recordedBreakIn ? dayjs(`2000-01-01 ${recoveryForm.recordedBreakIn}`, "YYYY-MM-DD HH:mm:ss") : null}
                         onChange={(time) => setRecoveryForm({...recoveryForm, recordedBreakIn: time ? time.format("HH:mm:ss") : ""})}
+                        getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
                       />
                     </div>
                     <div className="space-y-2 flex flex-col">
@@ -663,6 +665,7 @@ export default function AttendancePage() {
                         showNow={false}
                         value={recoveryForm.actualBreakOut ? dayjs(`2000-01-01 ${recoveryForm.actualBreakOut}`, "YYYY-MM-DD HH:mm:ss") : null}
                         onChange={(time) => setRecoveryForm({...recoveryForm, actualBreakOut: time ? time.format("HH:mm:ss") : ""})}
+                        getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
                       />
                     </div>
                   </div>
