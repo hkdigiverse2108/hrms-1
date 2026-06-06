@@ -689,6 +689,18 @@ export default function SeatingArrangementPage() {
               {isLayoutEditMode ? "Save Layout" : "Layout Editor"}
             </Button>
             
+            {isLayoutEditMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddDesk}
+                className="gap-2 font-bold border-brand-teal text-brand-teal hover:bg-brand-light bg-white"
+              >
+                <Plus className="w-4 h-4" />
+                Add Table
+              </Button>
+            )}
+            
             {!isLayoutEditMode ? (
               <div className="text-xs font-bold text-emerald-700 bg-emerald-100/80 backdrop-blur-sm border border-emerald-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm animate-in fade-in duration-200">
                 <span className="w-2.5 h-2.5 bg-emerald-600 rounded-full animate-pulse flex-shrink-0"></span>
@@ -1349,26 +1361,6 @@ export default function SeatingArrangementPage() {
                   ) : (
                     <p className="text-xs italic text-slate-400">No PCs on this desk.</p>
                   )}
-                </div>
-
-                {/* Danger Zone */}
-                <div className="border-t border-slate-100 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      triggerConfirm(
-                        "Delete Desk",
-                        `Are you sure you want to delete ${editingDesk.name || `Desk ${editingDesk.id}`}?`,
-                        () => {
-                          handleDeleteDesk(editingDesk.id);
-                        }
-                      );
-                    }}
-                    className="w-full py-2.5 px-4 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-all flex items-center justify-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Delete Desk & All Associated Seats
-                  </button>
                 </div>
               </div>
 
