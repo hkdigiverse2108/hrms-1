@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { exportToCSV } from "@/lib/export-utils";
 import { useApi } from "@/hooks/useApi";
+import { useAppEvent } from "@/hooks/useAppEvent";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -150,22 +151,28 @@ export default function EmployeeListPage() {
     });
   };
 
-  useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        const response = await fetch(`${API_URL}/employees`);
-        if (!response.ok) throw new Error("Failed to fetch employees");
-        const data = await response.json();
-        setEmployees(data);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const fetchEmployees = async () => {
+    try {
+      const response = await fetch(`${API_URL}/employees`);
+      if (!response.ok) throw new Error("Failed to fetch employees");
+      const data = await response.json();
+      setEmployees(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchEmployees();
   }, []);
+
+  useAppEvent("data_refresh", (data) => {
+    if (data?.entity === "employees") {
+      fetchEmployees();
+    }
+  });
 
   const handleDelete = async (id: string, name: string) => {
     const isConfirmed = await confirm({

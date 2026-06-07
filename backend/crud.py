@@ -5,6 +5,7 @@ import schemas
 import auth
 import calendar
 import pytz
+from websocket import manager as ws_manager
 
 import time
 import urllib.request
@@ -156,6 +157,12 @@ async def delete_employee(db, employee_id: str):
     )
 
     await archive_and_delete_one(db, "employees", {"_id": ObjectId(employee_id)})
+    
+    try:
+        await ws_manager.broadcast_all("data_refresh", {"entity": "employees"})
+    except Exception:
+        pass
+        
     return True
 
 async def get_employee(db, employee_id: str):
@@ -235,6 +242,11 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
     if "salary" in update_data and update_data["salary"] is not None:
         await sync_employee_salary_to_structure(db, employee_id, update_data["salary"])
     
+    try:
+        await ws_manager.broadcast_all("data_refresh", {"entity": "employees"})
+    except Exception:
+        pass
+        
     updated_doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
     return fix_id(updated_doc)
 
@@ -1067,6 +1079,11 @@ async def create_employee(db, employee: schemas.EmployeeCreate):
     
     if employee.salary is not None and employee.salary > 0:
         await sync_employee_salary_to_structure(db, employee_dict["id"], employee.salary)
+        
+    try:
+        await ws_manager.broadcast_all("data_refresh", {"entity": "employees"})
+    except Exception:
+        pass
         
     return employee_dict
 
@@ -2252,6 +2269,12 @@ async def create_notification(db, notification: schemas.NotificationCreate):
     notification_dict["id"] = str(result.inserted_id)
     if "_id" in notification_dict:
         notification_dict.pop("_id")
+        
+    try:
+        await ws_manager.send_personal_message(notification_dict["employee_id"], "new_notification", notification_dict)
+    except Exception as e:
+        print(f"Error broadcasting new notification: {e}")
+        
     return notification_dict
 
 async def get_notifications_by_user(db, employee_id: str, skip: int = 0, limit: int = 50):
@@ -2308,6 +2331,11 @@ async def create_client(db, client: schemas.ClientCreate):
     
     await log_activity(db, "Created", performedBy, userName, f"Client '{client_dict['companyName']}' was created.", clientId=clientId)
     
+    try:
+        await ws_manager.broadcast_all("data_refresh", {"entity": "clients"})
+    except Exception:
+        pass
+        
     doc = await db.clients.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
@@ -2331,6 +2359,11 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
         log_details = f"Client '{old_client.get('companyName')}': " + (", ".join(details) if details else "Details updated")
         await log_activity(db, "Updated", performedBy, userName, log_details, clientId=client_id)
         
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "clients"})
+        except Exception:
+            pass
+            
     doc = await db.clients.find_one({"_id": ObjectId(client_id)})
     return fix_id(doc)
 
@@ -2422,6 +2455,11 @@ async def create_project(db, project: schemas.ProjectCreate):
     
     await log_activity(db, "Created", performedBy, userName, f"Project '{project_dict['title']}' was created.", projectId=projectId)
     
+    try:
+        await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+    except Exception:
+        pass
+        
     doc = await db.projects.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
@@ -2454,6 +2492,11 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
         log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
         await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)
         
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+        except Exception:
+            pass
+            
     doc = await db.projects.find_one({"_id": ObjectId(project_id)})
     return fix_id(doc)
 
@@ -2639,6 +2682,11 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
     # Log the creation
     await log_task_activity(db, taskId, "Created", performedBy, userName, f"Task '{task_dict['title']}' was created.")
     
+    try:
+        await ws_manager.broadcast_all("task_update", {"taskId": taskId})
+    except Exception:
+        pass
+        
     doc = await db.wm_tasks.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 

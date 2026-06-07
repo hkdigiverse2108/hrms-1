@@ -7,8 +7,9 @@ import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { SidebarNav } from "./SidebarNav";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/context/UserContext";
 import { useChatContext } from "@/context/ChatContext";
+import { useAppEvent } from "@/hooks/useAppEvent";
 import { useRouter } from "next/navigation";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -91,6 +92,10 @@ export function Header() {
       console.error("Error fetching notifications:", err);
     }
   };
+
+  useAppEvent("new_notification", () => {
+    fetchNotifications();
+  });
 
   // Dynamically update the browser tab title with the unread chat badge count (like Email / WhatsApp) app-wide
   useEffect(() => {

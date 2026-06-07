@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from "sonner";
-import { useChatContext } from "@/context/ChatContext";
+import { useAppEvent } from "@/hooks/useAppEvent";
 import {
   Pagination,
   PaginationContent,
@@ -89,7 +89,6 @@ export default function TaskManagementPage() {
   const canAdd = isAdmin || checkPermission('personal-tasks', 'canAdd');
   const canEdit = isAdmin || checkPermission('personal-tasks', 'canEdit');
   const canDeletePerm = isAdmin || checkPermission('personal-tasks', 'canDelete');
-  const { lastEvent } = useChatContext();
   const [tasks, setTasks] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,12 +129,9 @@ export default function TaskManagementPage() {
     fetchTasks();
   }, [user]);
 
-  // Real-time updates via WebSocket
-  useEffect(() => {
-    if (lastEvent?.event === "task_update") {
-      fetchTasks();
-    }
-  }, [lastEvent]);
+  useAppEvent("task_update", () => {
+    fetchTasks();
+  });
 
   const fetchTasks = async () => {
     if (!user) return;

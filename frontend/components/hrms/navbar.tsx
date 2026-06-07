@@ -17,6 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useUser } from '@/hooks/useUser'
+import { useAppEvent } from '@/hooks/useAppEvent'
 import { getAvatarUrl } from '@/lib/config'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -73,6 +74,10 @@ export function HRMSNavbar() {
       console.error("Error fetching notifications:", err);
     }
   };
+
+  useAppEvent("new_notification", () => {
+    fetchNotifications();
+  });
 
   const markAsRead = async (id: string) => {
     try {
