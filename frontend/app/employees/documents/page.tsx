@@ -1076,60 +1076,95 @@ export default function EmployeeDocumentsPage() {
         </TabsList>
 
         <TabsContent value="submitted" className="mt-6 space-y-6">
-          {isAdminOrHR && filterType !== 'all' && (
-            <div className={`grid gap-4 ${(filterType.includes('Deposit') || filterType.includes('Deposite')) ? 'grid-cols-4' : 'grid-cols-3'}`}>
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center items-center">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Assigned Users</span>
-                <span className="text-2xl font-black text-slate-800 mt-1">{filteredDocuments.length}</span>
+          {isAdminOrHR && (
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+              <div className="flex items-center gap-4">
+                <div className="w-64">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Filter by Employee</span>
+                  <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
+                      <SelectValue placeholder="All Employees" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Employees</SelectItem>
+                      {employees.map((emp: any) => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-64">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Document Type</span>
+                  <Select value={filterType} onValueChange={setFilterType}>
+                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
+                      <SelectValue placeholder="All Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      {documentTypes.map((t: string) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-center items-center">
-                <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Accepted / Submitted</span>
-                <span className="text-2xl font-black text-emerald-700 mt-1">{filteredDocuments.filter((d: any) => d.status === 'Accepted' || (!d.isPendingSubmit && d.status !== 'Rejected' && d.status !== 'Returned to Employee' && d.status !== 'Pending to Submit')).length}</span>
-              </div>
-              <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-100 shadow-sm flex flex-col justify-center items-center">
-                <span className="text-xs font-bold text-rose-600 uppercase tracking-wider">Left to Submit</span>
-                <span className="text-2xl font-black text-rose-700 mt-1">{filteredDocuments.filter((d: any) => d.isPendingSubmit || d.status === 'Pending to Submit' || d.status === 'Rejected' || d.status === 'Returned to Employee').length}</span>
-              </div>
-              {(filterType.includes('Deposit') || filterType.includes('Deposite')) && (() => {
-                 let totalTarget = 0;
-                 let totalCollected = 0;
-                 filteredDocuments.forEach((record: any) => {
-                   let target = 10000;
-                   if (record.documentName?.includes('Intern - 2000')) target = 2000;
-                   else if (record.documentName?.includes('Employee - 10000')) target = 10000;
-                   else {
-                     const match = record.documentName?.match(/(\d+)/);
-                     if (match) target = Number(match[0]);
-                   }
-                   
-                   const emp = employees.find((e: any) => e.id === record.employeeId);
-                   const isExempt = emp?.securityDepositExempt || false;
-                   const directPayments = emp?.securityDepositDirectPayments || [];
-                   const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0);
-                   
-                   const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId);
-                   const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0);
-                   
-                   const collected = payrollCollected + directPaid;
-                   
-                   if (isExempt) {
-                     totalTarget += target;
-                     totalCollected += target;
-                   } else {
-                     totalTarget += target;
-                     totalCollected += Math.min(collected, target);
-                   }
-                 });
-                 return (
-                   <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 shadow-sm flex flex-col justify-center items-center">
-                     <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Financial Overview</span>
-                     <span className="text-lg font-black text-blue-800 mt-1">₹{totalCollected.toLocaleString('en-IN')} / ₹{totalTarget.toLocaleString('en-IN')}</span>
-                     <span className="text-[10px] text-blue-500 font-bold mt-1 uppercase tracking-wider">Total Collected</span>
-                   </div>
-                 );
-              })()}
+
+              {filterType !== 'all' && (
+                <div className={`grid gap-4 ${(filterType.includes('Deposit') || filterType.includes('Deposite')) ? 'grid-cols-4' : 'grid-cols-3'} pt-5 border-t border-slate-100`}>
+                  <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-center items-center">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Assigned</span>
+                    <span className="text-2xl font-black text-slate-800 mt-1">{filteredDocuments.length}</span>
+                  </div>
+                  <div className="bg-emerald-50/40 p-4 rounded-xl border border-emerald-100/50 shadow-sm flex flex-col justify-center items-center">
+                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Accepted / Submitted</span>
+                    <span className="text-2xl font-black text-emerald-700 mt-1">{filteredDocuments.filter((d: any) => d.status === 'Accepted' || (!d.isPendingSubmit && d.status !== 'Rejected' && d.status !== 'Returned to Employee' && d.status !== 'Pending to Submit')).length}</span>
+                  </div>
+                  <div className="bg-rose-50/40 p-4 rounded-xl border border-rose-100/50 shadow-sm flex flex-col justify-center items-center">
+                    <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Left to Submit</span>
+                    <span className="text-2xl font-black text-rose-700 mt-1">{filteredDocuments.filter((d: any) => d.isPendingSubmit || d.status === 'Pending to Submit' || d.status === 'Rejected' || d.status === 'Returned to Employee').length}</span>
+                  </div>
+                  {(filterType.includes('Deposit') || filterType.includes('Deposite')) && (() => {
+                    let totalTarget = 0;
+                    let totalCollected = 0;
+                    filteredDocuments.forEach((record: any) => {
+                      let target = 10000;
+                      if (record.documentName?.includes('Intern - 2000')) target = 2000;
+                      else if (record.documentName?.includes('Employee - 10000')) target = 10000;
+                      else {
+                        const match = record.documentName?.match(/(\d+)/);
+                        if (match) target = Number(match[0]);
+                      }
+                      
+                      const emp = employees.find((e: any) => e.id === record.employeeId);
+                      const isExempt = emp?.securityDepositExempt || false;
+                      const directPayments = emp?.securityDepositDirectPayments || [];
+                      const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0);
+                      
+                      const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId);
+                      const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0);
+                      
+                      const collected = payrollCollected + directPaid;
+                      
+                      if (isExempt) {
+                        totalTarget += target;
+                        totalCollected += target;
+                      } else {
+                        totalTarget += target;
+                        totalCollected += Math.min(collected, target);
+                      }
+                    });
+                    return (
+                      <div className="bg-blue-50/40 p-4 rounded-xl border border-blue-100/50 shadow-sm flex flex-col justify-center items-center">
+                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Financial Collection</span>
+                        <span className="text-lg font-black text-blue-800 mt-1">₹{totalCollected.toLocaleString('en-IN')} / ₹{totalTarget.toLocaleString('en-IN')}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           )}
+          
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <DataTable
               data={filteredDocuments}
@@ -1137,41 +1172,6 @@ export default function EmployeeDocumentsPage() {
               actions={isAdminOrHR ? actions : undefined}
               searchKey={isAdminOrHR ? "employeeName" : undefined}
               searchPlaceholder="Search by employee name..."
-              extraFilters={
-                <>
-                  {isAdminOrHR && (
-                    <div className="w-48">
-                      <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                        <SelectTrigger className="h-9 border-slate-200 bg-slate-50/30 text-xs font-semibold">
-                          <SelectValue placeholder="All Employees" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Employees</SelectItem>
-                          {employees.map((emp: any) => (
-                            <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {isAdminOrHR && (
-                    <div className="w-48">
-                      <Select value={filterType} onValueChange={setFilterType}>
-                        <SelectTrigger className="h-9 border-slate-200 bg-slate-50/30 text-xs font-semibold">
-                          <SelectValue placeholder="All Types" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Types</SelectItem>
-                          {documentTypes.map((t: string) => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </>
-              }
             />
           </div>
         </TabsContent>
