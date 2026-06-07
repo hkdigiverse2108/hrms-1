@@ -17,6 +17,7 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
   const [rows, setRows] = useState(10);
   const [cols, setCols] = useState(3);
   const [gap, setGap] = useState(8);
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [title, setTitle] = useState("Company Resource");
 
   if (!isOpen) return null;
@@ -74,9 +75,17 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
 
   const labelsPerPage = rows * cols;
   
+  // Extract unique categories
+  const categories = Array.from(new Set(resources.map(r => r.category).filter(Boolean)));
+  
+  // Filter resources
+  const filteredResources = selectedCategory === "all" 
+    ? resources 
+    : resources.filter(r => r.category === selectedCategory);
+
   // Use actual resources, if none, use placeholders
-  const displayResources = resources.length > 0 
-    ? resources.map(r => r.assetId || "HK-XXX-000")
+  const displayResources = filteredResources.length > 0 
+    ? filteredResources.map(r => r.assetId || "HK-XXX-000")
     : ["HK-XXX-001", "HK-XXX-002", "HK-XXX-003"];
 
   // Create pages
@@ -128,6 +137,21 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
                 <SelectContent>
                   <SelectItem value="A4">A4</SelectItem>
                   <SelectItem value="Letter">US Letter</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-foreground">Filter Category</label>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-full bg-white">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {categories.map((cat: any) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
