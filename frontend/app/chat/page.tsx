@@ -1696,7 +1696,14 @@ export default function ChatPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-bold text-[14px] text-foreground truncate">{chat.name}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-[14px] text-foreground truncate">{chat.name}</h3>
+                          {unreadCounts[chat.id] > 0 && (
+                            <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
+                              {unreadCounts[chat.id]}
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-[10px] font-semibold text-muted-foreground">{chat.time}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
@@ -1708,11 +1715,6 @@ export default function ChatPage() {
                             {employees.find(e => e.id === chat.id)?.customStatus || chat.lastMessage}
                           </p>
                         </div>
-                        {unreadCounts[chat.id] > 0 && (
-                          <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold">
-                            {unreadCounts[chat.id]}
-                          </Badge>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -1765,18 +1767,20 @@ export default function ChatPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-bold text-[14px] text-foreground truncate">{group.name}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-[14px] text-foreground truncate">{group.name}</h3>
+                          {unreadCounts[group.id] > 0 && (
+                            <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
+                              {unreadCounts[group.id]}
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-[10px] font-semibold text-muted-foreground">{group.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
                           {group.lastMessage || "No messages yet"}
                         </p>
-                        {unreadCounts[group.id] > 0 && (
-                          <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
-                            {unreadCounts[group.id]}
-                          </Badge>
-                        )}
                         {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -1851,18 +1855,20 @@ export default function ChatPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-bold text-[14px] text-foreground truncate">{channel.name}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-[14px] text-foreground truncate">{channel.name}</h3>
+                          {unreadCounts[channel.id] > 0 && (
+                            <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
+                              {unreadCounts[channel.id]}
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-[10px] font-semibold text-muted-foreground">{channel.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
                           {channel.lastMessage || channel.description}
                         </p>
-                        {unreadCounts[channel.id] > 0 && (
-                          <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
-                            {unreadCounts[channel.id]}
-                          </Badge>
-                        )}
                         {(user?.role === "Admin" || user?.role === "HR") && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
