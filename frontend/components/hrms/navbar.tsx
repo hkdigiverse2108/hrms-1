@@ -147,7 +147,8 @@ export function HRMSNavbar() {
                     className={`flex flex-col items-start gap-1 py-3 cursor-pointer ${!n.is_read ? 'bg-slate-50/50' : ''}`}
                     onClick={() => {
                       if (n.type === 'leave') {
-                        const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                        const isPersonal = n.title !== "New Leave Request";
+                        const route = isPersonal ? '/leave' : '/employees/leave';
                         router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
                       } else if (n.type === 'document') {
                         router.push('/employees/documents');
@@ -173,7 +174,8 @@ export function HRMSNavbar() {
                           className="h-7 px-2 text-[10px] border-brand-teal text-brand-teal hover:bg-brand-light"
                           onClick={() => {
                             if (n.type === 'leave') {
-                              const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                              const isPersonal = n.title !== "New Leave Request";
+                              const route = isPersonal ? '/leave' : '/employees/leave';
                               router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
                             } else if (n.type === 'document') {
                               router.push('/employees/documents');
@@ -363,7 +365,8 @@ export function HRMSNavbar() {
                               onClick={() => {
                                 setIsNotificationsModalOpen(false);
                                 if (n.type === 'leave') {
-                                  const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                                  const isPersonal = n.title !== "New Leave Request";
+                                  const route = isPersonal ? '/leave' : '/employees/leave';
                                   router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
                                 } else if (n.type === 'document') {
                                   router.push('/employees/documents');

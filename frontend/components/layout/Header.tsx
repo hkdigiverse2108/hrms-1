@@ -196,7 +196,8 @@ export function Header() {
                           <button 
                             onClick={() => {
                               if (n.type === 'leave') {
-                                const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                                const isPersonal = n.title !== "New Leave Request";
+                                const route = isPersonal ? '/leave' : '/employees/leave';
                                 router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
                               } else if (n.type === 'document') {
                                 router.push('/employees/documents');
@@ -383,7 +384,8 @@ export function Header() {
                               onClick={() => {
                                 setIsNotificationsModalOpen(false);
                                 if (n.type === 'leave') {
-                                  const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                                  const isPersonal = n.title !== "New Leave Request";
+                                  const route = isPersonal ? '/leave' : '/employees/leave';
                                   router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
                                 } else if (n.type === 'document') {
                                   router.push('/employees/documents');
