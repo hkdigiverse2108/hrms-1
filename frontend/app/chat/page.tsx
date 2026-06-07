@@ -1424,9 +1424,10 @@ export default function ChatPage() {
       .map((emp: any) => {
         const summary = chatSummaries[emp.id];
         const isOnline = onlineUsers.has(emp.id || emp.employeeId);
+        const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
         return {
           id: emp.id || emp.employeeId,
-          name: emp.id === user?.id ? `${emp.name} (You)` : emp.name,
+          name: emp.id === user?.id ? `${empName} (You)` : empName,
           status: isOnline ? "Online" : "Offline",
           lastMessage: summary?.lastMessage || "Click to start chatting",
           time: summary?.timestamp ? dayjs(summary.timestamp).format("hh:mm A") : "",
@@ -3055,7 +3056,7 @@ export default function ChatPage() {
                     />
                     <Avatar className="w-8 h-8">
                       <AvatarImage src={emp.avatar} />
-                      <AvatarFallback className="bg-brand-light text-brand-teal text-[10px]">{emp.name[0]}</AvatarFallback>
+                      <AvatarFallback className="bg-brand-light text-brand-teal text-[10px]">{emp.name ? emp.name[0]?.toUpperCase() : "?"}</AvatarFallback>
                     </Avatar>
                     <label
                       htmlFor={`emp-${emp.id}`}
@@ -3107,16 +3108,19 @@ export default function ChatPage() {
               {employees.filter((emp: any) => {
                 if (!newChatSearchQuery.trim()) return true;
                 const q = newChatSearchQuery.toLowerCase().trim();
-                const name = (emp.name || "").toLowerCase();
+                const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+                const name = empName.toLowerCase();
                 const designation = (emp.designation || "").toLowerCase();
                 return name.includes(q) || designation.includes(q);
-              }).map((emp: any) => (
+              }).map((emp: any) => {
+                const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+                return (
                 <div 
                   key={emp.id}
                   onClick={() => {
                     setSelectedChat({
                       id: emp.id || emp.employeeId,
-                      name: emp.id === user?.id ? `${emp.name} (You)` : emp.name,
+                      name: emp.id === user?.id ? `${empName} (You)` : empName,
                       status: onlineUsers.has(emp.id || emp.employeeId) ? "Online" : "Offline",
                       avatar: emp.profilePhoto 
                         ? (emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`)
@@ -3135,15 +3139,15 @@ export default function ChatPage() {
                       />
                     )}
                     <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
-                      {emp.name[0]}
+                      {empName ? empName[0]?.toUpperCase() : "?"}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                    <p className="text-sm font-bold text-slate-800">{emp.id === user?.id ? `${emp.name} (You)` : emp.name}</p>
+                    <p className="text-sm font-bold text-slate-800">{emp.id === user?.id ? `${empName} (You)` : empName}</p>
                     <p className="text-[11px] text-muted-foreground">{emp.designation || "Colleague"}</p>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         </DialogContent>
