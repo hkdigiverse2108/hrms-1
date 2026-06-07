@@ -140,7 +140,11 @@ async def delete_employee(db, employee_id: str):
     await archive_and_delete_many(db, "payroll", {"employeeId": employee_id})
     await archive_and_delete_many(db, "salary_structures", {"employeeId": employee_id})
     await archive_and_delete_many(db, "employee_daily_reports", {"employeeId": employee_id})
-    await archive_and_delete_many(db, "notifications", {"employeeId": employee_id})
+    try:
+        emp_obj_id = ObjectId(employee_id)
+        await archive_and_delete_many(db, "notifications", {"$or": [{"employee_id": employee_id}, {"employee_id": emp_obj_id}, {"employeeId": employee_id}]})
+    except Exception:
+        await archive_and_delete_many(db, "notifications", {"$or": [{"employee_id": employee_id}, {"employeeId": employee_id}]})
     await archive_and_delete_many(db, "remarks", {"employeeId": employee_id})
     await archive_and_delete_many(db, "bonus_deductions", {"employeeId": employee_id})
     await archive_and_delete_many(db, "sales_targets", {"employeeId": employee_id})
@@ -2251,7 +2255,13 @@ async def create_notification(db, notification: schemas.NotificationCreate):
     return notification_dict
 
 async def get_notifications_by_user(db, employee_id: str, skip: int = 0, limit: int = 50):
-    cursor = db.notifications.find({"employee_id": employee_id}).sort("_id", -1).skip(skip).limit(limit)
+    try:
+        emp_obj_id = ObjectId(employee_id)
+        query = {"$or": [{"employee_id": employee_id}, {"employee_id": emp_obj_id}]}
+    except Exception:
+        query = {"employee_id": employee_id}
+        
+    cursor = db.notifications.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -2264,8 +2274,14 @@ async def mark_notification_as_read(db, notification_id: str):
     return fix_id(result)
 
 async def mark_all_notifications_as_read(db, employee_id: str):
+    try:
+        emp_obj_id = ObjectId(employee_id)
+        query = {"$or": [{"employee_id": employee_id}, {"employee_id": emp_obj_id}], "is_read": False}
+    except Exception:
+        query = {"employee_id": employee_id, "is_read": False}
+
     await db.notifications.update_many(
-        {"employee_id": employee_id, "is_read": False},
+        query,
         {"$set": {"is_read": True}}
     )
     return {"message": "All notifications marked as read"}
