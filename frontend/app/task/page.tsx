@@ -103,6 +103,7 @@ export default function TaskManagementPage() {
   const [editTaskTitle, setEditTaskTitle] = useState("");
   const [editingDescId, setEditingDescId] = useState<string | null>(null);
   const [editTaskDesc, setEditTaskDesc] = useState("");
+  const [assigneeSearch, setAssigneeSearch] = useState("");
 
   // Form State
   const [newTask, setNewTask] = useState<{
@@ -463,8 +464,14 @@ export default function TaskManagementPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <Input
+                      placeholder="Search assignees by name..."
+                      value={assigneeSearch}
+                      onChange={(e) => setAssigneeSearch(e.target.value)}
+                      className="h-8 text-xs bg-white mb-2"
+                    />
                     <div className="border border-border rounded-md max-h-[140px] overflow-y-auto bg-white p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
-                      {employees.map(emp => {
+                      {employees.filter(emp => `${emp.firstName} ${emp.lastName}`.toLowerCase().includes(assigneeSearch.toLowerCase())).map(emp => {
                         const isSelected = newTask.assignedToIds.includes(emp.id);
                         return (
                           <div 
