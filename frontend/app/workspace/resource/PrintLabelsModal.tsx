@@ -56,9 +56,13 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:bg-white print:p-0 print:block">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:static print:bg-white print:p-0 print:block print:h-auto overflow-y-auto">
       <style>{`
         @media print {
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+          }
           body * {
             visibility: hidden;
           }
@@ -80,7 +84,7 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
           }
           .print-page {
             page-break-after: always;
-            height: calc(100vh - 1in); /* approximate printable height */
+            height: calc(100vh - 1in);
           }
           .print-page:last-child {
             page-break-after: avoid;
