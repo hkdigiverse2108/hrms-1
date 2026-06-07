@@ -2461,6 +2461,7 @@ async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, lim
         # User sees tasks assigned to them, or tasks they assigned
         query["$or"] = [
             {"assignedToId": userId},
+            {"assignedToIds": userId},
             {"assignedById": userId}
         ]
                 
@@ -2479,11 +2480,33 @@ async def create_task(db, task: schemas.TaskCreate):
     if not task_dict.get("assignedByName"):
         task_dict["assignedByName"] = userName
     
-    if task_dict.get("assignedToId"):
-        employee = await db.employees.find_one({"_id": ObjectId(task_dict["assignedToId"])})
-        if employee:
-            if not task_dict.get("assignedToName"):
-                task_dict["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+    if task_dict.get("assignedToIds") and len(task_dict.get("assignedToIds")) > 0:
+        names = []
+        for emp_id in task_dict["assignedToIds"]:
+            try:
+                employee = await db.employees.find_one({"_id": ObjectId(emp_id)})
+                if employee:
+                    names.append(f"{employee.get('firstName')} {employee.get('lastName')}")
+            except Exception:
+                pass
+        task_dict["assignedToNames"] = names
+        
+        # for backwards compatibility if only 1 user assigned
+        if len(task_dict["assignedToIds"]) == 1:
+            task_dict["assignedToId"] = task_dict["assignedToIds"][0]
+            task_dict["assignedToName"] = task_dict["assignedToNames"][0] if names else None
+
+    elif task_dict.get("assignedToId"):
+        try:
+            employee = await db.employees.find_one({"_id": ObjectId(task_dict["assignedToId"])})
+            if employee:
+                if not task_dict.get("assignedToName"):
+                    task_dict["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+                if not task_dict.get("assignedToIds"):
+                    task_dict["assignedToIds"] = [task_dict["assignedToId"]]
+                    task_dict["assignedToNames"] = [task_dict["assignedToName"]]
+        except Exception:
+            pass
 
     if not task_dict.get("createdDate"):
         task_dict["createdDate"] = get_now().strftime("%Y-%m-%d")
@@ -2500,10 +2523,30 @@ async def update_task(db, task_id: str, task: schemas.TaskUpdate):
     performedBy = update_data.pop("performedBy", "Unknown")
     userName = update_data.pop("userName", "Unknown User")
     
-    if update_data.get("assignedToId"):
-        employee = await db.employees.find_one({"_id": ObjectId(update_data["assignedToId"])})
-        if employee and not update_data.get("assignedToName"):
-            update_data["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+    if update_data.get("assignedToIds") is not None:
+        names = []
+        for emp_id in update_data["assignedToIds"]:
+            try:
+                employee = await db.employees.find_one({"_id": ObjectId(emp_id)})
+                if employee:
+                    names.append(f"{employee.get('firstName')} {employee.get('lastName')}")
+            except Exception:
+                pass
+        update_data["assignedToNames"] = names
+        if len(update_data["assignedToIds"]) == 1:
+            update_data["assignedToId"] = update_data["assignedToIds"][0]
+            update_data["assignedToName"] = update_data["assignedToNames"][0] if names else None
+        else:
+            update_data["assignedToId"] = None
+            update_data["assignedToName"] = None
+
+    elif update_data.get("assignedToId"):
+        try:
+            employee = await db.employees.find_one({"_id": ObjectId(update_data["assignedToId"])})
+            if employee and not update_data.get("assignedToName"):
+                update_data["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+        except Exception:
+            pass
 
     if update_data:
         await db.tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})

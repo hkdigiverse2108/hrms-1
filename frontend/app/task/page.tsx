@@ -158,39 +158,35 @@ export default function TaskManagementPage() {
     if (!newTask.title) return;
     setIsSubmitting(true);
     try {
-      const idsToAssign = newTask.assignedToIds.length > 0 ? newTask.assignedToIds : [user?.id || null];
-      const promises = idsToAssign.map(assigneeId => {
-        return fetch(`${API_URL}/tasks`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: newTask.title,
-            description: newTask.description,
-            dueDate: newTask.dueDate,
-            status: newTask.status,
-            priority: newTask.priority,
-            ...(assigneeId ? { assignedToId: assigneeId } : {}),
-            performedBy: user?.id,
-            userName: user?.name
-          })
-        });
+      const idsToAssign = newTask.assignedToIds.length > 0 ? newTask.assignedToIds : [user?.id].filter(Boolean);
+      
+      const response = await fetch(`${API_URL}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newTask.title,
+          description: newTask.description,
+          dueDate: newTask.dueDate,
+          status: newTask.status,
+          priority: newTask.priority,
+          assignedToIds: idsToAssign,
+          performedBy: user?.id,
+          userName: user?.name
+        })
       });
 
-      const results = await Promise.all(promises);
-      const allSuccess = results.every(res => res.ok);
-
-      if (allSuccess) {
+      if (response.ok) {
         setCreateModalOpen(false);
         setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: "todo", priority: "medium" });
         fetchTasks();
-        toast.success(newTask.assignedToIds.length > 0 ? `Task successfully assigned to ${newTask.assignedToIds.length} user(s)!` : "Task self-assigned successfully!");
+        toast.success(idsToAssign.length > 1 ? `Task successfully assigned to ${idsToAssign.length} user(s)!` : "Task created successfully!");
       } else {
-        toast.error("Failed to create some tasks.");
+        toast.error("Failed to create task.");
         fetchTasks();
       }
     } catch (err) {
-      console.error("Error creating tasks:", err);
-      toast.error("An error occurred while creating tasks.");
+      console.error("Error creating task:", err);
+      toast.error("An error occurred while creating task.");
     } finally {
       setIsSubmitting(false);
     }
@@ -357,7 +353,9 @@ export default function TaskManagementPage() {
   const filteredTasks = tasks.filter(task => {
     const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status);
     const priorityMatch = activePriorities.length === 0 || activePriorities.includes(task.priority?.toLowerCase() || "");
-    const assigneeMatch = activeAssignees.length === 0 || activeAssignees.includes(task.assignedToId);
+    const assigneeMatch = activeAssignees.length === 0 || 
+      (task.assignedToIds && activeAssignees.some(id => task.assignedToIds.includes(id))) || 
+      activeAssignees.includes(task.assignedToId);
     
     let dateMatch = true;
     if (activeDateRange?.from && task.dueDate) {
@@ -376,7 +374,7 @@ export default function TaskManagementPage() {
       dateMatch = false; // Filter out tasks with no due date if a date filter is applied
     }
     
-    const myAssignedMatch = !assignedToMe || task.assignedToId === user?.id;
+    const myAssignedMatch = !assignedToMe || task.assignedToId === user?.id || (task.assignedToIds && task.assignedToIds.includes(user?.id));
     const myCreatedMatch = !createdByMe || task.assignedById === user?.id;
 
     return statusMatch && priorityMatch && assigneeMatch && dateMatch && myAssignedMatch && myCreatedMatch;
@@ -990,15 +988,37 @@ export default function TaskManagementPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-6 h-6">
-                          <AvatarImage src={task.avatar} />
-                          <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                            {(task.assignedToName || task.assignee || 'U').split(' ').map((n:any) => n[0]).join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="font-medium text-foreground text-sm">{task.assignedToName || task.assignee}</span>
-                      </div>
+                      {task.assignedToIds && task.assignedToIds.length > 1 ? (
+                        <div className="flex items-center gap-2" title={task.assignedToNames?.join(', ')}>
+                          <div className="flex -space-x-2 overflow-hidden">
+                            {(task.assignedToNames || []).slice(0, 3).map((name: string, i: number) => (
+                              <Avatar key={i} className="w-6 h-6 border-2 border-white">
+                                <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold" title={name}>
+                                  {name.split(' ').map((n:any) => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                            ))}
+                            {(task.assignedToNames?.length || 0) > 3 && (
+                              <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 z-10">
+                                +{(task.assignedToNames?.length || 0) - 3}
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-xs font-medium text-foreground">
+                            {task.assignedToNames?.length || 0} Assignees
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-6 h-6">
+                            <AvatarImage src={task.avatar} />
+                            <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
+                              {((task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'U').split(' ').map((n:any) => n[0]).join('')}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium text-foreground text-sm">{(task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">

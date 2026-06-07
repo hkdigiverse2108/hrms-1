@@ -906,8 +906,10 @@ class Project(ProjectBase):
 class TaskBase(BaseModel):
     title: str
     description: Optional[str] = None
-    assignedToId: str # Employee ID
+    assignedToId: Optional[str] = None # Employee ID (Legacy)
     assignedToName: Optional[str] = None
+    assignedToIds: Optional[List[str]] = []
+    assignedToNames: Optional[List[str]] = []
     assignedById: Optional[str] = None # Employee ID who created/assigned the task
     assignedByName: Optional[str] = None
     dueDate: Optional[RobustDate] = None
@@ -925,6 +927,8 @@ class TaskUpdate(BaseModel):
     description: Optional[str] = None
     assignedToId: Optional[str] = None
     assignedToName: Optional[str] = None
+    assignedToIds: Optional[List[str]] = None
+    assignedToNames: Optional[List[str]] = None
     dueDate: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None
