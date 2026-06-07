@@ -207,7 +207,9 @@ export default function PayrollPage() {
         }
 
         const empPayrolls = payroll.filter(p => p.employeeId === record.employeeId && p.id !== record.id)
-        const previouslyCollected = empPayrolls.reduce((sum, p) => sum + (p.securityDeposit || 0), 0)
+        const directPayments = emp?.securityDepositDirectPayments || []
+        const directPaidTotal = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0)
+        const previouslyCollected = empPayrolls.reduce((sum, p) => sum + (p.securityDeposit || 0), 0) + directPaidTotal
         const previouslyReturned = empPayrolls.reduce((sum, p) => sum + (p.returnedDeposit || 0), 0)
         
         const isExempt = emp?.securityDepositExempt === true
