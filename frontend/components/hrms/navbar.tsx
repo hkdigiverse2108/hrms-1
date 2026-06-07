@@ -141,10 +141,15 @@ export function HRMSNavbar() {
                     key={n.id} 
                     className={`flex flex-col items-start gap-1 py-3 cursor-pointer ${!n.is_read ? 'bg-slate-50/50' : ''}`}
                     onClick={() => {
-                      if (n.type === 'leave' && n.reference_id) {
-                        router.push(`/employees/leave?id=${n.reference_id}`);
+                      if (n.type === 'leave') {
+                        const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                        router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
                       } else if (n.type === 'document') {
                         router.push('/employees/documents');
+                      } else if (n.type === 'attendance') {
+                        router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
+                      } else if (n.type === 'recruitment') {
+                        router.push('/recruitment');
                       }
                       markAsRead(n.id);
                     }}
@@ -157,16 +162,20 @@ export function HRMSNavbar() {
                       {n.message}
                     </span>
                     <div className="flex gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
-                      {n.reference_id && (
                         <Button 
                           variant="outline" 
                           size="sm" 
                           className="h-7 px-2 text-[10px] border-brand-teal text-brand-teal hover:bg-brand-light"
                           onClick={() => {
-                            if (n.type === 'leave' && n.reference_id) {
-                              router.push(`/employees/leave?id=${n.reference_id}`);
+                            if (n.type === 'leave') {
+                              const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                              router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
                             } else if (n.type === 'document') {
                               router.push('/employees/documents');
+                            } else if (n.type === 'attendance') {
+                              router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
+                            } else if (n.type === 'recruitment') {
+                              router.push('/recruitment');
                             }
                             markAsRead(n.id);
                           }}
@@ -174,7 +183,6 @@ export function HRMSNavbar() {
                           <Eye className="w-3 h-3 mr-1" />
                           View
                         </Button>
-                      )}
                       {!n.is_read && (
                         <Button 
                           variant="ghost" 
@@ -350,9 +358,14 @@ export function HRMSNavbar() {
                               onClick={() => {
                                 setIsNotificationsModalOpen(false);
                                 if (n.type === 'leave') {
-                                  router.push(user?.role === 'Employee' ? '/leave' : '/employees/leave');
+                                  const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                                  router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
                                 } else if (n.type === 'document') {
                                   router.push('/employees/documents');
+                                } else if (n.type === 'attendance') {
+                                  router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
+                                } else if (n.type === 'recruitment') {
+                                  router.push('/recruitment');
                                 }
                                 markAsRead(n.id);
                               }}
