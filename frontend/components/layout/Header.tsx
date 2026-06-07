@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { SidebarNav } from "./SidebarNav";
-import { useUser } from "@/context/UserContext";
+import { useUser } from "@/hooks/useUser";
 import { useChatContext } from "@/context/ChatContext";
 import { useAppEvent } from "@/hooks/useAppEvent";
 import { useRouter } from "next/navigation";
