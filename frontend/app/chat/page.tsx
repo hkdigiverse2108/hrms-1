@@ -406,8 +406,6 @@ export default function ChatPage() {
   const recordingTimerRef = useRef<any>(null);
   const typingTimeoutRef = useRef<any>(null);
   const isSendingRef = useRef(false);
-  const fetchMessagesRef = useRef<() => void>(() => {});
-  const fetchChatSummariesRef = useRef<() => void>(() => {});
 
 
   const scrollToBottom = useCallback((force = false) => {
@@ -757,29 +755,6 @@ export default function ChatPage() {
     }
   }, [selectedChat, user, fetchMessages, fetchGroups]);
 
-  // Keep refs updated so the polling interval always calls the latest version
-  useEffect(() => {
-    fetchMessagesRef.current = fetchMessages;
-  }, [fetchMessages]);
-
-  useEffect(() => {
-    fetchChatSummariesRef.current = fetchChatSummaries;
-  }, [fetchChatSummaries]);
-
-  // Polling fallback: fetch messages every 2 seconds to guarantee real-time feel
-  // Uses refs so the interval never restarts due to callback reference changes
-  useEffect(() => {
-    if (!selectedChat || !user) return;
-    console.log("[Chat] Starting message polling for chat:", selectedChat.id);
-    const pollInterval = setInterval(() => {
-      fetchMessagesRef.current();
-      fetchChatSummariesRef.current();
-    }, 2000);
-    return () => {
-      console.log("[Chat] Stopping message polling");
-      clearInterval(pollInterval);
-    };
-  }, [selectedChat?.id, user?.id]);
 
   useEffect(() => {
     wsRef.current = ws;
