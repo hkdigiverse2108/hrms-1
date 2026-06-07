@@ -399,7 +399,7 @@ async def update_bonus_deduction(item_id: str, request: dict, db=Depends(get_db)
 
 @app.delete("/bonus-deductions/{item_id}")
 async def delete_bonus_deduction(item_id: str, db=Depends(get_db)):
-    await crud.delete_item(db, "bonus_deductions", item_id)
+    await crud.update_item(db, "bonus_deductions", item_id, {"status": "deleted"})
     return {"message": "Adjustment deleted successfully"}
 
 # Notification Endpoints

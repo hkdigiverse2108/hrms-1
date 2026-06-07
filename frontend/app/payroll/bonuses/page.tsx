@@ -36,6 +36,21 @@ export default function BonusesPage() {
     }
     return false
   })()
+
+  const isAdmin = (() => {
+    if (user) {
+      return user.role?.toLowerCase() === 'admin' || user.name === 'Admin Admin'
+    }
+    if (typeof window !== 'undefined') {
+      const uStr = localStorage.getItem('user')
+      if (uStr) {
+        const u = JSON.parse(uStr)
+        return u.role?.toLowerCase() === 'admin' || u.name === 'Admin Admin'
+      }
+    }
+    return false
+  })()
+
   const { data, isLoading: loadingEmployees } = useApi()
   const employees = data?.employees || []
   const [adjustments, setAdjustments] = useState<any[]>([])
@@ -176,9 +191,11 @@ export default function BonusesPage() {
         <Button variant="ghost" size="icon" onClick={() => handleEdit(record)} className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50">
           <Edit className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)} className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50">
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {isAdmin && (
+          <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)} className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     )
   }
@@ -206,6 +223,7 @@ export default function BonusesPage() {
 
   // Filter adjustment records dynamically
   const filteredAdjustments = adjustments
+    .filter(a => a.status !== 'deleted')
     .filter(a => {
       return canManage || a.employeeId === user?.id || a.employeeId === user?.employeeId
     })
