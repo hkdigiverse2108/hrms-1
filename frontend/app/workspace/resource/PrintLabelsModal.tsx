@@ -190,8 +190,8 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
                   <div key={index} className="bg-white flex flex-col items-center justify-center p-2 text-center overflow-hidden border border-gray-300 border-dashed">
                     {id ? (
                       <>
-                        <div className="font-bold text-[10px] sm:text-xs text-foreground truncate w-full">{title}</div>
-                        <div className="font-mono text-[10px] text-muted-foreground truncate w-full mt-1">{id}</div>
+                        <div className="font-bold text-[10px] sm:text-xs text-foreground break-words w-full px-1">{title}</div>
+                        <div className="font-mono text-[10px] text-muted-foreground break-words w-full mt-1 px-1">{id}</div>
                       </>
                     ) : null}
                   </div>
@@ -220,7 +220,9 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
                 justifyContent: "center",
                 padding: "8px",
                 boxSizing: "border-box",
-                visibility: id ? "visible" : "hidden"
+                visibility: id ? "visible" : "hidden",
+                textAlign: "center",
+                wordBreak: "break-word"
               }}>
                 <div style={{ fontWeight: "bold", fontSize: "14px", marginBottom: "4px" }}>{title}</div>
                 <div style={{ fontFamily: "monospace", fontSize: "12px" }}>{id}</div>
