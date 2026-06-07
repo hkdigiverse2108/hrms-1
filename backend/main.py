@@ -1010,11 +1010,17 @@ async def get_unread_counts(user_id: str, db=Depends(get_db)):
     if user_id_obj:
         user_ids.append(user_id_obj)
     
+    # Get all valid employee IDs to filter out deleted or external users not in the chat list
+    employees = await db.employees.find({}, {"_id": 1}).to_list(length=10000)
+    valid_employee_ids = [str(e["_id"]) for e in employees]
+    valid_employee_objs = [ObjectId(e_id) for e_id in valid_employee_ids if len(e_id) == 24]
+    valid_senders = valid_employee_ids + valid_employee_objs
+
     # 1. Personal Chats: messages where receiverId == user_id (string or Obj) and seenBy does not contain user_id
     cursor_personal = db.messages._collection.aggregate([
         {"$match": {
             "$or": [{"receiverId": user_id}, {"receiverId": user_id_obj}],
-            "senderId": {"$nin": user_ids},
+            "senderId": {"$nin": user_ids, "$in": valid_senders},
             "seenBy": {"$nin": user_ids}
         }},
         {"$group": {"_id": "$senderId", "count": {"$sum": 1}}}
