@@ -989,25 +989,46 @@ export default function TaskManagementPage() {
                     </td>
                     <td className="px-6 py-4">
                       {task.assignedToIds && task.assignedToIds.length > 1 ? (
-                        <div className="flex items-center gap-2" title={task.assignedToNames?.join(', ')}>
-                          <div className="flex -space-x-2 overflow-hidden">
-                            {(task.assignedToNames || []).slice(0, 3).map((name: string, i: number) => (
-                              <Avatar key={i} className="w-6 h-6 border-2 border-white">
-                                <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold" title={name}>
-                                  {name.split(' ').map((n:any) => n[0]).join('')}
-                                </AvatarFallback>
-                              </Avatar>
-                            ))}
-                            {(task.assignedToNames?.length || 0) > 3 && (
-                              <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 z-10">
-                                +{(task.assignedToNames?.length || 0) - 3}
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex -space-x-2 overflow-hidden">
+                                {(task.assignedToNames || []).slice(0, 3).map((name: string, i: number) => (
+                                  <Avatar key={i} className="w-6 h-6 border-2 border-white">
+                                    <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
+                                      {name.split(' ').map((n:any) => n[0]).join('')}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                ))}
+                                {(task.assignedToNames?.length || 0) > 3 && (
+                                  <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 z-10">
+                                    +{(task.assignedToNames?.length || 0) - 3}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          <span className="text-xs font-medium text-foreground">
-                            {task.assignedToNames?.length || 0} Assignees
-                          </span>
-                        </div>
+                              <span className="text-xs font-medium text-foreground hover:underline">
+                                {task.assignedToNames?.length || 0} Assignees
+                              </span>
+                            </div>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[200px] p-3" align="start">
+                            <div className="space-y-2">
+                              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Assignees</h4>
+                              <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-1">
+                                {(task.assignedToNames || []).map((name: string, i: number) => (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <Avatar className="w-6 h-6">
+                                      <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
+                                        {name.split(' ').map((n:any) => n[0]).join('')}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm font-medium text-foreground">{name}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       ) : (
                         <div className="flex items-center gap-3">
                           <Avatar className="w-6 h-6">
