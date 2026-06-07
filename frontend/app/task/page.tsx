@@ -440,8 +440,8 @@ export default function TaskManagementPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2 col-span-2 sm:col-span-1">
+                <div className="space-y-4">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-semibold text-foreground">Assignees</label>
                       <Select value="" onValueChange={(val) => {
@@ -463,7 +463,7 @@ export default function TaskManagementPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="border border-border rounded-md max-h-[140px] overflow-y-auto bg-white p-2 space-y-1">
+                    <div className="border border-border rounded-md max-h-[140px] overflow-y-auto bg-white p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
                       {employees.map(emp => {
                         const isSelected = newTask.assignedToIds.includes(emp.id);
                         return (
@@ -504,112 +504,114 @@ export default function TaskManagementPage() {
                     )}
                   </div>
                   
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">Due date</label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full justify-start text-left font-normal bg-white h-10",
-                            !newTask.dueDate && "text-muted-foreground"
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Status</label>
+                      <Select value={newTask.status} onValueChange={(val) => setNewTask({...newTask, status: val})}>
+                        <SelectTrigger className="bg-white w-full">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="todo">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                              To do
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="pending">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                              Pending
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="in-progress">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-brand-teal"></span>
+                              In progress
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="completed">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                              Completed
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Due date</label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full justify-start text-left font-normal bg-white h-10",
+                              !newTask.dueDate && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {newTask.dueDate ? format(new Date(newTask.dueDate), "PPP") : <span>Pick a date</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={newTask.dueDate ? new Date(newTask.dueDate) : undefined}
+                            onSelect={(date) => setNewTask({...newTask, dueDate: date ? format(date, "yyyy-MM-dd") : ""})}
+                            initialFocus
+                            disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                          />
+                          {newTask.dueDate && (
+                            <div className="p-2 border-t border-border">
+                              <Button 
+                                variant="ghost" 
+                                className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                                onClick={() => setNewTask({...newTask, dueDate: ""})}
+                              >
+                                Clear date
+                              </Button>
+                            </div>
                           )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {newTask.dueDate ? format(new Date(newTask.dueDate), "PPP") : <span>Pick a date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={newTask.dueDate ? new Date(newTask.dueDate) : undefined}
-                          onSelect={(date) => setNewTask({...newTask, dueDate: date ? format(date, "yyyy-MM-dd") : ""})}
-                          initialFocus
-                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                        />
-                        {newTask.dueDate && (
-                          <div className="p-2 border-t border-border">
-                            <Button 
-                              variant="ghost" 
-                              className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
-                              onClick={() => setNewTask({...newTask, dueDate: ""})}
-                            >
-                              Clear date
-                            </Button>
-                          </div>
-                        )}
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">Status</label>
-                    <Select value={newTask.status} onValueChange={(val) => setNewTask({...newTask, status: val})}>
-                      <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todo">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-                            To do
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="pending">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                            Pending
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="in-progress">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-brand-teal"></span>
-                            In progress
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="completed">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                            Completed
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">Priority</label>
-                    <Select value={newTask.priority} onValueChange={(val) => setNewTask({...newTask, priority: val})}>
-                      <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="Select priority" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="urgent">
-                          <div className="flex items-center gap-2 text-red-600">
-                            <Flag className="w-4 h-4" />
-                            <span className="text-foreground">Urgent</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="high">
-                          <div className="flex items-center gap-2 text-red-500">
-                            <Flag className="w-4 h-4" />
-                            <span className="text-foreground">High</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="medium">
-                          <div className="flex items-center gap-2 text-amber-500">
-                            <Flag className="w-4 h-4" />
-                            <span className="text-foreground">Medium</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="low">
-                          <div className="flex items-center gap-2 text-slate-500">
-                            <Flag className="w-4 h-4" />
-                            <span className="text-foreground">Low</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Priority</label>
+                      <Select value={newTask.priority} onValueChange={(val) => setNewTask({...newTask, priority: val})}>
+                        <SelectTrigger className="bg-white w-full">
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="urgent">
+                            <div className="flex items-center gap-2 text-red-600">
+                              <Flag className="w-4 h-4" />
+                              <span className="text-foreground">Urgent</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="high">
+                            <div className="flex items-center gap-2 text-red-500">
+                              <Flag className="w-4 h-4" />
+                              <span className="text-foreground">High</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="medium">
+                            <div className="flex items-center gap-2 text-amber-500">
+                              <Flag className="w-4 h-4" />
+                              <span className="text-foreground">Medium</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="low">
+                            <div className="flex items-center gap-2 text-slate-500">
+                              <Flag className="w-4 h-4" />
+                              <span className="text-foreground">Low</span>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               </div>
