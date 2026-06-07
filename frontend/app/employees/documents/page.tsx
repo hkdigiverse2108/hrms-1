@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil, Eye, CheckCircle2, History } from 'lucide-react'
+import { Plus, Loader2, Save, Trash2, FileText, Download, ExternalLink, Calendar, Search, Pencil, Eye, CheckCircle2, History, IndianRupee, ShieldCheck } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useRouter } from 'next/navigation'
@@ -60,8 +60,14 @@ export default function EmployeeDocumentsPage() {
     paid: 0,
     remaining: 10000,
     transactions: [],
-    exempt: false
+    exempt: false,
+    directPayments: []
   })
+
+  // Partial Payment States
+  const [directPaymentAmount, setDirectPaymentAmount] = useState('')
+  const [directPaymentNote, setDirectPaymentNote] = useState('')
+  const [isRecordingPayment, setIsRecordingPayment] = useState(false)
 
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false)
   const [selectedRecordLogs, setSelectedRecordLogs] = useState<any[]>([])
@@ -69,6 +75,8 @@ export default function EmployeeDocumentsPage() {
   const handleViewLedger = async (record: any) => {
     setIsLedgerModalOpen(true)
     setLedgerLoading(true)
+    setDirectPaymentAmount('')
+    setDirectPaymentNote('')
     try {
       const response = await fetch(`${API_URL}/payroll`)
       if (response.ok) {
@@ -100,41 +108,46 @@ export default function EmployeeDocumentsPage() {
           }
         }
 
-        const isAccepted = record.status === 'Accepted'
+        const emp = employees.find((e: any) => e.id === record.employeeId)
+        const directPayments = emp?.securityDepositDirectPayments || []
+        const directPaidTotal = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0)
+        totalPaid += directPaidTotal
         
         const paidPayrolls = employeePayrolls.filter((p: any) => (p.securityDeposit || 0) > 0)
         const transactions = paidPayrolls.map((p: any) => ({
           month: p.month,
           year: p.year,
           amount: p.securityDeposit || 0,
-          status: p.status || 'processed'
+          status: p.status || 'processed',
+          type: 'payroll'
         }))
 
-        if (isAccepted) {
-          const remainder = target - totalPaid
-          if (remainder > 0) {
-            transactions.push({
-              month: 'Manual Direct Payment',
-              year: '(Accepted)',
-              amount: remainder,
-              status: 'paid'
-            })
-          }
-          totalPaid = target
-        }
+        // Add direct payments to transactions
+        directPayments.forEach((dp: any) => {
+          transactions.push({
+            month: 'Direct Payment',
+            year: dp.date || '',
+            amount: dp.amount || 0,
+            status: 'paid',
+            type: 'direct',
+            note: dp.note || ''
+          })
+        })
 
-        const remaining = Math.max(0, target - totalPaid)
-        
-        const emp = employees.find((e: any) => e.id === record.employeeId)
+        const isExempt = emp?.securityDepositExempt || false
+        const remaining = isExempt ? 0 : Math.max(0, target - totalPaid)
+        const exemptedAmount = isExempt ? Math.max(0, target - totalPaid) : 0
         
         setLedgerData({
           employeeId: record.employeeId,
           employeeName: record.employeeName,
           target,
-          paid: totalPaid,
+          paid: isExempt ? totalPaid : totalPaid,
           remaining,
+          exemptedAmount,
           transactions,
-          exempt: emp?.securityDepositExempt || false
+          exempt: isExempt,
+          directPayments
         })
       }
     } catch (error) {
@@ -142,6 +155,68 @@ export default function EmployeeDocumentsPage() {
       toast.error('Failed to load deposit ledger')
     } finally {
       setLedgerLoading(false)
+    }
+  }
+
+  const handleRecordDirectPayment = async () => {
+    const amount = parseFloat(directPaymentAmount)
+    if (!amount || amount <= 0) {
+      toast.error('Please enter a valid payment amount')
+      return
+    }
+    if (amount > ledgerData.remaining) {
+      toast.error(`Amount cannot exceed remaining balance of ₹${ledgerData.remaining.toLocaleString('en-IN')}`)
+      return
+    }
+
+    setIsRecordingPayment(true)
+    try {
+      const emp = employees.find((e: any) => e.id === ledgerData.employeeId)
+      const existingPayments = emp?.securityDepositDirectPayments || []
+      const newPayment = {
+        amount,
+        date: new Date().toISOString().split('T')[0],
+        note: directPaymentNote || `Direct deposit payment of ₹${amount.toLocaleString('en-IN')}`,
+        recordedBy: user?.name || 'Admin'
+      }
+      const updatedPayments = [...existingPayments, newPayment]
+
+      const res = await fetch(`${API_URL}/employees/${ledgerData.employeeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ securityDepositDirectPayments: updatedPayments })
+      })
+
+      if (res.ok) {
+        toast.success(`Payment of ₹${amount.toLocaleString('en-IN')} recorded successfully`)
+        setDirectPaymentAmount('')
+        setDirectPaymentNote('')
+        refreshItem('employees')
+        // Refresh ledger data
+        const newPaid = ledgerData.paid + amount
+        const newRemaining = Math.max(0, ledgerData.target - newPaid)
+        setLedgerData((prev: any) => ({
+          ...prev,
+          paid: newPaid,
+          remaining: newRemaining,
+          directPayments: updatedPayments,
+          transactions: [...prev.transactions, {
+            month: 'Direct Payment',
+            year: newPayment.date,
+            amount: newPayment.amount,
+            status: 'paid',
+            type: 'direct',
+            note: newPayment.note
+          }]
+        }))
+      } else {
+        toast.error('Failed to record payment')
+      }
+    } catch (err) {
+      console.error('Error recording payment:', err)
+      toast.error('Error recording direct payment')
+    } finally {
+      setIsRecordingPayment(false)
     }
   }
 
@@ -510,13 +585,44 @@ export default function EmployeeDocumentsPage() {
           if (match) target = Number(match[0])
         }
         
+        const emp = employees.find((e: any) => e.id === record.employeeId)
+        const isExempt = emp?.securityDepositExempt || false
+        const directPayments = emp?.securityDepositDirectPayments || []
+        const directPaid = directPayments.reduce((sum: number, dp: any) => sum + (dp.amount || 0), 0)
+        
         const empPayrolls = payrolls.filter((p: any) => p.employeeId === record.employeeId)
-        const collected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0)
+        const payrollCollected = empPayrolls.reduce((sum: number, p: any) => sum + (p.securityDeposit || 0), 0)
+        const collected = payrollCollected + directPaid
+        
+        if (isExempt) {
+          const advanceAmount = Math.max(0, target - collected)
+          return (
+            <div className="flex flex-col gap-0.5">
+              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase border bg-violet-50 text-violet-700 border-violet-200 inline-flex items-center gap-1 w-fit">
+                <ShieldCheck className="w-3 h-3" /> Paid in Advance
+              </span>
+              {collected > 0 && advanceAmount > 0 && (
+                <span className="text-[9px] text-slate-500 font-semibold">Payroll: ₹{collected.toLocaleString('en-IN')} · Advance: ₹{advanceAmount.toLocaleString('en-IN')}</span>
+              )}
+              {collected > 0 && advanceAmount === 0 && (
+                <span className="text-[9px] text-slate-500 font-semibold">Fully collected via payroll + direct</span>
+              )}
+              {collected === 0 && (
+                <span className="text-[9px] text-slate-500 font-semibold">Full ₹{target.toLocaleString('en-IN')} paid in advance</span>
+              )}
+            </div>
+          )
+        }
         
         if (collected >= target) {
           return <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase border bg-emerald-50 text-emerald-700 border-emerald-200">Deposit Collected</span>
         } else {
-          return <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase border bg-amber-50 text-amber-700 border-amber-200">Collected: {collected} / {target}</span>
+          return (
+            <div className="flex flex-col gap-0.5">
+              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase border bg-amber-50 text-amber-700 border-amber-200">Collected: ₹{collected.toLocaleString('en-IN')} / ₹{target.toLocaleString('en-IN')}</span>
+              {directPaid > 0 && <span className="text-[9px] text-slate-400 font-medium">Includes ₹{directPaid.toLocaleString('en-IN')} direct</span>}
+            </div>
+          )
         }
       }
 
@@ -1273,7 +1379,15 @@ export default function EmployeeDocumentsPage() {
                   checked={ledgerData.exempt}
                   onChange={async (e) => {
                     const newExempt = e.target.checked
-                    setLedgerData(prev => ({ ...prev, exempt: newExempt }))
+                    setLedgerData((prev: any) => {
+                      const exemptedAmount = newExempt ? Math.max(0, prev.target - prev.paid) : 0
+                      return {
+                        ...prev,
+                        exempt: newExempt,
+                        remaining: newExempt ? 0 : Math.max(0, prev.target - prev.paid),
+                        exemptedAmount
+                      }
+                    })
                     try {
                       const res = await fetch(`${API_URL}/employees/${ledgerData.employeeId}`, {
                         method: 'PUT',
@@ -1282,7 +1396,7 @@ export default function EmployeeDocumentsPage() {
                       })
                       if (res.ok) {
                         toast.success(newExempt ? "Deposit marked as Exempt" : "Deposit exemption removed")
-                        fetchEmployees()
+                        refreshItem('employees')
                       } else {
                         toast.error("Failed to update exemption status")
                       }
@@ -1292,7 +1406,7 @@ export default function EmployeeDocumentsPage() {
                   }}
                   className="w-4 h-4 text-brand-teal rounded border-amber-300 focus:ring-brand-teal"
                 />
-                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Mark as Exempt</span>
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Paid in Advance</span>
               </label>
             </div>
           </DialogHeader>
@@ -1304,7 +1418,7 @@ export default function EmployeeDocumentsPage() {
           ) : (
             <div className="space-y-6 py-4">
               {/* Progress Summary Cards */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className={`grid gap-4 ${ledgerData.exempt ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl shadow-sm text-center">
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Deposit</div>
                   <div className="text-lg font-black text-slate-800 mt-1">₹{ledgerData.target.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
@@ -1313,48 +1427,151 @@ export default function EmployeeDocumentsPage() {
                   <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Total Paid</div>
                   <div className="text-lg font-black text-emerald-700 mt-1">₹{ledgerData.paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                 </div>
-                <div className="bg-rose-50/40 border border-rose-100/50 p-3 rounded-xl shadow-sm text-center">
-                  <div className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">Remaining Balance</div>
-                  <div className="text-lg font-black text-rose-700 mt-1">₹{ledgerData.remaining.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                {ledgerData.exempt && (ledgerData.exemptedAmount > 0) && (
+                  <div className="bg-violet-50/40 border border-violet-100/50 p-3 rounded-xl shadow-sm text-center">
+                    <div className="text-[10px] font-bold text-violet-500 uppercase tracking-wider flex items-center justify-center gap-1"><ShieldCheck className="w-3 h-3" /> Paid in Advance</div>
+                    <div className="text-lg font-black text-violet-700 mt-1">₹{ledgerData.exemptedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                )}
+                <div className={`p-3 rounded-xl shadow-sm text-center ${ledgerData.exempt ? 'bg-emerald-50/40 border border-emerald-100/50' : 'bg-rose-50/40 border border-rose-100/50'}`}>
+                  <div className={`text-[10px] font-bold uppercase tracking-wider ${ledgerData.exempt ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {ledgerData.exempt ? 'Balance' : 'Remaining Balance'}
+                  </div>
+                  <div className={`text-lg font-black mt-1 ${ledgerData.exempt ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    ₹{ledgerData.exempt ? '0.00' : ledgerData.remaining.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
                 </div>
               </div>
+
+              {/* Paid in Advance Banner */}
+              {ledgerData.exempt && (
+                <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 flex items-center gap-3">
+                  <ShieldCheck className="w-5 h-5 text-violet-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-violet-800">Employee opted to pay deposit in advance</p>
+                    <p className="text-[10px] text-violet-600 mt-0.5">
+                      {ledgerData.paid > 0 
+                        ? `₹${ledgerData.paid.toLocaleString('en-IN')} was collected via payroll and ₹${ledgerData.exemptedAmount.toLocaleString('en-IN')} was paid directly in advance.`
+                        : `The full deposit of ₹${ledgerData.target.toLocaleString('en-IN')} was paid in advance directly.`
+                      }
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Graphical Progress Bar */}
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs font-bold text-slate-500">
                   <span>Deduction Progress</span>
-                  <span className="text-brand-teal">{Math.min(100, Math.round((ledgerData.paid / ledgerData.target) * 100))}% Completed</span>
+                  <span className="text-brand-teal">
+                    {ledgerData.exempt 
+                      ? '100% (Paid in Advance)' 
+                      : `${Math.min(100, Math.round((ledgerData.paid / ledgerData.target) * 100))}% Completed`
+                    }
+                  </span>
                 </div>
-                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
                   <div 
                     className="bg-brand-teal h-full rounded-full transition-all duration-500" 
                     style={{ width: `${Math.min(100, (ledgerData.paid / ledgerData.target) * 100)}%` }}
                   />
+                  {ledgerData.exempt && ledgerData.exemptedAmount > 0 && (
+                    <div 
+                      className="bg-violet-400/60 h-full rounded-r-full transition-all duration-500 absolute top-0" 
+                      style={{ 
+                        left: `${Math.min(100, (ledgerData.paid / ledgerData.target) * 100)}%`,
+                        width: `${Math.min(100 - (ledgerData.paid / ledgerData.target) * 100, (ledgerData.exemptedAmount / ledgerData.target) * 100)}%`
+                      }}
+                    />
+                  )}
                 </div>
+                {ledgerData.exempt && (
+                  <div className="flex items-center gap-4 text-[10px] font-bold">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-brand-teal inline-block" /> Payroll</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-violet-400/60 inline-block" /> Paid in Advance</span>
+                  </div>
+                )}
               </div>
+
+              {/* Record Direct Payment - Only when not exempt and balance remaining */}
+              {!ledgerData.exempt && ledgerData.remaining > 0 && isAdminOrHR && (
+                <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 space-y-3">
+                  <h4 className="text-xs font-extrabold text-blue-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <IndianRupee className="w-3.5 h-3.5" /> Record Direct Payment
+                  </h4>
+                  <p className="text-[10px] text-blue-600 font-medium -mt-1">
+                    Record a partial or full deposit payment made directly by the employee (cash, UPI, bank transfer, etc.)
+                  </p>
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-[10px] font-bold text-blue-700 uppercase">Amount (₹)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max={ledgerData.remaining}
+                        placeholder={`Max ₹${ledgerData.remaining.toLocaleString('en-IN')}`}
+                        value={directPaymentAmount}
+                        onChange={(e) => setDirectPaymentAmount(e.target.value)}
+                        className="h-9 border-blue-200 bg-white focus:border-blue-400 text-sm font-bold"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-[10px] font-bold text-blue-700 uppercase">Note (Optional)</Label>
+                      <Input
+                        type="text"
+                        placeholder="e.g. Cash payment, UPI transfer..."
+                        value={directPaymentNote}
+                        onChange={(e) => setDirectPaymentNote(e.target.value)}
+                        className="h-9 border-blue-200 bg-white focus:border-blue-400 text-sm"
+                      />
+                    </div>
+                    <Button 
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 px-4 text-xs shadow-sm"
+                      onClick={handleRecordDirectPayment}
+                      disabled={isRecordingPayment || !directPaymentAmount}
+                    >
+                      {isRecordingPayment ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <IndianRupee className="w-3.5 h-3.5 mr-1" />}
+                      Record
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Installment History Table */}
               <div className="space-y-2">
-                <h4 className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Installment History</h4>
+                <h4 className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Payment History</h4>
                 <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
                   <table className="w-full text-xs text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-500 uppercase">
-                        <th className="py-2.5 px-4">Period</th>
-                        <th className="py-2.5 px-4">Amount Deducted</th>
+                        <th className="py-2.5 px-4">Period / Source</th>
+                        <th className="py-2.5 px-4">Amount</th>
+                        <th className="py-2.5 px-4">Type</th>
                         <th className="py-2.5 px-4">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 font-semibold text-slate-700">
                       {ledgerData.transactions.length === 0 ? (
                         <tr>
-                          <td colSpan={3} className="py-6 text-center text-slate-400 italic">No deposit deductions processed yet.</td>
+                          <td colSpan={4} className="py-6 text-center text-slate-400 italic">No deposit payments recorded yet.</td>
                         </tr>
                       ) : (
                         ledgerData.transactions.map((t: any, idx: number) => (
                           <tr key={idx} className="hover:bg-slate-50/50">
-                            <td className="py-2.5 px-4">{t.month} {t.year}</td>
+                            <td className="py-2.5 px-4">
+                              <div className="flex flex-col">
+                                <span>{t.month} {t.year}</span>
+                                {t.note && <span className="text-[9px] text-slate-400 font-normal">{t.note}</span>}
+                              </div>
+                            </td>
                             <td className="py-2.5 px-4 text-slate-900 font-extrabold">₹{t.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="py-2.5 px-4">
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                t.type === 'direct' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}>
+                                {t.type === 'direct' ? 'Direct' : 'Payroll'}
+                              </span>
+                            </td>
                             <td className="py-2.5 px-4">
                               <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
                                 t.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
