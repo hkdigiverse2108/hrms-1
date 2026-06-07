@@ -505,9 +505,17 @@ export default function TaskManagementPage() {
                       })}
                     </div>
                     {newTask.assignedToIds.length > 0 && (
-                      <p className="text-xs text-brand-teal font-medium mt-1">
-                        {newTask.assignedToIds.length} user(s) selected
-                      </p>
+                      <div className="flex items-center justify-between mt-1 px-1">
+                        <p className="text-xs text-brand-teal font-medium">
+                          {newTask.assignedToIds.length} user(s) selected
+                        </p>
+                        <button 
+                          className="text-xs text-red-500 hover:text-red-700 font-medium hover:underline"
+                          onClick={() => setNewTask({...newTask, assignedToIds: []})}
+                        >
+                          Clear all
+                        </button>
+                      </div>
                     )}
                   </div>
                   
