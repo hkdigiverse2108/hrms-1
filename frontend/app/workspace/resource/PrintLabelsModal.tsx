@@ -22,7 +22,48 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
   if (!isOpen) return null;
 
   const handlePrint = () => {
-    window.print();
+    const printArea = document.getElementById('print-area');
+    if (!printArea) return;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) return;
+
+    iframeDoc.open();
+    iframeDoc.write(`
+      <html>
+        <head>
+          <title>Print Labels</title>
+          <style>
+            body { margin: 0; padding: 0; font-family: sans-serif; height: 100%; }
+            html { height: 100%; }
+            @page { size: ${pageSize === "A4" ? "A4" : "letter"} portrait; margin: 0.5in; }
+            .print-page { page-break-after: always; height: 100%; box-sizing: border-box; }
+            .print-page:last-child { page-break-after: auto; }
+          </style>
+        </head>
+        <body>
+          ${printArea.innerHTML}
+        </body>
+      </html>
+    `);
+    iframeDoc.close();
+
+    iframe.onload = () => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 500);
+    };
   };
 
   const getPageDimensions = () => {
@@ -56,41 +97,7 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:static print:bg-white print:p-0 print:block print:h-auto overflow-y-auto">
-      <style>{`
-        @media print {
-          html, body {
-            height: auto !important;
-            overflow: visible !important;
-          }
-          body * {
-            visibility: hidden;
-          }
-          #print-area, #print-area * {
-            visibility: visible;
-          }
-          #print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: auto;
-            padding: 0;
-            margin: 0;
-          }
-          @page {
-            size: ${pageSize === "A4" ? "A4" : "letter"} portrait;
-            margin: 0.5in;
-          }
-          .print-page {
-            page-break-after: always;
-            height: calc(100vh - 1in);
-          }
-          .print-page:last-child {
-            page-break-after: avoid;
-          }
-        }
-      `}</style>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:hidden overflow-y-auto">
 
       {/* Modal Container */}
       <div className="bg-white border border-border rounded-2xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh] print:hidden">
@@ -206,8 +213,8 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
         </div>
       </div>
 
-      {/* Actual Printable Area */}
-      <div id="print-area" className="hidden print:block w-full">
+      {/* Actual Printable Area (Hidden, used as template for iframe) */}
+      <div id="print-area" className="hidden">
         {pages.map((pageLabels, pageIdx) => (
           <div key={pageIdx} className="print-page" style={{
             display: "grid",
