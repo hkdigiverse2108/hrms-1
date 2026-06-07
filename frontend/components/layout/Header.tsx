@@ -191,8 +191,16 @@ export function Header() {
                           <button 
                             onClick={() => {
                               if (n.type === 'leave') {
-                                router.push(user?.role === 'Employee' ? '/leave' : '/employees/leave');
+                                const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                                router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
+                              } else if (n.type === 'document') {
+                                router.push('/employees/documents');
+                              } else if (n.type === 'attendance') {
+                                router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
+                              } else if (n.type === 'recruitment') {
+                                router.push('/recruitment');
                               }
+                              markAsRead(n.id);
                             }}
                             className="flex items-center gap-1 text-[10px] font-bold text-brand-teal hover:bg-brand-teal/10 px-2 py-1 rounded transition-colors"
                           >
@@ -370,8 +378,16 @@ export function Header() {
                               onClick={() => {
                                 setIsNotificationsModalOpen(false);
                                 if (n.type === 'leave') {
-                                  router.push(user?.role === 'Employee' ? '/leave' : '/employees/leave');
+                                  const route = user?.role === 'Employee' ? '/leave' : '/employees/leave';
+                                  router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
+                                } else if (n.type === 'document') {
+                                  router.push('/employees/documents');
+                                } else if (n.type === 'attendance') {
+                                  router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
+                                } else if (n.type === 'recruitment') {
+                                  router.push('/recruitment');
                                 }
+                                markAsRead(n.id);
                               }}
                               className="h-7 px-2.5 text-[10px] font-bold border-brand-teal text-brand-teal hover:bg-brand-light"
                             >
