@@ -45,6 +45,7 @@ import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TablePagination } from "@/components/common/TablePagination";
 import { useConfirm } from "@/context/ConfirmContext";
+import { PrintLabelsModal } from "./PrintLabelsModal";
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -116,6 +117,7 @@ export default function ResourceManagementPage() {
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   
   // Category management mode
   const [isAddingCategoryMode, setIsAddingCategoryMode] = useState(false);
@@ -1006,6 +1008,16 @@ export default function ResourceManagementPage() {
               <p className="text-xs text-muted-foreground mt-0.5">Add, allocate, check health, and track all physical resources.</p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3">
+              {!isEmployeeOnly && (
+                <Button 
+                  onClick={() => setIsPrintModalOpen(true)} 
+                  variant="outline"
+                  className="w-full sm:w-auto bg-white border-border text-foreground hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4 text-brand-teal" />
+                  Print Labels
+                </Button>
+              )}
               <div className="relative w-full sm:w-64">
                 <RefreshCw className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground ${isLoading ? 'animate-spin text-brand-teal' : ''}`} />
                 <Input 
@@ -1532,6 +1544,11 @@ export default function ResourceManagementPage() {
         </div>
       )}
 
+      <PrintLabelsModal 
+        isOpen={isPrintModalOpen} 
+        onClose={() => setIsPrintModalOpen(false)} 
+        resources={filteredResources}
+      />
     </div>
   );
 }
