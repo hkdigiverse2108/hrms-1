@@ -220,6 +220,58 @@ export default function EmployeeDocumentsPage() {
     }
   }
 
+  const handleDeleteDirectPayment = async (paymentIndex: number) => {
+    const isConfirmed = await confirm({
+      title: "Delete Payment Entry",
+      message: 'Are you sure you want to delete this direct payment entry? This action cannot be undone.',
+      destructive: true,
+      confirmText: "Delete"
+    });
+    if (!isConfirmed) return
+
+    try {
+      const emp = employees.find((e: any) => e.id === ledgerData.employeeId)
+      const existingPayments = emp?.securityDepositDirectPayments || []
+      const removedPayment = existingPayments[paymentIndex]
+      if (!removedPayment) {
+        toast.error('Payment entry not found')
+        return
+      }
+      const updatedPayments = existingPayments.filter((_: any, i: number) => i !== paymentIndex)
+
+      const res = await fetch(`${API_URL}/employees/${ledgerData.employeeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ securityDepositDirectPayments: updatedPayments })
+      })
+
+      if (res.ok) {
+        toast.success(`Payment of ₹${removedPayment.amount.toLocaleString('en-IN')} deleted`)
+        refreshItem('employees')
+        const newPaid = ledgerData.paid - removedPayment.amount
+        const newRemaining = ledgerData.exempt ? 0 : Math.max(0, ledgerData.target - newPaid)
+        setLedgerData((prev: any) => ({
+          ...prev,
+          paid: newPaid,
+          remaining: newRemaining,
+          exemptedAmount: prev.exempt ? Math.max(0, prev.target - newPaid) : 0,
+          directPayments: updatedPayments,
+          transactions: prev.transactions.filter((t: any) => {
+            if (t.type !== 'direct') return true
+            // Match by amount, date, and note to find the right one
+            if (t.amount === removedPayment.amount && t.year === removedPayment.date && t.note === (removedPayment.note || '')) return false
+            return true
+          })
+        }))
+      } else {
+        toast.error('Failed to delete payment entry')
+      }
+    } catch (err) {
+      console.error('Error deleting direct payment:', err)
+      toast.error('Error deleting payment')
+    }
+  }
+
   const [documentRequests, setDocumentRequests] = useState<any[]>([])
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false)
   const [isSendModalOpen, setIsSendModalOpen] = useState(false)
@@ -1548,12 +1600,13 @@ export default function EmployeeDocumentsPage() {
                         <th className="py-2.5 px-4">Amount</th>
                         <th className="py-2.5 px-4">Type</th>
                         <th className="py-2.5 px-4">Status</th>
+                        {isAdminOrHR && <th className="py-2.5 px-4 text-right">Action</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 font-semibold text-slate-700">
                       {ledgerData.transactions.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="py-6 text-center text-slate-400 italic">No deposit payments recorded yet.</td>
+                          <td colSpan={isAdminOrHR ? 5 : 4} className="py-6 text-center text-slate-400 italic">No deposit payments recorded yet.</td>
                         </tr>
                       ) : (
                         ledgerData.transactions.map((t: any, idx: number) => (
@@ -1579,6 +1632,26 @@ export default function EmployeeDocumentsPage() {
                                 {t.status === 'paid' ? 'Cleared' : 'Draft'}
                               </span>
                             </td>
+                            {isAdminOrHR && (
+                              <td className="py-2.5 px-4 text-right">
+                                {t.type === 'direct' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-rose-400 hover:text-rose-600 hover:bg-rose-50"
+                                    onClick={() => {
+                                      // Find the index in directPayments array
+                                      const directOnly = ledgerData.transactions.filter((tr: any) => tr.type === 'direct')
+                                      const directIdx = directOnly.indexOf(t)
+                                      if (directIdx !== -1) handleDeleteDirectPayment(directIdx)
+                                    }}
+                                    title="Delete this payment entry"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </td>
+                            )}
                           </tr>
                         ))
                       )}
