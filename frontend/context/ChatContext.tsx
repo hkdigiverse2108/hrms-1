@@ -84,14 +84,56 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     fetchOnlineUsers();
     let reconnectTimeout: any;
     let reconnectAttempts = 0;
+    let active = true;
 
-    const connectWebSocket = () => {
+    const connectWebSocket = async () => {
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       let wsUrl = "";
-      if (API_URL.startsWith("http")) {
-        wsUrl = API_URL.replace(/^http/, "ws") + `/chat/ws/${user.id}`;
-      } else {
-        wsUrl = `${wsProtocol}//${window.location.host}${API_URL}/chat/ws/${user.id}`;
+      
+      try {
+        const res = await fetch(`${API_URL}/chat/ws-info`);
+        if (!active) return;
+        if (res.ok) {
+          const data = await res.json();
+          const host = window.location.hostname;
+          const port = window.location.port;
+          const isLocal = host === "localhost" || 
+                          host === "127.0.0.1" || 
+                          host.startsWith("192.168.") || 
+                          host.startsWith("10.") || 
+                          host.startsWith("172.") || 
+                          host.endsWith(".local") ||
+                          (port !== "" && port !== "80" && port !== "443");
+          
+          if (isLocal && data.port) {
+            wsUrl = `${wsProtocol}//${host}:${data.port}/chat/ws/${user.id}`;
+          }
+        }
+      } catch (err) {
+        console.warn("[ChatContext] Failed to fetch WS info:", err);
+      }
+
+      if (!active) return;
+
+      if (!wsUrl) {
+        if (API_URL.startsWith("http")) {
+          wsUrl = API_URL.replace(/^http/, "ws") + `/chat/ws/${user.id}`;
+        } else {
+          const host = window.location.hostname;
+          const port = window.location.port;
+          const isLocal = host === "localhost" || 
+                          host === "127.0.0.1" || 
+                          host.startsWith("192.168.") || 
+                          host.startsWith("10.") || 
+                          host.startsWith("172.") || 
+                          host.endsWith(".local") ||
+                          (port !== "" && port !== "80" && port !== "443");
+          if (isLocal) {
+            wsUrl = `${wsProtocol}//${host}:8000/chat/ws/${user.id}`;
+          } else {
+            wsUrl = `${wsProtocol}//${window.location.host}${API_URL}/chat/ws/${user.id}`;
+          }
+        }
       }
       
       console.log("[ChatContext] Connecting WebSocket to:", wsUrl);
@@ -99,20 +141,27 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       wsRef.current = websocket;
 
       websocket.onopen = () => {
+        if (!active) {
+          websocket.close();
+          return;
+        }
         console.log("[ChatContext] WebSocket connected ✅");
         setWs(websocket);
         reconnectAttempts = 0;
       };
 
       websocket.onclose = (event) => {
+        if (!active) return;
         console.log("[ChatContext] WebSocket closed ❌ code:", event.code, "reason:", event.reason);
         setWs(null);
         wsRef.current = null;
         if (reconnectAttempts < 10) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 3000);
           reconnectTimeout = setTimeout(() => {
-            reconnectAttempts++;
-            connectWebSocket();
+            if (active) {
+              reconnectAttempts++;
+              connectWebSocket();
+            }
           }, delay);
         }
       };
@@ -123,6 +172,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       };
 
       websocket.onmessage = async (event) => {
+        if (!active) return;
         try {
           const payload = JSON.parse(event.data);
           // Wrap with a unique counter so React always detects a new event,
@@ -261,6 +311,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     connectWebSocket();
 
     return () => {
+      active = false;
       clearTimeout(reconnectTimeout);
       if (wsRef.current) {
         wsRef.current.close();
