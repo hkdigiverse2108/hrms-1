@@ -79,12 +79,15 @@ export function useApi() {
               if (res.status === 401) {
                 return [];
               }
-              if (!res.ok) throw new Error(`Failed to fetch ${ep.key}`);
+              if (!res.ok) {
+                console.warn(`Failed to fetch ${ep.key}: Status ${res.status}`);
+                return null;
+              }
               return res.json();
             })
             .then(data => ({ key: ep.key, data }))
             .catch(err => {
-              console.error(err);
+              console.warn(`Error fetching ${ep.key}:`, err);
               return { key: ep.key, data: null };
             })
         );

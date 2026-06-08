@@ -757,13 +757,6 @@ export default function SeatingArrangementPage() {
                 <div className="w-6 h-4 bg-slate-900 rounded-sm"></div>
                 <span>Allocated Seats</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-4 bg-gradient-to-r from-brand-teal to-emerald-400 rounded-sm border border-white shadow-sm ring-1 ring-brand-teal/30 animate-pulse"></div>
-                <span className="text-brand-teal font-extrabold flex items-center gap-1">
-                  My Seat
-                  <span className="w-1.5 h-1.5 bg-brand-teal rounded-full animate-ping"></span>
-                </span>
-              </div>
             </div>
 
             {/* Scrollable Canvas for Map */}
@@ -868,8 +861,8 @@ export default function SeatingArrangementPage() {
                           : "left-1/2 -translate-x-1/2";
 
                       const arrowYClass = isTopEdge 
-                        ? "bottom-full border-b-white/95" 
-                        : "top-full border-t-white/95";
+                        ? "bottom-full border-b-white" 
+                        : "top-full border-t-white";
 
                       const originClass = isTopEdge 
                         ? "origin-top" 
@@ -887,23 +880,16 @@ export default function SeatingArrangementPage() {
                           }}
                           className={cn(
                             "absolute w-[12%] h-[30%] -top-[35%] rounded-t-2xl shadow-sm transition-all hover:-translate-y-1 cursor-pointer group z-20 hover:z-50",
-                            isMySeat 
-                              ? 'bg-gradient-to-tr from-brand-teal via-cyan-500 to-emerald-400 border-2 border-white shadow-[0_0_15px_rgba(20,184,166,0.8)] ring-2 ring-brand-teal/50 animate-pulse'
-                              : seat.available 
-                                ? 'bg-emerald-700 hover:bg-emerald-600' 
-                                : 'bg-slate-900 hover:bg-slate-800'
+                            seat.available 
+                              ? 'bg-emerald-700 hover:bg-emerald-600' 
+                              : 'bg-slate-900 hover:bg-slate-800'
                           )}
                           style={{ left: `calc(${seat.x}% - 6%)` }}
                         >
-                          {isMySeat && (
-                            <span className="absolute -top-2 -right-2 bg-brand-teal text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider scale-90 border border-white shadow-md animate-bounce z-30">
-                              You
-                            </span>
-                          )}
 
                           {/* Tooltip Content */}
                           <div className={cn(
-                            "absolute w-64 bg-white/95 backdrop-blur-md border border-brand-teal/20 rounded-xl p-4 shadow-xl pointer-events-none opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 transform scale-95 group-hover:scale-100 text-left",
+                            "absolute w-64 bg-white border border-brand-teal/20 rounded-xl p-4 shadow-xl pointer-events-auto before:absolute before:content-[''] before:left-0 before:right-0 before:-top-4 before:-bottom-4 before:bg-transparent before:z-[-1] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 transform scale-95 group-hover:scale-100 text-left",
                             xAlignClass,
                             yAlignClass,
                             originClass
@@ -999,8 +985,8 @@ export default function SeatingArrangementPage() {
                           : "left-1/2 -translate-x-1/2";
 
                       const arrowYClass = isBottomEdge 
-                        ? "top-full border-t-white/95" 
-                        : "bottom-full border-b-white/95";
+                        ? "top-full border-t-white" 
+                        : "bottom-full border-b-white";
 
                       const originClass = isBottomEdge 
                         ? "origin-bottom" 
@@ -1018,23 +1004,16 @@ export default function SeatingArrangementPage() {
                           }}
                           className={cn(
                             "absolute w-[12%] h-[30%] -bottom-[35%] rounded-b-2xl shadow-sm transition-all hover:translate-y-1 cursor-pointer group z-20 hover:z-50",
-                            isMySeat 
-                              ? 'bg-gradient-to-br from-brand-teal via-cyan-500 to-emerald-400 border-2 border-white shadow-[0_0_15px_rgba(20,184,166,0.8)] ring-2 ring-brand-teal/50 animate-pulse'
-                              : seat.available 
-                                ? 'bg-emerald-700 hover:bg-emerald-600' 
-                                : 'bg-slate-900 hover:bg-slate-800'
+                            seat.available 
+                              ? 'bg-emerald-700 hover:bg-emerald-600' 
+                              : 'bg-slate-900 hover:bg-slate-800'
                           )}
                           style={{ left: `calc(${seat.x}% - 6%)` }}
                         >
-                          {isMySeat && (
-                            <span className="absolute -top-2 -right-2 bg-brand-teal text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider scale-90 border border-white shadow-md animate-bounce z-30">
-                              You
-                            </span>
-                          )}
 
                           {/* Tooltip Content */}
                           <div className={cn(
-                            "absolute w-64 bg-white/95 backdrop-blur-md border border-brand-teal/20 rounded-xl p-4 shadow-xl pointer-events-none opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 transform scale-95 group-hover:scale-100 text-left",
+                            "absolute w-64 bg-white border border-brand-teal/20 rounded-xl p-4 shadow-xl pointer-events-auto before:absolute before:content-[''] before:left-0 before:right-0 before:-top-4 before:-bottom-4 before:bg-transparent before:z-[-1] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 transform scale-95 group-hover:scale-100 text-left",
                             xAlignClass,
                             yAlignClass,
                             originClass
