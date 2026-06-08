@@ -110,6 +110,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   const router = useRouter()
   
   const [permissions, setPermissions] = useState<ModulePermission[]>([])
+  const [activePresetId, setActivePresetId] = useState<string | null>(null)
   const [employee, setEmployee] = useState<any>(null)
   const [employees, setEmployees] = useState<any[]>([])
   const [presets, setPresets] = useState<any[]>([])
@@ -161,8 +162,10 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
             return existing || { ...def, canAdd: false, canEdit: false, canDelete: false, canView: false }
           })
           setPermissions(merged)
+          setActivePresetId(data.presetId || null)
         } else {
           setPermissions(DEFAULT_MODULES.map(m => ({ ...m, canAdd: false, canEdit: false, canDelete: false, canView: false })))
+          setActivePresetId(null)
         }
       }
     } catch (error) {
@@ -174,6 +177,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   }
 
   const handleToggle = (moduleName: string, field: keyof ModulePermission) => {
+    setActivePresetId(null)
     setPermissions(prev => prev.map(p => {
       if (p.moduleName === moduleName) {
         const newVal = !p[field]
@@ -184,6 +188,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   }
 
   const handleToggleAll = (moduleName: string, checked: boolean) => {
+    setActivePresetId(null)
     setPermissions(prev => prev.map(p => {
       if (p.moduleName === moduleName) {
         return { ...p, canAdd: checked, canEdit: checked, canDelete: checked, canView: checked }
@@ -193,6 +198,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   }
 
   const handleToggleGroup = (groupName: string, field: keyof ModulePermission | 'fullAccess', checked: boolean) => {
+    setActivePresetId(null)
     const group = PERMISSION_GROUPS.find(g => g.name === groupName)
     if (!group) return
     const moduleNames = group.modules.map(m => m.moduleName)
@@ -214,8 +220,10 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
     if (presetId === 'full') {
       newPerms = newPerms.map(p => ({ ...p, canView: true, canAdd: true, canEdit: true, canDelete: true }));
       toast.success(`Full Access preset applied! (Don't forget to save)`);
+      setActivePresetId(null);
     } else if (presetId === 'none') {
       toast.success(`Cleared all permissions! (Don't forget to save)`);
+      setActivePresetId(null);
     } else {
       const preset = presets.find(p => p.id === presetId);
       if (preset && preset.permissions) {
@@ -227,6 +235,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
           return p;
         });
         toast.success(`${preset.name} preset applied! (Don't forget to save)`);
+        setActivePresetId(presetId);
       }
     }
     
@@ -239,7 +248,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
       const response = await fetch(`${API_URL}/user-permissions/${employeeId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permissions }),
+        body: JSON.stringify({ permissions, presetId: activePresetId }),
       })
       if (response.ok) {
         toast.success('Permissions updated successfully')
@@ -347,7 +356,19 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
             <div className="mb-4 flex items-center gap-2 overflow-x-auto custom-scrollbar pb-2">
                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mr-2 shrink-0">Quick Presets:</span>
                {presets.map(preset => (
-                 <Button key={preset.id} variant="outline" size="sm" className="h-8 text-xs shrink-0" onClick={() => applyPreset(preset.id)}>{preset.name}</Button>
+                 <Button 
+                   key={preset.id} 
+                   variant={activePresetId === preset.id ? "default" : "outline"} 
+                   size="sm" 
+                   className={`h-8 text-xs shrink-0 ${
+                     activePresetId === preset.id 
+                       ? 'bg-brand-teal hover:bg-brand-teal/90 text-white font-bold border-brand-teal' 
+                       : ''
+                   }`} 
+                   onClick={() => applyPreset(preset.id)}
+                 >
+                   {preset.name}
+                 </Button>
                ))}
                <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 bg-brand-orange/10 text-brand-orange border-brand-orange/20 hover:bg-brand-orange/20" onClick={() => applyPreset('full')}>Full Access</Button>
                <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => applyPreset('none')}>Clear All</Button>
