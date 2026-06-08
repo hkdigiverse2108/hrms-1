@@ -276,8 +276,9 @@ export default function EmployeeDocumentsPage() {
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false)
   const [isSendModalOpen, setIsSendModalOpen] = useState(false)
   const [selectedRequestForSend, setSelectedRequestForSend] = useState<any>(null)
+  const [templates, setTemplates] = useState<any[]>([])
   const [requestFormData, setRequestFormData] = useState({
-    documentType: 'Internship Offer Letter',
+    documentType: '',
     reason: ''
   })
   const [sendFormData, setSendFormData] = useState({
@@ -333,6 +334,26 @@ export default function EmployeeDocumentsPage() {
     }
   }
 
+  const fetchTemplates = async () => {
+    try {
+      const response = await fetch(`${API_URL}/document-templates`)
+      if (response.ok) {
+        const data = await response.json()
+        if (Array.isArray(data)) {
+          setTemplates(data)
+          if (data.length > 0) {
+            setRequestFormData(prev => ({
+              ...prev,
+              documentType: prev.documentType || data[0].name
+            }))
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error)
+    }
+  }
+
   useEffect(() => {
     const fetchPayrolls = async () => {
       try {
@@ -349,6 +370,7 @@ export default function EmployeeDocumentsPage() {
       fetchRequests()
       fetchDocTypes()
       fetchPayrolls()
+      fetchTemplates()
     }
   }, [user, isAdminOrHR])
 
@@ -376,7 +398,7 @@ export default function EmployeeDocumentsPage() {
       if (response.ok) {
         toast.success('Document request submitted successfully')
         setIsRequestModalOpen(false)
-        setRequestFormData({ documentType: 'Internship Offer Letter', reason: '' })
+        setRequestFormData({ documentType: templates[0]?.name || '', reason: '' })
         fetchRequests()
       } else {
         toast.error('Failed to submit request')
@@ -916,6 +938,9 @@ export default function EmployeeDocumentsPage() {
   ]
 
   const getTemplateId = (docType: string) => {
+    const matched = templates.find((t: any) => t.name === docType)
+    if (matched) return matched.template_id
+
     switch (docType) {
       case "Internship Offer Letter": return "offer-letter";
       case "Employee Offer Letter": return "employee-offer-letter";
@@ -1026,7 +1051,10 @@ export default function EmployeeDocumentsPage() {
           </Button>
         )}
         {activeMainTab === 'requests' && !isAdminOrHR && (
-          <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={() => setIsRequestModalOpen(true)}>
+          <Button className="bg-brand-teal hover:bg-brand-teal/90 font-bold" onClick={() => {
+            setRequestFormData({ documentType: templates[0]?.name || '', reason: '' })
+            setIsRequestModalOpen(true)
+          }}>
             <Plus className="mr-2 h-4 w-4" />
             Request New Letter
           </Button>
@@ -1368,11 +1396,9 @@ export default function EmployeeDocumentsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Internship Offer Letter">Internship Offer Letter</SelectItem>
-                  <SelectItem value="Employee Offer Letter">Employee Offer Letter</SelectItem>
-                  <SelectItem value="Internship Completion Certificate">Internship Completion Certificate</SelectItem>
-                  <SelectItem value="Appointment Letter">Appointment Letter</SelectItem>
-                  <SelectItem value="NDA & Agreement Letter">NDA & Agreement Letter</SelectItem>
+                  {templates.map((t: any) => (
+                    <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
