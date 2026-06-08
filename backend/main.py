@@ -1565,8 +1565,9 @@ async def get_schedules(employeeId: Optional[str] = None, date: Optional[str] = 
 
 @app.post("/schedules", response_model=schemas.Schedule)
 async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
+    from datetime import datetime, date
     # Check for overlaps
-    existing_schedules = await crud.get_schedules(db, employee_id=schedule.employeeId, date_str=schedule.date)
+    existing_schedules = await crud.get_schedules(db, employee_id=schedule.employeeId, date_str=str(schedule.date))
     if existing_schedules:
         for existing in existing_schedules:
             ex_start = existing.get("startTime")
@@ -1575,11 +1576,26 @@ async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
                 if max(schedule.startTime, ex_start) < min(schedule.endTime, ex_end):
                     raise HTTPException(status_code=400, detail="Schedule overlaps with an existing schedule for this employee on this date.")
 
-    return await crud.create_schedule(db, schedule.model_dump())
+    schedule_data = schedule.model_dump()
+    dt_val = schedule_data.get("date")
+    if type(dt_val) is date:
+        schedule_data["date"] = datetime.combine(dt_val, datetime.min.time())
+    elif isinstance(dt_val, str):
+        schedule_data["date"] = datetime.strptime(dt_val, "%Y-%m-%d")
+
+    return await crud.create_schedule(db, schedule_data)
 
 @app.put("/schedules/{schedule_id}", response_model=schemas.Schedule)
 async def update_schedule(schedule_id: str, schedule: schemas.ScheduleUpdate, db=Depends(get_db)):
+    from datetime import datetime, date
     update_data = schedule.model_dump(exclude_unset=True)
+    dt_val = update_data.get("date")
+    if dt_val is not None:
+        if type(dt_val) is date:
+            update_data["date"] = datetime.combine(dt_val, datetime.min.time())
+        elif isinstance(dt_val, str):
+            update_data["date"] = datetime.strptime(dt_val, "%Y-%m-%d")
+
     updated = await crud.update_schedule(db, schedule_id, update_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Schedule not found")
