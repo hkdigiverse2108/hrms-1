@@ -105,24 +105,24 @@ export default function AttendancePage() {
   const [sysSettings, setSysSettings] = useState<any>(null);
  
   useEffect(() => {
-    if (user) {
+    if (user && !permissionsLoading) {
       fetchAttendance();
       fetchEmployees();
       fetchSysSettings();
       fetchRecoveryRequests();
     }
-  }, [user]);
+  }, [user, permissionsLoading]);
 
   // Update form defaults when time synchronization is complete
   useEffect(() => {
     if (getISTNow().getTime() !== new Date().getTime()) {
       const now = getISTNow();
 
-      setCreateForm(prev => ({
+      setCreateForm((prev: any) => ({
         ...prev,
         date: dayjs(now).format("YYYY-MM-DD")
       }));
-      setRecoveryForm(prev => ({
+      setRecoveryForm((prev: any) => ({
         ...prev,
         date: dayjs(now).format("YYYY-MM-DD")
       }));
@@ -148,7 +148,7 @@ export default function AttendancePage() {
         const data = await res.json();
         setSysSettings(data);
         // Update createForm defaults if needed
-        setCreateForm(prev => ({
+        setCreateForm((prev: any) => ({
           ...prev,
           checkIn: data.officeStartTime ? `${data.officeStartTime}:00` : "09:30:00",
           checkOut: data.officeEndTime ? `${data.officeEndTime}:00` : "18:30:00"
