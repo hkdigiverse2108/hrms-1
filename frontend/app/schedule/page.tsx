@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DatePicker, TimePicker, Popconfirm } from "antd";
+import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
 import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
 import { API_URL } from "@/lib/config";
@@ -58,7 +58,8 @@ export default function SchedulePage() {
     date: dayjs(getISTNow()).format("YYYY-MM-DD"),
     startTime: defaultTimes.start,
     endTime: defaultTimes.end,
-    type: "meeting"
+    type: "meeting",
+    attendees: [] as string[]
   });
 
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -199,13 +200,18 @@ export default function SchedulePage() {
           const end = start.add(6, "day");
           fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
         }
-        setForm(prev => ({ ...prev, title: "", description: "" }));
+        setForm(prev => ({ ...prev, title: "", description: "", attendees: [] }));
       } else {
-        toast.error("Failed to add schedule");
+        try {
+          const errorData = await res.json();
+          toast.error(errorData.detail || errorData.message || "Failed to add schedule");
+        } catch {
+          toast.error("Failed to add schedule");
+        }
       }
     } catch (err) {
       console.error("Error adding schedule:", err);
-      toast.error("Error connecting to server");
+      toast.error(err instanceof Error ? err.message : "Error connecting to server");
     } finally {
       setIsSubmitting(false);
     }
@@ -232,6 +238,19 @@ export default function SchedulePage() {
   };
 
   /* ───── helpers ───── */
+  const [bulkSelectKey, setBulkSelectKey] = useState(0);
+
+  const handleBulkAdd = (type: "department" | "designation", value: string) => {
+    if (!value) return;
+    const matchingEmpIds = employees
+      .filter(e => e[type] === value && e.id !== form.employeeId && e.employeeId !== form.employeeId)
+      .map(e => String(e.id));
+    
+    const newAttendees = Array.from(new Set([...form.attendees, ...matchingEmpIds]));
+    setForm({ ...form, attendees: newAttendees });
+    setBulkSelectKey(prev => prev + 1);
+  };
+
   const getEmployeeColor = (empId: string) => {
     const index = employees.findIndex(e => String(e.id) === String(empId) || String(e.employeeId) === String(empId));
     if (index === -1) return EMPLOYEE_COLORS[0];
@@ -265,14 +284,26 @@ export default function SchedulePage() {
   };
 
   /* ───── filtered schedules ───── */
+  /* ───── filtered schedules ───── */
   const filterByEmployee = (items: any[]) =>
-    items.filter(s =>
-      selectedEmployeeIds.includes(String(s.employeeId)) ||
-      selectedEmployeeIds.some(id => {
+    items.filter(s => {
+      if (selectedEmployeeIds.includes(String(s.employeeId))) return true;
+      if (selectedEmployeeIds.some(id => {
         const emp = employees.find(e => String(e.id) === id);
         return emp && (String(emp.employeeId) === String(s.employeeId));
-      })
-    );
+      })) return true;
+
+      if (s.attendees && Array.isArray(s.attendees)) {
+        if (s.attendees.some((attId: string) => 
+          selectedEmployeeIds.includes(String(attId)) ||
+          selectedEmployeeIds.some(id => {
+             const emp = employees.find(e => String(e.id) === id);
+             return emp && (String(emp.employeeId) === String(attId));
+          })
+        )) return true;
+      }
+      return false;
+    });
 
   const timeToMinutes = (timeStr: string) => {
     const parts = timeStr.split(':');
@@ -410,6 +441,31 @@ export default function SchedulePage() {
       </div>
     );
 
+    const tooltipContent = (
+      <div className="text-xs max-w-[200px]">
+        <div className="font-bold mb-1">{event.title}</div>
+        {event.createdBy && (
+          <div><strong>Created By:</strong> {employees.find(e => String(e.id) === String(event.createdBy) || String(e.employeeId) === String(event.createdBy))?.name || "Unknown"}</div>
+        )}
+        {event.attendees && event.attendees.length > 0 && (
+          <div className="mt-1">
+            <strong>With:</strong> {
+              event.attendees.map((id: string) => {
+                const emp = employees.find(e => String(e.id) === String(id) || String(e.employeeId) === String(id));
+                return emp ? emp.name : "Unknown";
+              }).join(", ")
+            }
+          </div>
+        )}
+      </div>
+    );
+
+    const wrappedEventBlock = (
+      <AntTooltip title={tooltipContent} placement="top" mouseEnterDelay={0.3}>
+        {eventBlock}
+      </AntTooltip>
+    );
+
     return canDelete ? (
       <Popconfirm
         key={event.id}
@@ -419,11 +475,11 @@ export default function SchedulePage() {
         okText="Yes"
         cancelText="No"
       >
-        {eventBlock}
+        {wrappedEventBlock}
       </Popconfirm>
     ) : (
       <React.Fragment key={event.id}>
-        {eventBlock}
+        {wrappedEventBlock}
       </React.Fragment>
     );
   };
@@ -504,7 +560,7 @@ export default function SchedulePage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Employee</label>
-                  <Select value={form.employeeId} onValueChange={(v) => setForm({ ...form, employeeId: v })}>
+                  <Select value={form.employeeId} onValueChange={(v) => setForm({ ...form, employeeId: v, attendees: form.attendees.filter(id => id !== v) })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select Employee" />
                     </SelectTrigger>
@@ -515,6 +571,37 @@ export default function SchedulePage() {
                     </SelectContent>
                   </Select>
                 </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Colleagues (Attendees)</label>
+                <AntSelect
+                  mode="multiple"
+                  allowClear
+                  className="w-full"
+                  placeholder="Select colleagues"
+                  value={form.attendees}
+                  onChange={(v) => setForm({...form, attendees: v})}
+                  options={employees.filter(e => e.id !== form.employeeId && e.employeeId !== form.employeeId).map(emp => ({ label: emp.name, value: emp.id }))}
+                  getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
+                />
+                <div className="flex gap-2 mt-2">
+                  <Select key={`dept-${bulkSelectKey}`} value={undefined} onValueChange={(v) => handleBulkAdd("department", v)}>
+                    <SelectTrigger className="flex-1 text-xs h-8"><SelectValue placeholder="Add by Team" /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from(new Set(employees.map(e => e.department).filter(Boolean))).map(dep => (
+                        <SelectItem key={String(dep)} value={String(dep)}>{String(dep)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select key={`desig-${bulkSelectKey}`} value={undefined} onValueChange={(v) => handleBulkAdd("designation", v)}>
+                    <SelectTrigger className="flex-1 text-xs h-8"><SelectValue placeholder="Add by Position" /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from(new Set(employees.map(e => e.designation).filter(Boolean))).map(des => (
+                        <SelectItem key={String(des)} value={String(des)}>{String(des)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Date</label>
