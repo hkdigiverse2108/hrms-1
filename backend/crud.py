@@ -4046,7 +4046,10 @@ async def save_user_permissions(db, employee_id: str, permissions_data: schemas.
     # Upsert pattern
     await db.user_permissions.update_one(
         {"employeeId": employee_id},
-        {"$set": {"permissions": [p.dict() for p in permissions_data.permissions]}},
+        {"$set": {
+            "permissions": [p.dict() for p in permissions_data.permissions],
+            "presetId": permissions_data.presetId
+        }},
         upsert=True
     )
     doc = await db.user_permissions.find_one({"employeeId": employee_id})
@@ -4074,6 +4077,15 @@ async def update_permission_preset(db, preset_id: str, preset_update: schemas.Pe
     update_data = preset_update.dict(exclude_unset=True)
     if update_data:
         await db.permission_presets.update_one({"_id": ObjectId(preset_id)}, {"$set": update_data})
+    
+    # Propagate permissions to linked employees if permissions were updated
+    if "permissions" in update_data and update_data["permissions"] is not None:
+        permissions_list = [p.dict() for p in preset_update.permissions]
+        await db.user_permissions.update_many(
+            {"presetId": preset_id},
+            {"$set": {"permissions": permissions_list}}
+        )
+        
     doc = await db.permission_presets.find_one({"_id": ObjectId(preset_id)})
     return fix_id(doc)
 
