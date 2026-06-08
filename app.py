@@ -29,9 +29,8 @@ def load_env():
                         if len(parts) == 2:
                             key = parts[0].strip()
                             value = parts[1].strip().strip('"').strip("'")
-                            # Don't overwrite if already set in environment
-                            if key not in os.environ:
-                                os.environ[key] = value
+                            # Always overwrite to ensure local file settings take priority
+                            os.environ[key] = value
             return env_file == ".env.server"
     return False
 
