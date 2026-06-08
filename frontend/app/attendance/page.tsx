@@ -41,7 +41,7 @@ export default function AttendancePage() {
   const router = useRouter();
 
   const isHR = user?.role?.toLowerCase() === 'hr';
-  const canManageAttendance = isAdmin;
+  const canManageAttendance = isAdmin || user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin';
 
   const canViewAttendance = isAdmin || checkPermission('attendance', 'canView');
   const canAddAttendance = isAdmin || checkPermission('attendance', 'canAdd');
@@ -111,7 +111,7 @@ export default function AttendancePage() {
       fetchSysSettings();
       fetchRecoveryRequests();
     }
-  }, [user]);
+  }, [user, canManageAttendance]);
 
   // Update form defaults when time synchronization is complete
   useEffect(() => {
