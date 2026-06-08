@@ -101,6 +101,7 @@ export default function DashboardPage() {
   const [totalBreakTime, setTotalBreakTime] = useState("0h 0m");
   const [currentTime, setCurrentTime] = useState(getISTNow());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
+  const [isForcedRequest, setIsForcedRequest] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [interns, setInterns] = useState<any[]>([]);
@@ -352,6 +353,40 @@ export default function DashboardPage() {
       setAllTimeHours(`${h}h ${m}m`);
     }
   }, [recentAttendance]);
+
+  useEffect(() => {
+    const checkForgotPunchOut = async () => {
+      if (!user?.id || user.role?.toLowerCase() === "admin" || !attendanceStatus?.isPunchedIn || !attendanceStatus.record?.date) {
+        setIsForcedRequest(false);
+        return;
+      }
+      
+      const checkInDate = attendanceStatus.record.date;
+      const todayStr = dayjs(getISTNow()).format('YYYY-MM-DD');
+      
+      if (checkInDate < todayStr) {
+        try {
+          const res = await fetch(`${API_URL}/time-recovery/employee/${user.id}`);
+          if (res.ok) {
+            const recoveries = await res.json();
+            const hasRequested = recoveries.some((r: any) => r.date === checkInDate);
+            if (!hasRequested) {
+              setIsForcedRequest(true);
+              setIsRequestDialogOpen(true);
+            } else {
+              setIsForcedRequest(false);
+            }
+          }
+        } catch (err) {
+          console.error("Error checking forgotten punch out:", err);
+        }
+      } else {
+        setIsForcedRequest(false);
+      }
+    };
+
+    checkForgotPunchOut();
+  }, [attendanceStatus, user?.id, getISTNow]);
  
   const fetchStatus = async () => {
     try {
@@ -484,9 +519,14 @@ export default function DashboardPage() {
         punchInTime={formatTime12h(attendanceStatus?.record?.checkIn) || "Not Started"}
         employeeId={user?.id || ""}
         employeeName={user?.name || ""}
+        isForced={isForcedRequest}
+        punchInDate={attendanceStatus?.record?.date}
         onGoToPunchOut={() => {
           setIsRequestDialogOpen(false);
           punchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
+        onSubmitSuccess={() => {
+          fetchStatus();
         }}
       />
     </div>
