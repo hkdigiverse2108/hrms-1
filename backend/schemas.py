@@ -1449,12 +1449,14 @@ class ModulePermission(BaseModel):
 class UserPermissionBase(BaseModel):
     employeeId: str
     permissions: List[ModulePermission]
+    presetId: Optional[str] = None
 
 class UserPermissionCreate(UserPermissionBase):
     pass
 
 class UserPermissionUpdate(BaseModel):
     permissions: List[ModulePermission]
+    presetId: Optional[str] = None
 
 class UserPermission(UserPermissionBase):
     id: Optional[str] = None
