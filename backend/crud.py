@@ -1550,7 +1550,7 @@ async def update_event(db, event_id: str, update: schemas.EventUpdate): return a
 async def delete_event(db, event_id: str): return await delete_item(db, "events", event_id)
 
 async def authenticate_user(db, login_data: schemas.LoginRequest):
-    user = await db.employees.find_one({"email": {"$regex": f"^{re.escape(login_data.email)}$", "$options": "i"}})
+    user = await db.employees.find_one({"email": login_data.email})
     if not user:
         return None
         
