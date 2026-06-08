@@ -157,6 +157,35 @@ def run_app():
             except Exception:
                 pass
                 
+            # Dynamically patch backend port in Next.js build files to avoid rebuild loop/crash
+            try:
+                import re
+                manifest_files = [
+                    frontend_dir / ".next" / "routes-manifest.json",
+                    frontend_dir / ".next" / "required-server-files.json"
+                ]
+                for file_path in manifest_files:
+                    if file_path.exists():
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        
+                        pattern = r'(https?://[^:/]+):(\d+)'
+                        modified = False
+                        def replace_port(match):
+                            nonlocal modified
+                            if match.group(2) != backend_port:
+                                modified = True
+                                return f"{match.group(1)}:{backend_port}"
+                            return match.group(0)
+                            
+                        new_content = re.sub(pattern, replace_port, content)
+                        if modified:
+                            print(f"[OK] Dynamically patched backend port to {backend_port} in {file_path.name}")
+                            with open(file_path, "w", encoding="utf-8") as f:
+                                f.write(new_content)
+            except Exception as e:
+                print(f"[WARN] Failed to patch backend port in Next.js builds: {e}")
+                
         if needs_build:
             print("\n-> Production build missing or incomplete — running npm run build ...")
             subprocess.run("npm run build", cwd=str(frontend_dir), shell=True, check=True)

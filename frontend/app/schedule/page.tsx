@@ -487,120 +487,120 @@ export default function SchedulePage() {
                 Add Schedule
               </Button>
             </DialogTrigger>
-          <DialogContent className="sm:max-w-[450px]">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold">New Schedule Block</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Title</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2 border rounded-md focus:border-brand-teal outline-none" 
-                  placeholder="E.g., Client Meeting, Focused Work"
-                  value={form.title}
-                  onChange={e => setForm({...form, title: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Employee</label>
-                <Select value={form.employeeId} onValueChange={(v) => setForm({...form, employeeId: v})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <DialogContent className="sm:max-w-[450px]">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold">New Schedule Block</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Date</label>
-                  <DatePicker 
-                    className="w-full h-10" 
-                    value={dayjs(form.date)}
-                    onChange={d => setForm({...form, date: d ? d.format("YYYY-MM-DD") : ""})}
-                    format="YYYY-MM-DD"
-                    getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
+                  <label className="text-sm font-medium">Title</label>
+                  <input
+                    type="text"
+                    className="w-full p-2 border rounded-md focus:border-brand-teal outline-none"
+                    placeholder="E.g., Client Meeting, Focused Work"
+                    value={form.title}
+                    onChange={e => setForm({ ...form, title: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Type</label>
-                  <Select value={form.type} onValueChange={(v) => setForm({...form, type: v})}>
+                  <label className="text-sm font-medium">Employee</label>
+                  <Select value={form.employeeId} onValueChange={(v) => setForm({ ...form, employeeId: v })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Type" />
+                      <SelectValue placeholder="Select Employee" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="meeting">Meeting</SelectItem>
-                      <SelectItem value="work">Work Block</SelectItem>
-                      <SelectItem value="busy">Busy</SelectItem>
-                      <SelectItem value="out_of_office">Out of Office</SelectItem>
+                      {employees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Start Time</label>
-                  <TimePicker 
-                    className="w-full h-10"
-                    format="h:mm a"
-                    use12Hours
-                    value={dayjs(`2000-01-01 ${form.startTime}`)}
-                    onChange={t => {
-                      if (!t) { setForm({...form, startTime: ""}); return; }
-                      const newStart = t.format("HH:mm");
-                      if (form.endTime && newStart >= form.endTime) {
-                        const newEnd = t.add(1, 'hour').format("HH:mm");
-                        setForm({...form, startTime: newStart, endTime: newEnd});
-                      } else {
-                        setForm({...form, startTime: newStart});
-                      }
-                    }}
-                    minuteStep={15}
-                    getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Date</label>
+                    <DatePicker
+                      className="w-full h-10"
+                      value={dayjs(form.date)}
+                      onChange={d => setForm({ ...form, date: d ? d.format("YYYY-MM-DD") : "" })}
+                      format="YYYY-MM-DD"
+                      getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Type</label>
+                    <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="meeting">Meeting</SelectItem>
+                        <SelectItem value="work">Work Block</SelectItem>
+                        <SelectItem value="busy">Busy</SelectItem>
+                        <SelectItem value="out_of_office">Out of Office</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Start Time</label>
+                    <TimePicker
+                      className="w-full h-10"
+                      format="h:mm a"
+                      use12Hours
+                      value={dayjs(`2000-01-01 ${form.startTime}`)}
+                      onChange={t => {
+                        if (!t) { setForm({ ...form, startTime: "" }); return; }
+                        const newStart = t.format("HH:mm");
+                        if (form.endTime && newStart >= form.endTime) {
+                          const newEnd = t.add(1, 'hour').format("HH:mm");
+                          setForm({ ...form, startTime: newStart, endTime: newEnd });
+                        } else {
+                          setForm({ ...form, startTime: newStart });
+                        }
+                      }}
+                      minuteStep={15}
+                      getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">End Time</label>
+                    <TimePicker
+                      className="w-full h-10"
+                      format="h:mm a"
+                      use12Hours
+                      value={dayjs(`2000-01-01 ${form.endTime}`)}
+                      onChange={t => setForm({ ...form, endTime: t ? t.format("HH:mm") : "" })}
+                      minuteStep={15}
+                      getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">End Time</label>
-                  <TimePicker 
-                    className="w-full h-10"
-                    format="h:mm a"
-                    use12Hours
-                    value={dayjs(`2000-01-01 ${form.endTime}`)}
-                    onChange={t => setForm({...form, endTime: t ? t.format("HH:mm") : ""})}
-                    minuteStep={15}
-                    getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
+                  <label className="text-sm font-medium">Description (Optional)</label>
+                  <textarea
+                    className="w-full p-2 border rounded-md min-h-[80px]"
+                    placeholder="Additional details..."
+                    value={form.description}
+                    onChange={e => setForm({ ...form, description: e.target.value })}
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Description (Optional)</label>
-                <textarea 
-                  className="w-full p-2 border rounded-md min-h-[80px]"
-                  placeholder="Additional details..."
-                  value={form.description}
-                  onChange={e => setForm({...form, description: e.target.value})}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
-              <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleCreateSchedule}>Save Schedule</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+                <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleCreateSchedule}>Save Schedule</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </PageHeader>
 
       {/* ═══════ MAIN LAYOUT ═══════ */}
       <div className="flex gap-0 bg-white rounded-xl shadow-sm border border-border overflow-hidden" style={{ height: "calc(100vh - 180px)" }}>
-        
+
         {/* ─── LEFT SIDEBAR ─── */}
         <div className="w-[260px] shrink-0 border-r border-border flex flex-col bg-gray-50/50">
-          
+
           {/* Mini Calendar */}
           <div className="p-3 border-b border-border">
             <div className="flex items-center justify-between mb-2 px-1">
@@ -667,7 +667,7 @@ export default function SchedulePage() {
                 const color = EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length];
                 const isChecked = selectedEmployeeIds.includes(String(emp.id));
                 const isCurrentUser = user && (String(emp.id) === String(user.id || user.employeeId) || String(emp.employeeId) === String(user.id || user.employeeId));
-                
+
                 return (
                   <label
                     key={emp.id}
@@ -689,7 +689,7 @@ export default function SchedulePage() {
                       >
                         {isChecked && (
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         )}
                       </div>
@@ -707,7 +707,7 @@ export default function SchedulePage() {
 
         {/* ─── RIGHT PANEL ─── */}
         <div className="flex-1 flex flex-col min-w-0">
-          
+
           {/* Top Toolbar */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-white">
             <div className="flex items-center gap-3">
@@ -738,21 +738,19 @@ export default function SchedulePage() {
               <div className="flex border border-border rounded-lg overflow-hidden">
                 <button
                   onClick={() => setViewMode("day")}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                    viewMode === "day"
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "day"
                       ? "bg-brand-teal text-white"
                       : "bg-white text-foreground hover:bg-gray-50"
-                  }`}
+                    }`}
                 >
                   Day
                 </button>
                 <button
                   onClick={() => setViewMode("week")}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-border ${
-                    viewMode === "week"
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-border ${viewMode === "week"
                       ? "bg-brand-teal text-white"
                       : "bg-white text-foreground hover:bg-gray-50"
-                  }`}
+                    }`}
                 >
                   Week
                 </button>
@@ -771,9 +769,8 @@ export default function SchedulePage() {
                     {currentDate.format("ddd")}
                   </span>
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-medium mt-0.5 transition-colors ${
-                      isToday ? "bg-brand-teal text-white" : "text-foreground hover:bg-gray-100"
-                    }`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-medium mt-0.5 transition-colors ${isToday ? "bg-brand-teal text-white" : "text-foreground hover:bg-gray-100"
+                      }`}
                   >
                     {currentDate.format("D")}
                   </div>
@@ -822,11 +819,10 @@ export default function SchedulePage() {
                         {day.format("ddd")}
                       </span>
                       <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center text-base font-medium mt-0.5 transition-colors ${
-                          isDayToday
+                        className={`w-9 h-9 rounded-full flex items-center justify-center text-base font-medium mt-0.5 transition-colors ${isDayToday
                             ? "bg-brand-teal text-white"
                             : "text-foreground"
-                        }`}
+                          }`}
                       >
                         {day.format("D")}
                       </div>
