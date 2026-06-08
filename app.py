@@ -162,7 +162,9 @@ def run_app():
                 import re
                 manifest_files = [
                     frontend_dir / ".next" / "routes-manifest.json",
-                    frontend_dir / ".next" / "required-server-files.json"
+                    frontend_dir / ".next" / "required-server-files.json",
+                    frontend_dir / ".next" / "standalone" / ".next" / "routes-manifest.json",
+                    frontend_dir / ".next" / "standalone" / ".next" / "required-server-files.json"
                 ]
                 for file_path in manifest_files:
                     if file_path.exists():
@@ -180,7 +182,8 @@ def run_app():
                             
                         new_content = re.sub(pattern, replace_port, content)
                         if modified:
-                            print(f"[OK] Dynamically patched backend port to {backend_port} in {file_path.name}")
+                            rel_path = file_path.relative_to(frontend_dir)
+                            print(f"[OK] Dynamically patched backend port to {backend_port} in frontend/{rel_path}")
                             with open(file_path, "w", encoding="utf-8") as f:
                                 f.write(new_content)
             except Exception as e:
