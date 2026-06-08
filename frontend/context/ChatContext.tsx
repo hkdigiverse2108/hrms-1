@@ -87,9 +87,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     const connectWebSocket = () => {
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsHost = process.env.NEXT_PUBLIC_BACKEND_HOST || window.location.hostname || "127.0.0.1";
-      const wsPort = process.env.NEXT_PUBLIC_BACKEND_PORT || "8000";
-      const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/chat/ws/${user.id}`;
+      let wsUrl = "";
+      if (API_URL.startsWith("http")) {
+        wsUrl = API_URL.replace(/^http/, "ws") + `/chat/ws/${user.id}`;
+      } else {
+        wsUrl = `${wsProtocol}//${window.location.host}${API_URL}/chat/ws/${user.id}`;
+      }
       
       console.log("[ChatContext] Connecting WebSocket to:", wsUrl);
       const websocket = new WebSocket(wsUrl);
