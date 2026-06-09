@@ -926,24 +926,42 @@ export default function DocumentGeneratorPage() {
                           />
                         </div>
                       )}
-                      <div 
-                        dangerouslySetInnerHTML={{ __html: previewContent }} 
-                        className="ql-editor p-0 mt-6"
-                        contentEditable={isEditing}
-                        suppressContentEditableWarning={true}
-                        onBlur={(e) => {
-                          if (isEditing) {
-                            setPreviewContent(e.currentTarget.innerHTML);
-                          }
-                        }}
-                      />
+                      <div className="relative mt-6 -mx-[15px] group">
+                        <div 
+                          dangerouslySetInnerHTML={{ __html: previewContent }} 
+                          className="ql-editor"
+                          contentEditable={isEditing}
+                          suppressContentEditableWarning={true}
+                          onBlur={(e) => {
+                            if (isEditing) {
+                              setPreviewContent(e.currentTarget.innerHTML);
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                   
+                  {/* Repeating Letterheads for Page 2+ */}
+                  {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
+                    <div 
+                      key={`lh-${i+1}`}
+                      className="absolute left-0 w-full pointer-events-none z-0"
+                      style={{ top: `${(i + 1) * 297}mm` }}
+                    >
+                      <img 
+                        src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
+                        alt="Company Letterhead" 
+                        className="w-full"
+                        style={{ objectFit: 'contain', objectPosition: 'top' }}
+                      />
+                    </div>
+                  ))}
+
                   {/* Page break indicators */}
                   {estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
                     <div 
-                      key={i}
+                      key={`pb-${i}`}
                       className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex items-center justify-center opacity-70 z-50"
                       style={{ top: `${(i + 1) * 297}mm` }}
                     >

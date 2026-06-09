@@ -428,7 +428,7 @@ export default function DocumentTemplatesPage() {
                           )}
                           
                           {isLiveEditing ? (
-                            <div className="relative mt-6 -mx-4 group">
+                            <div className="relative mt-6 -mx-[15px] group">
                               <ReactQuill 
                                 theme="snow"
                                 modules={quillModules}
@@ -438,20 +438,38 @@ export default function DocumentTemplatesPage() {
                               />
                             </div>
                           ) : (
-                            <div 
-                              onClick={startLiveEditing}
-                              dangerouslySetInnerHTML={{ __html: selectedTemplate.content || '<div class="text-slate-400 italic">Click here to add document content...</div>' }} 
-                              className="ql-editor p-0 mt-6 cursor-text hover:bg-amber-50/50 hover:ring-2 hover:ring-brand-teal/20 transition-all rounded-lg min-h-[300px]" 
-                              title="Click to edit document content directly"
-                            />
+                            <div className="relative mt-6 -mx-[15px] group">
+                              <div 
+                                onClick={startLiveEditing}
+                                dangerouslySetInnerHTML={{ __html: selectedTemplate.content || '<div class="text-slate-400 italic">Click here to add document content...</div>' }} 
+                                className="ql-editor cursor-text hover:bg-amber-50/50 hover:ring-2 hover:ring-brand-teal/20 transition-all rounded-lg min-h-[300px]" 
+                                title="Click to edit document content directly"
+                              />
+                            </div>
                           )}
                         </div>
                       </div>
                       
+                      {/* Repeating Letterheads for Page 2+ */}
+                      {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
+                        <div 
+                          key={`lh-${i+1}`}
+                          className="absolute left-0 w-full pointer-events-none z-0"
+                          style={{ top: `${(i + 1) * 297}mm` }}
+                        >
+                          <img 
+                            src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
+                            alt="Company Letterhead" 
+                            className="w-full"
+                            style={{ objectFit: 'contain', objectPosition: 'top' }}
+                          />
+                        </div>
+                      ))}
+
                       {/* Page break indicators */}
                       {estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
                         <div 
-                          key={i}
+                          key={`pb-${i}`}
                           className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex items-center justify-center opacity-70 z-50"
                           style={{ top: `${(i + 1) * 297}mm` }}
                         >
