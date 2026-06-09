@@ -38,9 +38,10 @@ interface RequestPunchOutDialogProps {
   onGoToPunchOut: () => void;
   employeeId: string;
   employeeName: string;
+  missingDate?: Date; // e.g. Date object
 }
  
-export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchInTime, onGoToPunchOut, employeeId, employeeName }: RequestPunchOutDialogProps) {
+export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchInTime, onGoToPunchOut, employeeId, employeeName, missingDate }: RequestPunchOutDialogProps) {
   const [formData, setFormData] = useState({
     punchOutTime: "18:30",
     reason: "forgot",
@@ -57,7 +58,7 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchIn
         body: JSON.stringify({
           employee_id: employeeId,
           employee_name: employeeName,
-          date: dayjs().format("YYYY-MM-DD"),
+          date: missingDate ? dayjs(missingDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
           late_minutes: 0,
           recovery_minutes: 0,
           reason: `Forgot Punch-Out. Actual Punch-Out: ${formData.punchOutTime}. Reason: ${formData.reason === 'other' ? formData.otherReason : formData.reason}`,
@@ -86,7 +87,7 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchIn
         </div>
         <div className="p-8 relative">
  
-          {isPunchedIn ? (
+          {isPunchedIn && !missingDate ? (
             <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">
               <div className="w-20 h-20 bg-[#FFF7ED] rounded-full flex items-center justify-center mb-8">
                 <div className="text-[#9A3412]">
@@ -177,7 +178,7 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchIn
                     <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#9CA3AF]" />
                     <Input 
                       disabled 
-                      value={dayjs().format("MMMM DD, YYYY")} 
+                      value={missingDate ? dayjs(missingDate).format("MMMM DD, YYYY") : dayjs().format("MMMM DD, YYYY")} 
                       className="pl-11 h-[52px] bg-[#F9FAFB] border-[#F3F4F6] rounded-xl text-[#374151] font-medium text-[15px] disabled:opacity-100" 
                     />
                   </div>
