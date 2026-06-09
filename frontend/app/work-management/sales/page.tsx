@@ -93,7 +93,7 @@ export default function SalesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [pipelineDateFilter, setPipelineDateFilter] = useState("today");
+  const [pipelineDateFilter, setPipelineDateFilter] = useState("all");
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [inlineEditing, setInlineEditing] = useState<{ id: string, field: string } | null>(null);
@@ -1310,16 +1310,6 @@ export default function SalesPage() {
           </TabsList>
 
           <div className="flex items-center gap-2 mr-2">
-            <Select value={pipelineDateFilter} onValueChange={setPipelineDateFilter}>
-              <SelectTrigger className="h-9 w-[130px] border-slate-200 text-slate-600 font-bold text-xs bg-slate-50/50">
-                <Calendar className="w-3.5 h-3.5 mr-2 text-brand-teal" />
-                <SelectValue placeholder="Time Period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Today Only</SelectItem>
-                <SelectItem value="all">All Time</SelectItem>
-              </SelectContent>
-            </Select>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input 
