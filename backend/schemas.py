@@ -808,7 +808,7 @@ class Notification(NotificationBase):
 class ClientBase(BaseModel):
     name: str
     companyName: str
-    email: str
+    email: Optional[str] = None
     phone: str
     address: Optional[str] = None
     state: Optional[str] = ""

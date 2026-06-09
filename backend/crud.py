@@ -2945,8 +2945,30 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
         if not old_lead:
             return None
             
-        if update_data.get("status") == "Client Won" and not update_data.get("closedDate"):
-            update_data["closedDate"] = get_now().strftime("%Y-%m-%d")
+        if update_data.get("status") == "Client Won" and old_lead.get("status") != "Client Won":
+            if not update_data.get("closedDate"):
+                update_data["closedDate"] = get_now().strftime("%Y-%m-%d")
+            
+            # Auto-create Client
+            client_company = update_data.get("company", old_lead.get("company")) or "Unknown Company"
+            client_contact = update_data.get("contact", old_lead.get("contact")) or "Unknown Contact"
+            client_email = update_data.get("email", old_lead.get("email"))
+            client_phone = update_data.get("phone", old_lead.get("phone")) or ""
+            
+            new_client = schemas.ClientCreate(
+                name=client_contact,
+                companyName=client_company,
+                email=client_email,
+                phone=client_phone,
+                status="active",
+                department="Sales",
+                performedBy=performedBy,
+                userName=userName
+            )
+            try:
+                await create_client(db, new_client)
+            except Exception as e:
+                print(f"Failed to auto-create client: {e}")
             
         if update_data.get("status") in ["On Hold", "Client Won", "Client Loss"]:
             update_data["isHot"] = False
