@@ -136,6 +136,20 @@ RobustDateDMY = Annotated[Optional[date], BeforeValidator(parse_robust_date), Pl
 RobustDatetime = Annotated[Optional[datetime], BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_standard, when_used='always')]
 RobustDatetimeDMY = Annotated[Optional[datetime], BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_dmy, when_used='always')]
 
+def parse_robust_assigned_to(v: Any) -> List[str]:
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(item) for item in v if item]
+    if isinstance(v, str):
+        v_clean = v.strip()
+        if not v_clean:
+            return []
+        return [v_clean]
+    return []
+
+RobustAssignedTo = Annotated[List[str], BeforeValidator(parse_robust_assigned_to)]
+
 class BaseModel(PydanticBaseModel):
     created_at: Optional[RobustDatetime] = None
     updated_at: Optional[RobustDatetime] = None
@@ -1042,19 +1056,23 @@ class FollowUp(BaseModel):
     performedBy: Optional[str] = None
 
 class LeadBase(BaseModel):
-    company: str
+    company: Optional[str] = ""
     contact: str
     email: Optional[str] = None
     phone: Optional[str] = None
     expectedIncome: Optional[str] = None
-    status: Optional[str] = "Lead" # Lead, Contacted, Proposal Sent, Client Won, Client Loss
+    status: Optional[str] = "Lead" # Lead, Contacted, Proposal Sent, Client Won, Client Loss, On Hold
     priority: Optional[str] = "Medium" # Low, Medium, High
     source: Optional[str] = None
     date: Optional[RobustDate] = None
     remarks: Optional[str] = None
     closedDate: Optional[RobustDate] = None
-    assignedTo: Optional[str] = None
+    assignedTo: Optional[RobustAssignedTo] = []
     followUps: Optional[List[FollowUp]] = []
+    isHot: Optional[bool] = False
+    holdResumeDate: Optional[RobustDate] = None
+    createdBy: Optional[str] = None
+    createdByUserName: Optional[str] = None
 
 class LeadCreate(LeadBase):
     performedBy: Optional[str] = None
@@ -1072,9 +1090,11 @@ class LeadUpdate(BaseModel):
     date: Optional[RobustDate] = None
     remarks: Optional[str] = None
     closedDate: Optional[RobustDate] = None
-    assignedTo: Optional[str] = None
+    assignedTo: Optional[RobustAssignedTo] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    isHot: Optional[bool] = None
+    holdResumeDate: Optional[RobustDate] = None
 
 class Lead(LeadBase):
     id: str
@@ -1397,6 +1417,7 @@ class IncentiveSlabBase(BaseModel):
     minAmount: float
     maxAmount: float
     percentage: float
+    employees: Optional[List[str]] = []
 
 class IncentiveSlabCreate(IncentiveSlabBase):
     pass
@@ -1405,6 +1426,7 @@ class IncentiveSlabUpdate(BaseModel):
     minAmount: Optional[float] = None
     maxAmount: Optional[float] = None
     percentage: Optional[float] = None
+    employees: Optional[List[str]] = None
 
 class IncentiveSlab(IncentiveSlabBase):
     id: str
@@ -1413,10 +1435,12 @@ class IncentiveSlab(IncentiveSlabBase):
 class SalesTargetBase(BaseModel):
     employeeId: str
     employeeName: Optional[str] = "Unknown"
-    type: str = "Monthly" # Monthly, Weekly
-    month: str
-    year: int
+    type: str = "Monthly" # Monthly, Weekly, Custom
+    month: Optional[str] = None
+    year: Optional[int] = None
     week: Optional[int] = None # 1, 2, 3, 4, 5
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
     targetAmount: float = 0
     currentAchievement: float = 0
     incentiveAmount: float = 0
@@ -1430,6 +1454,8 @@ class SalesTargetUpdate(BaseModel):
     incentiveAmount: Optional[float] = None
     type: Optional[str] = None
     week: Optional[int] = None
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
 
 class SalesTarget(SalesTargetBase):
     id: str

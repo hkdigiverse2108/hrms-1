@@ -929,7 +929,16 @@ async def run_payroll_processing(db, month: str, year: int):
         })
         targets = await targets_cursor.to_list(length=10)
         for t in targets:
-            await recalculate_sales_target(db, emp_id, month, year, t.get("type", "Monthly"), t.get("week"))
+            await recalculate_sales_target(
+                db, 
+                emp_id, 
+                month, 
+                year, 
+                t.get("type", "Monthly"), 
+                t.get("week"),
+                startDate=t.get("startDate"),
+                endDate=t.get("endDate")
+            )
 
         # Fetch Sales Incentive
         sales_target = await db.sales_targets.find_one({
@@ -2839,6 +2848,13 @@ async def create_lead(db, lead: schemas.LeadCreate):
     if not lead_dict.get("date"):
         lead_dict["date"] = get_now().strftime("%Y-%m-%d")
         
+    if lead_dict.get("status") in ["On Hold", "Client Won", "Client Loss"]:
+        lead_dict["isHot"] = False
+        
+    # Store creator information
+    lead_dict["createdBy"] = performedBy
+    lead_dict["createdByUserName"] = userName
+        
     result = await db.leads.insert_one(lead_dict)
     lead_id = str(result.inserted_id)
     
@@ -2867,17 +2883,26 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
         if update_data.get("status") == "Client Won" and not update_data.get("closedDate"):
             update_data["closedDate"] = get_now().strftime("%Y-%m-%d")
             
+        if update_data.get("status") in ["On Hold", "Client Won", "Client Loss"]:
+            update_data["isHot"] = False
+            
+        if update_data.get("status") == "On Hold" and "holdResumeDate" not in update_data:
+            update_data["holdResumeDate"] = None
+            
         await db.leads.update_one({"_id": oid}, {"$set": update_data})
         
         # Log the update with detailed changes
         changes = []
-        ALLOWED_LOG_FIELDS = ["company", "contact", "email", "phone", "expectedIncome", "status", "priority", "source", "date", "remarks", "assignedTo"]
+        ALLOWED_LOG_FIELDS = ["company", "contact", "email", "phone", "expectedIncome", "status", "priority", "source", "date", "remarks", "assignedTo", "holdResumeDate"]
         for key, new_val in update_data.items():
             if key not in ALLOWED_LOG_FIELDS:
                 continue
             old_val = old_lead.get(key)
             if old_val != new_val:
-                display_key = key.replace("_", " ").title()
+                if key == "holdResumeDate":
+                    display_key = "Resume Date"
+                else:
+                    display_key = key.replace("_", " ").title()
                 if key == "expectedIncome":
                     changes.append(f"{display_key} changed from ₹{old_val or 0} to ₹{new_val}")
                 else:
@@ -2914,6 +2939,21 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
                             await recalculate_sales_target(db, str(emp["_id"]), month_name, ld.year, "Monthly")
                             # Recalculate Weekly
                             await recalculate_sales_target(db, str(emp["_id"]), month_name, ld.year, "Weekly", week_num)
+                            # Recalculate Custom
+                            custom_targets_cursor = db.sales_targets.find({
+                                "employeeId": str(emp["_id"]),
+                                "type": "Custom"
+                            })
+                            async for t in custom_targets_cursor:
+                                await recalculate_sales_target(
+                                    db,
+                                    str(emp["_id"]),
+                                    t.get("month"),
+                                    t.get("year"),
+                                    "Custom",
+                                    startDate=t.get("startDate"),
+                                    endDate=t.get("endDate")
+                                )
                     except Exception: pass
         
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
@@ -3829,15 +3869,21 @@ async def get_sales_targets(db, month: Optional[str] = None, year: Optional[int]
 
 async def create_or_update_sales_target(db, target: schemas.SalesTargetCreate):
     target_dict = target.dict()
-    # Unique identifier: employeeId + month + year + type + (week if weekly)
+    # Unique identifier: employeeId + type + details
     query = {
         "employeeId": target_dict["employeeId"],
-        "month": target_dict["month"],
-        "year": target_dict["year"],
         "type": target_dict.get("type", "Monthly")
     }
     if target_dict.get("type") == "Weekly":
+        query["month"] = target_dict["month"]
+        query["year"] = target_dict["year"]
         query["week"] = target_dict.get("week")
+    elif target_dict.get("type") == "Monthly":
+        query["month"] = target_dict["month"]
+        query["year"] = target_dict["year"]
+    elif target_dict.get("type") == "Custom":
+        query["startDate"] = target_dict.get("startDate")
+        query["endDate"] = target_dict.get("endDate")
         
     await db.sales_targets.update_one(
         query,
@@ -3849,10 +3895,12 @@ async def create_or_update_sales_target(db, target: schemas.SalesTargetCreate):
     await recalculate_sales_target(
         db, 
         target_dict["employeeId"], 
-        target_dict["month"], 
-        target_dict["year"], 
+        target_dict.get("month"), 
+        target_dict.get("year"), 
         target_dict.get("type", "Monthly"), 
-        target_dict.get("week")
+        target_dict.get("week"),
+        startDate=target_dict.get("startDate"),
+        endDate=target_dict.get("endDate")
     )
     
     doc = await db.sales_targets.find_one(query)
@@ -3892,10 +3940,21 @@ async def update_incentive_slab(db, slab_id: str, slab_update: schemas.Incentive
     )
     return fix_id(result)
 
-async def calculate_sales_incentive(db, revenue: float):
-    # Fetch slabs sorted by minAmount
-    cursor = db.incentive_slabs.find().sort("minAmount", 1)
+async def calculate_sales_incentive(db, revenue: float, employee_id: str, employee_name: str):
+    # Fetch slabs assigned to this specific employee
+    cursor = db.incentive_slabs.find({"employees": {"$in": [employee_id, employee_name]}}).sort("minAmount", 1)
     slabs = await cursor.to_list(length=100)
+    
+    # If no custom slabs exist for this employee, fetch global default slabs (where employees is empty or missing)
+    if not slabs:
+        cursor = db.incentive_slabs.find({
+            "$or": [
+                {"employees": {"$exists": False}},
+                {"employees": {"$size": 0}},
+                {"employees": None}
+            ]
+        }).sort("minAmount", 1)
+        slabs = await cursor.to_list(length=100)
     
     # Find the applicable slab (highest percentage where revenue hits the bracket)
     # Most business logic uses "flat" rate for the bracket reached
@@ -3909,7 +3968,7 @@ async def calculate_sales_incentive(db, revenue: float):
         return round((revenue * applicable_slab["percentage"]) / 100, 2)
     return 0.0
 
-async def recalculate_sales_target(db, employee_id: str, month: str, year: int, target_type: str = "Monthly", week: Optional[int] = None):
+async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = None, year: Optional[int] = None, target_type: str = "Monthly", week: Optional[int] = None, startDate: Optional[str] = None, endDate: Optional[str] = None):
     try:
         # 1. Calculate Achievement from Leads
         query = {
@@ -3946,16 +4005,27 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
                 
                 if not ld: continue
                 
-                # Check month/year
-                month_name = ld.strftime("%B")
-                if month_name != month or ld.year != year:
-                    continue
-                
-                # Weekly check
-                if target_type == "Weekly" and week:
-                    lead_week = (ld.day - 1) // 7 + 1
-                    if lead_week != week:
+                # Check period matches
+                if target_type == "Custom":
+                    if not startDate or not endDate:
                         continue
+                    sd = datetime.strptime(startDate, "%Y-%m-%d")
+                    ed = datetime.strptime(endDate, "%Y-%m-%d")
+                    sd = sd.replace(hour=0, minute=0, second=0, microsecond=0)
+                    ed = ed.replace(hour=23, minute=59, second=59, microsecond=999999)
+                    if not (sd <= ld <= ed):
+                        continue
+                else:
+                    # Check month/year
+                    month_name = ld.strftime("%B")
+                    if month_name != month or ld.year != year:
+                        continue
+                    
+                    # Weekly check
+                    if target_type == "Weekly" and week:
+                        lead_week = (ld.day - 1) // 7 + 1
+                        if lead_week != week:
+                            continue
                 
                 # Extract income amount
                 income_str = str(lead.get("expectedIncome", "0")).replace("₹", "").replace(",", "").strip()
@@ -3966,17 +4036,23 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
                 continue
                 
         # 2. Calculate Incentive
-        incentive = await calculate_sales_incentive(db, total_achievement)
+        incentive = await calculate_sales_incentive(db, total_achievement, employee_id, emp_name)
         
         # 3. Update Target record
         target_query = {
             "employeeId": employee_id,
-            "month": month,
-            "year": year,
             "type": target_type
         }
         if target_type == "Weekly":
+            target_query["month"] = month
+            target_query["year"] = year
             target_query["week"] = week
+        elif target_type == "Monthly":
+            target_query["month"] = month
+            target_query["year"] = year
+        elif target_type == "Custom":
+            target_query["startDate"] = startDate
+            target_query["endDate"] = endDate
             
         await db.sales_targets.update_one(
             target_query,

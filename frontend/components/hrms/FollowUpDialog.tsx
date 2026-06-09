@@ -110,29 +110,22 @@ export function FollowUpDialog({ lead, onUpdate, userId, userName }: FollowUpDia
         
         <div className="space-y-6 py-4">
           {/* Add New Follow-up */}
-          {lead.status?.toLowerCase() === "lead" ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center shadow-sm">
-              <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">Follow-ups Restricted</p>
-              <p className="text-xs text-amber-600 leading-relaxed">Follow-ups cannot be added while the status is still "Lead". Please update the status first.</p>
-            </div>
-          ) : (
-            <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">New Follow-up Note</Label>
-              <Textarea 
-                placeholder="What was the outcome of the last interaction? Next steps?" 
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="min-h-[80px] bg-white border-slate-200 focus-visible:ring-brand-teal"
-              />
-              <Button 
-                className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
-                onClick={handleAddFollowUp}
-                disabled={isSubmitting || !note.trim()}
-              >
-                {isSubmitting ? "Saving..." : "Add Follow-up"}
-              </Button>
-            </div>
-          )}
+          <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">New Follow-up Note</Label>
+            <Textarea 
+              placeholder="What was the outcome of the last interaction? Next steps?" 
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="min-h-[80px] bg-white border-slate-200 focus-visible:ring-brand-teal"
+            />
+            <Button 
+              className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
+              onClick={handleAddFollowUp}
+              disabled={isSubmitting || !note.trim()}
+            >
+              {isSubmitting ? "Saving..." : "Add Follow-up"}
+            </Button>
+          </div>
 
           {/* History */}
           <div className="space-y-3">

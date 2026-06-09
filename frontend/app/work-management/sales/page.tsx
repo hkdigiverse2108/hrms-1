@@ -22,7 +22,9 @@ import {
   Loader2,
   Trash2,
   Pencil,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Flame,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +40,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { LeadForm, LeadFormData } from "@/components/hrms/LeadForm";
 import { FollowUpDialog } from "@/components/hrms/FollowUpDialog";
 import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -60,10 +63,21 @@ export default function SalesPage() {
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
 
+  const currentUserName = (user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`).trim();
+
   const canViewSales = isAdmin || checkPermission('sales', 'canView');
   const canAddSales = isAdmin || checkPermission('sales', 'canAdd');
   const canEditSales = isAdmin || checkPermission('sales', 'canEdit');
   const canDeleteSales = isAdmin || checkPermission('sales', 'canDelete');
+
+  const canEditLead = (lead: any) => {
+    if (isAdmin || canEditSales) return true;
+    const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+    const isAssigned = assignedList.some((name: string) => name.toLowerCase() === currentUserName.toLowerCase());
+    const isCreator = lead.createdBy === user?.id || 
+                      (lead.createdByUserName && lead.createdByUserName.toLowerCase() === currentUserName.toLowerCase());
+    return !!currentUserName && (isAssigned || isCreator);
+  };
 
   const [searchTerm, setSearchTerm] = useState("");
   const [leads, setLeads] = useState<any[]>([]);
@@ -74,6 +88,7 @@ export default function SalesPage() {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [inlineEditing, setInlineEditing] = useState<{ id: string, field: string } | null>(null);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [reportEmployeeFilter, setReportEmployeeFilter] = useState("all");
   const [reportDateFilter, setReportDateFilter] = useState(dayjs().format("YYYY-MM-DD"));
@@ -92,17 +107,25 @@ export default function SalesPage() {
     month: dayjs().format("MMMM"),
     year: dayjs().year(),
     week: 1,
+    startDate: dayjs().format("YYYY-MM-DD"),
+    endDate: dayjs().add(14, 'day').format("YYYY-MM-DD"),
     targetAmount: 0
   });
 
-  const [slabForm, setSlabForm] = useState({
+  const [slabForm, setSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[] }>({
     minAmount: 0,
     maxAmount: 0,
-    percentage: 0
+    percentage: 0,
+    employees: []
   });
   const [isSlabDialogOpen, setIsSlabDialogOpen] = useState(false);
   const [editingSlabId, setEditingSlabId] = useState<string | null>(null);
-  const [editSlabForm, setEditSlabForm] = useState({ minAmount: 0, maxAmount: 0, percentage: 0 });
+  const [editSlabForm, setEditSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[] }>({
+    minAmount: 0,
+    maxAmount: 0,
+    percentage: 0,
+    employees: []
+  });
 
   const fetchTargets = async () => {
     try {
@@ -142,19 +165,22 @@ export default function SalesPage() {
   }, []);
 
   useEffect(() => {
-    const existing = targets.find(t => 
-      t.employeeId === targetForm.employeeId && 
-      t.month === targetForm.month && 
-      t.year === targetForm.year &&
-      t.type === targetForm.type &&
-      (targetForm.type === "Monthly" || t.week === targetForm.week)
-    );
+    const existing = targets.find(t => {
+      if (t.employeeId !== targetForm.employeeId || t.type !== targetForm.type) return false;
+      if (targetForm.type === "Custom") {
+        return t.startDate === targetForm.startDate && t.endDate === targetForm.endDate;
+      } else if (targetForm.type === "Weekly") {
+        return t.month === targetForm.month && t.year === targetForm.year && t.week === targetForm.week;
+      } else {
+        return t.month === targetForm.month && t.year === targetForm.year;
+      }
+    });
     if (existing) {
       setTargetForm(prev => ({ ...prev, targetAmount: existing.targetAmount }));
     } else {
       setTargetForm(prev => ({ ...prev, targetAmount: 0 }));
     }
-  }, [targetForm.employeeId, targetForm.month, targetForm.year, targetForm.type, targetForm.week, targets]);
+  }, [targetForm.employeeId, targetForm.month, targetForm.year, targetForm.type, targetForm.week, targetForm.startDate, targetForm.endDate, targets]);
 
   const fetchLeadLogs = async (lead: any) => {
     setSelectedLeadForLogs(lead);
@@ -181,7 +207,7 @@ export default function SalesPage() {
         toast.success("Slab created successfully");
         fetchIncentiveSlabs();
         setIsSlabDialogOpen(false);
-        setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0 });
+        setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0, employees: [] });
       }
     } catch (err) {
       toast.error("Failed to create slab");
@@ -242,7 +268,37 @@ export default function SalesPage() {
       const res = await fetch(`${API_URL}/leads`);
       if (res.ok) {
         const data = await res.json();
-        setLeads(data);
+        const today = dayjs().startOf('day');
+        let needsRefresh = false;
+        for (const lead of data) {
+          if (lead.status === "On Hold" && lead.holdResumeDate) {
+            const resumeDate = dayjs(lead.holdResumeDate).startOf('day');
+            if (today.isSame(resumeDate) || today.isAfter(resumeDate)) {
+              needsRefresh = true;
+              try {
+                await fetch(`${API_URL}/leads/${lead.id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    status: "Lead",
+                    performedBy: user?.id,
+                    userName: currentUserName
+                  }),
+                });
+              } catch (err) {
+                console.error("Auto-resume failed for lead:", lead.id, err);
+              }
+            }
+          }
+        }
+        if (needsRefresh) {
+          const freshRes = await fetch(`${API_URL}/leads`);
+          if (freshRes.ok) {
+            setLeads(await freshRes.json());
+          }
+        } else {
+          setLeads(data);
+        }
       }
     } catch (err) {
       console.error("Error fetching leads:", err);
@@ -261,7 +317,7 @@ export default function SalesPage() {
         body: JSON.stringify({
           ...formData,
           performedBy: user?.id,
-          userName: user?.name
+          userName: currentUserName
         }),
       });
 
@@ -290,7 +346,7 @@ export default function SalesPage() {
         body: JSON.stringify({
           ...editFormData,
           performedBy: user?.id,
-          userName: user?.name
+          userName: currentUserName
         }),
       });
 
@@ -309,7 +365,7 @@ export default function SalesPage() {
     }
   };
 
-  const handleInlineUpdate = async (leadId: string, field: string, value: any) => {
+  const handleInlineUpdate = async (leadId: string, field: string, value: any, keepEditing?: boolean) => {
     try {
       const res = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "PUT",
@@ -317,7 +373,7 @@ export default function SalesPage() {
         body: JSON.stringify({
           [field]: value,
           performedBy: user?.id,
-          userName: user?.name
+          userName: currentUserName
         }),
       });
 
@@ -330,7 +386,9 @@ export default function SalesPage() {
     } catch (err) {
       toast.error("Network error: Could not reach backend");
     } finally {
-      setInlineEditing(null);
+      if (!keepEditing) {
+        setInlineEditing(null);
+      }
     }
   };
 
@@ -343,7 +401,7 @@ export default function SalesPage() {
         body: JSON.stringify({
           status: newStatus,
           performedBy: user?.id,
-          userName: user?.name
+          userName: currentUserName
         }),
       });
 
@@ -385,6 +443,16 @@ export default function SalesPage() {
       toast.error("Please select an employee and set a valid target amount");
       return;
     }
+    if (targetForm.type === "Custom") {
+      if (!targetForm.startDate || !targetForm.endDate) {
+        toast.error("Please select both start date and end date");
+        return;
+      }
+      if (dayjs(targetForm.startDate).isAfter(dayjs(targetForm.endDate))) {
+        toast.error("Start date cannot be after end date");
+        return;
+      }
+    }
     setIsTargetSubmitting(true);
     try {
       const employee = employees.find(e => e.id === targetForm.employeeId);
@@ -393,7 +461,9 @@ export default function SalesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...targetForm,
-          employeeName: employee?.name || employee?.firstName
+          employeeName: employee?.name || employee?.firstName,
+          month: targetForm.type === "Custom" ? dayjs(targetForm.startDate).format("MMMM") : targetForm.month,
+          year: targetForm.type === "Custom" ? dayjs(targetForm.startDate).year() : targetForm.year,
         }),
       });
 
@@ -440,11 +510,22 @@ export default function SalesPage() {
       case "Client Loss": return <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">Client Loss</Badge>;
       case "Proposal Sent": return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200">Proposal Sent</Badge>;
       case "Contacted": return <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-indigo-200">Contacted</Badge>;
+      case "On Hold": return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">On Hold</Badge>;
       default: return <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-100 border-slate-200">{status}</Badge>;
     }
   };
 
-  const activeLeads = leads.filter(l => {
+  const visibleLeads = isAdmin 
+    ? leads 
+    : leads.filter((l: any) => {
+        const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+        const isAssigned = assignedList.some((name: string) => name.toLowerCase() === currentUserName.toLowerCase());
+        const isCreator = l.createdBy === user?.id || 
+                          (l.createdByUserName && l.createdByUserName.toLowerCase() === currentUserName.toLowerCase());
+        return isAssigned || isCreator;
+      });
+
+  const activeLeads = visibleLeads.filter(l => {
     const isNotWon = l.status !== "Client Won";
     if (pipelineDateFilter === "today") {
       const today = dayjs().format('YYYY-MM-DD');
@@ -454,7 +535,7 @@ export default function SalesPage() {
     return isNotWon;
   });
 
-  const convertedLeads = leads.filter(l => {
+  const convertedLeads = visibleLeads.filter(l => {
     const isWon = l.status === "Client Won";
     if (pipelineDateFilter === "today") {
       const today = dayjs().format('YYYY-MM-DD');
@@ -464,16 +545,35 @@ export default function SalesPage() {
     return isWon;
   });
 
+  const hotLeads = visibleLeads.filter(l => {
+    const isHot = l.isHot === true;
+    if (pipelineDateFilter === "today") {
+      const today = dayjs().format('YYYY-MM-DD');
+      const leadDate = dayjs(l.date).format('YYYY-MM-DD');
+      return isHot && leadDate === today;
+    }
+    return isHot;
+  });
+
   const totalRevenue = convertedLeads.reduce((acc, l) => {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
     return acc + val;
   }, 0);
 
   const monthlyTargets = targets.filter(t => t.month === selectedMonth && t.year === selectedYear);
-  const totalMonthlyTarget = monthlyTargets.reduce((acc, t) => acc + t.targetAmount, 0);
+  const myTarget = targets.find(t => t.employeeName?.toLowerCase() === currentUserName.toLowerCase() && t.month === selectedMonth && t.year === selectedYear);
+
+  const totalMonthlyTarget = isAdmin 
+    ? monthlyTargets.reduce((acc, t) => acc + t.targetAmount, 0)
+    : (myTarget?.targetAmount || 0);
   
-  const monthlyAchievement = leads.filter(l => {
+  const myAchievement = leads.filter(l => {
     if (l.status !== "Client Won") return false;
+    const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+    const isAssignedToMe = assignedList.some((name: string) => name.toLowerCase() === currentUserName.toLowerCase());
+    const isCreator = l.createdBy === user?.id || 
+                      (l.createdByUserName && l.createdByUserName.toLowerCase() === currentUserName.toLowerCase());
+    if (!isAssignedToMe && !isCreator) return false;
     const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
     return leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
   }).reduce((acc, l) => {
@@ -481,20 +581,19 @@ export default function SalesPage() {
     return acc + val;
   }, 0);
 
+  const monthlyAchievement = isAdmin 
+    ? leads.filter(l => {
+        if (l.status !== "Client Won") return false;
+        const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+        return leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
+      }).reduce((acc, l) => {
+        const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+        return acc + val;
+      }, 0)
+    : myAchievement;
+
   const achievementRate = totalMonthlyTarget > 0 ? (monthlyAchievement / totalMonthlyTarget) * 100 : 0;
 
-  const myTarget = targets.find(t => t.employeeName === user?.name && t.month === selectedMonth && t.year === selectedYear);
-  const myAchievement = leads.filter(l => {
-    if (l.status !== "Client Won" || l.assignedTo === user?.name) {
-      const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-      return l.status === "Client Won" && l.assignedTo === user?.name && leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
-    }
-    return false;
-  }).reduce((acc, l) => {
-    const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
-    return acc + val;
-  }, 0);
-  
   const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
 
   const stats = [
@@ -504,207 +603,443 @@ export default function SalesPage() {
     { title: "Target (Monthly)", value: `₹${totalMonthlyTarget.toLocaleString()}`, trend: selectedMonth, trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
   ];
 
-  const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' }) => (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left border-collapse">
-        <thead>
-          <tr className="bg-slate-50/50 border-b border-slate-100">
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lead Info</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Source</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assigned To</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Expected Income</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Remarks</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Follow-ups</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {data.filter(l => 
-            l.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            l.contact.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            l.remarks?.toLowerCase().includes(searchTerm.toLowerCase())
-          ).map((lead) => {
-            return (
-              <tr 
-                key={lead.id} 
-                className="hover:bg-slate-50/80 transition-colors group"
-              >
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex flex-col flex-1">
-                      {inlineEditing?.id === lead.id && inlineEditing?.field === 'company' ? (
+  const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' | 'hot' }) => {
+    const statusContainerRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (inlineEditing?.field === 'status' && statusContainerRef.current) {
+          const clickedElement = document.elementFromPoint(event.clientX, event.clientY);
+          if (clickedElement && statusContainerRef.current.contains(clickedElement)) {
+            return;
+          }
+          const portal = document.querySelector('[data-radix-popper-content-wrapper]');
+          if (portal && portal.contains(event.target as Node)) {
+            return;
+          }
+          setInlineEditing(null);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, [inlineEditing]);
+
+    const getLeadCategory = (lead: any) => {
+      if (lead.status === "On Hold") {
+        const today = dayjs().startOf('day');
+        const resumeDate = lead.holdResumeDate ? dayjs(lead.holdResumeDate).startOf('day') : null;
+        if (resumeDate && (today.isSame(resumeDate) || today.isAfter(resumeDate))) {
+          return 1; // On Hold - Resumed (Very Top)
+        }
+        return 3; // On Hold - Pending (Very Bottom)
+      }
+      return 2; // Standard (Middle)
+    };
+
+    const filteredAndSorted = data
+      .filter(l => 
+        (l.company || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.contact || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.remarks || "").toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      .sort((a, b) => {
+        const catA = getLeadCategory(a);
+        const catB = getLeadCategory(b);
+        if (catA !== catB) {
+          return catA - catB;
+        }
+        return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+      });
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-slate-50/50 border-b border-slate-100">
+              <th className="w-12 px-4 py-3.5 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">Hot</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Created By</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Source</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assigned To</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Expected Income</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Remarks</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Follow-ups</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredAndSorted.map((lead) => {
+              const cat = getLeadCategory(lead);
+              return (
+                <tr 
+                  key={lead.id} 
+                  className={`hover:bg-slate-50/80 transition-colors group relative ${
+                    cat === 1 ? 'border-l-4 border-l-rose-500 bg-rose-50/5' : ''
+                  }`}
+                >
+                  <td className="px-4 py-4 text-center">
+                    <input 
+                      type="checkbox"
+                      checked={!!lead.isHot}
+                      onChange={(e) => handleInlineUpdate(lead.id, "isHot", e.target.checked)}
+                      disabled={!canEditLead(lead) || lead.status === "On Hold" || lead.status === "Client Won" || lead.status === "Client Loss"}
+                      className="rounded border-slate-300 text-orange-500 focus:ring-orange-500 w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-800 text-sm">
+                            {lead.createdByUserName || 'Admin'}
+                          </span>
+                          {lead.isHot && (
+                            <span title="Hot Lead">
+                              <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500 shrink-0" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium mt-1">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          {inlineEditing?.id === lead.id && inlineEditing?.field === 'date' ? (
+                            <Input 
+                              type="date"
+                              autoFocus
+                              className="h-6 text-[10px] w-32 py-0" 
+                              defaultValue={lead.date} 
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleInlineUpdate(lead.id, 'date', e.target.value);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                handleInlineUpdate(lead.id, 'date', e.target.value);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleInlineUpdate(lead.id, 'date', e.currentTarget.value);
+                                }
+                              }}
+                            />
+                          ) : (
+                            <span
+                              onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'date' })}
+                              className="cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                            >
+                              Created: {lead.date}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col">
+                      {inlineEditing?.id === lead.id && inlineEditing?.field === 'contact' ? (
                         <Input 
                           autoFocus
-                          className="h-8 text-sm font-bold" 
-                          defaultValue={lead.company} 
-                          onBlur={(e) => handleInlineUpdate(lead.id, 'company', e.target.value)} 
-                          onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'company', e.currentTarget.value)}
+                          className="h-8 text-[13px] font-bold" 
+                          defaultValue={lead.contact} 
+                          onBlur={(e) => handleInlineUpdate(lead.id, 'contact', e.target.value)} 
+                          onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'contact', e.currentTarget.value)}
                         />
                       ) : (
                         <span 
-                          onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'company' })}
-                          className="font-bold text-slate-800 text-sm cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                          onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'contact' })}
+                          className="text-[13px] font-bold text-slate-700 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                         >
-                          {lead.company}
+                          {lead.contact}
                         </span>
                       )}
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium mt-1">
-                        <Calendar className="w-3 h-3 text-slate-400" />
-                        {inlineEditing?.id === lead.id && inlineEditing?.field === 'date' ? (
-                          <Input 
-                            autoFocus
-                            className="h-6 text-[10px] w-24 py-0" 
-                            defaultValue={lead.date} 
-                            onBlur={(e) => handleInlineUpdate(lead.id, 'date', e.target.value)} 
-                            onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'date', e.currentTarget.value)}
-                          />
-                        ) : (
-                          <span
-                            onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'date' })}
-                            className="cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                          >
-                            Created: {lead.date}
-                          </span>
-                        )}
+                      <div className="flex flex-col gap-1 mt-1">
+                        <div className="flex items-center gap-1">
+                          <Mail className="w-3 h-3 text-slate-400" />
+                          {inlineEditing?.id === lead.id && inlineEditing?.field === 'email' ? (
+                            <Input 
+                              autoFocus
+                              className="h-6 text-[10px] w-full py-0" 
+                              defaultValue={lead.email || ''} 
+                              onBlur={(e) => handleInlineUpdate(lead.id, 'email', e.target.value)} 
+                              onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'email', e.currentTarget.value)}
+                              placeholder="Email"
+                            />
+                          ) : (
+                            <span 
+                              onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'email' })}
+                              className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                            >
+                              {lead.email || 'Add email'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-slate-400" />
+                          {inlineEditing?.id === lead.id && inlineEditing?.field === 'phone' ? (
+                            <Input 
+                              autoFocus
+                              className="h-6 text-[10px] w-full py-0" 
+                              defaultValue={lead.phone || ''} 
+                              onBlur={(e) => handleInlineUpdate(lead.id, 'phone', e.target.value)} 
+                              onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'phone', e.currentTarget.value)}
+                              placeholder="Phone"
+                            />
+                          ) : (
+                            <span 
+                              onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'phone' })}
+                              className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                            >
+                              {lead.phone || 'Add phone'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-col">
-                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'contact' ? (
+                  </td>
+                  <td className="px-6 py-4">
+                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'source' ? (
                       <Input 
                         autoFocus
-                        className="h-8 text-[13px] font-bold" 
-                        defaultValue={lead.contact} 
-                        onBlur={(e) => handleInlineUpdate(lead.id, 'contact', e.target.value)} 
-                        onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'contact', e.currentTarget.value)}
+                        className="h-8 text-[12px]" 
+                        defaultValue={lead.source} 
+                        onBlur={(e) => handleInlineUpdate(lead.id, 'source', e.target.value)} 
+                        onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'source', e.currentTarget.value)}
                       />
                     ) : (
-                      <span 
-                        onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'contact' })}
-                        className="text-[13px] font-bold text-slate-700 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                      <div 
+                        onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'source' })}
+                        className="flex items-center gap-1.5 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                       >
-                        {lead.contact}
-                      </span>
+                        {lead.source ? (
+                          <>
+                            <div className="w-1.5 h-1.5 rounded-full bg-brand-teal/40" />
+                            <span className="text-[12px] font-medium text-slate-600">{lead.source}</span>
+                          </>
+                        ) : (
+                          <span className="text-[12px] text-slate-400 italic">Add source</span>
+                        )}
+                      </div>
                     )}
-                    <div className="flex flex-col gap-1 mt-1">
-                      <div className="flex items-center gap-1">
-                        <Mail className="w-3 h-3 text-slate-400" />
-                        {inlineEditing?.id === lead.id && inlineEditing?.field === 'email' ? (
-                          <Input 
-                            autoFocus
-                            className="h-6 text-[10px] w-full py-0" 
-                            defaultValue={lead.email || ''} 
-                            onBlur={(e) => handleInlineUpdate(lead.id, 'email', e.target.value)} 
-                            onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'email', e.currentTarget.value)}
-                            placeholder="Email"
-                          />
-                        ) : (
+                  </td>
+                  <td className="px-6 py-4">
+                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'status' ? (
+                      <div ref={statusContainerRef}>
+                        <Select 
+                          defaultValue={lead.status} 
+                          defaultOpen={true} 
+                          onValueChange={(val) => {
+                            if (val !== "On Hold") {
+                              handleInlineUpdate(lead.id, 'status', val);
+                            } else {
+                              handleInlineUpdate(lead.id, 'status', val, true);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Lead">Lead</SelectItem>
+                            <SelectItem value="Contacted">Contacted</SelectItem>
+                            <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
+                            <SelectItem value="On Hold">On Hold</SelectItem>
+                            <SelectItem value="Client Won">Client Won</SelectItem>
+                            <SelectItem value="Client Loss">Client Loss</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        
+                        {lead.status === "On Hold" && (
+                          <div className="flex flex-col gap-1 mt-1">
+                            <span className="text-[9px] uppercase font-bold text-slate-400">Resume Date</span>
+                            <Input 
+                              type="date"
+                              defaultValue={lead.holdResumeDate || ""}
+                              className="h-8 text-xs"
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleInlineUpdate(lead.id, 'holdResumeDate', e.currentTarget.value);
+                                }
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : inlineEditing?.id === lead.id && inlineEditing?.field === 'holdResumeDate' ? (
+                      <div className="flex flex-col gap-1 min-w-[120px]">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {getStatusBadge(lead.status)}
+                          {lead.status !== "On Hold" && lead.holdResumeDate && (
+                            <Badge className="bg-orange-50 text-orange-600 hover:bg-orange-50 border-orange-200 text-[9px] font-bold px-1.5 py-0.5 shadow-none shrink-0">
+                              Resumed from Hold
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-[9px] uppercase font-bold text-slate-400 mt-1">Resume Date</span>
+                        <Input 
+                          type="date"
+                          defaultValue={lead.holdResumeDate || ""}
+                          className="h-8 text-xs"
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleInlineUpdate(lead.id, 'holdResumeDate', e.currentTarget.value);
+                            }
+                          }}
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <div 
+                        onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'status' })}
+                        className="cursor-pointer flex flex-col gap-1"
+                      >
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {getStatusBadge(lead.status)}
+                          {lead.status !== "On Hold" && lead.holdResumeDate && (
+                            <Badge className="bg-orange-50 text-orange-600 hover:bg-orange-50 border-orange-200 text-[9px] font-bold px-1.5 py-0.5 shadow-none shrink-0">
+                              Resumed from Hold
+                            </Badge>
+                          )}
+                        </div>
+                        {lead.status === "On Hold" && (
                           <span 
-                            onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'email' })}
-                            className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                            onClick={(e) => {
+                              if (canEditLead(lead)) {
+                                e.stopPropagation();
+                                setInlineEditing({ id: lead.id, field: 'holdResumeDate' });
+                              }
+                            }}
+                            className={`text-[10px] font-semibold mt-1 hover:underline cursor-pointer ${
+                              cat === 1 ? 'text-rose-600 font-bold' : 'text-slate-500'
+                            }`}
                           >
-                            {lead.email || 'Add email'}
+                            Resume: {lead.holdResumeDate ? dayjs(lead.holdResumeDate).format("DD MMM YYYY") : "Set Date"}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-slate-400" />
-                        {inlineEditing?.id === lead.id && inlineEditing?.field === 'phone' ? (
-                          <Input 
-                            autoFocus
-                            className="h-6 text-[10px] w-full py-0" 
-                            defaultValue={lead.phone || ''} 
-                            onBlur={(e) => handleInlineUpdate(lead.id, 'phone', e.target.value)} 
-                            onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'phone', e.currentTarget.value)}
-                            placeholder="Phone"
-                          />
-                        ) : (
-                          <span 
-                            onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'phone' })}
-                            className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                          >
-                            {lead.phone || 'Add phone'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'source' ? (
-                    <Input 
-                      autoFocus
-                      className="h-8 text-[12px]" 
-                      defaultValue={lead.source} 
-                      onBlur={(e) => handleInlineUpdate(lead.id, 'source', e.target.value)} 
-                      onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'source', e.currentTarget.value)}
-                    />
-                  ) : (
-                    <div 
-                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'source' })}
-                      className="flex items-center gap-1.5 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                    >
-                      <div className="w-1.5 h-1.5 rounded-full bg-brand-teal/40" />
-                      <span className="text-[12px] font-medium text-slate-600">{lead.source}</span>
-                    </div>
-                  )}
-                </td>
-                <td className="px-6 py-4">
-                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'status' ? (
-                    <Select 
-                      defaultValue={lead.status} 
-                      onValueChange={(val) => handleInlineUpdate(lead.id, 'status', val)}
-                      defaultOpen={true}
-                      onOpenChange={(open) => !open && setInlineEditing(null)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Lead">Lead</SelectItem>
-                        <SelectItem value="Contacted">Contacted</SelectItem>
-                        <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
-                        <SelectItem value="Client Won">Client Won</SelectItem>
-                        <SelectItem value="Client Loss">Client Loss</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div 
-                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'status' })}
-                      className="cursor-pointer"
-                    >
-                      {getStatusBadge(lead.status)}
-                    </div>
-                  )}
-                </td>
+                    )}
+                  </td>
                 <td className="px-6 py-4">
                   {inlineEditing?.id === lead.id && inlineEditing?.field === 'assignedTo' ? (
-                    <Select 
-                      defaultValue={lead.assignedTo || ""} 
-                      onValueChange={(val) => handleInlineUpdate(lead.id, 'assignedTo', val)}
-                      defaultOpen={true}
-                      onOpenChange={(open) => !open && setInlineEditing(null)}
+                    <Popover 
+                      open={true} 
+                      onOpenChange={(open) => {
+                        if (!open) {
+                          const originalList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+                          const hasChanged = originalList.length !== selectedAssignees.length || 
+                            !originalList.every((name: string) => selectedAssignees.includes(name)) ||
+                            !selectedAssignees.every((name: string) => originalList.includes(name));
+                          if (hasChanged) {
+                            handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees);
+                          } else {
+                            setInlineEditing(null);
+                          }
+                        }
+                      }}
                     >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
-                          <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <PopoverTrigger asChild>
+                        <div className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1">
+                          {selectedAssignees.length > 0 ? (
+                            selectedAssignees.map((name: string) => (
+                              <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
+                                {name}
+                                {canEditLead(lead) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const updated = selectedAssignees.filter((n: string) => n !== name);
+                                      setSelectedAssignees(updated);
+                                    }}
+                                    className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-slate-400 italic text-xs">Unassigned</span>
+                          )}
+                        </div>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-52 p-3 bg-white shadow-md border border-slate-100 rounded-lg z-50">
+                        <Label className="text-[10px] uppercase font-black text-slate-400 mb-2 block">Assign Employees</Label>
+                        <div className="max-h-40 overflow-y-auto space-y-1.5 bg-slate-50/50 p-2 rounded border border-slate-100">
+                          {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => {
+                            const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                            return (
+                              <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                                <input 
+                                  type="checkbox"
+                                  checked={selectedAssignees.includes(empName)}
+                                  onChange={(e) => {
+                                    const updated = e.target.checked 
+                                      ? [...selectedAssignees, empName] 
+                                      : selectedAssignees.filter((n: string) => n !== empName);
+                                    setSelectedAssignees(updated);
+                                  }}
+                                  className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                />
+                                {empName}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   ) : (
-                    <span 
-                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'assignedTo' })}
-                      className="text-[12px] font-bold text-brand-teal cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5"
+                    <div 
+                      onClick={() => {
+                        if (canEditLead(lead)) {
+                          setInlineEditing({ id: lead.id, field: 'assignedTo' });
+                          const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+                          setSelectedAssignees(assignedList);
+                        }
+                      }}
+                      className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1"
                     >
-                      {lead.assignedTo || "--"}
-                    </span>
+                      {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 ? (
+                        lead.assignedTo.map((name: string) => (
+                          <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
+                            {name}
+                            {canEditLead(lead) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+                                  const updated = assignedList.filter((n: string) => n !== name);
+                                  handleInlineUpdate(lead.id, 'assignedTo', updated);
+                                }}
+                                className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-slate-400 italic text-xs">Unassigned</span>
+                      )}
+                    </div>
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -719,10 +1054,10 @@ export default function SalesPage() {
                       />
                     ) : (
                       <span 
-                        onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'expectedIncome' })}
+                        onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'expectedIncome' })}
                         className="font-bold text-slate-900 text-sm cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                       >
-                        ₹{lead.expectedIncome}
+                        {lead.expectedIncome ? (lead.expectedIncome.startsWith('₹') ? lead.expectedIncome : `₹${lead.expectedIncome}`) : '--'}
                       </span>
                     )}
                     {type === 'converted' && (
@@ -741,7 +1076,7 @@ export default function SalesPage() {
                     />
                   ) : (
                     <p 
-                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'remarks' })}
+                      onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'remarks' })}
                       className="text-[12px] text-slate-500 italic max-w-[120px] truncate cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                       title={lead.remarks}
                     >
@@ -754,7 +1089,7 @@ export default function SalesPage() {
                     lead={lead} 
                     onUpdate={fetchLeads} 
                     userId={user?.id} 
-                    userName={user?.name} 
+                    userName={currentUserName} 
                   />
                 </td>
                 <td className="px-6 py-4 text-right">
@@ -790,6 +1125,7 @@ export default function SalesPage() {
       </table>
     </div>
   );
+};
 
   if (permissionsLoading) {
     return (
@@ -898,6 +1234,10 @@ export default function SalesPage() {
             <TabsTrigger value="active" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
               Active Pipeline ({activeLeads.length})
             </TabsTrigger>
+            <TabsTrigger value="hot" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold flex items-center gap-1.5">
+              <Flame className="w-4 h-4 text-orange-500 fill-orange-500" />
+              Hot Leads ({hotLeads.length})
+            </TabsTrigger>
             <TabsTrigger value="converted" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
               Converted Successes ({convertedLeads.length})
             </TabsTrigger>
@@ -951,6 +1291,14 @@ export default function SalesPage() {
               </Card>
             </TabsContent>
 
+            <TabsContent value="hot">
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardContent className="p-0">
+                  <LeadTable data={hotLeads} type="hot" />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="converted">
               <Card className="border-none shadow-sm bg-white overflow-hidden">
                 <CardContent className="p-0">
@@ -977,6 +1325,7 @@ export default function SalesPage() {
                             <SelectContent>
                               <SelectItem value="Monthly">Monthly</SelectItem>
                               <SelectItem value="Weekly">Weekly</SelectItem>
+                              <SelectItem value="Custom">Custom</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -995,50 +1344,84 @@ export default function SalesPage() {
                           </Select>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Month</label>
-                            <Select value={targetForm.month} onValueChange={(val) => setTargetForm({...targetForm, month: val})}>
-                              <SelectTrigger className="h-10 text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                                  <SelectItem key={m} value={m}>{m}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                        {targetForm.type === "Custom" ? (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Start Date</label>
+                              <Input 
+                                type="date" 
+                                className="h-10 text-sm" 
+                                value={targetForm.startDate || ""}
+                                onChange={(e) => setTargetForm({...targetForm, startDate: e.target.value})}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">End Date</label>
+                              <Input 
+                                type="date" 
+                                className="h-10 text-sm" 
+                                value={targetForm.endDate || ""}
+                                onChange={(e) => setTargetForm({...targetForm, endDate: e.target.value})}
+                              />
+                            </div>
                           </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Year</label>
-                            <Input 
-                              type="number" 
-                              className="h-10 text-sm" 
-                              value={targetForm.year} 
-                              onChange={(e) => setTargetForm({...targetForm, year: parseInt(e.target.value)})}
-                            />
-                          </div>
-                        </div>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Month</label>
+                                <Select value={targetForm.month} onValueChange={(val) => setTargetForm({...targetForm, month: val})}>
+                                  <SelectTrigger className="h-10 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Year</label>
+                                <Input 
+                                  type="number" 
+                                  className="h-10 text-sm" 
+                                  value={targetForm.year} 
+                                  onChange={(e) => setTargetForm({...targetForm, year: parseInt(e.target.value)})}
+                                />
+                              </div>
+                            </div>
 
-                        {targetForm.type === "Weekly" && (
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Week Number</label>
-                            <Select value={String(targetForm.week)} onValueChange={(val) => setTargetForm({...targetForm, week: parseInt(val)})}>
-                              <SelectTrigger className="h-10 text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {[1, 2, 3, 4, 5].map(w => (
-                                  <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
+                            {targetForm.type === "Weekly" && (
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Week Number</label>
+                                <Select value={String(targetForm.week)} onValueChange={(val) => setTargetForm({...targetForm, week: parseInt(val)})}>
+                                  <SelectTrigger className="h-10 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {[1, 2, 3, 4, 5].map(w => (
+                                      <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </>
                         )}
 
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                            Target Amount (₹) {targets.some(t => t.employeeId === targetForm.employeeId && t.month === targetForm.month && t.year === targetForm.year && t.type === targetForm.type && (targetForm.type === "Monthly" || t.week === targetForm.week)) && <span className="text-brand-teal ml-1">(Existing)</span>}
+                            Target Amount (₹) {targets.some(t => {
+                              if (t.employeeId !== targetForm.employeeId || t.type !== targetForm.type) return false;
+                              if (targetForm.type === "Custom") {
+                                return t.startDate === targetForm.startDate && t.endDate === targetForm.endDate;
+                              } else if (targetForm.type === "Weekly") {
+                                return t.month === targetForm.month && t.year === targetForm.year && t.week === targetForm.week;
+                              } else {
+                                return t.month === targetForm.month && t.year === targetForm.year;
+                              }
+                            }) && <span className="text-brand-teal ml-1">(Existing)</span>}
                           </label>
                           <Input 
                             type="number" 
@@ -1087,6 +1470,30 @@ export default function SalesPage() {
                                 <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
                                 <Input type="number" step="0.1" value={slabForm.percentage} onChange={e => setSlabForm({...slabForm, percentage: parseFloat(e.target.value) || 0})} />
                               </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] uppercase font-black text-slate-400">Applicable Employees (Leave empty for Global/All)</Label>
+                                <div className="border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto space-y-1.5 bg-slate-50/50">
+                                  {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => {
+                                    const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                                    return (
+                                      <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                                        <input 
+                                          type="checkbox"
+                                          checked={slabForm.employees?.includes(empName)}
+                                          onChange={(e) => {
+                                            const updated = e.target.checked 
+                                              ? [...(slabForm.employees || []), empName] 
+                                              : (slabForm.employees || []).filter(n => n !== empName);
+                                            setSlabForm({...slabForm, employees: updated});
+                                          }}
+                                          className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                        />
+                                        {empName}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                               <Button className="w-full bg-brand-teal text-white font-bold" onClick={handleCreateSlab}>Create Slab</Button>
                             </div>
                           </DialogContent>
@@ -1096,9 +1503,18 @@ export default function SalesPage() {
                         <div className="divide-y divide-slate-100">
                           {incentiveSlabs.map((slab) => (
                             <div key={slab.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50">
-                              <div className="space-y-0.5">
+                              <div className="space-y-1">
                                 <div className="text-sm font-bold text-slate-700">₹{slab.minAmount.toLocaleString()} - ₹{slab.maxAmount.toLocaleString()}</div>
-                                <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
+                                <div className="flex flex-col gap-0.5">
+                                  <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
+                                  <div className="text-[10px] text-slate-400 font-semibold">
+                                    {slab.employees && slab.employees.length > 0 ? (
+                                      <span>Assigned to: {slab.employees.join(", ")}</span>
+                                    ) : (
+                                      <span className="italic text-slate-400">Global fallback (all employees)</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                               <div className="flex items-center gap-1">
                                 <Dialog>
@@ -1107,7 +1523,7 @@ export default function SalesPage() {
                                       variant="ghost" 
                                       size="icon" 
                                       className="h-8 w-8 text-slate-300 hover:text-brand-teal"
-                                      onClick={() => setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage })}
+                                      onClick={() => setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage, employees: slab.employees || [] })}
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </Button>
@@ -1130,6 +1546,30 @@ export default function SalesPage() {
                                       <div className="space-y-1.5">
                                         <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
                                         <Input type="number" step="0.1" value={editSlabForm.percentage} onChange={e => setEditSlabForm({...editSlabForm, percentage: parseFloat(e.target.value) || 0})} />
+                                      </div>
+                                      <div className="space-y-1.5">
+                                        <Label className="text-[10px] uppercase font-black text-slate-400">Applicable Employees (Leave empty for Global/All)</Label>
+                                        <div className="border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto space-y-1.5 bg-slate-50/50">
+                                          {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => {
+                                            const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                                            return (
+                                              <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                                                <input 
+                                                  type="checkbox"
+                                                  checked={editSlabForm.employees?.includes(empName)}
+                                                  onChange={(e) => {
+                                                    const updated = e.target.checked 
+                                                      ? [...(editSlabForm.employees || []), empName] 
+                                                      : (editSlabForm.employees || []).filter(n => n !== empName);
+                                                    setEditSlabForm({...editSlabForm, employees: updated});
+                                                  }}
+                                                  className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                                />
+                                                {empName}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
                                       </div>
                                       <Button className="w-full bg-brand-teal text-white font-bold" onClick={() => handleUpdateSlab(slab.id)}>Save Changes</Button>
                                     </div>
@@ -1170,15 +1610,26 @@ export default function SalesPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {targets.filter(t => canEditSales || t.employeeName === user?.name).length > 0 ? (
+                          {targets.filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase()).length > 0 ? (
                             targets
-                              .filter(t => canEditSales || t.employeeName === user?.name)
+                              .filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
                                 const achieved = leads.filter(l => {
-                                  if (l.status !== "Client Won" || l.assignedTo !== t.employeeName) return false;
+                                  if (l.status !== "Client Won") return false;
+                                  const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+                                  const isAssigned = assignedList.some((name: string) => name.toLowerCase() === t.employeeName?.toLowerCase());
+                                  if (!isAssigned) return false;
                                   const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
                                   
+                                  if (t.type === "Custom") {
+                                    if (!t.startDate || !t.endDate) return false;
+                                    const start = dayjs(t.startDate).startOf('day');
+                                    const end = dayjs(t.endDate).endOf('day');
+                                    return (leadDate.isSame(start, 'day') || leadDate.isAfter(start, 'day')) && 
+                                           (leadDate.isSame(end, 'day') || leadDate.isBefore(end, 'day'));
+                                  }
+
                                   // Month/Year check
                                   const monthMatch = leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
                                   if (!monthMatch) return false;
@@ -1217,14 +1668,26 @@ export default function SalesPage() {
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                      <Badge className={`${t.type === 'Weekly' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'} border-none text-[10px] font-bold`}>
+                                      <Badge className={`${
+                                        t.type === 'Weekly' ? 'bg-amber-100 text-amber-700' : 
+                                        t.type === 'Custom' ? 'bg-emerald-100 text-emerald-700' : 
+                                        'bg-indigo-100 text-indigo-700'
+                                      } border-none text-[10px] font-bold`}>
                                         {t.type}
                                       </Badge>
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                       <div className="flex flex-col items-center">
-                                        <span className="text-[10px] font-bold text-slate-600">{t.month} {t.year}</span>
-                                        {t.type === "Weekly" && <span className="text-[9px] font-black text-brand-teal uppercase">Week {t.week}</span>}
+                                        {t.type === "Custom" ? (
+                                          <span className="text-[10px] font-bold text-slate-600">
+                                            {dayjs(t.startDate).format("DD MMM YYYY")} - {dayjs(t.endDate).format("DD MMM YYYY")}
+                                          </span>
+                                        ) : (
+                                          <>
+                                            <span className="text-[10px] font-bold text-slate-600">{t.month} {t.year}</span>
+                                            {t.type === "Weekly" && <span className="text-[9px] font-black text-brand-teal uppercase">Week {t.week}</span>}
+                                          </>
+                                        )}
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
@@ -1345,8 +1808,11 @@ export default function SalesPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {leads.filter(l => l.status === "Client Won")
-                          .filter(l => reportEmployeeFilter === "all" || l.assignedTo === reportEmployeeFilter)
+                        {visibleLeads.filter(l => l.status === "Client Won")
+                          .filter(l => {
+                            const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+                            return reportEmployeeFilter === "all" || assignedList.some((name: string) => name.toLowerCase() === reportEmployeeFilter.toLowerCase());
+                          })
                           .filter(l => {
                             if (!reportDateFilter) return true;
                             const targetDate = dayjs(reportDateFilter).format('YYYY-MM-DD');
@@ -1368,9 +1834,15 @@ export default function SalesPage() {
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-2">
                                   <div className="w-7 h-7 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[10px] font-bold uppercase">
-                                    {(lead.assignedTo || "??").substring(0, 2)}
+                                    {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 
+                                      ? lead.assignedTo[0].substring(0, 2) 
+                                      : ((lead.assignedTo && typeof lead.assignedTo === 'string' ? lead.assignedTo : "??").substring(0, 2))}
                                   </div>
-                                  <span className="font-bold text-slate-700 text-sm">{lead.assignedTo || "Unassigned"}</span>
+                                  <span className="font-bold text-slate-700 text-sm">
+                                    {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 
+                                      ? lead.assignedTo.join(", ") 
+                                      : (lead.assignedTo || "Unassigned")}
+                                  </span>
                                 </div>
                               </td>
                               <td className="px-6 py-4">
@@ -1384,7 +1856,7 @@ export default function SalesPage() {
                               </td>
                             </tr>
                           ))}
-                        {leads.filter(l => l.status === "Client Won").length === 0 && (
+                        {visibleLeads.filter(l => l.status === "Client Won").length === 0 && (
                           <tr>
                             <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
                               No converted leads found for reporting.
