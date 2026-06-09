@@ -1054,6 +1054,7 @@ class FollowUp(BaseModel):
     date: RobustDate
     note: str
     performedBy: Optional[str] = None
+    nextFollowUpDate: Optional[RobustDate] = None
 
 class LeadBase(BaseModel):
     company: Optional[str] = ""
@@ -1073,6 +1074,7 @@ class LeadBase(BaseModel):
     holdResumeDate: Optional[RobustDate] = None
     createdBy: Optional[str] = None
     createdByUserName: Optional[str] = None
+    nextFollowUpDate: Optional[RobustDate] = None
 
 class LeadCreate(LeadBase):
     performedBy: Optional[str] = None
@@ -1095,6 +1097,8 @@ class LeadUpdate(BaseModel):
     userName: Optional[str] = None
     isHot: Optional[bool] = None
     holdResumeDate: Optional[RobustDate] = None
+    nextFollowUpDate: Optional[RobustDate] = None
+    reason: Optional[str] = None
 
 class Lead(LeadBase):
     id: str

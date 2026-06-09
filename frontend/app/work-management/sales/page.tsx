@@ -57,6 +57,15 @@ import {
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { useConfirm } from "@/context/ConfirmContext";
 
+const STATUS_REASONS: Record<string, string[]> = {
+  "Lead": ["New lead created", "Reopened", "Other"],
+  "Contacted": ["Introductory call completed", "Client responded", "Other"],
+  "Proposal Sent": ["Proposal document ready", "Pricing discussed", "Other"],
+  "On Hold": ["Client request", "Budget constraint", "No contact from client", "Other"],
+  "Client Won": ["Contract signed", "Requirements finalized", "Payment received", "Other"],
+  "Client Loss": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
+};
+
 export default function SalesPage() {
   const { confirm } = useConfirm();
   const { user } = useUser();
@@ -96,6 +105,9 @@ export default function SalesPage() {
   const [leadLogs, setLeadLogs] = useState<any[]>([]);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
+  const [statusChangeData, setStatusChangeData] = useState<{ leadId: string, newStatus: string, keepEditing?: boolean } | null>(null);
+  const [selectedReason, setSelectedReason] = useState("");
+  const [customReason, setCustomReason] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(dayjs().format("MMMM"));
   const [selectedYear, setSelectedYear] = useState(dayjs().year());
   const [targets, setTargets] = useState<any[]>([]);
@@ -393,13 +405,22 @@ export default function SalesPage() {
   };
 
 
-  const handleUpdateStatus = async (leadId: string, newStatus: string) => {
+  const handleStatusChangeSubmit = async () => {
+    if (!statusChangeData) return;
+    const { leadId, newStatus, keepEditing } = statusChangeData;
+    const finalReason = selectedReason === "Other" ? customReason : selectedReason;
+    if (!finalReason.trim()) {
+      toast.error("Please provide a reason for the status change.");
+      return;
+    }
+
     try {
       const res = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: newStatus,
+          reason: finalReason,
           performedBy: user?.id,
           userName: currentUserName
         }),
@@ -408,10 +429,18 @@ export default function SalesPage() {
       if (res.ok) {
         toast.success(`Lead status updated to ${newStatus}`);
         fetchLeads();
+      } else {
+        toast.error(`Update failed: ${res.status}`);
       }
     } catch (err) {
-      console.error("Error updating lead:", err);
-      toast.error("Failed to update status");
+      toast.error("Network error: Could not reach backend");
+    } finally {
+      setStatusChangeData(null);
+      setSelectedReason("");
+      setCustomReason("");
+      if (!keepEditing) {
+        setInlineEditing(null);
+      }
     }
   };
 
@@ -524,6 +553,12 @@ export default function SalesPage() {
                           (l.createdByUserName && l.createdByUserName.toLowerCase() === currentUserName.toLowerCase());
         return isAssigned || isCreator;
       });
+
+  const todayStr = dayjs().format("YYYY-MM-DD");
+  const todayFollowUps = visibleLeads.filter((l: any) => {
+    if (!l.nextFollowUpDate) return false;
+    return dayjs(l.nextFollowUpDate).format("YYYY-MM-DD") === todayStr;
+  });
 
   const activeLeads = visibleLeads.filter(l => {
     const isNotWon = l.status !== "Client Won";
@@ -830,11 +865,12 @@ export default function SalesPage() {
                           defaultValue={lead.status} 
                           defaultOpen={true} 
                           onValueChange={(val) => {
-                            if (val !== "On Hold") {
-                              handleInlineUpdate(lead.id, 'status', val);
-                            } else {
-                              handleInlineUpdate(lead.id, 'status', val, true);
-                            }
+                            if (val === lead.status) return;
+                            setStatusChangeData({
+                              leadId: lead.id,
+                              newStatus: val,
+                              keepEditing: val === "On Hold"
+                            });
                           }}
                         >
                           <SelectTrigger className="h-8 text-xs">
@@ -1085,12 +1121,32 @@ export default function SalesPage() {
                   )}
                 </td>
                 <td className="px-6 py-4">
-                  <FollowUpDialog 
-                    lead={lead} 
-                    onUpdate={fetchLeads} 
-                    userId={user?.id} 
-                    userName={currentUserName} 
-                  />
+                  <div className="flex items-center gap-2">
+                    <FollowUpDialog 
+                      lead={lead} 
+                      onUpdate={fetchLeads} 
+                      userId={user?.id} 
+                      userName={currentUserName} 
+                    />
+                    {lead.nextFollowUpDate && (() => {
+                      const today = dayjs().startOf('day');
+                      const nextDate = dayjs(lead.nextFollowUpDate).startOf('day');
+                      const isDue = today.isSame(nextDate) || today.isAfter(nextDate);
+                      return (
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          {isDue ? (
+                            <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                              Follow-up Due
+                            </Badge>
+                          ) : (
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                              Next: {dayjs(lead.nextFollowUpDate).format("DD MMM")}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex justify-end gap-2">
@@ -1872,6 +1928,50 @@ export default function SalesPage() {
           </>
         )}
       </Tabs>
+
+      <Dialog open={!!statusChangeData} onOpenChange={(open) => { if (!open) setStatusChangeData(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reason for Status Change</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Why did you change the status to {statusChangeData?.newStatus}?</Label>
+              <Select value={selectedReason} onValueChange={(val) => { setSelectedReason(val); if (val !== "Other") setCustomReason(""); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusChangeData?.newStatus && STATUS_REASONS[statusChangeData.newStatus]?.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedReason === "Other" && (
+              <div className="space-y-2">
+                <Label htmlFor="customReason">Specify Reason</Label>
+                <Input 
+                  id="customReason" 
+                  placeholder="Enter custom reason..." 
+                  value={customReason} 
+                  onChange={(e) => setCustomReason(e.target.value)} 
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 border-t pt-4">
+            <Button variant="outline" onClick={() => setStatusChangeData(null)}>Cancel</Button>
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal-light text-white" 
+              onClick={handleStatusChangeSubmit}
+              disabled={!selectedReason || (selectedReason === "Other" && !customReason.trim())}
+            >
+              Confirm
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <ActivityLogDialog 
         open={isLogsDialogOpen}

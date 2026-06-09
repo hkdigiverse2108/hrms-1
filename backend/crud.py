@@ -2873,6 +2873,7 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
     update_data = lead_update.dict(exclude_unset=True)
     performedBy = update_data.pop("performedBy", "Unknown")
     userName = update_data.pop("userName", "Unknown User")
+    reason = update_data.pop("reason", None)
     
     if update_data:
         # If status changed to 'Client Won', set closedDate if not provided
@@ -2893,7 +2894,7 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
         
         # Log the update with detailed changes
         changes = []
-        ALLOWED_LOG_FIELDS = ["company", "contact", "email", "phone", "expectedIncome", "status", "priority", "source", "date", "remarks", "assignedTo", "holdResumeDate"]
+        ALLOWED_LOG_FIELDS = ["company", "contact", "email", "phone", "expectedIncome", "status", "priority", "source", "date", "remarks", "assignedTo", "holdResumeDate", "isHot", "nextFollowUpDate"]
         for key, new_val in update_data.items():
             if key not in ALLOWED_LOG_FIELDS:
                 continue
@@ -2901,15 +2902,26 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
             if old_val != new_val:
                 if key == "holdResumeDate":
                     display_key = "Resume Date"
+                elif key == "nextFollowUpDate":
+                    display_key = "Next Follow-up Date"
+                elif key == "isHot":
+                    display_key = "Hot Status"
                 else:
                     display_key = key.replace("_", " ").title()
+                    
                 if key == "expectedIncome":
                     changes.append(f"{display_key} changed from ₹{old_val or 0} to ₹{new_val}")
+                elif key == "isHot":
+                    old_str = "Yes" if old_val else "No"
+                    new_str = "Yes" if new_val else "No"
+                    changes.append(f"{display_key} changed from '{old_str}' to '{new_str}'")
                 else:
-                    changes.append(f"{display_key} changed from '{old_val or 'None'}' to '{new_val}'")
+                    changes.append(f"{display_key} changed from '{old_val or 'None'}' to '{new_val or 'None'}'")
                     
         if changes:
             details = "; ".join(changes)
+            if reason:
+                details += f" (Reason: {reason})"
             await log_activity(db, "Lead Updated", performedBy, userName, details, leadId=lead_id)
         
         # Trigger recalculation if status is Client Won or assignedTo changed
@@ -2968,16 +2980,27 @@ async def delete_lead(db, lead_id: str):
 
 async def add_lead_follow_up(db, lead_id: str, follow_up: schemas.FollowUp, performedBy: str = "Unknown", userName: str = "Unknown User"):
     follow_up_dict = follow_up.dict()
+    next_follow_up_date = follow_up_dict.get("nextFollowUpDate", None)
     if not follow_up_dict.get("date"):
         follow_up_dict["date"] = get_now().strftime("%Y-%m-%d %H:%M")
         
     await db.leads.update_one(
         {"_id": ObjectId(lead_id)},
-        {"$push": {"followUps": follow_up_dict}}
+        {
+            "$push": {"followUps": follow_up_dict},
+            "$set": {"nextFollowUpDate": next_follow_up_date}
+        }
     )
     
     # Log activity
-    await log_activity(db, "Follow-up Added", performedBy, userName, f"Added follow-up: {follow_up_dict.get('note', 'No notes provided')}", leadId=lead_id)
+    log_detail = f"Added follow-up: {follow_up_dict.get('note', 'No notes provided')}"
+    if next_follow_up_date:
+        try:
+            date_str = next_follow_up_date.strftime("%Y-%m-%d")
+        except AttributeError:
+            date_str = str(next_follow_up_date)
+        log_detail += f" (Next follow-up date: {date_str})"
+    await log_activity(db, "Follow-up Added", performedBy, userName, log_detail, leadId=lead_id)
     
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
