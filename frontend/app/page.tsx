@@ -101,7 +101,6 @@ export default function DashboardPage() {
   const [totalBreakTime, setTotalBreakTime] = useState("0h 0m");
   const [currentTime, setCurrentTime] = useState(getISTNow());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
-  const [isForcedRequest, setIsForcedRequest] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [interns, setInterns] = useState<any[]>([]);
@@ -396,6 +395,16 @@ export default function DashboardPage() {
         // If data has checkIn and no checkOut, it's an active punch-in
         if (data && data.checkIn && data.checkIn !== "--" && data.checkIn !== "--:--" && data.checkOut === null) {
           setAttendanceStatus({ isPunchedIn: true, record: data });
+          
+          // Check for missing punch out from a previous day
+          if (data.date) {
+             const recordDateStr = typeof data.date === 'string' ? data.date.split('T')[0] : dayjs(data.date).format('YYYY-MM-DD');
+             const todayStr = dayjs(getISTNow()).format('YYYY-MM-DD');
+             if (recordDateStr !== todayStr) {
+                setMissingPunchOutDate(new Date(recordDateStr));
+                setIsRequestDialogOpen(true);
+             }
+          }
         } else {
           setAttendanceStatus({ isPunchedIn: false, record: data });
         }
@@ -514,15 +523,17 @@ export default function DashboardPage() {
  
       <RequestPunchOutDialog 
         open={isRequestDialogOpen}
-        onOpenChange={setIsRequestDialogOpen}
+        onOpenChange={(open) => {
+          setIsRequestDialogOpen(open);
+          if (!open) setMissingPunchOutDate(null);
+        }}
         isPunchedIn={attendanceStatus?.isPunchedIn || false}
         punchInTime={formatTime12h(attendanceStatus?.record?.checkIn) || "Not Started"}
         employeeId={user?.id || ""}
         employeeName={user?.name || ""}
-        isForced={isForcedRequest}
-        punchInDate={attendanceStatus?.record?.date}
         onGoToPunchOut={() => {
           setIsRequestDialogOpen(false);
+          setMissingPunchOutDate(null);
           punchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }}
         onSubmitSuccess={() => {
@@ -899,7 +910,7 @@ function EmployeeView({
             <div className="flex items-center gap-4 mb-8">
               <Button 
                 onClick={() => handlePunch(isOnBreak ? 'break-out' : 'break-in')} 
-                disabled={isPunching || !isPunchedIn}
+                disabled={isPunching || !isPunchedIn || !!missingPunchOutDate}
                 variant="outline"
                 className={`flex-1 py-7 text-base font-bold shadow-sm transition-all border-[#F3F4F6] rounded-xl bg-white hover:bg-gray-50 text-[#111827]`}
               >
@@ -910,7 +921,7 @@ function EmployeeView({
               
               <Button 
                 onClick={() => handlePunch(isPunchedIn ? 'punch-out' : 'punch-in')} 
-                disabled={isPunching || isOnBreak}
+                disabled={isPunching || isOnBreak || !!missingPunchOutDate}
                 className={`flex-1 py-7 text-base font-bold shadow-sm transition-all rounded-xl border border-red-100 ${isPunchedIn ? 'bg-[#FEF2F2] hover:bg-red-100 text-red-600' : 'bg-brand-light hover:bg-brand-teal/10 text-brand-teal border-brand-teal/20'}`}
               >
                 {isPunching ? <Loader2 className="w-5 h-5 animate-spin" /> : (
@@ -919,6 +930,13 @@ function EmployeeView({
               </Button>
             </div>
  
+            {missingPunchOutDate && (
+              <div className="bg-amber-50 text-amber-800 p-4 rounded-xl mb-8 border border-amber-200 flex justify-between items-center">
+                <span className="font-medium text-sm">You have a missing punch-out from {missingPunchOutDate.toLocaleDateString()}.</span>
+                <Button variant="outline" size="sm" onClick={() => setIsRequestDialogOpen(true)} className="border-amber-300 text-amber-700 hover:bg-amber-100">Resolve Now</Button>
+              </div>
+            )}
+
             <div className="grid grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
                {[
                  { label: 'First In', value: punchInTime, highlight: false },
