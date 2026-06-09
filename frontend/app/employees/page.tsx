@@ -7,7 +7,7 @@ import autoTable from "jspdf-autotable";
 import { SearchBar } from "@/components/common/SearchBar";
 import { TablePagination } from "@/components/common/TablePagination";
 import { Button } from "@/components/ui/button";
-import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2, Eye, EyeOff, CreditCard } from "lucide-react";
+import { Plus, Download, Pencil, Trash2, MoreVertical, Loader2, Eye, EyeOff, CreditCard, Shield } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Key } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EmployeeModal } from "@/components/hrms/employee-modal";
@@ -54,10 +55,11 @@ export default function EmployeeListPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [viewType, setViewType] = useState<"employees" | "admins">("employees");
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterDept, filterRole, filterStatus]);
+  }, [searchTerm, filterDept, filterRole, filterStatus, viewType]);
 
   const handleExportPDF = async () => {
     setIsExporting(true)
@@ -227,7 +229,16 @@ export default function EmployeeListPage() {
     }
   };
 
+  // Calculate counts for tabs
+  const activeCount = employees.filter(emp => emp.role?.toLowerCase() !== 'admin' && emp.status?.toLowerCase() !== 'inactive').length;
+  const inactiveCount = employees.filter(emp => emp.role?.toLowerCase() !== 'admin' && emp.status?.toLowerCase() === 'inactive').length;
+  const adminCount = employees.filter(emp => emp.role?.toLowerCase() === 'admin').length;
+
   const filteredEmployees = employees.filter(emp => {
+    const isAdminUser = emp.role?.toLowerCase() === 'admin';
+    if (viewType === "employees" && isAdminUser) return false;
+    if (viewType === "admins" && !isAdminUser) return false;
+
     const matchesSearch = 
       emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -237,7 +248,8 @@ export default function EmployeeListPage() {
     const matchesRole = filterRole === "All Roles" || emp.role === filterRole || emp.designation === filterRole;
     const matchesStatus = filterStatus === "Status" || emp.status?.toLowerCase() === filterStatus.toLowerCase();
 
-    return matchesSearch && matchesDept && matchesRole && matchesStatus;
+    // Do not apply active/inactive filter on admin tab, only on regular employees tab
+    return matchesSearch && matchesDept && matchesRole && (viewType === "admins" || matchesStatus);
   });
 
   const paginatedEmployees = filteredEmployees.slice(
@@ -296,8 +308,25 @@ export default function EmployeeListPage() {
       </PageHeader>
 
       <div className="bg-white border border-border rounded-xl shadow-sm">
+        {/* Toggle between Employees and Admins */}
+        <div className="p-4 border-b border-border">
+          <Tabs value={viewType} onValueChange={(val: any) => setViewType(val)} className="w-full sm:w-auto">
+            <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
+              <TabsTrigger value="employees" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white flex items-center justify-center gap-2">
+                Regular Employees
+                <span className="bg-black/10 px-1.5 py-0.5 rounded-full text-[10px] font-bold">{activeCount + inactiveCount}</span>
+              </TabsTrigger>
+              <TabsTrigger value="admins" className="data-[state=active]:bg-amber-500 data-[state=active]:text-white flex items-center justify-center gap-2">
+                <Shield className="w-3.5 h-3.5" />
+                Administrators
+                <span className="bg-black/10 px-1.5 py-0.5 rounded-full text-[10px] font-bold">{adminCount}</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
         {/* Filters and Search */}
-        <div className="p-4 border-b border-border bg-gray-50/30 rounded-t-xl flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="p-4 border-b border-border bg-gray-50/30 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full xl:w-auto">
             <select 
               className="w-full sm:w-auto px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
@@ -327,8 +356,9 @@ export default function EmployeeListPage() {
                   onCheckedChange={(checked) => setFilterStatus(checked ? "inactive" : "active")}
                   className="data-[state=checked]:bg-brand-teal"
                 />
-                <Label htmlFor="status-toggle" className="text-sm font-medium cursor-pointer text-muted-foreground whitespace-nowrap">
+                <Label htmlFor="status-toggle" className="text-sm font-medium cursor-pointer text-muted-foreground whitespace-nowrap flex items-center gap-1.5">
                   Show Inactive
+                  <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full text-[10px] font-bold">{inactiveCount}</span>
                 </Label>
               </div>
             </div>

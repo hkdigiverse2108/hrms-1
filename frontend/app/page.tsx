@@ -546,6 +546,9 @@ export default function DashboardPage() {
  
 function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow }: { user: any, leaves: any[], employees: any[], interns: any[], allAttendance: any[], getISTNow: () => Date }) {
 
+  // Exclude admin employees from attendance-related calculations
+  const nonAdminEmployees = employees?.filter(e => e.role?.toLowerCase() !== 'admin') || [];
+
   const todayStr = dayjs(getISTNow()).format('YYYY-MM-DD');
   const todayAttendance = allAttendance?.filter(a => a.date === todayStr) || [];
   
@@ -553,8 +556,8 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
   const chartData = last7Days.map(date => {
     const dayAttendance = allAttendance?.filter(a => a.date === date) || [];
     const present = dayAttendance.length;
-    // Approximating absent as total employees minus present
-    const totalEmps = employees?.length || 0;
+    // Approximating absent as total non-admin employees minus present
+    const totalEmps = nonAdminEmployees.length;
     const absent = Math.max(0, totalEmps - present);
     return {
       date: dayjs(date).format('MMM DD'),
@@ -563,7 +566,7 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
     };
   });
 
-  const totalEmployeesCount = employees?.length || 0;
+  const totalEmployeesCount = nonAdminEmployees.length;
   const todayAttendanceCount = todayAttendance?.length || 0;
   const onTimeCount = todayAttendance?.filter(a => !a.isLate)?.length || 0;
   const lateCount = todayAttendance?.filter(a => a.isLate)?.length || 0;
