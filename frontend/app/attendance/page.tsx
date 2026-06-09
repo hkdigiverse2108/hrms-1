@@ -103,11 +103,57 @@ export default function AttendancePage() {
     totalBreakTime: "0h 0m"
   });
   const [sysSettings, setSysSettings] = useState<any>(null);
+
+  // Store admin IDs to filter attendance records without extra API calls
+  const adminIdsRef = React.useRef<Set<string>>(new Set());
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch(`${API_URL}/employees`);
+      if (res.ok) {
+        const data = await res.json();
+        // Track admin IDs for filtering attendance
+        adminIdsRef.current = new Set(
+          data.filter((e: any) => e.role?.toLowerCase() === 'admin').map((e: any) => e.id)
+        );
+        // Filter out admin employees - they don't have attendance
+        setAllEmployees(data.filter((e: any) => e.role?.toLowerCase() !== 'admin'));
+      }
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+    }
+  };
+
+  const fetchAttendance = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/attendance`);
+      if (res.ok) {
+        let data = await res.json();
+        
+        if (!canManageAttendance) {
+          data = data.filter((a: any) => a.employeeId === user?.id || a.employeeId === user?.employeeId);
+        }
+
+        // Filter out attendance records belonging to admin employees
+        if (adminIdsRef.current.size > 0) {
+          data = data.filter((a: any) => !adminIdsRef.current.has(a.employeeId));
+        }
+ 
+        data.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setAttendance(data);
+      }
+    } catch (err) {
+      console.error("Error fetching attendance:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
  
   useEffect(() => {
     if (user) {
-      fetchAttendance();
-      fetchEmployees();
+      // Fetch employees first so adminIdsRef is populated before attendance
+      fetchEmployees().then(() => fetchAttendance());
       fetchSysSettings();
       fetchRecoveryRequests();
     }
@@ -156,38 +202,6 @@ export default function AttendancePage() {
       }
     } catch (err) {
       console.error("Error fetching system settings:", err);
-    }
-  };
-
-  const fetchEmployees = async () => {
-    try {
-      const res = await fetch(`${API_URL}/employees`);
-      if (res.ok) {
-        setAllEmployees(await res.json());
-      }
-    } catch (err) {
-      console.error("Error fetching employees:", err);
-    }
-  };
- 
-  const fetchAttendance = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/attendance`);
-      if (res.ok) {
-        let data = await res.json();
-        
-        if (!canManageAttendance) {
-          data = data.filter((a: any) => a.employeeId === user?.id || a.employeeId === user?.employeeId);
-        }
- 
-        data.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setAttendance(data);
-      }
-    } catch (err) {
-      console.error("Error fetching attendance:", err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
