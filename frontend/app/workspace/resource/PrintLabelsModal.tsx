@@ -20,6 +20,12 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [title, setTitle] = useState("Company Resource");
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedCategory("all");
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
@@ -84,9 +90,9 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
     : resources.filter(r => r.category === selectedCategory);
 
   // Use actual resources, if none, use placeholders
-  const displayResources = filteredResources.length > 0 
-    ? filteredResources.map(r => r.assetId || "HK-XXX-000")
-    : ["HK-XXX-001", "HK-XXX-002", "HK-XXX-003"];
+  const displayResources = resources.length === 0 
+    ? ["HK-XXX-001", "HK-XXX-002", "HK-XXX-003"]
+    : filteredResources.map(r => r.assetId || "HK-XXX-000");
 
   // Create pages
   const pages = [];
@@ -134,7 +140,7 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
                 <SelectTrigger className="w-full bg-white">
                   <SelectValue placeholder="Select Page Size" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[150]">
                   <SelectItem value="A4">A4</SelectItem>
                   <SelectItem value="Letter">US Letter</SelectItem>
                 </SelectContent>
@@ -147,7 +153,7 @@ export function PrintLabelsModal({ isOpen, onClose, resources }: PrintLabelsModa
                 <SelectTrigger className="w-full bg-white">
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[150]">
                   <SelectItem value="all">All Categories</SelectItem>
                   {categories.map((cat: any) => (
                     <SelectItem key={cat} value={cat}>{cat}</SelectItem>
