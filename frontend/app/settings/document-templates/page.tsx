@@ -447,24 +447,28 @@ export default function DocumentTemplatesPage() {
                               />
                             </div>
                           )}
+                          
+                          {/* Repeating Letterheads for Page 2+ */}
+                          {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
+                            <div 
+                              key={`lh-${i+1}`}
+                              className="absolute pointer-events-none z-0"
+                              style={{ 
+                                top: `${(i + 1) * 1122.5}px`,
+                                left: '-56.7px',
+                                width: '793.7px'
+                              }}
+                            >
+                              <img 
+                                src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
+                                alt="Company Letterhead" 
+                                className="w-full"
+                                style={{ objectFit: 'contain', objectPosition: 'top' }}
+                              />
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      
-                      {/* Repeating Letterheads for Page 2+ */}
-                      {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
-                        <div 
-                          key={`lh-${i+1}`}
-                          className="absolute left-0 w-full pointer-events-none z-0"
-                          style={{ top: `${(i + 1) * 297}mm` }}
-                        >
-                          <img 
-                            src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
-                            alt="Company Letterhead" 
-                            className="w-full"
-                            style={{ objectFit: 'contain', objectPosition: 'top' }}
-                          />
-                        </div>
-                      ))}
 
                       {/* Page break indicators */}
                       {estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
