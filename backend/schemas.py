@@ -403,6 +403,8 @@ class PayrollBase(BaseModel):
     deductionRemarks: str = ""
     paymentMode: Optional[str] = "Cash"
     chequeNumber: Optional[str] = "-"
+    incentiveDetails: Optional[str] = ""
+    incentiveAmount: Optional[float] = 0.0
 
 class Payroll(PayrollBase):
     id: str

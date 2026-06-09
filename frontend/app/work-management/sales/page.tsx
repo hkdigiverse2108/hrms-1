@@ -132,6 +132,7 @@ export default function SalesPage() {
   });
   const [isSlabDialogOpen, setIsSlabDialogOpen] = useState(false);
   const [editingSlabId, setEditingSlabId] = useState<string | null>(null);
+  const [isEditSlabDialogOpen, setIsEditSlabDialogOpen] = useState(false);
   const [editSlabForm, setEditSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[] }>({
     minAmount: 0,
     maxAmount: 0,
@@ -256,6 +257,7 @@ export default function SalesPage() {
       if (res.ok) {
         toast.success("Slab updated successfully");
         fetchIncentiveSlabs();
+        setIsEditSlabDialogOpen(false);
       } else {
         toast.error("Failed to update slab");
       }
@@ -864,13 +866,35 @@ export default function SalesPage() {
                         <Select 
                           defaultValue={lead.status} 
                           defaultOpen={true} 
-                          onValueChange={(val) => {
+                          onValueChange={async (val) => {
                             if (val === lead.status) return;
-                            setStatusChangeData({
-                              leadId: lead.id,
-                              newStatus: val,
-                              keepEditing: val === "On Hold"
-                            });
+                            if (val === "Client Won") {
+                              try {
+                                const res = await fetch(`${API_URL}/leads/${lead.id}`, {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    status: val,
+                                    performedBy: user?.id,
+                                    userName: currentUserName
+                                  }),
+                                });
+                                if (res.ok) {
+                                  toast.success(`Lead status updated to ${val}`);
+                                  fetchLeads();
+                                } else {
+                                  toast.error(`Update failed: ${res.status}`);
+                                }
+                              } catch (err) {
+                                toast.error("Network error: Could not reach backend");
+                              }
+                            } else {
+                              setStatusChangeData({
+                                leadId: lead.id,
+                                newStatus: val,
+                                keepEditing: val === "On Hold"
+                              });
+                            }
                           }}
                         >
                           <SelectTrigger className="h-8 text-xs">
@@ -1222,25 +1246,7 @@ export default function SalesPage() {
             </Select>
           </div>
 
-          {myTarget && (
-            <div className="hidden sm:flex items-center gap-3 bg-white/50 backdrop-blur-sm border border-slate-200/50 rounded-xl px-4 py-2 shadow-sm">
-              <div className="flex flex-col">
-                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">My {selectedMonth} Target</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-black text-slate-800">₹{myAchievement.toLocaleString()} / ₹{myTarget.targetAmount.toLocaleString()}</span>
-                  <div className="w-12 h-1.5 bg-slate-200/50 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${myProgress >= 100 ? 'bg-emerald-500' : 'bg-brand-teal'} transition-all`} 
-                      style={{ width: `${Math.min(myProgress, 100)}%` }} 
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold ${myProgress >= 100 ? 'bg-emerald-100 text-emerald-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
-                {myProgress.toFixed(0)}%
-              </div>
-            </div>
-          )}
+
 
                   {canAddSales && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -1563,13 +1569,13 @@ export default function SalesPage() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1">
-                                <Dialog>
+                                <Dialog open={isEditSlabDialogOpen && editingSlabId === slab.id} onOpenChange={(open) => { if (!open) { setIsEditSlabDialogOpen(false); setEditingSlabId(null); } }}>
                                   <DialogTrigger asChild>
                                     <Button 
                                       variant="ghost" 
                                       size="icon" 
                                       className="h-8 w-8 text-slate-300 hover:text-brand-teal"
-                                      onClick={() => setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage, employees: slab.employees || [] })}
+                                      onClick={() => { setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage, employees: slab.employees || [] }); setEditingSlabId(slab.id); setIsEditSlabDialogOpen(true); }}
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </Button>

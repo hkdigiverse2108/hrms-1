@@ -141,9 +141,29 @@ export default function PayrollPage() {
     {
       key: 'bonus' as const,
       header: 'Bonus / Incentives',
-      render: (record: Payroll) => (
-        <span className="text-green-600">+{formatCurrency((record.bonus || 0) + (record.allowances || 0))}</span>
-      ),
+      render: (record: Payroll) => {
+        const incentive = record.incentiveAmount ?? 0
+        const adHocBonus = record.bonus ?? 0
+        const total = incentive + adHocBonus
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-green-600 font-medium">+{formatCurrency(total)}</span>
+            {incentive > 0 && (
+              <span 
+                className="text-[10px] text-slate-400 max-w-[180px] truncate cursor-help hover:text-slate-600 transition-colors"
+                title={record.incentiveDetails ? record.incentiveDetails.split('; ').join('\n') : "No details available"}
+              >
+                Incentive: {formatCurrency(incentive)}
+              </span>
+            )}
+            {adHocBonus > 0 && (
+              <span className="text-[10px] text-slate-400">
+                Bonus: {formatCurrency(adHocBonus)}
+              </span>
+            )}
+          </div>
+        )
+      },
     },
     {
       key: 'deductions' as const,

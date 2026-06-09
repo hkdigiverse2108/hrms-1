@@ -922,12 +922,36 @@ async def run_payroll_processing(db, month: str, year: int):
         emp_adjustments = [a for a in adjustments if a["employeeId"] == emp_id and a["status"] == "active"]
         
         # Recalculate Sales Targets to ensure fresh data for payroll
+        try:
+            tgt_month_num = list(calendar.month_name).index(month)
+        except ValueError:
+            tgt_month_map = {m: i for i, m in enumerate(calendar.month_name)}
+            tgt_month_num = tgt_month_map.get(month.capitalize(), 1)
+        _, tgt_num_days = calendar.monthrange(year, tgt_month_num)
+        
+        month_start_str = f"{year}-{tgt_month_num:02d}-01"
+        month_end_str = f"{year}-{tgt_month_num:02d}-{tgt_num_days:02d}"
+
+        emp_obj_id = ObjectId(emp_id) if len(emp_id) == 24 else None
+        emp_query = [emp_id]
+        if emp_obj_id:
+            emp_query.append(emp_obj_id)
+            
         targets_cursor = db.sales_targets.find({
-            "employeeId": emp_id,
-            "month": month,
-            "year": year
+            "employeeId": {"$in": emp_query},
+            "$or": [
+                {
+                    "month": month,
+                    "year": year
+                },
+                {
+                    "type": "Custom",
+                    "startDate": {"$lte": month_end_str},
+                    "endDate": {"$gte": month_start_str}
+                }
+            ]
         })
-        targets = await targets_cursor.to_list(length=10)
+        targets = await targets_cursor.to_list(length=100)
         for t in targets:
             await recalculate_sales_target(
                 db, 
@@ -940,14 +964,52 @@ async def run_payroll_processing(db, month: str, year: int):
                 endDate=t.get("endDate")
             )
 
-        # Fetch Sales Incentive
-        sales_target = await db.sales_targets.find_one({
-            "employeeId": emp_id,
-            "month": month,
-            "year": year,
-            "type": "Monthly" # Usually payroll uses monthly incentive
+        # Fetch Sales Incentives (all targets relevant to this month)
+        updated_targets_cursor = db.sales_targets.find({
+            "employeeId": {"$in": emp_query},
+            "$or": [
+                {
+                    "month": month,
+                    "year": year
+                },
+                {
+                    "type": "Custom",
+                    "startDate": {"$lte": month_end_str},
+                    "endDate": {"$gte": month_start_str}
+                }
+            ]
         })
-        incentive_amount = sales_target.get("incentiveAmount", 0) if sales_target else 0
+        updated_targets = await updated_targets_cursor.to_list(length=100)
+        
+        incentive_amount = 0.0
+        incentive_details_list = []
+        for t in updated_targets:
+            t_inc = t.get("incentiveAmount", 0.0)
+            incentive_amount += t_inc
+            
+            t_type = t.get("type", "Monthly")
+            t_target = t.get("targetAmount", 0.0)
+            t_achieved = t.get("currentAchievement", 0.0)
+            
+            if t_type == "Custom":
+                sd_raw = t.get("startDate", "")
+                ed_raw = t.get("endDate", "")
+                try:
+                    sd_dt = datetime.strptime(sd_raw, "%Y-%m-%d")
+                    ed_dt = datetime.strptime(ed_raw, "%Y-%m-%d")
+                    date_desc = f"{sd_dt.strftime('%d')} to {ed_dt.strftime('%d %b')}"
+                except:
+                    date_desc = f"{sd_raw} to {ed_raw}"
+            elif t_type == "Weekly":
+                date_desc = f"Week {t.get('week')} ({month})"
+            else:
+                date_desc = f"Monthly ({month})"
+                
+            incentive_details_list.append(
+                f"• {date_desc}: Target ₹{int(t_target)}, Achieved ₹{int(t_achieved)} (Incentive: ₹{int(t_inc)})"
+            )
+        
+        incentive_details_str = "; ".join(incentive_details_list)
 
         total_bonus = 0
         total_adhoc_deduction = 0
@@ -1031,13 +1093,15 @@ async def run_payroll_processing(db, month: str, year: int):
             "basicSalary": salary["basic"],
             "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"] + incentive_amount,
             "bonus": total_bonus,
+            "incentiveAmount": round(incentive_amount, 2),
             "deductions": salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + lop_amount + total_adhoc_deduction + penalty_total + deposit_deduction,
             "penalty": penalty_total,
             "securityDeposit": deposit_deduction,
             "returnedDeposit": returned_deposit,
             "netSalary": round(net_salary, 2),
             "status": existing_payroll.get("status", "processed") if existing_payroll else "processed",
-            "deductionRemarks": "; ".join(deduction_details)
+            "deductionRemarks": "; ".join(deduction_details),
+            "incentiveDetails": incentive_details_str
         }
         
         await db.payroll.update_one(
@@ -2927,46 +2991,60 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
         # Trigger recalculation if status is Client Won or assignedTo changed
         if update_data.get("status") == "Client Won" or "assignedTo" in update_data:
             updated_lead = await db.leads.find_one({"_id": oid})
-            emp_name = updated_lead.get("assignedTo")
-            if emp_name:
-                emp = await db.employees.find_one({"name": emp_name})
-                if emp:
-                    ld_str = updated_lead.get("closedDate") or updated_lead.get("date")
-                    try:
-
-                        ld = None
-                        for fmt in ("%b %d, %Y", "%Y-%m-%d", "%d/%m/%Y"):
-                            try: 
-                                if isinstance(ld_str, datetime):
-                                    ld = ld_str
-                                else:
-                                    ld = datetime.strptime(str(ld_str), fmt)
+            assigned_to = updated_lead.get("assignedTo", [])
+            # assignedTo is a list of names
+            if not isinstance(assigned_to, list):
+                assigned_to = [assigned_to] if assigned_to else []
+            
+            for emp_name in assigned_to:
+                if not emp_name:
+                    continue
+                emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name.strip()}$", "$options": "i"}})
+                if not emp:
+                    continue
+                ld_str = updated_lead.get("closedDate") or updated_lead.get("date")
+                try:
+                    ld = None
+                    if isinstance(ld_str, datetime):
+                        ld = ld_str.replace(tzinfo=None)  # strip timezone for safe comparison
+                    elif ld_str:
+                        for fmt in ("%b %d, %Y", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                            try:
+                                ld = datetime.strptime(str(ld_str).strip(), fmt)
                                 break
                             except Exception: continue
-                        
-                        if ld:
-                            month_name = ld.strftime("%B")
-                            week_num = (ld.day - 1) // 7 + 1
-                            # Recalculate Monthly
-                            await recalculate_sales_target(db, str(emp["_id"]), month_name, ld.year, "Monthly")
-                            # Recalculate Weekly
-                            await recalculate_sales_target(db, str(emp["_id"]), month_name, ld.year, "Weekly", week_num)
-                            # Recalculate Custom
-                            custom_targets_cursor = db.sales_targets.find({
-                                "employeeId": str(emp["_id"]),
-                                "type": "Custom"
-                            })
-                            async for t in custom_targets_cursor:
-                                await recalculate_sales_target(
-                                    db,
-                                    str(emp["_id"]),
-                                    t.get("month"),
-                                    t.get("year"),
-                                    "Custom",
-                                    startDate=t.get("startDate"),
-                                    endDate=t.get("endDate")
-                                )
-                    except Exception: pass
+                    
+                    if ld:
+                        month_name = ld.strftime("%B")
+                        week_num = (ld.day - 1) // 7 + 1
+                        emp_id_str = str(emp["_id"])
+                        # Recalculate Monthly
+                        await recalculate_sales_target(db, emp_id_str, month_name, ld.year, "Monthly")
+                        # Recalculate Weekly
+                        await recalculate_sales_target(db, emp_id_str, month_name, ld.year, "Weekly", week_num)
+                        emp_obj_id = ObjectId(emp_id_str) if len(emp_id_str) == 24 else None
+                        emp_query = [emp_id_str]
+                        if emp_obj_id:
+                            emp_query.append(emp_obj_id)
+                            
+                        custom_targets_cursor = db.sales_targets.find({
+                            "employeeId": {"$in": emp_query},
+                            "type": "Custom"
+                        })
+                        async for t in custom_targets_cursor:
+                            await recalculate_sales_target(
+                                db,
+                                emp_id_str,
+                                t.get("month"),
+                                t.get("year"),
+                                "Custom",
+                                startDate=t.get("startDate"),
+                                endDate=t.get("endDate")
+                            )
+                        # Auto-reprocess payroll to update the incentives and totals
+                        await run_payroll_processing(db, month_name, ld.year)
+                except Exception as e:
+                    print(f"Error auto-processing payroll on lead won for {emp_name}: {e}")
         
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
@@ -3892,6 +3970,11 @@ async def get_sales_targets(db, month: Optional[str] = None, year: Optional[int]
 
 async def create_or_update_sales_target(db, target: schemas.SalesTargetCreate):
     target_dict = target.dict()
+    # Ensure employeeId is an ObjectId if valid
+    emp_id = target_dict["employeeId"]
+    if isinstance(emp_id, str) and len(emp_id) == 24:
+        target_dict["employeeId"] = ObjectId(emp_id)
+
     # Unique identifier: employeeId + type + details
     query = {
         "employeeId": target_dict["employeeId"],
@@ -3964,7 +4047,7 @@ async def update_incentive_slab(db, slab_id: str, slab_update: schemas.Incentive
     return fix_id(result)
 
 async def calculate_sales_incentive(db, revenue: float, employee_id: str, employee_name: str):
-    # Fetch slabs assigned to this specific employee
+    # Fetch slabs assigned to this specific employee (match by name)
     cursor = db.incentive_slabs.find({"employees": {"$in": [employee_id, employee_name]}}).sort("minAmount", 1)
     slabs = await cursor.to_list(length=100)
     
@@ -3979,14 +4062,20 @@ async def calculate_sales_incentive(db, revenue: float, employee_id: str, employ
         }).sort("minAmount", 1)
         slabs = await cursor.to_list(length=100)
     
-    # Find the applicable slab (highest percentage where revenue hits the bracket)
-    # Most business logic uses "flat" rate for the bracket reached
+    if not slabs or revenue <= 0:
+        return 0.0
+
+    # Find the applicable slab — exact bracket match first
     applicable_slab = None
     for slab in slabs:
         if revenue >= slab["minAmount"] and revenue <= slab["maxAmount"]:
             applicable_slab = slab
             break
-            
+
+    # If revenue exceeds all slab maxAmounts, use the highest slab
+    if not applicable_slab and revenue > slabs[-1]["minAmount"]:
+        applicable_slab = slabs[-1]
+
     if applicable_slab:
         return round((revenue * applicable_slab["percentage"]) / 100, 2)
     return 0.0
@@ -3995,7 +4084,6 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
     try:
         # 1. Calculate Achievement from Leads
         query = {
-            "assignedTo": None, # Will be filled below
             "status": "Client Won"
         }
         
@@ -4003,7 +4091,7 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
         emp = await get_employee(db, employee_id)
         if not emp: return
         emp_name = emp["name"]
-        query["assignedTo"] = emp_name
+        emp_name_norm = " ".join(emp_name.split()).lower()
 
         cursor = db.leads.find(query)
         all_won_leads = await cursor.to_list(length=1000)
@@ -4011,18 +4099,33 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
         total_achievement = 0.0
         for lead in all_won_leads:
             try:
+                assigned = lead.get("assignedTo", [])
+                if not isinstance(assigned, list):
+                    assigned = [assigned]
+                
+                matched = False
+                for name in assigned:
+                    if name and " ".join(str(name).split()).lower() == emp_name_norm:
+                        matched = True
+                        break
+                if not matched:
+                    continue
+
                 # Parse date and check if it matches period
                 lead_date_str = lead.get("closedDate") or lead.get("date")
                 if not lead_date_str: continue
 
-                # Expected format: "May 08, 2026" or "2026-05-08"
+                # Parse to a timezone-NAIVE datetime for safe comparison
                 ld = None
                 if isinstance(lead_date_str, datetime):
-                    ld = lead_date_str
+                    # MongoDB returns timezone-aware UTC datetimes — strip tz info
+                    ld = lead_date_str.replace(tzinfo=None)
+                elif isinstance(lead_date_str, date) and not isinstance(lead_date_str, datetime):
+                    ld = datetime(lead_date_str.year, lead_date_str.month, lead_date_str.day)
                 else:
-                    for fmt in ("%b %d, %Y", "%Y-%m-%d", "%d/%m/%Y"):
+                    for fmt in ("%b %d, %Y", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
                         try:
-                            ld = datetime.strptime(str(lead_date_str), fmt)
+                            ld = datetime.strptime(str(lead_date_str).strip(), fmt)
                             break
                         except Exception: continue
                 
@@ -4032,10 +4135,8 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
                 if target_type == "Custom":
                     if not startDate or not endDate:
                         continue
-                    sd = datetime.strptime(startDate, "%Y-%m-%d")
-                    ed = datetime.strptime(endDate, "%Y-%m-%d")
-                    sd = sd.replace(hour=0, minute=0, second=0, microsecond=0)
-                    ed = ed.replace(hour=23, minute=59, second=59, microsecond=999999)
+                    sd = datetime.strptime(startDate, "%Y-%m-%d").replace(hour=0, minute=0, second=0, microsecond=0)
+                    ed = datetime.strptime(endDate, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999)
                     if not (sd <= ld <= ed):
                         continue
                 else:
@@ -4062,8 +4163,10 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
         incentive = await calculate_sales_incentive(db, total_achievement, employee_id, emp_name)
         
         # 3. Update Target record
+        emp_obj_id = ObjectId(employee_id) if isinstance(employee_id, str) and len(employee_id) == 24 else employee_id
+        
         target_query = {
-            "employeeId": employee_id,
+            "employeeId": emp_obj_id,
             "type": target_type
         }
         if target_type == "Weekly":
