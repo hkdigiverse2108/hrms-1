@@ -96,6 +96,10 @@ export interface Payroll {
   monthlyLeaveDays: number
   lopDays: number
   deductionRemarks?: string
+  incentiveDetails?: string
+  incentiveAmount?: number
+  paymentMode?: string
+  chequeNumber?: string
 }
 
 export interface JobOpening {
