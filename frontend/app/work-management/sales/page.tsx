@@ -236,9 +236,12 @@ export default function SalesPage() {
         fetchIncentiveSlabs();
         setIsSlabDialogOpen(false);
         setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0, employees: [], clientCategories: [], isRecurring: false });
+      } else {
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to create slab");
       }
     } catch (err) {
-      toast.error("Failed to create slab");
+      toast.error("An error occurred while creating slab");
     }
   };
 
@@ -255,9 +258,12 @@ export default function SalesPage() {
       if (res.ok) {
         toast.success("Slab deleted");
         fetchIncentiveSlabs();
+      } else {
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to delete slab");
       }
     } catch (err) {
-      toast.error("Failed to delete slab");
+      toast.error("An error occurred while deleting slab");
     }
   };
 
@@ -274,7 +280,8 @@ export default function SalesPage() {
         fetchIncentiveSlabs();
         setIsEditSlabDialogOpen(false);
       } else {
-        toast.error("Failed to update slab");
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to update slab");
       }
     } catch (err) {
       console.error(err);
@@ -355,7 +362,8 @@ export default function SalesPage() {
         setIsDialogOpen(false);
         fetchLeads();
       } else {
-        toast.error("Failed to add lead");
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to add lead");
       }
     } catch (err) {
       console.error("Error adding lead:", err);
@@ -437,7 +445,8 @@ export default function SalesPage() {
       });
 
       if (!clientRes.ok) {
-        toast.error("Failed to create client");
+        const errorData = await clientRes.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to create client");
         setIsClientSubmitting(false);
         return;
       }
@@ -459,7 +468,8 @@ export default function SalesPage() {
         fetchLeads();
         setInlineEditing(null);
       } else {
-        toast.error("Client created, but failed to update Lead status");
+        const errorData = await leadRes.json().catch(() => null);
+        toast.error(errorData?.detail || "Client created, but failed to update Lead status");
       }
     } catch (err) {
       console.error("Error creating client:", err);
@@ -524,10 +534,13 @@ export default function SalesPage() {
       if (res.ok) {
         toast.success("Lead deleted");
         fetchLeads();
+      } else {
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to delete lead");
       }
     } catch (err) {
       console.error("Error deleting lead:", err);
-      toast.error("Failed to delete lead");
+      toast.error("An error occurred while deleting lead");
     }
   };
 
@@ -564,7 +577,8 @@ export default function SalesPage() {
         toast.success("Target set successfully");
         fetchTargets();
       } else {
-        toast.error("Failed to set target");
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to set target");
       }
     } catch (err) {
       console.error("Error setting target:", err);
@@ -588,7 +602,8 @@ export default function SalesPage() {
         toast.success(`Incentive of ₹${amount} awarded successfully`);
         fetchTargets();
       } else {
-        toast.error("Failed to award incentive");
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to award incentive");
       }
     } catch (err) {
       console.error("Error awarding incentive:", err);
