@@ -172,7 +172,9 @@ export default function PayrollPage() {
             )}
             {record.incentiveBreakdown && record.incentiveBreakdown.length > 0 && (
               <button 
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
                   setSelectedBreakdown(record.incentiveBreakdown || [])
                   setIsBreakdownOpen(true)
                 }}
@@ -532,7 +534,7 @@ export default function PayrollPage() {
       </div>
 
       <Dialog open={isBreakdownOpen} onOpenChange={setIsBreakdownOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="sm:max-w-3xl max-w-[95vw]">
           <DialogHeader>
             <DialogTitle>Incentive Breakdown</DialogTitle>
           </DialogHeader>
