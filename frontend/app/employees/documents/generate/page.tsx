@@ -911,11 +911,12 @@ export default function DocumentGeneratorPage() {
 
             <CardContent className="p-8 flex-1 overflow-y-auto scrollbar-hide">
               {previewContent ? (
-                <div className="mx-auto relative" style={{ width: '210mm' }}>
+                <div className="mx-auto relative" style={{ width: '794px' }}>
                   <div className="ql-container ql-snow border-none !font-sans">
                     <div 
                       ref={previewRef}
-                      className={`document-preview bg-white shadow-xl shadow-slate-200/50 min-h-[297mm] p-[15mm] transition-all relative border border-slate-100 ${isEditing ? 'ring-2 ring-amber-400 cursor-text shadow-2xl' : ''}`}
+                      className={`document-preview bg-white shadow-xl shadow-slate-200/50 p-[15mm] transition-all relative border border-slate-100 ${isEditing ? 'ring-2 ring-amber-400 cursor-text shadow-2xl' : ''}`}
+                      style={{ minHeight: '1123px' }}
                     >
                       {systemSettings?.companyLetterheadUrl && (
                         <div className="-mt-[15mm] -mx-[15mm] mb-[10mm]">
