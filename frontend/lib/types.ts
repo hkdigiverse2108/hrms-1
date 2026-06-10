@@ -98,6 +98,7 @@ export interface Payroll {
   deductionRemarks?: string
   incentiveDetails?: string
   incentiveAmount?: number
+  incentiveBreakdown?: any[]
   paymentMode?: string
   chequeNumber?: string
 }

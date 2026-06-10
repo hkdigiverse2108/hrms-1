@@ -405,6 +405,7 @@ class PayrollBase(BaseModel):
     chequeNumber: Optional[str] = "-"
     incentiveDetails: Optional[str] = ""
     incentiveAmount: Optional[float] = 0.0
+    incentiveBreakdown: Optional[List[dict]] = []
 
 class Payroll(PayrollBase):
     id: str
@@ -1424,6 +1425,8 @@ class IncentiveSlabBase(BaseModel):
     maxAmount: float
     percentage: float
     employees: Optional[List[str]] = []
+    clientCategories: Optional[List[str]] = []
+    isRecurring: Optional[bool] = False
 
 class IncentiveSlabCreate(IncentiveSlabBase):
     pass
@@ -1433,6 +1436,8 @@ class IncentiveSlabUpdate(BaseModel):
     maxAmount: Optional[float] = None
     percentage: Optional[float] = None
     employees: Optional[List[str]] = None
+    clientCategories: Optional[List[str]] = None
+    isRecurring: Optional[bool] = None
 
 class IncentiveSlab(IncentiveSlabBase):
     id: str
@@ -1450,6 +1455,7 @@ class SalesTargetBase(BaseModel):
     targetAmount: float = 0
     currentAchievement: float = 0
     incentiveAmount: float = 0
+    breakdown: Optional[List[dict]] = []
 
 class SalesTargetCreate(SalesTargetBase):
     pass

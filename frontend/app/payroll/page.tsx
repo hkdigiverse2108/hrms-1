@@ -19,7 +19,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { IndianRupee, Users, CheckCircle, Clock, MoreHorizontal, Eye, FileText, Download, Play, Loader2 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { IndianRupee, Users, CheckCircle, Clock, MoreHorizontal, Eye, FileText, Download, Play, Loader2, BarChart2 } from 'lucide-react'
 import { API_URL } from '@/lib/config'
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from 'sonner'
@@ -34,6 +40,9 @@ export default function PayrollPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState('May')
   const [selectedYear, setSelectedYear] = useState('2026')
+  
+  const [isBreakdownOpen, setIsBreakdownOpen] = useState(false)
+  const [selectedBreakdown, setSelectedBreakdown] = useState<any[]>([])
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -160,6 +169,18 @@ export default function PayrollPage() {
               <span className="text-[10px] text-slate-400">
                 Bonus: {formatCurrency(adHocBonus)}
               </span>
+            )}
+            {record.incentiveBreakdown && record.incentiveBreakdown.length > 0 && (
+              <button 
+                onClick={() => {
+                  setSelectedBreakdown(record.incentiveBreakdown || [])
+                  setIsBreakdownOpen(true)
+                }}
+                className="flex items-center gap-1 text-[10px] text-brand-teal mt-1 hover:underline text-left w-max"
+              >
+                <BarChart2 className="w-3 h-3" />
+                View Breakdown
+              </button>
             )}
           </div>
         )
@@ -509,6 +530,63 @@ export default function PayrollPage() {
           }}
         />
       </div>
+
+      <Dialog open={isBreakdownOpen} onOpenChange={setIsBreakdownOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Incentive Breakdown</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {selectedBreakdown.length > 0 ? (
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Client / Invoice</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Category</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Type</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Invoice Value</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Slab %</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Earned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedBreakdown.map((item, idx) => (
+                      <tr key={idx} className="border-b last:border-0 hover:bg-slate-50/50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium">{item.clientName}</p>
+                          {item.invoiceNumber && <p className="text-[10px] text-slate-400">{item.invoiceNumber}</p>}
+                        </td>
+                        <td className="px-4 py-3">{item.category}</td>
+                        <td className="px-4 py-3">
+                          {item.isRecurring ? (
+                            <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded text-[10px] font-bold">Recurring</span>
+                          ) : (
+                            <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">First-time</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(item.subtotal || 0)}</td>
+                        <td className="px-4 py-3 text-right font-medium">{item.slabPercentage}%</td>
+                        <td className="px-4 py-3 text-right text-brand-teal font-bold">{formatCurrency(item.earnedIncentive || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50 border-t">
+                    <tr>
+                      <td colSpan={5} className="px-4 py-3 text-right font-bold text-slate-700">Total Incentive:</td>
+                      <td className="px-4 py-3 text-right font-bold text-brand-teal text-base">
+                        {formatCurrency(selectedBreakdown.reduce((sum, item) => sum + (item.earnedIncentive || 0), 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 text-center py-8">No breakdown data available.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

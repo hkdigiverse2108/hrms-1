@@ -24,7 +24,8 @@ import {
   Pencil,
   History as HistoryIcon,
   Flame,
-  X
+  X,
+  BarChart2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { API_URL } from "@/lib/config";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { LeadForm, LeadFormData } from "@/components/hrms/LeadForm";
+import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
 import { FollowUpDialog } from "@/components/hrms/FollowUpDialog";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -97,6 +99,10 @@ export default function SalesPage() {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [inlineEditing, setInlineEditing] = useState<{ id: string, field: string } | null>(null);
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [clientFormData, setClientFormData] = useState<Partial<ClientFormData> | null>(null);
+  const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
+  const [isClientSubmitting, setIsClientSubmitting] = useState(false);
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [reportEmployeeFilter, setReportEmployeeFilter] = useState("all");
@@ -124,21 +130,30 @@ export default function SalesPage() {
     targetAmount: 0
   });
 
-  const [slabForm, setSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[] }>({
+  const [slabForm, setSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[]; clientCategories: string[]; isRecurring: boolean }>({
     minAmount: 0,
     maxAmount: 0,
     percentage: 0,
-    employees: []
+    employees: [],
+    clientCategories: [],
+    isRecurring: false
   });
   const [isSlabDialogOpen, setIsSlabDialogOpen] = useState(false);
   const [editingSlabId, setEditingSlabId] = useState<string | null>(null);
   const [isEditSlabDialogOpen, setIsEditSlabDialogOpen] = useState(false);
-  const [editSlabForm, setEditSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[] }>({
+  const [editSlabForm, setEditSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[]; clientCategories: string[]; isRecurring: boolean }>({
     minAmount: 0,
     maxAmount: 0,
     percentage: 0,
-    employees: []
+    employees: [],
+    clientCategories: [],
+    isRecurring: false
   });
+  const [slabTab, setSlabTab] = useState<"global" | "employee">("global");
+  const [selectedSlabEmployee, setSelectedSlabEmployee] = useState<string>("");
+
+  const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
+  const [selectedBreakdown, setSelectedBreakdown] = useState<any[]>([]);
 
   const fetchTargets = async () => {
     try {
@@ -220,7 +235,7 @@ export default function SalesPage() {
         toast.success("Slab created successfully");
         fetchIncentiveSlabs();
         setIsSlabDialogOpen(false);
-        setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0, employees: [] });
+        setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0, employees: [], clientCategories: [], isRecurring: false });
       }
     } catch (err) {
       toast.error("Failed to create slab");
@@ -406,6 +421,53 @@ export default function SalesPage() {
     }
   };
 
+
+  const handleClientSubmit = async (data: ClientFormData) => {
+    if (!convertingLeadId) return;
+    setIsClientSubmitting(true);
+    try {
+      const clientRes = await fetch(`${API_URL}/clients`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          performedBy: user?.id,
+          userName: currentUserName
+        })
+      });
+
+      if (!clientRes.ok) {
+        toast.error("Failed to create client");
+        setIsClientSubmitting(false);
+        return;
+      }
+
+      const leadRes = await fetch(`${API_URL}/leads/${convertingLeadId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "Client Won",
+          closedDate: dayjs().format("YYYY-MM-DD"),
+          performedBy: user?.id,
+          userName: currentUserName
+        }),
+      });
+
+      if (leadRes.ok) {
+        toast.success("Client generated and Lead marked as Won");
+        setClientDialogOpen(false);
+        fetchLeads();
+        setInlineEditing(null);
+      } else {
+        toast.error("Client created, but failed to update Lead status");
+      }
+    } catch (err) {
+      console.error("Error creating client:", err);
+      toast.error("An error occurred while creating client");
+    } finally {
+      setIsClientSubmitting(false);
+    }
+  };
 
   const handleStatusChangeSubmit = async () => {
     if (!statusChangeData) return;
@@ -869,25 +931,16 @@ export default function SalesPage() {
                           onValueChange={async (val) => {
                             if (val === lead.status) return;
                             if (val === "Client Won") {
-                              try {
-                                const res = await fetch(`${API_URL}/leads/${lead.id}`, {
-                                  method: "PUT",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    status: val,
-                                    performedBy: user?.id,
-                                    userName: currentUserName
-                                  }),
-                                });
-                                if (res.ok) {
-                                  toast.success(`Lead status updated to ${val}`);
-                                  fetchLeads();
-                                } else {
-                                  toast.error(`Update failed: ${res.status}`);
-                                }
-                              } catch (err) {
-                                toast.error("Network error: Could not reach backend");
-                              }
+                              setClientFormData({
+                                companyName: lead.company || lead.contact,
+                                name: lead.contact,
+                                phone: lead.phone || "",
+                                email: lead.email || "",
+                                remarks: lead.remarks || "",
+                                department: "Sales",
+                              });
+                              setConvertingLeadId(lead.id);
+                              setClientDialogOpen(true);
                             } else {
                               setStatusChangeData({
                                 leadId: lead.id,
@@ -1495,145 +1548,251 @@ export default function SalesPage() {
                     </Card>
 
                     <Card className="border-none shadow-sm bg-white overflow-hidden">
-                      <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
-                        <CardTitle className="text-sm font-bold text-slate-700">Incentive Slabs</CardTitle>
-                        <Dialog open={isSlabDialogOpen} onOpenChange={setIsSlabDialogOpen}>
-                          <DialogTrigger asChild>
-                            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold text-brand-teal border-brand-teal/20 hover:bg-brand-teal/5">
-                              <Plus className="w-3 h-3 mr-1" /> Add Slab
-                            </Button>
-                          </DialogTrigger>
+                      <CardHeader className="border-b border-slate-100 flex flex-col items-start space-y-3 pb-3">
+                        <div className="flex flex-row items-center justify-between w-full">
+                          <CardTitle className="text-sm font-bold text-slate-700">Incentive Slabs</CardTitle>
+                          <Dialog open={isSlabDialogOpen} onOpenChange={setIsSlabDialogOpen}>
+                            <DialogTrigger asChild>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="h-7 text-[10px] font-bold text-brand-teal border-brand-teal/20 hover:bg-brand-teal/5"
+                                onClick={(e) => {
+                                  if (slabTab === "employee" && !selectedSlabEmployee) {
+                                    e.preventDefault();
+                                    toast.error("Please select an employee first");
+                                    return;
+                                  }
+                                  setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0, employees: slabTab === "employee" ? [selectedSlabEmployee] : [], clientCategories: [], isRecurring: false });
+                                }}
+                              >
+                                <Plus className="w-3 h-3 mr-1" /> Add Slab
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-sm">
+                              <DialogHeader>
+                                <DialogTitle>{slabTab === "global" ? "Add Common Slab" : `Add Slab for ${selectedSlabEmployee}`}</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1.5">
+                                    <Label className="text-[10px] uppercase font-black text-slate-400">Min Amount (₹)</Label>
+                                    <Input type="number" value={slabForm.minAmount} onChange={e => setSlabForm({...slabForm, minAmount: parseFloat(e.target.value) || 0})} />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <Label className="text-[10px] uppercase font-black text-slate-400">Max Amount (₹)</Label>
+                                    <Input type="number" value={slabForm.maxAmount} onChange={e => setSlabForm({...slabForm, maxAmount: parseFloat(e.target.value) || 0})} />
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
+                                  <Input type="number" step="0.1" value={slabForm.percentage} onChange={e => setSlabForm({...slabForm, percentage: parseFloat(e.target.value) || 0})} />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] uppercase font-black text-slate-400">Client Categories (Leave empty for All)</Label>
+                                  <div className="flex flex-wrap gap-2 pt-1 border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto bg-slate-50/50">
+                                    {['Marketing', 'Development', 'Graphics'].map(cat => (
+                                      <label key={cat} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
+                                        <input 
+                                          type="checkbox"
+                                          checked={slabForm.clientCategories?.includes(cat)}
+                                          onChange={(e) => {
+                                            const updated = e.target.checked 
+                                              ? [...(slabForm.clientCategories || []), cat] 
+                                              : (slabForm.clientCategories || []).filter(c => c !== cat);
+                                            setSlabForm({...slabForm, clientCategories: updated});
+                                          }}
+                                          className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                        />
+                                        {cat}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5 flex flex-row items-center gap-2 pt-2">
+                                  <input 
+                                    type="checkbox" 
+                                    id="isRecurring"
+                                    checked={slabForm.isRecurring} 
+                                    onChange={e => setSlabForm({...slabForm, isRecurring: e.target.checked})}
+                                    className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-4 h-4"
+                                  />
+                                  <Label htmlFor="isRecurring" className="text-xs font-bold text-slate-600 cursor-pointer">This is a Recurring Slab</Label>
+                                </div>
+                                <Button className="w-full bg-brand-teal text-white font-bold" onClick={handleCreateSlab}>Create Slab</Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                        <Tabs value={slabTab} onValueChange={(v) => setSlabTab(v as "global" | "employee")} className="w-full">
+                          <TabsList className="w-full grid grid-cols-2 h-8">
+                            <TabsTrigger value="global" className="text-xs">Common Slabs</TabsTrigger>
+                            <TabsTrigger value="employee" className="text-xs">Employee Wise</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <Dialog open={isEditSlabDialogOpen} onOpenChange={setIsEditSlabDialogOpen}>
                           <DialogContent className="max-w-sm">
                             <DialogHeader>
-                              <DialogTitle>Add Incentive Slab</DialogTitle>
+                              <DialogTitle>Edit Incentive Slab</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 py-4">
                               <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
                                   <Label className="text-[10px] uppercase font-black text-slate-400">Min Amount (₹)</Label>
-                                  <Input type="number" value={slabForm.minAmount} onChange={e => setSlabForm({...slabForm, minAmount: parseFloat(e.target.value) || 0})} />
+                                  <Input type="number" value={editSlabForm.minAmount} onChange={e => setEditSlabForm({...editSlabForm, minAmount: parseFloat(e.target.value) || 0})} />
                                 </div>
                                 <div className="space-y-1.5">
                                   <Label className="text-[10px] uppercase font-black text-slate-400">Max Amount (₹)</Label>
-                                  <Input type="number" value={slabForm.maxAmount} onChange={e => setSlabForm({...slabForm, maxAmount: parseFloat(e.target.value) || 0})} />
+                                  <Input type="number" value={editSlabForm.maxAmount} onChange={e => setEditSlabForm({...editSlabForm, maxAmount: parseFloat(e.target.value) || 0})} />
                                 </div>
                               </div>
                               <div className="space-y-1.5">
                                 <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
-                                <Input type="number" step="0.1" value={slabForm.percentage} onChange={e => setSlabForm({...slabForm, percentage: parseFloat(e.target.value) || 0})} />
+                                <Input type="number" step="0.1" value={editSlabForm.percentage} onChange={e => setEditSlabForm({...editSlabForm, percentage: parseFloat(e.target.value) || 0})} />
                               </div>
                               <div className="space-y-1.5">
-                                <Label className="text-[10px] uppercase font-black text-slate-400">Applicable Employees (Leave empty for Global/All)</Label>
-                                <div className="border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto space-y-1.5 bg-slate-50/50">
-                                  {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => {
-                                    const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
-                                    return (
-                                      <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
-                                        <input 
-                                          type="checkbox"
-                                          checked={slabForm.employees?.includes(empName)}
-                                          onChange={(e) => {
-                                            const updated = e.target.checked 
-                                              ? [...(slabForm.employees || []), empName] 
-                                              : (slabForm.employees || []).filter(n => n !== empName);
-                                            setSlabForm({...slabForm, employees: updated});
-                                          }}
-                                          className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
-                                        />
-                                        {empName}
-                                      </label>
-                                    );
-                                  })}
+                                <Label className="text-[10px] uppercase font-black text-slate-400">Client Categories (Leave empty for All)</Label>
+                                <div className="flex flex-wrap gap-2 pt-1 border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto bg-slate-50/50">
+                                  {['Marketing', 'Development', 'Graphics'].map(cat => (
+                                    <label key={cat} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
+                                      <input 
+                                        type="checkbox"
+                                        checked={editSlabForm.clientCategories?.includes(cat)}
+                                        onChange={(e) => {
+                                          const updated = e.target.checked 
+                                            ? [...(editSlabForm.clientCategories || []), cat] 
+                                            : (editSlabForm.clientCategories || []).filter(c => c !== cat);
+                                          setEditSlabForm({...editSlabForm, clientCategories: updated});
+                                        }}
+                                        className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                      />
+                                      {cat}
+                                    </label>
+                                  ))}
                                 </div>
                               </div>
-                              <Button className="w-full bg-brand-teal text-white font-bold" onClick={handleCreateSlab}>Create Slab</Button>
+                              <div className="space-y-1.5 flex flex-row items-center gap-2 pt-2">
+                                <input 
+                                  type="checkbox" 
+                                  id="editIsRecurring"
+                                  checked={editSlabForm.isRecurring} 
+                                  onChange={e => setEditSlabForm({...editSlabForm, isRecurring: e.target.checked})}
+                                  className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-4 h-4"
+                                />
+                                <Label htmlFor="editIsRecurring" className="text-xs font-bold text-slate-600 cursor-pointer">This is a Recurring Slab</Label>
+                              </div>
+                              <Button className="w-full bg-brand-teal text-white font-bold" onClick={() => editingSlabId && handleUpdateSlab(editingSlabId)}>Save Changes</Button>
                             </div>
                           </DialogContent>
                         </Dialog>
-                      </CardHeader>
-                      <CardContent className="p-0">
+
                         <div className="divide-y divide-slate-100">
-                          {incentiveSlabs.map((slab) => (
-                            <div key={slab.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50">
-                              <div className="space-y-1">
-                                <div className="text-sm font-bold text-slate-700">₹{slab.minAmount.toLocaleString()} - ₹{slab.maxAmount.toLocaleString()}</div>
-                                <div className="flex flex-col gap-0.5">
-                                  <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
-                                  <div className="text-[10px] text-slate-400 font-semibold">
-                                    {slab.employees && slab.employees.length > 0 ? (
-                                      <span>Assigned to: {slab.employees.join(", ")}</span>
-                                    ) : (
-                                      <span className="italic text-slate-400">Global fallback (all employees)</span>
-                                    )}
+                          {slabTab === "global" && (
+                            incentiveSlabs.filter(s => !s.employees || s.employees.length === 0).length === 0 ? (
+                              <div className="p-6 text-center text-xs text-slate-400 italic">No common slabs configured</div>
+                            ) : (
+                              incentiveSlabs.filter(s => !s.employees || s.employees.length === 0).map(slab => (
+                                <div key={slab.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-sm font-bold text-slate-700">₹{slab.minAmount.toLocaleString()} - ₹{slab.maxAmount.toLocaleString()}</div>
+                                      {slab.isRecurring ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 uppercase tracking-widest">Recurring</span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 uppercase tracking-widest">Standard</span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
+                                    <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                      {slab.clientCategories && slab.clientCategories.length > 0 
+                                        ? `Categories: ${slab.clientCategories.join(", ")}` 
+                                        : 'All Categories'}
+                                    </div>
                                   </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Dialog open={isEditSlabDialogOpen && editingSlabId === slab.id} onOpenChange={(open) => { if (!open) { setIsEditSlabDialogOpen(false); setEditingSlabId(null); } }}>
-                                  <DialogTrigger asChild>
+                                  <div className="flex items-center gap-1">
                                     <Button 
                                       variant="ghost" 
                                       size="icon" 
                                       className="h-8 w-8 text-slate-300 hover:text-brand-teal"
-                                      onClick={() => { setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage, employees: slab.employees || [] }); setEditingSlabId(slab.id); setIsEditSlabDialogOpen(true); }}
+                                      onClick={() => { setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage, employees: slab.employees || [], clientCategories: slab.clientCategories || [], isRecurring: slab.isRecurring || false }); setEditingSlabId(slab.id); setIsEditSlabDialogOpen(true); }}
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </Button>
-                                  </DialogTrigger>
-                                  <DialogContent className="max-w-sm">
-                                    <DialogHeader>
-                                      <DialogTitle>Edit Incentive Slab</DialogTitle>
-                                    </DialogHeader>
-                                    <div className="space-y-4 py-4">
-                                      <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] uppercase font-black text-slate-400">Min Amount (₹)</Label>
-                                          <Input type="number" value={editSlabForm.minAmount} onChange={e => setEditSlabForm({...editSlabForm, minAmount: parseFloat(e.target.value) || 0})} />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] uppercase font-black text-slate-400">Max Amount (₹)</Label>
-                                          <Input type="number" value={editSlabForm.maxAmount} onChange={e => setEditSlabForm({...editSlabForm, maxAmount: parseFloat(e.target.value) || 0})} />
-                                        </div>
-                                      </div>
-                                      <div className="space-y-1.5">
-                                        <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
-                                        <Input type="number" step="0.1" value={editSlabForm.percentage} onChange={e => setEditSlabForm({...editSlabForm, percentage: parseFloat(e.target.value) || 0})} />
-                                      </div>
-                                      <div className="space-y-1.5">
-                                        <Label className="text-[10px] uppercase font-black text-slate-400">Applicable Employees (Leave empty for Global/All)</Label>
-                                        <div className="border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto space-y-1.5 bg-slate-50/50">
-                                          {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => {
-                                            const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
-                                            return (
-                                              <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
-                                                <input 
-                                                  type="checkbox"
-                                                  checked={editSlabForm.employees?.includes(empName)}
-                                                  onChange={(e) => {
-                                                    const updated = e.target.checked 
-                                                      ? [...(editSlabForm.employees || []), empName] 
-                                                      : (editSlabForm.employees || []).filter(n => n !== empName);
-                                                    setEditSlabForm({...editSlabForm, employees: updated});
-                                                  }}
-                                                  className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
-                                                />
-                                                {empName}
-                                              </label>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                      <Button className="w-full bg-brand-teal text-white font-bold" onClick={() => handleUpdateSlab(slab.id)}>Save Changes</Button>
-                                    </div>
-                                  </DialogContent>
-                                </Dialog>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-rose-500" onClick={() => handleDeleteSlab(slab.id)}>
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-rose-500" onClick={() => handleDeleteSlab(slab.id)}>
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            )
+                          )}
+
+                          {slabTab === "employee" && (
+                            <div className="p-3">
+                              <div className="space-y-1.5 mb-3">
+                                <Label className="text-[10px] uppercase font-black text-slate-400">Select Salesperson</Label>
+                                <Select value={selectedSlabEmployee} onValueChange={setSelectedSlabEmployee}>
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Choose an employee..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => {
+                                      const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                                      return <SelectItem key={emp.id} value={empName}>{empName}</SelectItem>
+                                    })}
+                                  </SelectContent>
+                                </Select>
                               </div>
+                              
+                              {selectedSlabEmployee ? (
+                                <div className="border border-slate-100 rounded-lg overflow-hidden divide-y divide-slate-100">
+                                  {incentiveSlabs.filter(s => s.employees && s.employees.includes(selectedSlabEmployee)).length === 0 ? (
+                                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-50/50">No custom slabs for this employee. Common slabs will apply.</div>
+                                  ) : (
+                                    incentiveSlabs.filter(s => s.employees && s.employees.includes(selectedSlabEmployee)).map(slab => (
+                                      <div key={slab.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50 bg-white">
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className="text-sm font-bold text-slate-700">₹{slab.minAmount.toLocaleString()} - ₹{slab.maxAmount.toLocaleString()}</div>
+                                            {slab.isRecurring ? (
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 uppercase tracking-widest">Recurring</span>
+                                            ) : (
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 uppercase tracking-widest">Standard</span>
+                                            )}
+                                          </div>
+                                          <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
+                                          <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                            {slab.clientCategories && slab.clientCategories.length > 0 
+                                              ? `Categories: ${slab.clientCategories.join(", ")}` 
+                                              : 'All Categories'}
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-8 w-8 text-slate-300 hover:text-brand-teal"
+                                            onClick={() => { setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage, employees: slab.employees || [], clientCategories: slab.clientCategories || [], isRecurring: slab.isRecurring || false }); setEditingSlabId(slab.id); setIsEditSlabDialogOpen(true); }}
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </Button>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-rose-500" onClick={() => handleDeleteSlab(slab.id)}>
+                                            <Trash2 className="w-4 h-4" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="p-6 text-center text-xs text-slate-400 italic border border-slate-100 rounded-lg bg-slate-50/50">
+                                  Select an employee to view or add their custom slabs
+                                </div>
+                              )}
                             </div>
-                          ))}
-                          {incentiveSlabs.length === 0 && <div className="p-6 text-center text-xs text-slate-400 italic">No slabs configured</div>}
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -1752,6 +1911,18 @@ export default function SalesPage() {
                                       <div className="flex flex-col items-end">
                                         <span className="font-bold text-indigo-600 text-sm">₹{earnedIncentive.toLocaleString()}</span>
                                         {t.incentiveAmount === 0 && earnedIncentive > 0 && <span className="text-[8px] font-black text-slate-400 uppercase italic">Estimated</span>}
+                                        {t.breakdown && t.breakdown.length > 0 && (
+                                          <button 
+                                            onClick={() => {
+                                              setSelectedBreakdown(t.breakdown || [])
+                                              setIsBreakdownOpen(true)
+                                            }}
+                                            className="flex items-center gap-1 text-[10px] text-brand-teal mt-1 hover:underline text-right w-max"
+                                          >
+                                            <BarChart2 className="w-3 h-3" />
+                                            View Breakdown
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
@@ -1969,6 +2140,21 @@ export default function SalesPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="px-6 py-4 border-b border-slate-100 shrink-0">
+            <DialogTitle>Generate Client Details</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <ClientForm
+              initialData={clientFormData || undefined}
+              onSubmit={handleClientSubmit}
+              isSubmitting={isClientSubmitting}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <ActivityLogDialog 
         open={isLogsDialogOpen}
         onOpenChange={setIsLogsDialogOpen}
@@ -1977,6 +2163,69 @@ export default function SalesPage() {
         logs={leadLogs}
         isLoading={isLogsLoading}
       />
+
+      <Dialog open={isBreakdownOpen} onOpenChange={setIsBreakdownOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Incentive Breakdown</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {selectedBreakdown.length > 0 ? (
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Client / Invoice</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Category</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Type</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Invoice Value</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Slab %</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Earned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedBreakdown.map((item, idx) => (
+                      <tr key={idx} className="border-b last:border-0 hover:bg-slate-50/50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium">{item.clientName}</p>
+                          {item.invoiceNumber && <p className="text-[10px] text-slate-400">{item.invoiceNumber}</p>}
+                        </td>
+                        <td className="px-4 py-3">{item.category}</td>
+                        <td className="px-4 py-3">
+                          {item.isRecurring ? (
+                            <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded text-[10px] font-bold">Recurring</span>
+                          ) : (
+                            <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">First-time</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.subtotal || 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium">{item.slabPercentage}%</td>
+                        <td className="px-4 py-3 text-right text-brand-teal font-bold">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.earnedIncentive || 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50 border-t">
+                    <tr>
+                      <td colSpan={5} className="px-4 py-3 text-right font-bold text-slate-700">Total Incentive:</td>
+                      <td className="px-4 py-3 text-right font-bold text-brand-teal text-base">
+                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(
+                          selectedBreakdown.reduce((sum, item) => sum + (item.earnedIncentive || 0), 0)
+                        )}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 text-center py-8">No breakdown data available.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
