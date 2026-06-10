@@ -10,16 +10,16 @@ import { SidebarNav } from "./SidebarNav";
 import { useUser } from "@/hooks/useUser";
 import { useChatContext } from "@/context/ChatContext";
 import { useAppEvent } from "@/hooks/useAppEvent";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { Check, Eye } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { Check, Eye, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 
 dayjs.extend(relativeTime);
@@ -29,6 +29,7 @@ const { Header: AntHeader } = Layout;
  
 export function Header() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isLoading } = useUser();
   const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -109,6 +110,47 @@ export function Header() {
     }
   }, [unreadChatCount]);
 
+  const isSalesSection = pathname === "/work-management/sales" || pathname?.includes("/work-management/sales");
+  const [todayFollowUpCount, setTodayFollowUpCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.id && isSalesSection) {
+      const fetchTodayFollowUps = async () => {
+        try {
+          const res = await fetch(`${API_URL}/leads`);
+          if (res.ok) {
+            const data = await res.json();
+            const todayStr = dayjs().format("YYYY-MM-DD");
+            const currentUserName = (user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`).trim();
+            const isAdmin = user?.role === "Admin" || user?.role === "SuperAdmin";
+            
+            const visibleLeads = isAdmin 
+              ? data 
+              : data.filter((l: any) => {
+                  const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+                  const isAssigned = assignedList.some((name: string) => name.toLowerCase() === currentUserName.toLowerCase());
+                  const isCreator = l.createdBy === user?.id || 
+                                    (l.createdByUserName && l.createdByUserName.toLowerCase() === currentUserName.toLowerCase());
+                  return isAssigned || isCreator;
+                });
+
+            const todayFollowUps = visibleLeads.filter((l: any) => {
+              if (!l.nextFollowUpDate) return false;
+              return dayjs(l.nextFollowUpDate).format("YYYY-MM-DD") === todayStr;
+            });
+
+            setTodayFollowUpCount(todayFollowUps.length);
+          }
+        } catch (err) {
+          console.error("Error fetching leads for header alert:", err);
+        }
+      };
+      fetchTodayFollowUps();
+    } else if (!isSalesSection && todayFollowUpCount > 0) {
+      setTodayFollowUpCount(0);
+    }
+  }, [user?.id, user?.name, user?.firstName, user?.lastName, user?.role, isSalesSection]);
+
   const markAsRead = async (id: string) => {
     try {
       const res = await fetch(`${API_URL}/notifications/${id}/read`, { method: 'PUT' });
@@ -132,257 +174,72 @@ export function Header() {
   };
  
   return (
-    <AntHeader 
-      className="bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-10 w-full mb-6"
-      style={{ height: '64px', padding: '0 24px', lineHeight: '64px', background: '#fff' }}
-    >
-      {/* Left - Search & Mobile Menu */}
-      <div className="flex-1 max-w-md flex items-center gap-4 h-full">
-        <Sheet>
-          <SheetTrigger asChild>
-            <button className="p-2 lg:hidden border border-border rounded-md hover:bg-muted transition-colors flex items-center justify-center">
-              <Menu className="w-5 h-5 text-foreground" />
-            </button>
-          </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-64">
-            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-            <SidebarNav />
-          </SheetContent>
-        </Sheet>
-      </div>
- 
-      {/* Right - Profile & Actions */}
-      <div className="flex items-center gap-4 h-full">
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">
-              <Bell className="w-4 h-4 text-muted-foreground" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white font-bold">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 p-0 shadow-xl border-border" align="end">
-            <div className="p-4 border-b border-border flex items-center justify-between bg-gray-50/50 rounded-t-lg">
-              <h3 className="font-bold text-sm">Notifications</h3>
-              {unreadCount > 0 && <span className="text-[10px] bg-brand-teal/10 text-brand-teal px-2 py-0.5 rounded-full font-medium">{unreadCount} New</span>}
-            </div>
-            <ScrollArea className="h-[350px]">
-              {notifications.length === 0 ? (
-                <div className="p-10 text-center flex flex-col items-center gap-2">
-                  <div className="bg-gray-100 p-3 rounded-full">
-                    <Bell className="w-6 h-6 text-gray-400" />
-                  </div>
-                  <p className="text-sm text-muted-foreground">No notifications yet</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {notifications.map((n) => (
-                    <div 
-                      key={n.id} 
-                      className={`p-4 hover:bg-gray-50 transition-colors relative group ${!n.is_read ? 'bg-brand-light/10' : ''}`}
-                    >
-                      {!n.is_read && <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-brand-teal rounded-full" />}
-                      <div className="flex flex-col gap-1 pl-2">
-                        <div className="flex justify-between items-start">
-                          <span className="font-semibold text-xs text-foreground">{n.title}</span>
-                          <span className="text-[10px] text-muted-foreground">{getFromNow(n.created_at)}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{n.message}</p>
-                        
-                        <div className="flex items-center gap-2 mt-1">
-                          <button 
-                            onClick={() => {
-                              if (n.type === 'leave') {
-                                const isPersonal = n.title !== "New Leave Request";
-                                const route = isPersonal ? '/leave' : '/employees/leave';
-                                router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
-                              } else if (n.type === 'document') {
-                                router.push('/employees/documents');
-                              } else if (n.type === 'attendance') {
-                                router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
-                              } else if (n.type === 'recruitment') {
-                                router.push('/recruitment');
-                              }
-                              markAsRead(n.id);
-                            }}
-                            className="flex items-center gap-1 text-[10px] font-bold text-brand-teal hover:bg-brand-teal/10 px-2 py-1 rounded transition-colors"
-                          >
-                            <Eye className="w-3 h-3" />
-                            View
-                          </button>
-                          {!n.is_read && (
-                            <button 
-                              onClick={() => markAsRead(n.id)}
-                              className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:bg-gray-200 px-2 py-1 rounded transition-colors"
-                            >
-                              <Check className="w-3 h-3" />
-                              Mark as Read
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-            <div className="p-3 border-t border-border text-center flex justify-center">
-              <button 
-                onClick={markAllAsRead} 
-                disabled={unreadCount === 0}
-                className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-brand-teal hover:underline disabled:text-muted-foreground disabled:no-underline disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                <Check className="w-3.5 h-3.5" />
-                Mark all read
+    <>
+      <AntHeader 
+        className={`bg-white border-b border-border flex items-center justify-between px-6 sticky top-0 z-10 w-full ${
+          (isSalesSection && todayFollowUpCount > 0) ? "mb-0" : "mb-6"
+        }`}
+        style={{ height: '64px', padding: '0 24px', lineHeight: '64px', background: '#fff' }}
+      >
+        {/* Left - Search & Mobile Menu */}
+        <div className="flex-1 max-w-md flex items-center gap-4 h-full">
+          <Sheet>
+            <SheetTrigger asChild>
+              <button className="p-2 lg:hidden border border-border rounded-md hover:bg-muted transition-colors flex items-center justify-center">
+                <Menu className="w-5 h-5 text-foreground" />
               </button>
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        <Link href="/chat" className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">
-          <MessageSquare className="w-4 h-4 text-muted-foreground" />
-          {unreadChatCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 text-white text-[9px] flex items-center justify-center rounded-full border-2 border-white font-bold animate-pulse">
-              {unreadChatCount > 9 ? '9+' : unreadChatCount}
-            </span>
-          )}
-        </Link>
-        
-        <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
-          <div className="flex items-center gap-3">
-            <Avatar className="w-8 h-8">
-              <AvatarImage 
-                src={getAvatarUrl(user?.profilePhoto, userName)} 
-                alt={userName} 
-              />
-              <AvatarFallback>{showUserInfo ? initials : ""}</AvatarFallback>
-            </Avatar>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-64">
+              <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+              <SidebarNav />
+            </SheetContent>
+          </Sheet>
+        </div>
  
-            <div className="hidden md:flex flex-col text-sm leading-tight min-w-[100px]">
-              {showUserInfo ? (
-                <>
-                  <span className="font-medium text-foreground">{userName}</span>
-                  <span className="text-xs text-muted-foreground">{designation}</span>
-                </>
-              ) : (
-                <div className="space-y-1">
-                  <div className="h-3 w-20 bg-gray-100 animate-pulse rounded"></div>
-                  <div className="h-2 w-16 bg-gray-50 animate-pulse rounded"></div>
-                </div>
-              )}
-            </div>
-          </div>
-        </Link>
-        <button 
-          onClick={handleLogout}
-          className="ml-2 p-1.5 text-muted-foreground hover:text-brand-danger hover:bg-red-50 rounded-md transition-colors"
-          title="Log out"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
-      </div>
-
-      <Dialog open={isNotificationsModalOpen} onOpenChange={setIsNotificationsModalOpen}>
-        <DialogContent className="sm:max-w-[550px] max-h-[85vh] flex flex-col p-0 overflow-hidden bg-white border border-border rounded-xl shadow-2xl">
-          <DialogHeader className="p-6 pb-4 border-b border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle className="text-lg font-bold text-foreground">Notifications Center</DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  Stay updated with your latest activities, requests, and system alerts.
-                </DialogDescription>
+        {/* Right - Profile & Actions */}
+        <div className="flex items-center gap-4 h-full">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">
+                <Bell className="w-4 h-4 text-muted-foreground" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white font-bold">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0 shadow-xl border-border" align="end">
+              <div className="p-4 border-b border-border flex items-center justify-between bg-gray-50/50 rounded-t-lg">
+                <h3 className="font-bold text-sm">Notifications</h3>
+                {unreadCount > 0 && <span className="text-[10px] bg-brand-teal/10 text-brand-teal px-2 py-0.5 rounded-full font-medium">{unreadCount} New</span>}
               </div>
-              {unreadCount > 0 && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={markAllAsRead} 
-                  className="text-xs border-brand-teal text-brand-teal hover:bg-brand-light flex items-center gap-1.5 h-8 font-medium"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  Mark all as read
-                </Button>
-              )}
-            </div>
-            {/* Tabs for All vs Unread */}
-            <div className="flex gap-2 mt-4 border-b border-border pb-1">
-              <button 
-                onClick={() => setActiveTab("all")}
-                className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-all ${activeTab === 'all' ? 'border-brand-teal text-brand-teal' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-              >
-                All Notifications ({notifications.length})
-              </button>
-              <button 
-                onClick={() => setActiveTab("unread")}
-                className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-all ${activeTab === 'unread' ? 'border-brand-teal text-brand-teal' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-              >
-                Unread ({unreadCount})
-              </button>
-            </div>
-          </DialogHeader>
-
-          <ScrollArea className="flex-1 overflow-y-auto px-6 max-h-[50vh]">
-            {(() => {
-              const displayed = activeTab === "unread" 
-                ? notifications.filter(n => !n.is_read)
-                : notifications;
-              
-              if (displayed.length === 0) {
-                return (
-                  <div className="py-16 text-center flex flex-col items-center justify-center gap-3">
-                    <div className="bg-brand-light/50 p-4 rounded-full text-brand-teal">
-                      <Bell className="w-8 h-8" />
+              <ScrollArea className="h-[350px]">
+                {notifications.length === 0 ? (
+                  <div className="p-10 text-center flex flex-col items-center gap-2">
+                    <div className="bg-gray-100 p-3 rounded-full">
+                      <Bell className="w-6 h-6 text-gray-400" />
                     </div>
-                    <div>
-                      <p className="font-semibold text-foreground text-sm">No notifications found</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">You're all caught up!</p>
-                    </div>
+                    <p className="text-sm text-muted-foreground">No notifications yet</p>
                   </div>
-                );
-              }
-
-              return (
-                <div className="divide-y divide-border">
-                  {displayed.map((n) => {
-                    const isUnread = !n.is_read;
-                    // Determine icon based on notification type
-                    let iconBg = "bg-blue-50 text-blue-600";
-                    if (n.type === 'leave') {
-                      iconBg = "bg-amber-50 text-amber-600";
-                    } else if (n.type === 'attendance') {
-                      iconBg = "bg-emerald-50 text-emerald-600";
-                    }
-
-                    return (
+                ) : (
+                  <div className="divide-y divide-border">
+                    {notifications.map((n) => (
                       <div 
                         key={n.id} 
-                        className={`py-4 flex gap-4 transition-colors relative group ${isUnread ? 'bg-brand-light/5' : ''}`}
+                        className={`p-4 hover:bg-gray-50 transition-colors relative group ${!n.is_read ? 'bg-brand-light/10' : ''}`}
                       >
-                        {isUnread && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-brand-teal rounded-full" />}
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
-                          <Bell className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start gap-2">
-                            <span className={`font-semibold text-sm text-foreground block truncate ${isUnread ? 'text-brand-teal font-bold' : ''}`}>
-                              {n.title}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground whitespace-nowrap pt-0.5">
-                              {getFromNow(n.created_at)}
-                            </span>
+                        {!n.is_read && <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-brand-teal rounded-full" />}
+                        <div className="flex flex-col gap-1 pl-2">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-xs text-foreground">{n.title}</span>
+                            <span className="text-[10px] text-muted-foreground">{getFromNow(n.created_at)}</span>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed break-words">{n.message}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{n.message}</p>
                           
-                          <div className="flex items-center gap-3 mt-3">
-                            <Button 
-                              size="sm"
-                              variant="outline"
+                          <div className="flex items-center gap-2 mt-1">
+                            <button 
                               onClick={() => {
-                                setIsNotificationsModalOpen(false);
                                 if (n.type === 'leave') {
                                   const isPersonal = n.title !== "New Leave Request";
                                   const route = isPersonal ? '/leave' : '/employees/leave';
@@ -396,39 +253,239 @@ export function Header() {
                                 }
                                 markAsRead(n.id);
                               }}
-                              className="h-7 px-2.5 text-[10px] font-bold border-brand-teal text-brand-teal hover:bg-brand-light"
+                              className="flex items-center gap-1 text-[10px] font-bold text-brand-teal hover:bg-brand-teal/10 px-2 py-1 rounded transition-colors"
                             >
-                              <Eye className="w-3.5 h-3.5 mr-1" />
-                              View Details
-                            </Button>
-                            {isUnread && (
-                              <Button 
-                                size="sm"
-                                variant="ghost"
+                              <Eye className="w-3 h-3" />
+                              View
+                            </button>
+                            {!n.is_read && (
+                              <button 
                                 onClick={() => markAsRead(n.id)}
-                                className="h-7 px-2.5 text-[10px] font-bold text-muted-foreground hover:bg-gray-100 hover:text-foreground"
+                                className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:bg-gray-200 px-2 py-1 rounded transition-colors"
                               >
-                                <Check className="w-3.5 h-3.5 mr-1" />
+                                <Check className="w-3 h-3" />
                                 Mark as Read
-                              </Button>
+                              </button>
                             )}
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
+  
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+              <div className="p-3 border-t border-border text-center flex justify-center">
+                <button 
+                  onClick={markAllAsRead} 
+                  disabled={unreadCount === 0}
+                  className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-brand-teal hover:underline disabled:text-muted-foreground disabled:no-underline disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Mark all read
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+  
+          <Link href="/chat" className="flex items-center justify-center p-2 border border-border rounded-full hover:bg-muted transition-colors relative">
+            <MessageSquare className="w-4 h-4 text-muted-foreground" />
+            {unreadChatCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 text-white text-[9px] flex items-center justify-center rounded-full border-2 border-white font-bold animate-pulse">
+                {unreadChatCount > 9 ? '9+' : unreadChatCount}
+              </span>
+            )}
+          </Link>
+          
+          <Link href="/profile" className="flex items-center gap-3 ml-2 border-l border-border pl-6 px-2 py-1 h-10 my-auto hover:bg-muted rounded-md transition-colors">
+            <div className="flex items-center gap-3">
+              <Avatar className="w-8 h-8">
+                <AvatarImage 
+                  src={getAvatarUrl(user?.profilePhoto, userName)} 
+                  alt={userName} 
+                />
+                <AvatarFallback>{showUserInfo ? initials : ""}</AvatarFallback>
+              </Avatar>
+   
+              <div className="hidden md:flex flex-col text-sm leading-tight min-w-[100px]">
+                {showUserInfo ? (
+                  <>
+                    <span className="font-medium text-foreground">{userName}</span>
+                    <span className="text-xs text-muted-foreground">{designation}</span>
+                  </>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="h-3 w-20 bg-gray-100 animate-pulse rounded"></div>
+                    <div className="h-2 w-16 bg-gray-50 animate-pulse rounded"></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Link>
+          <button 
+            onClick={handleLogout}
+            className="ml-2 p-1.5 text-muted-foreground hover:text-brand-danger hover:bg-red-50 rounded-md transition-colors"
+            title="Log out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+  
+        <Dialog open={isNotificationsModalOpen} onOpenChange={setIsNotificationsModalOpen}>
+          <DialogContent className="sm:max-w-[550px] max-h-[85vh] flex flex-col p-0 overflow-hidden bg-white border border-border rounded-xl shadow-2xl">
+            <DialogHeader className="p-6 pb-4 border-b border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle className="text-lg font-bold text-foreground">Notifications Center</DialogTitle>
+                  <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                    Stay updated with your latest activities, requests, and system alerts.
+                  </DialogDescription>
                 </div>
-              );
-            })()}
-          </ScrollArea>
-
-          <div className="p-4 border-t border-border bg-gray-50/50 flex justify-end">
-            <Button variant="outline" size="sm" onClick={() => setIsNotificationsModalOpen(false)} className="text-xs font-semibold">
-              Close Notifications
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </AntHeader>
+                {unreadCount > 0 && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={markAllAsRead} 
+                    className="text-xs border-brand-teal text-brand-teal hover:bg-brand-light flex items-center gap-1.5 h-8 font-medium"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Mark all as read
+                  </Button>
+                )}
+              </div>
+              {/* Tabs for All vs Unread */}
+              <div className="flex gap-2 mt-4 border-b border-border pb-1">
+                <button 
+                  onClick={() => setActiveTab("all")}
+                  className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-all ${activeTab === 'all' ? 'border-brand-teal text-brand-teal' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                >
+                  All Notifications ({notifications.length})
+                </button>
+                <button 
+                  onClick={() => setActiveTab("unread")}
+                  className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-all ${activeTab === 'unread' ? 'border-brand-teal text-brand-teal' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                >
+                  Unread ({unreadCount})
+                </button>
+              </div>
+            </DialogHeader>
+  
+            <ScrollArea className="flex-1 overflow-y-auto px-6 max-h-[50vh]">
+              {(() => {
+                const displayed = activeTab === "unread" 
+                  ? notifications.filter(n => !n.is_read)
+                  : notifications;
+                
+                if (displayed.length === 0) {
+                  return (
+                    <div className="py-16 text-center flex flex-col items-center justify-center gap-3">
+                      <div className="bg-brand-light/50 p-4 rounded-full text-brand-teal">
+                        <Bell className="w-8 h-8" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground text-sm">No notifications found</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">You're all caught up!</p>
+                      </div>
+                    </div>
+                  );
+                }
+  
+                return (
+                  <div className="divide-y divide-border">
+                    {displayed.map((n) => {
+                      const isUnread = !n.is_read;
+                      // Determine icon based on notification type
+                      let iconBg = "bg-blue-50 text-blue-600";
+                      if (n.type === 'leave') {
+                        iconBg = "bg-amber-50 text-amber-600";
+                      } else if (n.type === 'attendance') {
+                        iconBg = "bg-emerald-50 text-emerald-600";
+                      }
+  
+                      return (
+                        <div 
+                          key={n.id} 
+                          className={`py-4 flex gap-4 transition-colors relative group ${isUnread ? 'bg-brand-light/5' : ''}`}
+                        >
+                          {isUnread && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-brand-teal rounded-full" />}
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
+                            <Bell className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start gap-2">
+                              <span className={`font-semibold text-sm text-foreground block truncate ${isUnread ? 'text-brand-teal font-bold' : ''}`}>
+                                {n.title}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground whitespace-nowrap pt-0.5">
+                                {getFromNow(n.created_at)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed break-words">{n.message}</p>
+                            
+                            <div className="flex items-center gap-3 mt-3">
+                              <Button 
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setIsNotificationsModalOpen(false);
+                                  if (n.type === 'leave') {
+                                    const isPersonal = n.title !== "New Leave Request";
+                                    const route = isPersonal ? '/leave' : '/employees/leave';
+                                    router.push(n.reference_id ? `${route}?id=${n.reference_id}` : route);
+                                  } else if (n.type === 'document') {
+                                    router.push('/employees/documents');
+                                  } else if (n.type === 'attendance') {
+                                    router.push(user?.role === 'Employee' ? '/attendance' : '/employees/attendance');
+                                  } else if (n.type === 'recruitment') {
+                                    router.push('/recruitment');
+                                  }
+                                  markAsRead(n.id);
+                                }}
+                                className="h-7 px-2.5 text-[10px] font-bold border-brand-teal text-brand-teal hover:bg-brand-light"
+                              >
+                                <Eye className="w-3.5 h-3.5 mr-1" />
+                                View Details
+                              </Button>
+                              {isUnread && (
+                                <Button 
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => markAsRead(n.id)}
+                                  className="h-7 px-2.5 text-[10px] font-bold text-muted-foreground hover:bg-gray-100 hover:text-foreground"
+                                >
+                                  <Check className="w-3.5 h-3.5 mr-1" />
+                                  Mark as Read
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </ScrollArea>
+  
+            <div className="p-4 border-t border-border bg-gray-50/50 flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setIsNotificationsModalOpen(false)} className="text-xs font-semibold">
+                Close Notifications
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </AntHeader>
+      
+      {/* Full-width System Notice Alert Banner */}
+      {isSalesSection && todayFollowUpCount > 0 && (
+        <div className="w-full bg-amber-50 border-b border-amber-200 py-2.5 px-6 flex items-center gap-2 text-amber-800 animate-pulse mb-6">
+          <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
+          <span className="text-xs font-medium">
+            <strong className="font-bold text-amber-950 mr-1.5">Follow-up Reminder:</strong> 
+            You have {todayFollowUpCount} lead{todayFollowUpCount > 1 ? "s" : ""} due for a follow-up today. Please check your dashboard actions.
+          </span>
+        </div>
+      )}
+    </>
   );
 }

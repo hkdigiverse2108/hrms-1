@@ -298,8 +298,13 @@ export default function DocumentGeneratorPage() {
       const nodeHeight = Math.max(1123, clone.scrollHeight) // 1123px is A4 height
       container.style.height = `${nodeHeight}px`
       clone.style.height = `${nodeHeight}px`
+      
+      // Make repeating letterheads fully opaque for the PDF
+      clone.querySelectorAll('.repeating-letterhead').forEach(el => {
+        el.classList.remove('opacity-30')
+      })
 
-      const scale = 1.5
+      const scale = 1
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
@@ -428,8 +433,13 @@ export default function DocumentGeneratorPage() {
       const nodeHeight = Math.max(1123, clone.scrollHeight) // 1123px is A4 height
       container.style.height = `${nodeHeight}px`
       clone.style.height = `${nodeHeight}px`
+      
+      // Make repeating letterheads fully opaque for the PDF
+      clone.querySelectorAll('.repeating-letterhead').forEach(el => {
+        el.classList.remove('opacity-30')
+      })
 
-      const scale = 1.5
+      const scale = 1
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
@@ -911,11 +921,12 @@ export default function DocumentGeneratorPage() {
 
             <CardContent className="p-8 flex-1 overflow-y-auto scrollbar-hide">
               {previewContent ? (
-                <div className="mx-auto relative" style={{ width: '210mm' }}>
+                <div className="mx-auto relative" style={{ width: '794px' }}>
                   <div className="ql-container ql-snow border-none !font-sans">
                     <div 
                       ref={previewRef}
-                      className={`document-preview bg-white shadow-xl shadow-slate-200/50 min-h-[297mm] p-[15mm] transition-all relative border border-slate-100 ${isEditing ? 'ring-2 ring-amber-400 cursor-text shadow-2xl' : ''}`}
+                      className={`document-preview bg-white shadow-xl shadow-slate-200/50 p-[15mm] transition-all relative border border-slate-100 ${isEditing ? 'ring-2 ring-amber-400 cursor-text shadow-2xl' : ''}`}
+                      style={{ minHeight: '1123px' }}
                     >
                       {systemSettings?.companyLetterheadUrl && (
                         <div className="-mt-[15mm] -mx-[15mm] mb-[10mm]">
@@ -939,34 +950,37 @@ export default function DocumentGeneratorPage() {
                           }}
                         />
                       </div>
+                      
+                      {/* Repeating Letterheads for Page 2+ */}
+                      {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
+                        <div 
+                          key={`lh-${i+1}`}
+                          className="absolute left-0 w-full pointer-events-none z-0 repeating-letterhead opacity-30 transition-opacity"
+                          style={{ 
+                            top: `${(i + 1) * 1122.5}px`
+                          }}
+                        >
+                          <img 
+                            src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
+                            alt="Company Letterhead" 
+                            className="w-full"
+                            style={{ objectFit: 'contain', objectPosition: 'top' }}
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  
-                  {/* Repeating Letterheads for Page 2+ */}
-                  {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
-                    <div 
-                      key={`lh-${i+1}`}
-                      className="absolute left-0 w-full pointer-events-none z-0"
-                      style={{ top: `${(i + 1) * 297}mm` }}
-                    >
-                      <img 
-                        src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
-                        alt="Company Letterhead" 
-                        className="w-full"
-                        style={{ objectFit: 'contain', objectPosition: 'top' }}
-                      />
-                    </div>
-                  ))}
 
                   {/* Page break indicators */}
                   {estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
                     <div 
                       key={`pb-${i}`}
-                      className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex items-center justify-center opacity-70 z-50"
-                      style={{ top: `${(i + 1) * 297}mm` }}
+                      className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex flex-col items-center justify-start opacity-70 z-50"
+                      style={{ top: `${(i + 1) * 1122.5}px`, height: '100px' }}
                     >
-                      <span className="bg-red-50 text-red-500 font-bold text-[10px] px-2 py-0.5 rounded-full absolute -top-2.5 shadow-sm border border-red-200">
-                        Page {i + 2} Break
+                      <span className="bg-red-50 text-red-500 font-bold text-[10px] px-3 py-1 rounded-full shadow-sm border border-red-200 mt-2 text-center">
+                        Page {i + 2} Starts Here<br/>
+                        <span className="font-normal opacity-80">(Hit Enter to push text below letterhead)</span>
                       </span>
                     </div>
                   ))}

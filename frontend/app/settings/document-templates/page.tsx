@@ -414,9 +414,9 @@ export default function DocumentTemplatesPage() {
                   </div>
                   
                   <div className="bg-slate-50 rounded-xl p-8 border border-slate-200 overflow-hidden flex justify-center">
-                    <div className="relative" style={{ width: '210mm' }}>
+                    <div className="relative" style={{ width: '794px' }}>
                       <div className="ql-container ql-snow border-none !font-sans">
-                        <div ref={previewRef} className="bg-white shadow-xl shadow-slate-200/50 min-h-[297mm] p-[15mm] transition-all relative border border-slate-100">
+                        <div ref={previewRef} className="bg-white shadow-xl shadow-slate-200/50 p-[15mm] transition-all relative border border-slate-100" style={{ minHeight: '1123px' }}>
                           {systemSettings?.companyLetterheadUrl && (
                             <div className="-mt-[15mm] -mx-[15mm] mb-[10mm]">
                               <img 
@@ -447,34 +447,37 @@ export default function DocumentTemplatesPage() {
                               />
                             </div>
                           )}
+                          
+                          {/* Repeating Letterheads for Page 2+ */}
+                          {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
+                            <div 
+                              key={`lh-${i+1}`}
+                              className="absolute left-0 w-full pointer-events-none z-0 repeating-letterhead opacity-30 transition-opacity"
+                              style={{ 
+                                top: `${(i + 1) * 1122.5}px`
+                              }}
+                            >
+                              <img 
+                                src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
+                                alt="Company Letterhead" 
+                                className="w-full"
+                                style={{ objectFit: 'contain', objectPosition: 'top' }}
+                              />
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      
-                      {/* Repeating Letterheads for Page 2+ */}
-                      {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
-                        <div 
-                          key={`lh-${i+1}`}
-                          className="absolute left-0 w-full pointer-events-none z-0"
-                          style={{ top: `${(i + 1) * 297}mm` }}
-                        >
-                          <img 
-                            src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
-                            alt="Company Letterhead" 
-                            className="w-full"
-                            style={{ objectFit: 'contain', objectPosition: 'top' }}
-                          />
-                        </div>
-                      ))}
 
                       {/* Page break indicators */}
                       {estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
                         <div 
                           key={`pb-${i}`}
-                          className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex items-center justify-center opacity-70 z-50"
-                          style={{ top: `${(i + 1) * 297}mm` }}
+                          className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex flex-col items-center justify-start opacity-70 z-50"
+                          style={{ top: `${(i + 1) * 1122.5}px`, height: '100px' }}
                         >
-                          <span className="bg-red-50 text-red-500 font-bold text-[10px] px-2 py-0.5 rounded-full absolute -top-2.5 shadow-sm border border-red-200">
-                            Page {i + 2} Break
+                          <span className="bg-red-50 text-red-500 font-bold text-[10px] px-3 py-1 rounded-full shadow-sm border border-red-200 mt-2 text-center">
+                            Page {i + 2} Starts Here<br/>
+                            <span className="font-normal opacity-80">(Hit Enter to push text below letterhead)</span>
                           </span>
                         </div>
                       ))}
