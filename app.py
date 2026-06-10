@@ -63,10 +63,12 @@ def kill_port_owner(port):
             # Linux/macOS
             cmd = f"lsof -t -i:{port}"
             try:
-                pid = subprocess.check_output(cmd, shell=True).decode().strip()
-                if pid:
-                    print(f"Cleaning up port {port} (PID: {pid})...")
-                    subprocess.run(f"kill -9 {pid}", shell=True)
+                pids = subprocess.check_output(cmd, shell=True).decode().strip()
+                if pids:
+                    # Replace newlines with spaces to kill multiple PIDs
+                    pids_flat = pids.replace('\n', ' ')
+                    print(f"Cleaning up port {port} (PIDs: {pids_flat})...")
+                    subprocess.run(f"kill -9 {pids_flat}", shell=True)
             except subprocess.CalledProcessError:
                 pass
     except Exception:
@@ -274,7 +276,11 @@ def run_app():
                     subprocess.call(["taskkill", "/F", "/T", "/PID", str(proc.pid)])
                 else:
                     proc.terminate()
-                    proc.wait(timeout=5)
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=2)
             except Exception:
                 pass
         print("All servers stopped cleanly.")
