@@ -54,7 +54,6 @@ export function SalesAnalytics() {
   const [dateRange, setDateRange] = useState({ start: '', end: '' })
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all')
   const [selectedSource, setSelectedSource] = useState<string>('all')
-  const [searchQuery, setSearchQuery] = useState('')
 
   // Sorting
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({
@@ -136,6 +135,8 @@ export function SalesAnalytics() {
   const metrics = useMemo(() => {
     const totalLeads = filteredLeads.length;
     const wonLeads = filteredLeads.filter(l => l.status === "Client Won");
+    const activeStatuses = ["lead", "contacted", "proposal sent"];
+    const activePipeline = filteredLeads.filter(l => activeStatuses.includes((l.status || "").toLowerCase())).length;
     const totalRevenue = wonLeads.reduce((sum, l) => sum + parseIncome(l.expectedIncome), 0);
     const winRate = totalLeads > 0 ? ((wonLeads.length / totalLeads) * 100).toFixed(1) : "0.0";
 
@@ -197,11 +198,11 @@ export function SalesAnalytics() {
         if (l.status === "Client Won") {
           empStats[key].won += 1;
           empStats[key].revenue += income;
-        } else if (l.status === "Client Loss") {
+        } else if (l.status === "Client Lost" || l.status === "Lost") {
           empStats[key].lost += 1;
         } else if (l.status === "Hot") {
           empStats[key].hot += 1;
-        } else if (l.status === "Active") {
+        } else if (["lead", "contacted", "proposal sent"].includes((l.status || "").toLowerCase())) {
           empStats[key].active += 1;
         }
       });
@@ -216,14 +217,22 @@ export function SalesAnalytics() {
 
     const totalTargetValue = employeeData.reduce((sum, emp) => sum + emp.target, 0);
 
-    return { totalLeads, wonLeads: wonLeads.length, totalRevenue, winRate, employeeData, totalTargetValue };
+    let topPerformer = "N/A";
+    let maxRev = 0;
+    employeeData.forEach(emp => {
+      if (emp.revenue > maxRev) {
+        maxRev = emp.revenue;
+        topPerformer = emp.name;
+      }
+    });
+    if (maxRev === 0 && employeeData.length > 0) topPerformer = "No Revenue Yet";
+
+    return { totalLeads, wonLeads: wonLeads.length, totalRevenue, winRate, employeeData, totalTargetValue, activePipeline, topPerformer };
   }, [filteredLeads, employees, targets]);
 
-  // Apply Search and Sort
+  // Apply Sort
   const displayData = useMemo(() => {
-    let data = metrics.employeeData.filter(emp => 
-      emp.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    let data = [...metrics.employeeData];
 
     if (sortConfig.key) {
       data.sort((a, b) => {
@@ -241,7 +250,7 @@ export function SalesAnalytics() {
     }
 
     return data;
-  }, [metrics.employeeData, searchQuery, sortConfig]);
+  }, [metrics.employeeData, sortConfig]);
 
   const handleSort = (key: SortKey) => {
     setSortConfig(prev => ({
@@ -257,17 +266,41 @@ export function SalesAnalytics() {
       : <ArrowDown className="w-3 h-3 ml-1 text-brand-teal" />;
   };
 
+  const setQuickDate = (type: 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'ytd') => {
+    const now = dayjs();
+    switch (type) {
+      case 'thisMonth':
+        setDateRange({ start: now.startOf('month').format('YYYY-MM-DD'), end: now.endOf('month').format('YYYY-MM-DD') });
+        break;
+      case 'lastMonth':
+        const lastM = now.subtract(1, 'month');
+        setDateRange({ start: lastM.startOf('month').format('YYYY-MM-DD'), end: lastM.endOf('month').format('YYYY-MM-DD') });
+        break;
+      case 'thisQuarter':
+        const quarterStartMonth = Math.floor(now.month() / 3) * 3;
+        const startOfQ = now.month(quarterStartMonth).startOf('month');
+        const endOfQ = startOfQ.add(2, 'month').endOf('month');
+        setDateRange({ start: startOfQ.format('YYYY-MM-DD'), end: endOfQ.format('YYYY-MM-DD') });
+        break;
+      case 'ytd':
+        setDateRange({ start: now.startOf('year').format('YYYY-MM-DD'), end: now.endOf('year').format('YYYY-MM-DD') });
+        break;
+    }
+  };
+
   const handleExport = () => {
     const exportData = displayData.map(row => ({
-      'Employee Name': row.name,
-      'Month / Year': row.duration,
-      'Assigned Leads': row.assigned,
-      'Won Leads': row.won,
-      'Lost Leads': row.lost,
-      'Win Rate (%)': row.winRate.toFixed(1) + '%',
-      'Target Amount': row.target,
-      'Achieved Revenue': row.revenue,
-      'Incentive Amount': row.incentive
+      'Employee Details': row.name,
+      'Month': row.duration,
+      'Assigned': row.assigned,
+      'Active': row.active,
+      'Hot': row.hot,
+      'Won': row.won,
+      'Lost': row.lost,
+      'Win Rate': row.winRate.toFixed(1) + '%',
+      'Target': row.target,
+      'Revenue': row.revenue,
+      'Incentive': row.incentive
     }));
     exportToPDF(exportData, 'monthly-sales-performance')
   }
@@ -284,23 +317,31 @@ export function SalesAnalytics() {
     <div className="space-y-6">
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-slate-400" />
-          <Input 
-            type="date" 
-            className="h-9 text-xs w-[140px]" 
-            value={dateRange.start}
-            onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-            placeholder="Start Date"
-          />
-          <span className="text-slate-400 text-xs">to</span>
-          <Input 
-            type="date" 
-            className="h-9 text-xs w-[140px]" 
-            value={dateRange.end}
-            onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-            placeholder="End Date"
-          />
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <Input 
+              type="date" 
+              className="h-9 text-xs w-[140px]" 
+              value={dateRange.start}
+              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+              placeholder="Start Date"
+            />
+            <span className="text-slate-400 text-xs">to</span>
+            <Input 
+              type="date" 
+              className="h-9 text-xs w-[140px]" 
+              value={dateRange.end}
+              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+              placeholder="End Date"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 pl-6">
+            <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 rounded-full" onClick={() => setQuickDate('thisMonth')}>This Month</Button>
+            <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 rounded-full" onClick={() => setQuickDate('lastMonth')}>Last Month</Button>
+            <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 rounded-full" onClick={() => setQuickDate('thisQuarter')}>This Quarter</Button>
+            <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 rounded-full" onClick={() => setQuickDate('ytd')}>YTD</Button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
@@ -353,64 +394,77 @@ export function SalesAnalytics() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
-                <Target className="w-5 h-5" />
-              </div>
-            </div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Total Leads</p>
-            <p className="text-3xl font-bold text-slate-900 mt-1">{metrics.totalLeads}</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         
-        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
-                <CheckCircle2 className="w-5 h-5" />
+        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow relative overflow-hidden">
+          <CardContent className="p-4 relative z-10">
+            <div className="flex items-center justify-between mb-1">
+              <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+                <Target className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Converted Leads</p>
-            <p className="text-3xl font-bold text-slate-900 mt-1">{metrics.wonLeads}</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Leads</p>
+            <p className="text-xl font-black text-slate-800 mt-0.5">{metrics.totalLeads}</p>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="p-2.5 rounded-xl bg-purple-50 text-purple-600">
-                <TrendingUp className="w-5 h-5" />
+        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow relative overflow-hidden">
+          <CardContent className="p-4 relative z-10">
+            <div className="flex items-center justify-between mb-1">
+              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Conversion Rate</p>
-            <p className="text-3xl font-bold text-slate-900 mt-1">{metrics.winRate}%</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Converted</p>
+            <p className="text-xl font-black text-slate-800 mt-0.5">{metrics.wonLeads}</p>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
-                <span className="font-serif font-bold text-lg leading-none w-5 h-5 flex items-center justify-center">₹</span>
+        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow relative overflow-hidden">
+          <CardContent className="p-4 relative z-10">
+            <div className="flex items-center justify-between mb-1">
+              <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
+                <TrendingUp className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Total Revenue</p>
-            <p className="text-3xl font-bold text-slate-900 mt-1">₹{metrics.totalRevenue.toLocaleString()}</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Win Rate</p>
+            <p className="text-xl font-black text-slate-800 mt-0.5">{metrics.winRate}%</p>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
-                <Target className="w-5 h-5" />
+        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow relative overflow-hidden">
+          <CardContent className="p-4 relative z-10">
+            <div className="flex items-center justify-between mb-1">
+              <div className="p-2 rounded-lg bg-teal-50 text-teal-600">
+                <Target className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Total Target</p>
-            <p className="text-3xl font-bold text-slate-900 mt-1">₹{metrics.totalTargetValue.toLocaleString()}</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Active Leads</p>
+            <p className="text-xl font-black text-slate-800 mt-0.5">{metrics.activePipeline}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow relative overflow-hidden">
+          <CardContent className="p-4 relative z-10">
+            <div className="flex items-center justify-between mb-1">
+              <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
+                <span className="font-serif font-bold text-base leading-none w-4 h-4 flex items-center justify-center">₹</span>
+              </div>
+            </div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Rev</p>
+            <p className="text-xl font-black text-slate-800 mt-0.5">₹{metrics.totalRevenue.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow relative overflow-hidden">
+          <CardContent className="p-4 relative z-10">
+            <div className="flex items-center justify-between mb-1">
+              <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+                <Target className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Target</p>
+            <p className="text-xl font-black text-slate-800 mt-0.5">₹{metrics.totalTargetValue.toLocaleString()}</p>
           </CardContent>
         </Card>
       </div>
@@ -420,15 +474,6 @@ export function SalesAnalytics() {
       <Card className="border-none shadow-sm bg-white overflow-hidden">
         <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between py-4">
           <CardTitle className="text-sm font-bold text-slate-700">Monthly Performance Details</CardTitle>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input 
-              placeholder="Search employee..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 w-[250px] text-xs bg-slate-50 border-slate-200"
-            />
-          </div>
         </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm whitespace-nowrap">

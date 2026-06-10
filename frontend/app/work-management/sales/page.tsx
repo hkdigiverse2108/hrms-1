@@ -66,7 +66,7 @@ const STATUS_REASONS: Record<string, string[]> = {
   "Proposal Sent": ["Proposal document ready", "Pricing discussed", "Other"],
   "On Hold": ["Client request", "Budget constraint", "No contact from client", "Other"],
   "Client Won": ["Contract signed", "Requirements finalized", "Payment received", "Other"],
-  "Client Loss": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
+  "Client Lost": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
 };
 
 export default function SalesPage() {
@@ -616,7 +616,7 @@ export default function SalesPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "Client Won": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">Client Won</Badge>;
-      case "Client Loss": return <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">Client Loss</Badge>;
+      case "Client Lost": return <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">Client Lost</Badge>;
       case "Proposal Sent": return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200">Proposal Sent</Badge>;
       case "Contacted": return <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-indigo-200">Contacted</Badge>;
       case "On Hold": return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">On Hold</Badge>;
@@ -800,7 +800,7 @@ export default function SalesPage() {
                       type="checkbox"
                       checked={!!lead.isHot}
                       onChange={(e) => handleInlineUpdate(lead.id, "isHot", e.target.checked)}
-                      disabled={!canEditLead(lead) || lead.status === "On Hold" || lead.status === "Client Won" || lead.status === "Client Loss"}
+                      disabled={!canEditLead(lead) || lead.status === "On Hold" || lead.status === "Client Won" || lead.status === "Client Lost"}
                       className="rounded border-slate-300 text-orange-500 focus:ring-orange-500 w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </td>
@@ -975,7 +975,7 @@ export default function SalesPage() {
                             <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
                             <SelectItem value="On Hold">On Hold</SelectItem>
                             <SelectItem value="Client Won">Client Won</SelectItem>
-                            <SelectItem value="Client Loss">Client Loss</SelectItem>
+                            <SelectItem value="Client Lost">Client Lost</SelectItem>
                           </SelectContent>
                         </Select>
                         

@@ -65,7 +65,11 @@ export const exportToPDF = (data: any[], fileName: string) => {
       body: tableData,
       startY: 35,
       theme: 'grid',
-      headStyles: { fillColor: [16, 185, 129] }, // Brand Teal (#10b981)
+      headStyles: { 
+        fillColor: [16, 185, 129], // Brand Teal (#10b981)
+        textColor: [255, 255, 255], // White
+        fontStyle: 'bold'
+      },
       styles: { 
         fontSize: headers.length > 10 ? 8 : (headers.length > 8 ? 9 : 10), 
         cellPadding: 3,
