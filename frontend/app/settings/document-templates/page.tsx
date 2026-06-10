@@ -13,18 +13,21 @@ const ReactQuill = dynamic(
     const { Quill } = await import('react-quill-new');
     if (typeof window !== 'undefined') {
       window.Quill = Quill;
-      const ImageResize = (await import('quill-image-resize-module-react')).default;
-      Quill.register('modules/imageResize', ImageResize);
-      
-      const Parchment = Quill.import('parchment');
-      const StyleAttributor = Parchment.StyleAttributor || Quill.import('attributors/style/align').constructor;
-      const BlockScope = Parchment.Scope ? Parchment.Scope.BLOCK : 2; // Fallback to 2 if Scope is undefined
+      if (!(window as any).__QUILL_MODULES_REGISTERED__) {
+        const ImageResize = (await import('quill-image-resize-module-react')).default;
+        Quill.register('modules/imageResize', ImageResize);
+        
+        const Parchment = Quill.import('parchment');
+        const StyleAttributor = Parchment.StyleAttributor || Quill.import('attributors/style/align').constructor;
+        const BlockScope = Parchment.Scope ? Parchment.Scope.BLOCK : 2; // Fallback to 2 if Scope is undefined
 
-      const LineHeightStyle = new StyleAttributor('lineHeight', 'line-height', {
-        scope: BlockScope,
-        whitelist: ['0.5', '1.0', '1.15', '1.5', '2.0', '2.5', '3.0']
-      });
-      Quill.register(LineHeightStyle, true);
+        const LineHeightStyle = new StyleAttributor('lineHeight', 'line-height', {
+          scope: BlockScope,
+          whitelist: ['0.5', '1.0', '1.15', '1.5', '2.0', '2.5', '3.0']
+        });
+        Quill.register(LineHeightStyle, true);
+        (window as any).__QUILL_MODULES_REGISTERED__ = true;
+      }
     }
     return function ForwardedQuill(props: any) {
       return <RQ {...props} />;
@@ -82,6 +85,9 @@ export default function DocumentTemplatesPage() {
   const [estimatedPages, setEstimatedPages] = useState(1)
   const previewRef = useRef<HTMLDivElement>(null)
   
+  const [editEstimatedPages, setEditEstimatedPages] = useState(1)
+  const editPreviewRef = useRef<HTMLDivElement>(null)
+  
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   
@@ -129,16 +135,33 @@ export default function DocumentTemplatesPage() {
     return () => observer.disconnect();
   }, [selectedTemplate?.content, systemSettings])
 
+  useEffect(() => {
+    if (!editPreviewRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const height = entry.target.getBoundingClientRect().height;
+        setEditEstimatedPages(Math.max(1, Math.ceil(height / 1122.5)));
+      }
+    });
+    observer.observe(editPreviewRef.current);
+    return () => observer.disconnect();
+  }, [formData.content, systemSettings, isAddOpen])
+
   const fetchTemplates = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/document-templates`)
+      const res = await fetch(`${API_URL}/document-templates?t=${Date.now()}`, { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data)) {
           setTemplates(data)
-          if (data.length > 0 && !selectedTemplate) {
-            setSelectedTemplate(data[0])
+          if (data.length > 0) {
+            if (!selectedTemplate) {
+              setSelectedTemplate(data[0])
+            } else {
+              const updated = data.find((t: any) => t.id === selectedTemplate.id)
+              if (updated) setSelectedTemplate(updated)
+            }
           }
         } else {
           console.error('Expected array of templates, got:', data)
@@ -297,6 +320,47 @@ export default function DocumentTemplatesPage() {
 
   return (
     <div className="flex flex-col h-full -mt-6">
+      <style>{`
+        .edit-quill-sync .ql-container {
+          font-family: inherit !important;
+          font-size: inherit !important;
+          border: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+        .edit-quill-sync .ql-editor {
+          font-family: inherit !important;
+          font-size: inherit !important;
+          line-height: inherit !important;
+          padding: 12px 15px !important;
+          overflow-y: visible !important;
+          min-height: 500px;
+          border-radius: 0.5rem !important;
+          transition-property: all !important;
+          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+          transition-duration: 150ms !important;
+          word-break: normal !important;
+          overflow-wrap: break-word !important;
+        }
+        .edit-quill-sync.quill {
+          border: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+        .edit-quill-sync .ql-toolbar {
+          position: absolute !important;
+          top: -110px !important;
+          left: -15mm !important;
+          right: -15mm !important;
+          background: rgba(255, 255, 255, 0.95) !important;
+          backdrop-filter: blur(8px) !important;
+          border: 1px solid #e2e8f0 !important;
+          border-radius: 0.75rem !important;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+          z-index: 100 !important;
+          margin-bottom: 0 !important;
+        }
+      `}</style>
       <div className="grid grid-cols-1 xl:grid-cols-4 min-h-[calc(100vh-100px)]">
         {/* Left Side: Templates List */}
         <div className="xl:col-span-1 border-r border-slate-200 bg-white flex flex-col h-full">
@@ -413,7 +477,7 @@ export default function DocumentTemplatesPage() {
                     </span>
                   </div>
                   
-                  <div className="bg-slate-50 rounded-xl p-8 border border-slate-200 overflow-hidden flex justify-center">
+                  <div className="bg-slate-50 rounded-xl p-8 pt-32 border border-slate-200 overflow-auto flex justify-center" style={{ minHeight: '500px' }}>
                     <div className="relative" style={{ width: '794px' }}>
                       <div className="ql-container ql-snow border-none !font-sans">
                         <div ref={previewRef} className="bg-white shadow-xl shadow-slate-200/50 p-[15mm] transition-all relative border border-slate-100" style={{ minHeight: '1123px' }}>
@@ -434,16 +498,21 @@ export default function DocumentTemplatesPage() {
                                 modules={quillModules}
                                 value={liveContent}
                                 onChange={setLiveContent}
-                                className="bg-transparent [&_.ql-editor]:min-h-[500px] [&_.ql-container]:border-none [&_.ql-toolbar]:sticky [&_.ql-toolbar]:top-4 [&_.ql-toolbar]:bg-white/95 [&_.ql-toolbar]:backdrop-blur [&_.ql-toolbar]:border [&_.ql-toolbar]:border-slate-200 [&_.ql-toolbar]:rounded-xl [&_.ql-toolbar]:shadow-lg [&_.ql-toolbar]:z-[100] [&_.ql-toolbar]:mb-6"
+                                className="bg-transparent static edit-quill-sync"
                               />
                             </div>
                           ) : (
-                            <div className="relative mt-6 -mx-[15px] group">
-                              <div 
-                                onClick={startLiveEditing}
-                                dangerouslySetInnerHTML={{ __html: selectedTemplate.content || '<div class="text-slate-400 italic">Click here to add document content...</div>' }} 
-                                className="ql-editor cursor-text hover:bg-amber-50/50 hover:ring-2 hover:ring-brand-teal/20 transition-all rounded-lg min-h-[300px]" 
-                                title="Click to edit document content directly"
+                            <div 
+                              className="relative mt-6 -mx-[15px] group cursor-text hover:bg-amber-50/50 hover:ring-2 hover:ring-brand-teal/20 transition-all rounded-lg" 
+                              onClick={startLiveEditing} 
+                              title="Click to edit document content directly"
+                            >
+                              <ReactQuill 
+                                readOnly={true}
+                                theme="snow"
+                                modules={{ toolbar: false }}
+                                value={selectedTemplate.content || '<div class="text-slate-400 italic">Click here to add document content...</div>'}
+                                className="bg-transparent static edit-quill-sync pointer-events-none"
                               />
                             </div>
                           )}
@@ -452,9 +521,11 @@ export default function DocumentTemplatesPage() {
                           {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
                             <div 
                               key={`lh-${i+1}`}
-                              className="absolute left-0 w-full pointer-events-none z-0 repeating-letterhead opacity-30 transition-opacity"
+                              className="absolute pointer-events-none z-0 repeating-letterhead transition-opacity"
                               style={{ 
-                                top: `${(i + 1) * 1122.5}px`
+                                top: `${(i + 1) * 1122.5}px`,
+                                left: 0,
+                                right: 0
                               }}
                             >
                               <img 
@@ -472,8 +543,13 @@ export default function DocumentTemplatesPage() {
                       {estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
                         <div 
                           key={`pb-${i}`}
-                          className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex flex-col items-center justify-start opacity-70 z-50"
-                          style={{ top: `${(i + 1) * 1122.5}px`, height: '100px' }}
+                          className="absolute border-t-2 border-dashed border-red-400 pointer-events-none flex flex-col items-center justify-start opacity-70 z-50"
+                          style={{ 
+                            top: `${(i + 1) * 1122.5}px`, 
+                            height: '100px',
+                            left: 0,
+                            right: 0
+                          }}
                         >
                           <span className="bg-red-50 text-red-500 font-bold text-[10px] px-3 py-1 rounded-full shadow-sm border border-red-200 mt-2 text-center">
                             Page {i + 2} Starts Here<br/>
@@ -569,18 +645,77 @@ export default function DocumentTemplatesPage() {
             <div className="space-y-2 flex-1 min-h-[400px] flex flex-col">
               <div className="flex items-center justify-between">
                 <Label>Document Content (use {`{{variableName}}`} for dynamic fields)</Label>
+                <span className="text-[10px] text-slate-400 font-medium">Edit in A4 page view — same as preview</span>
               </div>
 
-              <div className="flex-1 rounded-xl overflow-hidden border border-slate-200 bg-white" style={{ minHeight: '350px' }}>
-                  <ReactQuill 
-                    theme="snow"
-                    modules={quillModules}
-                    value={formData.content}
-                    onChange={(content) => setFormData({...formData, content})}
-                    className="h-full bg-white [&_.ql-editor]:min-h-[300px] [&_.ql-container]:border-b-0 [&_.ql-container]:border-x-0 [&_.ql-container]:rounded-b-xl [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:bg-slate-50"
-                    placeholder="Type your document template here. Use {{variableName}} for dynamic fields like {{empName}}, {{startDate}}, etc."
-                  />
+              <div className="flex-1 bg-slate-50 rounded-xl overflow-auto border border-slate-200 p-8 pt-32 flex justify-center" style={{ minHeight: '500px' }}>
+                <div className="relative" style={{ width: '794px' }}>
+                  <div className="ql-container ql-snow border-none !font-sans">
+                    <div ref={editPreviewRef} className="bg-white shadow-xl shadow-slate-200/50 p-[15mm] transition-all relative border border-slate-100" style={{ minHeight: '1123px' }}>
+                      {systemSettings?.companyLetterheadUrl && (
+                        <div className="-mt-[15mm] -mx-[15mm] mb-[10mm]">
+                          <img 
+                            src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
+                            alt="Company Letterhead" 
+                            className="w-full object-contain"
+                          />
+                        </div>
+                      )}
+                      
+
+                      <div className="relative mt-6 -mx-[15px] group">
+                        <ReactQuill 
+                          theme="snow"
+                          modules={quillModules}
+                          value={formData.content}
+                          onChange={(content) => setFormData({...formData, content})}
+                          className="bg-transparent static edit-quill-sync"
+                          placeholder="Type your document template here. Use {{variableName}} for dynamic fields like {{empName}}, {{startDate}}, etc."
+                        />
+                      </div>
+
+                      {/* Repeating Letterheads for Page 2+ */}
+                      {systemSettings?.companyLetterheadUrl && editEstimatedPages > 1 && Array.from({ length: editEstimatedPages - 1 }).map((_, i) => (
+                        <div 
+                          key={`lh-${i+1}`}
+                          className="absolute pointer-events-none z-0 repeating-letterhead transition-opacity"
+                          style={{ 
+                            top: `${(i + 1) * 1122.5}px`,
+                            left: 0,
+                            right: 0
+                          }}
+                        >
+                          <img 
+                            src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
+                            alt="Company Letterhead" 
+                            className="w-full"
+                            style={{ objectFit: 'contain', objectPosition: 'top' }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Page break indicators */}
+                  {editEstimatedPages > 1 && Array.from({ length: editEstimatedPages - 1 }).map((_, i) => (
+                    <div 
+                      key={`pb-${i}`}
+                      className="absolute border-t-2 border-dashed border-red-400 pointer-events-none flex flex-col items-center justify-start opacity-70 z-50"
+                      style={{ 
+                        top: `${(i + 1) * 1122.5}px`, 
+                        height: '100px',
+                        left: 0,
+                        right: 0
+                      }}
+                    >
+                      <span className="bg-red-50 text-red-500 font-bold text-[10px] px-3 py-1 rounded-full shadow-sm border border-red-200 mt-2 text-center">
+                        Page {i + 2} Starts Here<br/>
+                        <span className="font-normal opacity-80">(Hit Enter to push text below letterhead)</span>
+                      </span>
+                    </div>
+                  ))}
                 </div>
+              </div>
             </div>
           </div>
           <DialogFooter className="mt-4">

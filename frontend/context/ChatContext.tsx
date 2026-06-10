@@ -118,7 +118,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       };
 
       websocket.onerror = (err) => {
-        console.error("[ChatContext] WebSocket error:", err);
+        console.warn("[ChatContext] WebSocket error:", err);
         websocket.close();
       };
 
