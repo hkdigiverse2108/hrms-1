@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import dayjs from "dayjs";
+import { SalesAnalytics } from "./components/SalesAnalytics";
 import { PageHeader } from "@/components/common/PageHeader";
 import { 
   TrendingUp, 
@@ -65,7 +66,7 @@ const STATUS_REASONS: Record<string, string[]> = {
   "Proposal Sent": ["Proposal document ready", "Pricing discussed", "Other"],
   "On Hold": ["Client request", "Budget constraint", "No contact from client", "Other"],
   "Client Won": ["Contract signed", "Requirements finalized", "Payment received", "Other"],
-  "Client Loss": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
+  "Client Lost": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
 };
 
 export default function SalesPage() {
@@ -615,7 +616,7 @@ export default function SalesPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "Client Won": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">Client Won</Badge>;
-      case "Client Loss": return <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">Client Loss</Badge>;
+      case "Client Lost": return <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">Client Lost</Badge>;
       case "Proposal Sent": return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200">Proposal Sent</Badge>;
       case "Contacted": return <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-indigo-200">Contacted</Badge>;
       case "On Hold": return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">On Hold</Badge>;
@@ -799,7 +800,7 @@ export default function SalesPage() {
                       type="checkbox"
                       checked={!!lead.isHot}
                       onChange={(e) => handleInlineUpdate(lead.id, "isHot", e.target.checked)}
-                      disabled={!canEditLead(lead) || lead.status === "On Hold" || lead.status === "Client Won" || lead.status === "Client Loss"}
+                      disabled={!canEditLead(lead) || lead.status === "On Hold" || lead.status === "Client Won" || lead.status === "Client Lost"}
                       className="rounded border-slate-300 text-orange-500 focus:ring-orange-500 w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </td>
@@ -974,7 +975,7 @@ export default function SalesPage() {
                             <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
                             <SelectItem value="On Hold">On Hold</SelectItem>
                             <SelectItem value="Client Won">Client Won</SelectItem>
-                            <SelectItem value="Client Loss">Client Loss</SelectItem>
+                            <SelectItem value="Client Lost">Client Lost</SelectItem>
                           </SelectContent>
                         </Select>
                         
@@ -1111,7 +1112,7 @@ export default function SalesPage() {
                       <PopoverContent className="w-52 p-3 bg-white shadow-md border border-slate-100 rounded-lg z-50">
                         <Label className="text-[10px] uppercase font-black text-slate-400 mb-2 block">Assign Employees</Label>
                         <div className="max-h-40 overflow-y-auto space-y-1.5 bg-slate-50/50 p-2 rounded border border-slate-100">
-                          {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => {
+                          {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
                             const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
                             return (
                               <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
@@ -1375,11 +1376,13 @@ export default function SalesPage() {
               Monthly Targets
             </TabsTrigger>
             {canEditSales && (
-              <>
-                <TabsTrigger value="reports" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
-                  Performance Reports
-                </TabsTrigger>
-              </>
+              <button 
+                onClick={() => router.push('/work-management/sales/analytics')}
+                className="ml-1 text-foreground px-6 py-2 text-sm font-bold flex items-center gap-2 rounded-sm transition-all"
+              >
+                <TrendingUp className="w-4 h-4" />
+                Sales Analytics
+              </button>
             )}
           </TabsList>
 
@@ -1457,7 +1460,7 @@ export default function SalesPage() {
                               <SelectValue placeholder="Select Employee" />
                             </SelectTrigger>
                             <SelectContent>
-                              {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
+                              {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => (
                                 <SelectItem key={emp.id} value={emp.id}>{emp.name || emp.firstName}</SelectItem>
                               ))}
                             </SelectContent>
@@ -1753,7 +1756,7 @@ export default function SalesPage() {
                                     <SelectValue placeholder="Choose an employee..." />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => {
+                                    {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
                                       const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
                                       return <SelectItem key={emp.id} value={empName}>{empName}</SelectItem>
                                     })}
@@ -1956,122 +1959,10 @@ export default function SalesPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="reports">
-              <Card className="border-none shadow-sm bg-white overflow-hidden">
-                <CardHeader className="px-6 py-4 border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="text-sm font-bold text-slate-700">Sales Performance Report</CardTitle>
-                  <div className="flex items-center gap-3">
-                    <Select value={reportEmployeeFilter} onValueChange={setReportEmployeeFilter}>
-                      <SelectTrigger className="h-8 w-[150px] text-xs">
-                        <SelectValue placeholder="Filter Employee" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Employees</SelectItem>
-                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
-                          <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="relative">
-                      <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                      <Input 
-                        type="date" 
-                        className="h-8 pl-8 text-xs w-[140px]" 
-                        value={reportDateFilter}
-                        onChange={(e) => setReportDateFilter(e.target.value)}
-                      />
-                    </div>
-                    {(reportEmployeeFilter !== "all" || reportDateFilter) && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-8 px-2 text-[10px] text-slate-400 hover:text-slate-600"
-                        onClick={() => {
-                          setReportEmployeeFilter("all");
-                          setReportDateFilter("");
-                        }}
-                      >
-                        Clear
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50/50 border-b border-slate-100">
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Employee Name</th>
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lead (Company)</th>
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Income</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {visibleLeads.filter(l => l.status === "Client Won")
-                          .filter(l => {
-                            const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
-                            return reportEmployeeFilter === "all" || assignedList.some((name: string) => name.toLowerCase() === reportEmployeeFilter.toLowerCase());
-                          })
-                          .filter(l => {
-                            if (!reportDateFilter) return true;
-                            const targetDate = dayjs(reportDateFilter).format('YYYY-MM-DD');
-                            const leadClosedDate = l.closedDate ? dayjs(l.closedDate).format('YYYY-MM-DD') : null;
-                            const leadDate = dayjs(l.date).format('YYYY-MM-DD');
-                            
-                            // Match either closed date or creation date if closed date is missing
-                            return leadClosedDate === targetDate || (!leadClosedDate && leadDate === targetDate);
-                          })
-                          .sort((a, b) => new Date(b.closedDate || 0).getTime() - new Date(a.closedDate || 0).getTime())
-                          .map((lead) => (
-                            <tr key={lead.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="px-6 py-4 text-xs text-slate-500 font-medium">
-                                <div className="flex items-center gap-1.5">
-                                  <Calendar className="w-3 h-3 text-emerald-500" />
-                                  {lead.closedDate || lead.date}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-7 h-7 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[10px] font-bold uppercase">
-                                    {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 
-                                      ? lead.assignedTo[0].substring(0, 2) 
-                                      : ((lead.assignedTo && typeof lead.assignedTo === 'string' ? lead.assignedTo : "??").substring(0, 2))}
-                                  </div>
-                                  <span className="font-bold text-slate-700 text-sm">
-                                    {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 
-                                      ? lead.assignedTo.join(", ") 
-                                      : (lead.assignedTo || "Unassigned")}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className="font-bold text-slate-900 text-sm">{lead.company}</span>
-                              </td>
-                              <td className="px-6 py-4 text-center">
-                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">Converted</Badge>
-                              </td>
-                              <td className="px-6 py-4 text-right font-bold text-slate-900 text-sm text-emerald-600">
-                                {lead.expectedIncome}
-                              </td>
-                            </tr>
-                          ))}
-                        {visibleLeads.filter(l => l.status === "Client Won").length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
-                              No converted leads found for reporting.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+
           </>
         )}
+
       </Tabs>
 
       <Dialog open={!!statusChangeData} onOpenChange={(open) => { if (!open) setStatusChangeData(null); }}>

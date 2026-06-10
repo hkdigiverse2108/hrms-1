@@ -70,7 +70,7 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
   const currentAssignedTo = watch("assignedTo");
 
   useEffect(() => {
-    if (currentStatus === "On Hold" || currentStatus === "Client Won" || currentStatus === "Client Loss") {
+    if (currentStatus === "On Hold" || currentStatus === "Client Won" || currentStatus === "Client Lost") {
       setValue("isHot", false);
     }
   }, [currentStatus, setValue]);
@@ -158,7 +158,7 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
               <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
               <SelectItem value="On Hold">On Hold</SelectItem>
               <SelectItem value="Client Won">Client Won</SelectItem>
-              <SelectItem value="Client Loss">Client Loss</SelectItem>
+              <SelectItem value="Client Lost">Client Lost</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -221,14 +221,14 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
           <input 
             type="checkbox"
             id="isHot"
-            disabled={currentStatus === "On Hold" || currentStatus === "Client Won" || currentStatus === "Client Loss"}
+            disabled={currentStatus === "On Hold" || currentStatus === "Client Won" || currentStatus === "Client Lost"}
             {...register("isHot")}
             className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <Label 
             htmlFor="isHot" 
             className={`font-bold text-slate-700 ${
-              (currentStatus === "On Hold" || currentStatus === "Client Won" || currentStatus === "Client Loss")
+              (currentStatus === "On Hold" || currentStatus === "Client Won" || currentStatus === "Client Lost")
                 ? "opacity-50 cursor-not-allowed"
                 : "cursor-pointer"
             }`}

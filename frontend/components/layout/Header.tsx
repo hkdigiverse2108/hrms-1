@@ -110,7 +110,7 @@ export function Header() {
     }
   }, [unreadChatCount]);
 
-  const isSalesSection = pathname === "/work-management/sales" || pathname?.includes("/work-management/sales");
+  const isSalesSection = (pathname === "/work-management/sales" || pathname?.includes("/work-management/sales")) && !pathname?.includes("/analytics");
   const [todayFollowUpCount, setTodayFollowUpCount] = useState(0);
 
   useEffect(() => {
