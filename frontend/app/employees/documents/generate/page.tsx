@@ -298,8 +298,13 @@ export default function DocumentGeneratorPage() {
       const nodeHeight = Math.max(1123, clone.scrollHeight) // 1123px is A4 height
       container.style.height = `${nodeHeight}px`
       clone.style.height = `${nodeHeight}px`
+      
+      // Make repeating letterheads fully opaque for the PDF
+      clone.querySelectorAll('.repeating-letterhead').forEach(el => {
+        el.classList.remove('opacity-30')
+      })
 
-      const scale = 1.5
+      const scale = 1
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
@@ -428,8 +433,13 @@ export default function DocumentGeneratorPage() {
       const nodeHeight = Math.max(1123, clone.scrollHeight) // 1123px is A4 height
       container.style.height = `${nodeHeight}px`
       clone.style.height = `${nodeHeight}px`
+      
+      // Make repeating letterheads fully opaque for the PDF
+      clone.querySelectorAll('.repeating-letterhead').forEach(el => {
+        el.classList.remove('opacity-30')
+      })
 
-      const scale = 1.5
+      const scale = 1
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
@@ -945,7 +955,7 @@ export default function DocumentGeneratorPage() {
                       {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
                         <div 
                           key={`lh-${i+1}`}
-                          className="absolute left-0 w-full pointer-events-none z-0"
+                          className="absolute left-0 w-full pointer-events-none z-0 repeating-letterhead opacity-30 transition-opacity"
                           style={{ 
                             top: `${(i + 1) * 1122.5}px`
                           }}
@@ -965,11 +975,12 @@ export default function DocumentGeneratorPage() {
                   {estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
                     <div 
                       key={`pb-${i}`}
-                      className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex items-center justify-center opacity-70 z-50"
-                      style={{ top: `${(i + 1) * 297}mm` }}
+                      className="absolute left-0 w-full border-t-2 border-dashed border-red-400 pointer-events-none flex flex-col items-center justify-start opacity-70 z-50"
+                      style={{ top: `${(i + 1) * 1122.5}px`, height: '100px' }}
                     >
-                      <span className="bg-red-50 text-red-500 font-bold text-[10px] px-2 py-0.5 rounded-full absolute -top-2.5 shadow-sm border border-red-200">
-                        Page {i + 2} Break
+                      <span className="bg-red-50 text-red-500 font-bold text-[10px] px-3 py-1 rounded-full shadow-sm border border-red-200 mt-2 text-center">
+                        Page {i + 2} Starts Here<br/>
+                        <span className="font-normal opacity-80">(Hit Enter to push text below letterhead)</span>
                       </span>
                     </div>
                   ))}
