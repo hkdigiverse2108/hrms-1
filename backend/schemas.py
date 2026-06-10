@@ -1456,6 +1456,7 @@ class SalesTargetBase(BaseModel):
     currentAchievement: float = 0
     incentiveAmount: float = 0
     breakdown: Optional[List[dict]] = []
+    createdAt: Optional[str] = None
 
 class SalesTargetCreate(SalesTargetBase):
     pass

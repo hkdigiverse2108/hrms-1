@@ -1826,47 +1826,9 @@ export default function SalesPage() {
                               .filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
-                                const achieved = leads.filter(l => {
-                                  if (l.status !== "Client Won") return false;
-                                  const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
-                                  const isAssigned = assignedList.some((name: string) => name.toLowerCase() === t.employeeName?.toLowerCase());
-                                  if (!isAssigned) return false;
-                                  const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-                                  
-                                  if (t.type === "Custom") {
-                                    if (!t.startDate || !t.endDate) return false;
-                                    const start = dayjs(t.startDate).startOf('day');
-                                    const end = dayjs(t.endDate).endOf('day');
-                                    return (leadDate.isSame(start, 'day') || leadDate.isAfter(start, 'day')) && 
-                                           (leadDate.isSame(end, 'day') || leadDate.isBefore(end, 'day'));
-                                  }
-
-                                  // Month/Year check
-                                  const monthMatch = leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
-                                  if (!monthMatch) return false;
-
-                                  // Weekly check
-                                  if (t.type === "Weekly") {
-                                    const dayOfMonth = leadDate.date();
-                                    const weekNum = Math.ceil(dayOfMonth / 7);
-                                    return weekNum === t.week;
-                                  }
-                                  return true;
-                                }).reduce((acc, l) => {
-                                  const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
-                                  return acc + val;
-                                }, 0);
-                                
+                                let achieved = t.currentAchievement || 0;
                                 const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
-                                
-                                // Auto-calculate incentive based on slabs if incentiveAmount is 0
-                                let earnedIncentive = t.incentiveAmount || 0;
-                                if (earnedIncentive === 0 && achieved > 0) {
-                                  const applicableSlab = incentiveSlabs.find(s => achieved >= s.minAmount && achieved <= s.maxAmount);
-                                  if (applicableSlab) {
-                                    earnedIncentive = (achieved * applicableSlab.percentage) / 100;
-                                  }
-                                }
+                                const earnedIncentive = t.incentiveAmount || 0;
 
                                 return (
                                   <tr key={i} className="hover:bg-slate-50/50 transition-colors">
@@ -1910,10 +1872,11 @@ export default function SalesPage() {
                                     <td className="px-6 py-4 text-right">
                                       <div className="flex flex-col items-end">
                                         <span className="font-bold text-indigo-600 text-sm">₹{earnedIncentive.toLocaleString()}</span>
-                                        {t.incentiveAmount === 0 && earnedIncentive > 0 && <span className="text-[8px] font-black text-slate-400 uppercase italic">Estimated</span>}
                                         {t.breakdown && t.breakdown.length > 0 && (
                                           <button 
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              e.preventDefault()
                                               setSelectedBreakdown(t.breakdown || [])
                                               setIsBreakdownOpen(true)
                                             }}
@@ -2165,7 +2128,7 @@ export default function SalesPage() {
       />
 
       <Dialog open={isBreakdownOpen} onOpenChange={setIsBreakdownOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="sm:max-w-3xl max-w-[95vw]">
           <DialogHeader>
             <DialogTitle>Incentive Breakdown</DialogTitle>
           </DialogHeader>

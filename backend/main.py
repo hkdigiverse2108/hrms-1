@@ -1374,7 +1374,10 @@ async def read_sales_targets(month: Optional[str] = None, year: Optional[int] = 
 
 @app.post("/sales-targets", response_model=schemas.SalesTarget)
 async def upsert_sales_target(target: schemas.SalesTargetCreate, db=Depends(get_db)):
-    return await crud.create_or_update_sales_target(db, target)
+    try:
+        return await crud.create_or_update_sales_target(db, target)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.put("/sales-targets/{target_id}", response_model=schemas.SalesTarget)
 async def update_sales_target(target_id: str, target_update: schemas.SalesTargetUpdate, db=Depends(get_db)):

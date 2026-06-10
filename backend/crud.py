@@ -4019,9 +4019,83 @@ async def create_or_update_sales_target(db, target: schemas.SalesTargetCreate):
         query["startDate"] = target_dict.get("startDate")
         query["endDate"] = target_dict.get("endDate")
         
+    # Check for date overlaps
+    def get_date_range(td):
+        from datetime import datetime
+        import calendar
+        ttype = td.get("type", "Monthly")
+        if ttype == "Custom":
+            sd_str = td.get("startDate")
+            ed_str = td.get("endDate")
+            if not sd_str or not ed_str: return None, None
+            try:
+                sd = datetime.strptime(sd_str, "%Y-%m-%d")
+                ed = datetime.strptime(ed_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                return sd, ed
+            except: return None, None
+        
+        m_str = td.get("month")
+        y = td.get("year")
+        if not m_str or not y: return None, None
+        
+        try:
+            m_num = list(calendar.month_name).index(m_str)
+        except: return None, None
+            
+        if ttype == "Monthly":
+            _, last = calendar.monthrange(y, m_num)
+            sd = datetime(y, m_num, 1)
+            ed = datetime(y, m_num, last, 23, 59, 59)
+            return sd, ed
+            
+        if ttype == "Weekly":
+            w = td.get("week", 1)
+            _, last = calendar.monthrange(y, m_num)
+            s_day = (w - 1) * 7 + 1
+            e_day = min(w * 7, last)
+            if s_day > last: return None, None
+            sd = datetime(y, m_num, s_day)
+            ed = datetime(y, m_num, e_day, 23, 59, 59)
+            return sd, ed
+            
+        return None, None
+        
+    new_sd, new_ed = get_date_range(target_dict)
+    if new_sd and new_ed:
+        existing = await db.sales_targets.find({"employeeId": target_dict["employeeId"]}).to_list(length=100)
+        for ext in existing:
+            # Skip if it is the exact same target type/period we are upserting
+            ext_q = {"type": ext.get("type")}
+            if ext.get("type") == "Weekly":
+                ext_q["month"] = ext.get("month")
+                ext_q["year"] = ext.get("year")
+                ext_q["week"] = ext.get("week")
+            elif ext.get("type") == "Monthly":
+                ext_q["month"] = ext.get("month")
+                ext_q["year"] = ext.get("year")
+            elif ext.get("type") == "Custom":
+                ext_q["startDate"] = ext.get("startDate")
+                ext_q["endDate"] = ext.get("endDate")
+                
+            is_same = True
+            for k, v in query.items():
+                if k != "employeeId" and ext_q.get(k) != v:
+                    is_same = False
+                    break
+            if is_same: continue
+            
+            ext_sd, ext_ed = get_date_range(ext)
+            if ext_sd and ext_ed:
+                if new_sd <= ext_ed and new_ed >= ext_sd:
+                    raise ValueError(f"Target overlaps with existing {ext.get('type')} target")
+                    
+    target_dict.pop("createdAt", None)
     await db.sales_targets.update_one(
         query,
-        {"$set": target_dict},
+        {
+            "$set": target_dict,
+            "$setOnInsert": {"createdAt": get_now().isoformat()}
+        },
         upsert=True
     )
     
@@ -4050,7 +4124,21 @@ async def update_sales_target(db, target_id: str, target_update: schemas.SalesTa
     return fix_id(result)
 
 async def delete_sales_target(db, target_id: str):
-    await db.sales_targets.delete_one({"_id": ObjectId(target_id)})
+    target = await db.sales_targets.find_one({"_id": ObjectId(target_id)})
+    if target:
+        query = {
+            "type": target.get("type"),
+            "targetAmount": target.get("targetAmount")
+        }
+        if "month" in target: query["month"] = target["month"]
+        if "year" in target: query["year"] = target["year"]
+        if "week" in target: query["week"] = target["week"]
+        if "startDate" in target: query["startDate"] = target["startDate"]
+        if "endDate" in target: query["endDate"] = target["endDate"]
+        
+        await db.sales_targets.delete_many(query)
+    else:
+        await db.sales_targets.delete_one({"_id": ObjectId(target_id)})
     return True
 
 # Incentive Slab CRUD
@@ -4164,30 +4252,42 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
             matched_invoices = []
             for inv in invoices_list:
                 try:
-                    c_name_orig = inv.get("clientName", "")
+                    c_name_orig = inv.get("clientName", "").strip()
+                    if not c_name_orig:
+                        continue
+                        
                     import re
                     c_name_escaped = re.escape(c_name_orig)
-                    lead = await db.leads.find_one({
+                    regex_pattern = f"^\\s*{c_name_escaped}\\s*$"
+                    
+                    # Fetch ALL won leads that match the company or contact name (ignoring leading/trailing spaces)
+                    leads_cursor = db.leads.find({
                         "status": "Client Won",
                         "$or": [
-                            {"company": {"$regex": f"^{c_name_escaped}$", "$options": "i"}},
-                            {"contact": {"$regex": f"^{c_name_escaped}$", "$options": "i"}}
+                            {"company": {"$regex": regex_pattern, "$options": "i"}},
+                            {"contact": {"$regex": regex_pattern, "$options": "i"}}
                         ]
                     })
+                    matching_leads = await leads_cursor.to_list(length=100)
                     
-                    if not lead:
+                    if not matching_leads:
                         continue
-                    
-                    assigned = lead.get("assignedTo", [])
-                    if not isinstance(assigned, list):
-                        assigned = [assigned]
-                    
-                    matched = False
-                    for name in assigned:
-                        if name and " ".join(str(name).split()).lower() == emp_name_norm:
-                            matched = True
+                        
+                    # Find a lead assigned to this employee
+                    assigned_lead = None
+                    for lead in matching_leads:
+                        assigned = lead.get("assignedTo", [])
+                        if not isinstance(assigned, list):
+                            assigned = [assigned]
+                        
+                        for name in assigned:
+                            if name and " ".join(str(name).split()).lower() == emp_name_norm:
+                                assigned_lead = lead
+                                break
+                        if assigned_lead:
                             break
-                    if not matched:
+                            
+                    if not assigned_lead:
                         continue
 
                     inv_date_str = inv.get("paymentDate") or inv.get("issueDate") or inv.get("timestamp")
