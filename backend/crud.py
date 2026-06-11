@@ -4256,6 +4256,13 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
         cursor = db.invoices.find({"status": "Paid"}).sort("timestamp", 1)
         all_paid_invoices = await cursor.to_list(length=10000)
         
+        # Fetch all won leads and clients ONCE to avoid db regex issues and improve performance
+        won_leads_cursor = db.leads.find({"status": "Client Won"})
+        all_won_leads = await won_leads_cursor.to_list(length=10000)
+        
+        clients_cursor = db.clients.find()
+        all_clients = await clients_cursor.to_list(length=10000)
+        
         processed_clients = set()
         first_paid_invoices = []
         recurring_paid_invoices = []
@@ -4280,19 +4287,14 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
                     if not c_name_orig:
                         continue
                         
-                    import re
-                    c_name_escaped = re.escape(c_name_orig)
-                    regex_pattern = f"^\\s*{c_name_escaped}\\s*$"
+                    c_name_lower = c_name_orig.lower()
                     
-                    # Fetch ALL won leads that match the company or contact name (ignoring leading/trailing spaces)
-                    leads_cursor = db.leads.find({
-                        "status": "Client Won",
-                        "$or": [
-                            {"company": {"$regex": regex_pattern, "$options": "i"}},
-                            {"contact": {"$regex": regex_pattern, "$options": "i"}}
-                        ]
-                    })
-                    matching_leads = await leads_cursor.to_list(length=100)
+                    # Find matching leads in python
+                    matching_leads = [
+                        lead for lead in all_won_leads
+                        if lead.get("company", "").strip().lower() == c_name_lower or 
+                           lead.get("contact", "").strip().lower() == c_name_lower
+                    ]
                     
                     if not matching_leads:
                         continue
@@ -4323,11 +4325,19 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
                     elif isinstance(inv_date_str, date) and not isinstance(inv_date_str, datetime):
                         ld = datetime(inv_date_str.year, inv_date_str.month, inv_date_str.day)
                     else:
-                        for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%b %d, %Y", "%d/%m/%Y", "%d-%m-%Y"):
-                            try:
-                                ld = datetime.strptime(str(inv_date_str).strip(), fmt)
-                                break
-                            except Exception: continue
+                        date_str = str(inv_date_str).strip()
+                        try:
+                            ld = datetime.fromisoformat(date_str)
+                            if ld.tzinfo:
+                                ld = ld.replace(tzinfo=None)
+                        except ValueError:
+                            for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%b %d, %Y", "%d/%m/%Y", "%d-%m-%Y"):
+                                try:
+                                    ld = datetime.strptime(date_str, fmt)
+                                    if ld.tzinfo:
+                                        ld = ld.replace(tzinfo=None)
+                                    break
+                                except Exception: continue
                     
                     if not ld: continue
                     
@@ -4352,7 +4362,7 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
                     achievement += subtotal
                     
                     # Identify the client's primary department (category)
-                    client = await db.clients.find_one({"companyName": {"$regex": f"^{c_name_escaped}$", "$options": "i"}})
+                    client = next((c for c in all_clients if c.get("companyName", "").strip().lower() == c_name_lower), None)
                     dept_str = client.get("department", "Unknown") if client else "Unknown"
                     departments = [d.strip() for d in dept_str.split(',')] if dept_str else ["Unknown"]
                     primary_dept = departments[0] if departments else "Unknown"
