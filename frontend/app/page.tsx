@@ -518,6 +518,8 @@ export default function DashboardPage() {
           isTimeSynced={isTimeSynced}
           getISTNow={getISTNow}
           punchCardRef={punchCardRef}
+          missingPunchOutDate={missingPunchOutDate}
+          setIsRequestDialogOpen={setIsRequestDialogOpen}
         />
       )}
  
@@ -787,7 +789,9 @@ function EmployeeView({
   currentTime,
   isTimeSynced,
   getISTNow,
-  punchCardRef
+  punchCardRef,
+  missingPunchOutDate,
+  setIsRequestDialogOpen
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -800,7 +804,9 @@ function EmployeeView({
   currentTime: Date,
   isTimeSynced: boolean,
   getISTNow: () => Date,
-  punchCardRef: React.RefObject<HTMLDivElement | null>
+  punchCardRef: React.RefObject<HTMLDivElement | null>,
+  missingPunchOutDate: Date | null,
+  setIsRequestDialogOpen: (open: boolean) => void
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
