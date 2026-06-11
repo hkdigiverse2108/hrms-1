@@ -242,9 +242,35 @@ export default function DocumentGeneratorPage() {
     if (!previewRef.current) return;
     const observer = new ResizeObserver((entries) => {
       for (let entry of entries) {
-        const height = entry.target.getBoundingClientRect().height;
+        const target = entry.target as HTMLElement;
+        const editor = target.querySelector('.ql-editor');
+        let contentHeight = target.getBoundingClientRect().height;
+        
+        if (editor) {
+          const elements = Array.from(editor.children) as HTMLElement[];
+          let maxBottom = 0;
+          let hasContent = false;
+          
+          for (const el of elements) {
+            // Check if element has visible text or an image
+            if (el.textContent?.trim() !== '' || el.querySelector('img')) {
+              hasContent = true;
+              const bottom = el.offsetTop + el.offsetHeight;
+              if (bottom > maxBottom) {
+                maxBottom = bottom;
+              }
+            }
+          }
+          
+          if (hasContent) {
+             const editorTop = (editor as HTMLElement).offsetTop || 0;
+             // Add 80px buffer so we don't cut off descenders or margins tightly
+             contentHeight = editorTop + maxBottom + 80; 
+          }
+        }
+        
         // A4 page height is exactly 297mm. At 96 DPI, this is approx 1122.5px
-        setEstimatedPages(Math.max(1, Math.ceil(height / 1122.5)));
+        setEstimatedPages(Math.max(1, Math.ceil(contentHeight / 1122.5)));
       }
     });
     observer.observe(previewRef.current);
@@ -295,7 +321,7 @@ export default function DocumentGeneratorPage() {
       clone.style.boxShadow = 'none'
       
       // Get the actual height after setting the fixed width
-      const nodeHeight = Math.max(1123, clone.scrollHeight) // 1123px is A4 height
+      const nodeHeight = Math.max(1123, estimatedPages * 1123) // Force exact A4 page multiples
       container.style.height = `${nodeHeight}px`
       clone.style.height = `${nodeHeight}px`
       
@@ -430,7 +456,7 @@ export default function DocumentGeneratorPage() {
       clone.style.boxShadow = 'none'
       
       // Get the actual height after setting the fixed width
-      const nodeHeight = Math.max(1123, clone.scrollHeight) // 1123px is A4 height
+      const nodeHeight = Math.max(1123, estimatedPages * 1123) // Force exact A4 page multiples
       container.style.height = `${nodeHeight}px`
       clone.style.height = `${nodeHeight}px`
       
@@ -955,7 +981,7 @@ export default function DocumentGeneratorPage() {
                       {systemSettings?.companyLetterheadUrl && estimatedPages > 1 && Array.from({ length: estimatedPages - 1 }).map((_, i) => (
                         <div 
                           key={`lh-${i+1}`}
-                          className="absolute left-0 w-full pointer-events-none z-0 repeating-letterhead opacity-30 transition-opacity"
+                          className="absolute left-0 w-full pointer-events-none z-0 repeating-letterhead transition-opacity"
                           style={{ 
                             top: `${(i + 1) * 1122.5}px`
                           }}

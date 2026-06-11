@@ -1,5 +1,5 @@
 from pydantic import BaseModel as PydanticBaseModel, model_serializer, BeforeValidator, PlainSerializer, SerializationInfo
-from typing import List, Optional, Any, Dict, Annotated
+from typing import List, Optional, Any, Dict, Annotated, Union
 from datetime import datetime, date
 import pytz
 
@@ -1071,7 +1071,7 @@ class LeadBase(BaseModel):
     date: Optional[RobustDate] = None
     remarks: Optional[str] = None
     closedDate: Optional[RobustDate] = None
-    assignedTo: Optional[RobustAssignedTo] = []
+    assignedTo: Optional[Union[str, List[RobustAssignedTo]]] = []
     followUps: Optional[List[FollowUp]] = []
     isHot: Optional[bool] = False
     holdResumeDate: Optional[RobustDate] = None
