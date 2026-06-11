@@ -117,10 +117,19 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const isMarketing = formData.department === "Marketing";
-  const isGraphics = formData.department === "Graphics";
-  const isDevelopment = formData.department === "Development";
-  const isSales = formData.department === "Sales";
+  const isMarketing = formData.department?.includes("Marketing");
+  const isGraphics = formData.department?.includes("Graphics");
+  const isDevelopment = formData.department?.includes("Development");
+  const isSales = formData.department?.includes("Sales");
+
+  const toggleDepartment = (dept: string) => {
+    const currentDepts = formData.department ? formData.department.split(',').map(d => d.trim()).filter(Boolean) : [];
+    if (currentDepts.includes(dept)) {
+      handleChange("department", currentDepts.filter(d => d !== dept).join(', '));
+    } else {
+      handleChange("department", [...currentDepts, dept].join(', '));
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,15 +186,25 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
             <div className="space-y-2">
-              <Label htmlFor="department" className="text-xs font-bold uppercase text-slate-500">Department</Label>
-              <Select value={formData.department} onValueChange={(v) => handleChange("department", v)}>
-                <SelectTrigger><SelectValue placeholder="Select Department" /></SelectTrigger>
-                <SelectContent>
-                  {departments.map((dept) => (
-                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs font-bold uppercase text-slate-500">Department(s)</Label>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {departments.map((dept) => {
+                  const isSelected = formData.department?.split(',').map(d => d.trim()).includes(dept);
+                  return (
+                    <div 
+                      key={dept}
+                      onClick={() => toggleDepartment(dept)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer border transition-colors ${
+                        isSelected 
+                          ? 'bg-brand-teal text-white border-brand-teal' 
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-brand-teal/50'
+                      }`}
+                    >
+                      {dept}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="status" className="text-xs font-bold uppercase text-slate-500">Status</Label>
