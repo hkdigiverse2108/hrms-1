@@ -1082,15 +1082,35 @@ export default function ChatPage() {
         );
       }
       
-      // Then, handle search highlighting for non-mention parts
-      if (!messageSearchQuery) return part;
-      
-      const searchParts = part.split(new RegExp(`(${messageSearchQuery})`, 'gi'));
-      return searchParts.map((sp, j) => 
-        sp.toLowerCase() === messageSearchQuery.toLowerCase() ? 
-          <mark key={`search-${i}-${j}`} className="bg-yellow-200 text-slate-900 rounded-sm px-0.5">{sp}</mark> : 
-          sp
-      );
+      // Then, handle URL parsing and search highlighting for non-mention parts
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const textParts = part.split(urlRegex);
+
+      return textParts.map((tp, k) => {
+        if (tp.match(urlRegex)) {
+          return (
+            <a 
+              key={`url-${i}-${k}`} 
+              href={tp} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className={cn("no-underline hover:!underline font-medium break-all", isMeBubble ? "!text-white" : "!text-brand-teal")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {tp}
+            </a>
+          );
+        }
+
+        if (!messageSearchQuery) return tp;
+        
+        const searchParts = tp.split(new RegExp(`(${messageSearchQuery})`, 'gi'));
+        return searchParts.map((sp, j) => 
+          sp.toLowerCase() === messageSearchQuery.toLowerCase() ? 
+            <mark key={`search-${i}-${k}-${j}`} className="bg-yellow-200 text-slate-900 rounded-sm px-0.5">{sp}</mark> : 
+            sp
+        );
+      });
     });
 
     return withMentions;
