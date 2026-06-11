@@ -917,6 +917,25 @@ export default function ChatPage() {
     };
     shouldScrollToBottom.current = true;
     setCurrentMessages(prev => [...prev, optimisticMessage]);
+
+    // Optimistically update the sidebar lists instantly
+    const nowIso = new Date().toISOString();
+    if (selectedChat.type === 'personal') {
+      setChatSummaries(prev => ({
+        ...prev,
+        [targetId]: {
+          ...prev[targetId],
+          lastMessage: optimisticText,
+          timestamp: nowIso,
+          isSeen: true,
+          senderId: user.id
+        }
+      }));
+    } else if (selectedChat.type === 'group') {
+      setChatGroups(prev => prev.map(g => g.id === targetId ? { ...g, lastMessage: optimisticText, lastMessageTime: nowIso } : g));
+    } else if (selectedChat.type === 'general') {
+      setChatChannels(prev => prev.map(c => c.id === targetId ? { ...c, lastMessage: optimisticText, lastMessageTime: nowIso } : c));
+    }
     // Clear input fields immediately so the user gets instant feedback
     setMessage("");
     setReplyingTo(null);
