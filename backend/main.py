@@ -74,12 +74,30 @@ app.add_middleware(
 import shutil
 from fastapi.staticfiles import StaticFiles
 
+class SafeStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except Exception as ex:
+            if hasattr(ex, "status_code") and ex.status_code == 404:
+                ext = os.path.splitext(path)[1].lower()
+                if ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']:
+                    placeholder_svg = (
+                        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="%23cbd5e1" stroke-width="1.5">'
+                        '<rect width="20" height="20" x="2" y="2" rx="2" ry="2" fill="%23f8fafc"/>'
+                        '<circle cx="8.5" cy="8.5" r="1.5" fill="%23cbd5e1"/>'
+                        '<path d="m22 14-4.586-4.586a2 2 0 0 0-2.828 0L4 20"/>'
+                        '</svg>'
+                    )
+                    return Response(content=placeholder_svg, media_type="image/svg+xml")
+            raise ex
+
 # Ensure uploads directory exists
 UPLOAD_DIR = "uploads"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app.mount("/uploads", SafeStaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 from fastapi import Request
 from jose import jwt
@@ -922,7 +940,10 @@ async def create_chat_message(message: schemas.ChatMessageCreate, db=Depends(get
     
     # Broadcast to active clients in real-time
     try:
-        group_id = saved_msg.get("groupId")
+        from fastapi.encoders import jsonable_encoder
+        json_msg = jsonable_encoder(saved_msg)
+        
+        group_id = json_msg.get("groupId")
         if group_id:
             # Group or general channel message
             is_group = await db.chat_groups.find_one({"_id": ObjectId(group_id)}) if len(group_id) == 24 else None
@@ -935,13 +956,13 @@ async def create_chat_message(message: schemas.ChatMessageCreate, db=Depends(get
                 employees = await db.employees.find().to_list(length=1000)
                 member_ids = [str(emp["_id"]) for emp in employees]
                 
-            await ws_manager.broadcast_to_group(member_ids, "new_message", saved_msg)
+            await ws_manager.broadcast_to_group(member_ids, "new_message", json_msg)
         else:
             # Personal message: broadcast to both receiver and sender
-            receiver_id = saved_msg.get("receiverId")
-            sender_id = saved_msg.get("senderId")
+            receiver_id = json_msg.get("receiverId")
+            sender_id = json_msg.get("senderId")
             recipients = [receiver_id, sender_id]
-            await ws_manager.broadcast_to_group(recipients, "new_message", saved_msg)
+            await ws_manager.broadcast_to_group(recipients, "new_message", json_msg)
     except Exception as e:
         import logging
         logging.getLogger("websocket").warning(f"Error broadcasting new message: {e}")
@@ -1140,6 +1161,15 @@ async def get_online_users(db=Depends(get_db)):
 async def get_typing_status(chat_id: str, user_id: str, db=Depends(get_db)):
     typing_users = await crud.get_typing_users(db, chat_id, user_id)
     return {"typingUsers": typing_users}
+
+@app.get("/chat/ws-info")
+async def get_ws_info(request: Request):
+    backend_port = os.environ.get("BACKEND_PORT", "8000")
+    try:
+        port_val = int(backend_port)
+    except ValueError:
+        port_val = 8000
+    return {"port": port_val}
 
 @app.websocket("/chat/ws/{user_id}")
 async def chat_websocket_endpoint(websocket: WebSocket, user_id: str):
