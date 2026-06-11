@@ -102,6 +102,7 @@ export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(getISTNow());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [missingPunchOutDate, setMissingPunchOutDate] = useState<Date | null>(null);
+  const [isForcedRequest, setIsForcedRequest] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [interns, setInterns] = useState<any[]>([]);
@@ -526,6 +527,7 @@ export default function DashboardPage() {
  
       <RequestPunchOutDialog 
         open={isRequestDialogOpen}
+        isForced={isForcedRequest}
         onOpenChange={(open) => {
           setIsRequestDialogOpen(open);
           if (!open) setMissingPunchOutDate(null);
