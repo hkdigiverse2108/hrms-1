@@ -51,9 +51,15 @@ async def lifespan(app):
     
     # Start the global input tracker
     try:
+        import platform
+        import os
         from database import db
         import input_tracker
-        input_tracker.start_tracker(db)
+        run_tracker = os.environ.get("RUN_TRACKER", "true").lower() == "true"
+        if platform.system() != "Linux" and run_tracker:
+            input_tracker.start_tracker(db)
+        else:
+            print("[Tracker] Skipping input tracker start (disabled or running on Linux/Production server).")
     except Exception as e:
         print(f"Error starting global input tracker: {e}")
 
