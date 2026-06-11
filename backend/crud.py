@@ -4661,14 +4661,78 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
             print(f"Correction logic error: {e}")
     return fix_id(doc)
 
+async def _trigger_sales_target_recalculation(db, invoice_doc):
+    client_name = invoice_doc.get("clientName", "")
+    import re
+    client_name_escaped = re.escape(client_name)
+    lead = await db.leads.find_one({
+        "status": "Client Won",
+        "$or": [
+            {"company": {"$regex": f"^{client_name_escaped}$", "$options": "i"}},
+            {"contact": {"$regex": f"^{client_name_escaped}$", "$options": "i"}}
+        ]
+    })
+    
+    if lead:
+        assigned_to = lead.get("assignedTo", [])
+        if not isinstance(assigned_to, list):
+            assigned_to = [assigned_to] if assigned_to else []
+        
+        for emp_name in assigned_to:
+            if not emp_name:
+                continue
+            emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name.strip()}$", "$options": "i"}})
+            if not emp:
+                continue
+            
+            pd_str = invoice_doc.get("paymentDate") or invoice_doc.get("timestamp")
+            try:
+                from datetime import datetime
+                pd = datetime.fromisoformat(pd_str) if pd_str else get_now()
+                month_name = pd.strftime("%B")
+                week_num = (pd.day - 1) // 7 + 1
+                emp_id_str = str(emp["_id"])
+                
+                await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Monthly")
+                await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Weekly", week_num)
+                
+                emp_obj_id = ObjectId(emp_id_str) if len(emp_id_str) == 24 else None
+                emp_query = [emp_id_str]
+                if emp_obj_id:
+                    emp_query.append(emp_obj_id)
+                    
+                custom_targets_cursor = db.sales_targets.find({
+                    "employeeId": {"$in": emp_query},
+                    "type": "Custom"
+                })
+                async for t in custom_targets_cursor:
+                    await recalculate_sales_target(
+                        db,
+                        emp_id_str,
+                        t.get("month"),
+                        t.get("year"),
+                        "Custom",
+                        startDate=t.get("startDate"),
+                        endDate=t.get("endDate")
+                    )
+                await run_payroll_processing(db, month_name, pd.year)
+            except Exception as e:
+                print(f"Error triggering recalculate_sales_target from invoice: {e}")
+
 # Invoice CRUD
 async def create_invoice(db, invoice: schemas.InvoiceCreate):
     invoice_dict = invoice.dict()
     invoice_dict["timestamp"] = get_now().isoformat()
+    if invoice_dict.get("status") == "Paid":
+        invoice_dict["paymentDate"] = get_now().isoformat()
     result = await db.invoices.insert_one(invoice_dict)
     invoice_dict["id"] = str(result.inserted_id)
     if "_id" in invoice_dict:
         invoice_dict.pop("_id")
+        
+    if invoice_dict.get("status") == "Paid":
+        await _trigger_sales_target_recalculation(db, invoice_dict)
+        
     return invoice_dict
 
 async def get_invoices(db, skip: int = 0, limit: int = 100):
@@ -4694,61 +4758,7 @@ async def update_invoice(db, invoice_id: str, invoice_update: schemas.InvoiceUpd
     updated_doc = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
     
     if is_paid and not was_paid and updated_doc:
-        client_name = updated_doc.get("clientName", "")
-        import re
-        client_name_escaped = re.escape(client_name)
-        lead = await db.leads.find_one({
-            "status": "Client Won",
-            "$or": [
-                {"company": {"$regex": f"^{client_name_escaped}$", "$options": "i"}},
-                {"contact": {"$regex": f"^{client_name_escaped}$", "$options": "i"}}
-            ]
-        })
-        
-        if lead:
-            assigned_to = lead.get("assignedTo", [])
-            if not isinstance(assigned_to, list):
-                assigned_to = [assigned_to] if assigned_to else []
-            
-            for emp_name in assigned_to:
-                if not emp_name:
-                    continue
-                emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name.strip()}$", "$options": "i"}})
-                if not emp:
-                    continue
-                
-                pd_str = updated_doc.get("paymentDate")
-                try:
-                    pd = datetime.fromisoformat(pd_str) if pd_str else get_now()
-                    month_name = pd.strftime("%B")
-                    week_num = (pd.day - 1) // 7 + 1
-                    emp_id_str = str(emp["_id"])
-                    
-                    await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Monthly")
-                    await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Weekly", week_num)
-                    
-                    emp_obj_id = ObjectId(emp_id_str) if len(emp_id_str) == 24 else None
-                    emp_query = [emp_id_str]
-                    if emp_obj_id:
-                        emp_query.append(emp_obj_id)
-                        
-                    custom_targets_cursor = db.sales_targets.find({
-                        "employeeId": {"$in": emp_query},
-                        "type": "Custom"
-                    })
-                    async for t in custom_targets_cursor:
-                        await recalculate_sales_target(
-                            db,
-                            emp_id_str,
-                            t.get("month"),
-                            t.get("year"),
-                            "Custom",
-                            startDate=t.get("startDate"),
-                            endDate=t.get("endDate")
-                        )
-                    await run_payroll_processing(db, month_name, pd.year)
-                except Exception as e:
-                    print(f"Error auto-processing payroll on invoice paid for {emp_name}: {e}")
+        await _trigger_sales_target_recalculation(db, updated_doc)
                     
     return fix_id(updated_doc) if updated_doc else None
 
