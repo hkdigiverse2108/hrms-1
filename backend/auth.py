@@ -4,6 +4,7 @@ from typing import Optional, Any
 from jose import jwt, JWTError
 from fastapi import Depends, HTTPException, status, Header
 from passlib.context import CryptContext
+import passlib.handlers.bcrypt
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-very-secure-fallback-secret-key-change-this-in-prod")
 ALGORITHM = "HS256"

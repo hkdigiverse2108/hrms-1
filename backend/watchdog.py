@@ -28,7 +28,11 @@ from datetime import datetime
 PLATFORM = platform.system()
 
 # ── Configuration ────────────────────────────────────────────────────────────
-SCRIPT_DIR = Path(__file__).parent.resolve()
+if getattr(sys, 'frozen', False):
+    SCRIPT_DIR = Path(sys.executable).parent.resolve()
+else:
+    SCRIPT_DIR = Path(__file__).parent.resolve()
+
 BACKEND_BINARY = SCRIPT_DIR / ("backend.exe" if PLATFORM == "Windows" else "backend")
 LOG_FILE = SCRIPT_DIR / "watchdog.log"
 RESTART_DELAY_SECONDS = 2  # Wait 2s before restarting
