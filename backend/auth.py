@@ -61,6 +61,14 @@ async def require_admin(token_payload: dict = Depends(get_current_user_token)):
     """
     role = str(token_payload.get("role", "")).lower()
     if role != "admin":
+        # Fallback: query database in case token doesn't contain role
+        from database import db
+        user_id = token_payload.get("sub")
+        if user_id:
+            from bson import ObjectId
+            user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
+            if user and str(user.get("role", "")).lower() == "admin":
+                return token_payload
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required. You do not have permission to perform this action.",

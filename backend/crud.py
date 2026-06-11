@@ -1570,7 +1570,7 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
             user_fixed["permissions"] = []
             
         # Generate JWT token
-        token = auth.create_access_token(data={"sub": user_id})
+        token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", "")})
         
         # The frontend expects {user: ...} right now, we'll wrap it in main.py
         # Actually main.py returns {"message": "...", "user": user}
