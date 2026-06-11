@@ -7,7 +7,8 @@ import {
   ShieldHalf,
   Loader2,
   ChevronLeft,
-  DollarSign
+  DollarSign,
+  RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter, useParams } from "next/navigation";
@@ -241,6 +242,30 @@ export default function ViewInvoicePage() {
     }
   };
 
+  const handleMarkAsUnpaid = async () => {
+    if (!invoice) return;
+    setIsUpdatingStatus(true);
+    try {
+      const res = await fetch(`${API_URL}/invoices/${invoiceId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Pending" })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setInvoice(updated);
+        toast.success("Invoice successfully marked as Unpaid!");
+      } else {
+        toast.error("Failed to update status");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error updating status");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
   const handleConvertToTaxInvoice = async () => {
     if (!invoice) return;
     const isConfirmed = await confirm({
@@ -399,6 +424,20 @@ export default function ViewInvoicePage() {
                 <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Processing...</>
               ) : (
                 <><DollarSign className="w-3.5 h-3.5 mr-2" />Mark as Paid</>
+              )}
+            </Button>
+          )}
+          {invoice.status === "Paid" && (
+            <Button 
+              variant="outline"
+              className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-medium h-10 px-4"
+              onClick={handleMarkAsUnpaid}
+              disabled={isUpdatingStatus}
+            >
+              {isUpdatingStatus ? (
+                <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Processing...</>
+              ) : (
+                <><RotateCcw className="w-3.5 h-3.5 mr-2" />Mark as Unpaid</>
               )}
             </Button>
           )}
@@ -669,22 +708,66 @@ export default function ViewInvoicePage() {
           </div>
 
           {/* Bank Details */}
-          <div className="mx-12 my-3 border border-slate-200 rounded-md px-4 py-2.5 flex flex-col gap-2 bg-white shadow-sm">
-            <span className="text-[9.5px] font-bold text-slate-400 tracking-wider uppercase leading-none">
-              BANK DETAILS
-            </span>
-            <div className="flex gap-12 text-[11.5px] text-slate-500 font-medium">
-              <div>
-                Bank: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankName || "Axis Bank"}</span>
-              </div>
-              <div>
-                A/c: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankAccountNumber || "924020057377415"}</span>
-              </div>
-              <div>
-                IFSC: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankIfscCode || "UTIB0002891"}</span>
-              </div>
+          {invoice.paymentMode !== "Cash" && (
+            <div className="mx-12 my-3 border border-slate-200 rounded-md px-4 py-2.5 flex flex-col gap-2 bg-white shadow-sm">
+              <span className="text-[9.5px] font-bold text-slate-400 tracking-wider uppercase leading-none">
+                BANK DETAILS
+              </span>
+              {invoice.paymentMode === "Other Account" ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-x-8 gap-y-2 text-[11.5px] text-slate-500 font-medium">
+                    {invoice.otherBankName && (
+                      <div>
+                        Bank: <span className="font-bold text-[#111827] ml-0.5">{invoice.otherBankName}</span>
+                      </div>
+                    )}
+                    {invoice.otherBankAccount && (
+                      <div>
+                        A/c: <span className="font-bold text-[#111827] ml-0.5">{invoice.otherBankAccount}</span>
+                      </div>
+                    )}
+                    {invoice.otherBankIfsc && (
+                      <div>
+                        IFSC: <span className="font-bold text-[#111827] ml-0.5">{invoice.otherBankIfsc}</span>
+                      </div>
+                    )}
+                    {invoice.otherUpiId && (
+                      <div>
+                        UPI: <span className="font-bold text-[#111827] ml-0.5">{invoice.otherUpiId}</span>
+                      </div>
+                    )}
+                    {!invoice.otherBankName && !invoice.otherBankAccount && !invoice.otherBankIfsc && !invoice.otherUpiId && !invoice.otherQrUrl && (
+                      <span>N/A</span>
+                    )}
+                  </div>
+                  {invoice.otherQrUrl && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[9.5px] font-bold text-slate-400 tracking-wider uppercase leading-none">
+                        SCAN TO PAY
+                      </span>
+                      <img 
+                        src={invoice.otherQrUrl.startsWith('http') ? invoice.otherQrUrl : `${API_URL}${invoice.otherQrUrl}`}
+                        alt="QR Code"
+                        className="w-16 h-16 object-contain rounded border border-slate-200 p-1"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-12 text-[11.5px] text-slate-500 font-medium">
+                  <div>
+                    Bank: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankName || "Axis Bank"}</span>
+                  </div>
+                  <div>
+                    A/c: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankAccountNumber || "924020057377415"}</span>
+                  </div>
+                  <div>
+                    IFSC: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankIfscCode || "UTIB0002891"}</span>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           {/* Terms & Authorized Signatory Row */}
           <div className="mx-12 mt-6 mb-8 grid grid-cols-2 gap-8 items-end">
@@ -693,11 +776,17 @@ export default function ViewInvoicePage() {
               <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
                 TERMS & CONDITIONS
               </span>
-              <ol className="list-decimal pl-3.5 text-[11px] text-gray-600 font-semibold leading-relaxed">
-                <li>Payment is due within 3 days of the invoice date.</li>
-                <li>Late payments may incur additional charges.</li>
-                <li>All disputes are subject to Gujarat Jurisdiction.</li>
-              </ol>
+              {invoice.notes ? (
+                <div className="text-[11px] text-gray-600 font-semibold leading-relaxed whitespace-pre-wrap">
+                  {invoice.notes}
+                </div>
+              ) : (
+                <ol className="list-decimal pl-3.5 text-[11px] text-gray-600 font-semibold leading-relaxed">
+                  <li>Payment is due within 3 days of the invoice date.</li>
+                  <li>Late payments may incur additional charges.</li>
+                  <li>All disputes are subject to Gujarat Jurisdiction.</li>
+                </ol>
+              )}
             </div>
 
             {/* Signature Block */}

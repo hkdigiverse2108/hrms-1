@@ -1564,6 +1564,11 @@ class InvoiceBase(BaseModel):
     subtotal: float
     total: float
     notes: Optional[str] = None
+    otherBankName: Optional[str] = None
+    otherBankAccount: Optional[str] = None
+    otherBankIfsc: Optional[str] = None
+    otherUpiId: Optional[str] = None
+    otherQrUrl: Optional[str] = None
     status: str = "Pending"  # Pending, Paid, Overdue
     invoiceType: str = "Tax Invoice"  # Tax Invoice, Proforma Invoice
 
@@ -1587,6 +1592,11 @@ class InvoiceUpdate(BaseModel):
     subtotal: Optional[float] = None
     total: Optional[float] = None
     notes: Optional[str] = None
+    otherBankName: Optional[str] = None
+    otherBankAccount: Optional[str] = None
+    otherBankIfsc: Optional[str] = None
+    otherUpiId: Optional[str] = None
+    otherQrUrl: Optional[str] = None
     status: Optional[str] = None
     invoiceType: Optional[str] = None
 

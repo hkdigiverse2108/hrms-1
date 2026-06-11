@@ -4245,7 +4245,7 @@ async def calculate_sales_incentive(db, category_revenues: dict, employee_id: st
             
     return total_incentive, category_percentages
 
-async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = None, year: Optional[int] = None, target_type: str = "Monthly", week: Optional[int] = None, startDate: Optional[str] = None, endDate: Optional[str] = None):
+async def recalculate_sales_target(db, employee_id: str, month: str, year: int, target_type: str = "Monthly", week: Optional[int] = None):
     try:
         # 1. Calculate Achievement from First Paid Invoices
         emp = await get_employee(db, employee_id)
@@ -4418,12 +4418,6 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
             target_query["month"] = month
             target_query["year"] = year
             target_query["week"] = week
-        elif target_type == "Monthly":
-            target_query["month"] = month
-            target_query["year"] = year
-        elif target_type == "Custom":
-            target_query["startDate"] = startDate
-            target_query["endDate"] = endDate
             
         await db.sales_targets.update_one(
             target_query,
@@ -4695,19 +4689,22 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
             print(f"Correction logic error: {e}")
     return fix_id(doc)
 
+
+# Invoice CRUD
 async def _trigger_sales_target_recalculation(db, invoice_doc):
-    client_name = invoice_doc.get("clientName", "")
-    import re
-    client_name_escaped = re.escape(client_name)
-    lead = await db.leads.find_one({
-        "status": "Client Won",
-        "$or": [
-            {"company": {"$regex": f"^{client_name_escaped}$", "$options": "i"}},
-            {"contact": {"$regex": f"^{client_name_escaped}$", "$options": "i"}}
-        ]
-    })
+    client_name = invoice_doc.get("clientName", "").strip().lower()
     
-    if lead:
+    # In-memory lead matching to bypass database regex stripping issues
+    leads_cursor = db.leads.find({"status": "Client Won"})
+    all_won_leads = await leads_cursor.to_list(length=10000)
+    
+    matched_leads = [
+        lead for lead in all_won_leads
+        if lead.get("company", "").strip().lower() == client_name or 
+           lead.get("contact", "").strip().lower() == client_name
+    ]
+    
+    for lead in matched_leads:
         assigned_to = lead.get("assignedTo", [])
         if not isinstance(assigned_to, list):
             assigned_to = [assigned_to] if assigned_to else []
@@ -4721,8 +4718,29 @@ async def _trigger_sales_target_recalculation(db, invoice_doc):
             
             pd_str = invoice_doc.get("paymentDate") or invoice_doc.get("timestamp")
             try:
-                from datetime import datetime
-                pd = datetime.fromisoformat(pd_str) if pd_str else get_now()
+                pd = None
+                if isinstance(pd_str, datetime):
+                    pd = pd_str.replace(tzinfo=None)
+                elif isinstance(pd_str, date):
+                    pd = datetime(pd_str.year, pd_str.month, pd_str.day)
+                else:
+                    date_str = str(pd_str).strip()
+                    try:
+                        pd = datetime.fromisoformat(date_str)
+                        if pd.tzinfo:
+                            pd = pd.replace(tzinfo=None)
+                    except ValueError:
+                        for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%b %d, %Y", "%d/%m/%Y", "%d-%m-%Y"):
+                            try:
+                                pd = datetime.strptime(date_str, fmt)
+                                if pd.tzinfo:
+                                    pd = pd.replace(tzinfo=None)
+                                break
+                            except Exception: continue
+                
+                if not pd:
+                    pd = get_now()
+                    
                 month_name = pd.strftime("%B")
                 week_num = (pd.day - 1) // 7 + 1
                 emp_id_str = str(emp["_id"])
@@ -4753,7 +4771,6 @@ async def _trigger_sales_target_recalculation(db, invoice_doc):
             except Exception as e:
                 print(f"Error triggering recalculate_sales_target from invoice: {e}")
 
-# Invoice CRUD
 async def create_invoice(db, invoice: schemas.InvoiceCreate):
     invoice_dict = invoice.dict()
     invoice_dict["timestamp"] = get_now().isoformat()
