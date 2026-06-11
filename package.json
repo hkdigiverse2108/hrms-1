@@ -22,6 +22,12 @@
     "win": {
       "target": [
         { "target": "nsis", "arch": ["x64"] }
+      ],
+      "extraResources": [
+        {
+          "from": "backend/dist/backend.exe",
+          "to": "backend/backend.exe"
+        }
       ]
     },
     "nsis": {
@@ -36,7 +42,13 @@
       ],
       "category": "public.app-category.business",
       "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "extraResources": [
+        {
+          "from": "backend/dist/backend",
+          "to": "backend/backend"
+        }
+      ]
     },
     "dmg": {
       "title": "HRMS ${version}",
@@ -58,18 +70,6 @@
       {
         "from": "frontend/public",
         "to": "app/frontend/public"
-      }
-    ],
-    "extraResources_win": [
-      {
-        "from": "backend/dist/backend.exe",
-        "to": "backend/backend.exe"
-      }
-    ],
-    "extraResources_mac": [
-      {
-        "from": "backend/dist/backend",
-        "to": "backend/backend"
       }
     ]
   }

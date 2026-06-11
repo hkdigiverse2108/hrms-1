@@ -30,7 +30,7 @@ def compile_binary(script_path: Path, binary_name: str, hidden_imports: list, ba
 
     cmd.append(str(script_path))
 
-    print(f"Compiling {script_path.name} → {binary_name}...")
+    print(f"Compiling {script_path.name} -> {binary_name}...")
     print(" ".join(cmd))
     result = subprocess.run(cmd, cwd=str(backend_dir))
     return result.returncode
@@ -89,14 +89,14 @@ def build():
     if rc1 != 0:
         print("Backend PyInstaller build failed!")
         sys.exit(rc1)
-    print(f"\n✅ Backend compiled: backend/dist/backend{ext}")
+    print(f"\n[OK] Backend compiled: backend/dist/backend{ext}")
 
     # ── Build 2: watchdog binary ──────────────────────────────────────────
     rc2 = compile_binary(watchdog_py, "watchdog", watchdog_imports, backend_dir)
     if rc2 != 0:
         print("Watchdog PyInstaller build failed!")
         sys.exit(rc2)
-    print(f"✅ Watchdog compiled: backend/dist/watchdog{ext}")
+    print(f"[OK] Watchdog compiled: backend/dist/watchdog{ext}")
 
     print("\n=== Build complete ===")
     print(f"Both binaries are in: {backend_dir / 'dist'}")
