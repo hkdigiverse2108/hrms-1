@@ -311,7 +311,7 @@ export default function EditInvoicePage() {
       return;
     }
 
-    if (!clientGstin.trim()) {
+    if (taxType !== "No Tax" && !clientGstin.trim()) {
       toast.error("Please enter client GSTIN");
       return;
     }
@@ -547,7 +547,9 @@ export default function EditInvoicePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Client GSTIN</label>
+                  <label className="text-sm font-semibold text-foreground">
+                    Client GSTIN {taxType !== "No Tax" && <span className="text-red-500">*</span>}
+                  </label>
                   <Input 
                     value={clientGstin}
                     onChange={(e) => setClientGstin(e.target.value)}
