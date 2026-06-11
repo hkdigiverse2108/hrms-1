@@ -49,8 +49,44 @@ async def lifespan(app):
     except Exception as e:
         print(f"Error seeding default document types: {e}")
     
+    # Start the global input tracker
+    try:
+        from database import db
+        import input_tracker
+        input_tracker.start_tracker(db)
+    except Exception as e:
+        print(f"Error starting global input tracker: {e}")
+
+    # Auto-register local PC device
+    try:
+        from database import db
+        import socket
+        import platform
+        hostname = socket.gethostname()
+        os_name = platform.system()
+        os_version = platform.release()
+        
+        local_ip = "127.0.0.1"
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            pass
+            
+        await crud.register_pc_device(db, hostname, local_ip, os_name, os_version)
+        print(f"[PC Registration] Registered device: {hostname} ({local_ip})")
+    except Exception as e:
+        print(f"[PC Registration] Failed to register PC: {e}")
+
     yield
-    # --- Shutdown (nothing needed for now) ---
+    # --- Shutdown ---
+    try:
+        import input_tracker
+        input_tracker.stop_tracker()
+    except Exception as e:
+        print(f"Error stopping global input tracker: {e}")
     # Reload trigger: 1
 
 app = FastAPI(title="HRMS API", lifespan=lifespan)
@@ -1607,6 +1643,130 @@ async def delete_schedule(schedule_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return {"message": "Schedule deleted successfully"}
+
+
+# --- User Activity Input Tracking API ---
+@app.post("/activity/track/{employee_id}", response_model=schemas.UserInputStats)
+async def track_activity(employee_id: str, input_data: schemas.UserInputStatsCreate, db=Depends(get_db)):
+    return await crud.track_user_activity(db, employee_id, input_data.clicks, input_data.keystrokes)
+
+@app.get("/activity/stats", response_model=List[schemas.UserInputStats])
+async def get_activity_stats(employeeId: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_user_activity_stats(db, employee_id=employeeId)
+
+
+@app.post("/activity/session-active/{employee_id}")
+async def set_active_session(employee_id: str):
+    import input_tracker
+    await input_tracker.set_active_user(employee_id)
+    return {"message": "Session tracking started"}
+
+@app.post("/activity/session-inactive")
+async def clear_active_session():
+    import input_tracker
+    input_tracker.clear_active_user()
+    return {"message": "Session tracking stopped"}
+
+# --- PC Device Restrictions & Broadcasts APIs ---
+import socket
+import platform
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+@app.get("/system/info")
+async def get_system_info():
+    return {
+        "hostname": socket.gethostname(),
+        "ipAddress": get_local_ip(),
+        "os": platform.system(),
+        "osVersion": platform.release()
+    }
+
+@app.get("/restrictions/pcs", response_model=List[schemas.RegisteredPC])
+async def read_registered_pcs(
+    db=Depends(get_db),
+    _token=Depends(auth.require_auth)  # Must be logged in to see PC list
+):
+    return await crud.get_registered_pcs(db)
+
+@app.put("/restrictions/pcs/{hostname}", response_model=schemas.RegisteredPC)
+async def update_pcs_restrictions(
+    hostname: str,
+    pc_update: schemas.RegisteredPCUpdate,
+    db=Depends(get_db),
+    _admin=Depends(auth.require_admin)  # Admin ONLY — employees cannot modify restrictions
+):
+    updated = await crud.update_pc_restrictions(
+        db,
+        hostname,
+        block_chrome=pc_update.blockChrome,
+        block_youtube=pc_update.blockYoutube,
+        block_apps=pc_update.blockApps,
+        block_urls=pc_update.blockUrls
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Registered PC not found")
+    return updated
+
+@app.post("/system/broadcast")
+async def system_broadcast(
+    payload: dict,
+    _admin=Depends(auth.require_admin)  # Admin ONLY — employees cannot send broadcasts
+):
+    title = payload.get("title", "System Broadcast")
+    message = payload.get("message", "")
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    await ws_manager.broadcast_all("system_alert", {"title": title, "message": message})
+    return {"message": "Announcement broadcasted successfully"}
+
+
+
+@app.get("/security/alerts")
+async def get_security_alerts(
+    resolved: bool = None,
+    db=Depends(get_db),
+    _token=Depends(auth.require_auth)  # Any logged-in user (admin sees panel)
+):
+    """Return all security tamper alerts from MongoDB, newest first."""
+    query = {}
+    if resolved is not None:
+        query["resolved"] = resolved
+    cursor = db.security_alerts.find(query).sort("timestamp", -1).limit(200)
+    alerts = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        alerts.append(doc)
+    return alerts
+
+@app.put("/security/alerts/{alert_id}/resolve")
+async def resolve_security_alert(
+    alert_id: str,
+    db=Depends(get_db),
+    _admin=Depends(auth.require_admin)  # Admin only
+):
+    """Mark a security alert as resolved."""
+    from bson import ObjectId as ObjId
+    try:
+        result = await db.security_alerts.update_one(
+            {"_id": ObjId(alert_id)},
+            {"$set": {"resolved": True, "resolvedAt": datetime.utcnow()}}
+        )
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        return {"message": "Alert marked as resolved"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))

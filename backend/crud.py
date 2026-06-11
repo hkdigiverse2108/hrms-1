@@ -4697,6 +4697,111 @@ async def delete_schedule(db, schedule_id: str):
         return False
     res = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
     return res.deleted_count > 0
+# --- User Activity Input Tracking Operations ---
+async def track_user_activity(db, employee_id: str, clicks: int, keystrokes: int, applications: Optional[dict] = None, domains: Optional[dict] = None):
+    # Find the employee first to get their name
+    employee = None
+    if ObjectId.is_valid(employee_id):
+        employee = await db.employees.find_one({"_id": ObjectId(employee_id)})
+    if not employee:
+        employee = await db.employees.find_one({"_id": employee_id})
+    if not employee:
+        employee = await db.employees.find_one({"employeeId": employee_id})
 
+    employee_name = "Unknown Employee"
+    if employee:
+        employee_name = employee.get("name") or f"{employee.get('firstName', '')} {employee.get('lastName', '')}".strip() or "Unnamed"
+
+    today_str = get_now().strftime("%Y-%m-%d")
+
+    # Construct increments dynamically
+    inc_updates = {
+        "clicks": clicks,
+        "keystrokes": keystrokes
+    }
+
+    if applications:
+        for app, seconds in applications.items():
+            # Replace dots with underscores to prevent MongoDB path errors
+            safe_app = app.replace(".", "_")
+            inc_updates[f"applications.{safe_app}"] = seconds
+
+    if domains:
+        for domain, seconds in domains.items():
+            safe_domain = domain.replace(".", "_")
+            inc_updates[f"domains.{safe_domain}"] = seconds
+
+    # Upsert the daily record for this user
+    await db.user_input_stats.update_one(
+        {"employeeId": employee_id, "date": today_str},
+        {
+            "$set": {
+                "employeeName": employee_name,
+                "lastActive": get_now()
+            },
+            "$inc": inc_updates
+        },
+        upsert=True
+    )
+    
+    updated = await db.user_input_stats.find_one({"employeeId": employee_id, "date": today_str})
+    return fix_id(updated)
+
+async def get_user_activity_stats(db, employee_id: str = None):
+    query = {}
+    if employee_id:
+        query["employeeId"] = employee_id
+    cursor = db.user_input_stats.find(query)
+    stats = await cursor.to_list(length=10000)
+    return [fix_id(s) for s in stats]
+
+
+# --- Registered PC Device Operations ---
+async def register_pc_device(db, hostname: str, ip_address: str, os_name: str, os_version: str):
+    await db.registered_pcs.update_one(
+        {"hostname": hostname},
+        {
+            "$set": {
+                "ipAddress": ip_address,
+                "os": os_name,
+                "osVersion": os_version,
+                "lastSeen": get_now()
+            },
+            "$setOnInsert": {
+                "firstSeen": get_now(),
+                "blockChrome": False,
+                "blockYoutube": False,
+                "blockApps": [],
+                "blockUrls": []
+            }
+        },
+        upsert=True
+    )
+    return await db.registered_pcs.find_one({"hostname": hostname})
+
+async def get_registered_pcs(db):
+    cursor = db.registered_pcs.find({})
+    pcs = await cursor.to_list(length=1000)
+    return [fix_id(pc) for pc in pcs]
+
+async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool] = None, block_youtube: Optional[bool] = None, block_apps: Optional[List[str]] = None, block_urls: Optional[List[str]] = None):
+    update_fields = {}
+    if block_chrome is not None:
+        update_fields["blockChrome"] = block_chrome
+    if block_youtube is not None:
+        update_fields["blockYoutube"] = block_youtube
+    if block_apps is not None:
+        update_fields["blockApps"] = block_apps
+    if block_urls is not None:
+        update_fields["blockUrls"] = block_urls
+        
+    if update_fields:
+        await db.registered_pcs.update_one(
+            {"hostname": hostname},
+            {"$set": update_fields}
+        )
+    
+    updated = await db.registered_pcs.find_one({"hostname": hostname})
+    return fix_id(updated) if updated else None
 
 

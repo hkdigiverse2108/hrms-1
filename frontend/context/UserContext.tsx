@@ -165,10 +165,36 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Run status check every 5 seconds
-    const intervalId = setInterval(checkUserStatus, 5000);
+    // Run status check every 60 seconds (1 minute)
+    const intervalId = setInterval(checkUserStatus, 60000);
     return () => clearInterval(intervalId);
-  }, [user]);
+  }, [user?.id, user?._id]);
+
+  // Native OS input tracking session management
+  useEffect(() => {
+    if (!user) {
+      // Clear active session on logout
+      fetch(`${API_URL}/activity/session-inactive`, { method: 'POST' }).catch(() => {});
+      return;
+    }
+    const userId = user.id || user._id;
+    if (!userId) return;
+
+    // Register active user in global native listener
+    fetch(`${API_URL}/activity/session-active/${userId}`, { method: 'POST' }).catch(() => {});
+
+    const handleUnload = () => {
+      // Notify session inactive on unload
+      fetch(`${API_URL}/activity/session-inactive`, { method: 'POST', keepalive: true }).catch(() => {});
+    };
+
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload);
+      handleUnload();
+    };
+  }, [user?.id, user?._id]);
  
   return (
     <UserContext.Provider value={{ user, isLoading, login, updateUser, logout, getISTNow, timeAnchor, isTimeSynced }}>

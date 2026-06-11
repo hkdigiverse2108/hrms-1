@@ -1688,4 +1688,49 @@ class Schedule(ScheduleBase):
         from_attributes = True
 
 
+# User Input Stats Schemas
+class UserInputStatsBase(BaseModel):
+    employeeId: str
+    employeeName: str
+    date: str  # YYYY-MM-DD
+    clicks: int
+    keystrokes: int
+    lastActive: Optional[RobustDatetime] = None
+    applications: Optional[dict] = {}
+    domains: Optional[dict] = {}
+
+class UserInputStatsCreate(BaseModel):
+    clicks: int
+    keystrokes: int
+    applications: Optional[dict] = {}
+    domains: Optional[dict] = {}
+
+class UserInputStats(UserInputStatsBase):
+    id: str
+
+
+# Registered PC & Restriction Schemas
+class RegisteredPCBase(BaseModel):
+    hostname: str
+    ipAddress: Optional[str] = None
+    os: Optional[str] = None
+    osVersion: Optional[str] = None
+    firstSeen: Optional[RobustDatetime] = None
+    lastSeen: Optional[RobustDatetime] = None
+    blockChrome: Optional[bool] = False
+    blockYoutube: Optional[bool] = False
+    blockApps: Optional[List[str]] = []
+    blockUrls: Optional[List[str]] = []
+
+class RegisteredPCUpdate(BaseModel):
+    blockChrome: Optional[bool] = None
+    blockYoutube: Optional[bool] = None
+    blockApps: Optional[List[str]] = None
+    blockUrls: Optional[List[str]] = None
+
+class RegisteredPC(RegisteredPCBase):
+    id: str
+
+
+
 

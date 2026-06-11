@@ -5,7 +5,8 @@ import { useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ReactNode } from "react";
-import { Layout } from "antd";
+import { Layout, Modal } from "antd";
+import { useAppEvent } from "@/hooks/useAppEvent";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AccessDenied } from "@/components/common/AccessDenied";
@@ -51,6 +52,7 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/invoice")) return "invoice";
   if (pathname.startsWith("/chat")) return "chat";
   if (pathname.startsWith("/settings")) return "settings";
+  if (pathname.startsWith("/activity-tracker")) return null;
   
   return null;
 }
@@ -62,6 +64,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
  
+  // Listen for global WebSocket broadcast alerts
+  useAppEvent("system_alert", (data) => {
+    Modal.warning({
+      title: data.title || "System Announcement",
+      content: data.message,
+      okText: "Dismiss",
+      centered: true,
+      maskClosable: false,
+    });
+  });
+
   // Authentication Guard
   useEffect(() => {
     if (!isLoading && !user && !isAuthPage) {
