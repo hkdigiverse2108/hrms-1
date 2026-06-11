@@ -124,12 +124,18 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
   const isSales = formData.department?.includes("Sales");
 
   const toggleDepartment = (dept: string) => {
-    const currentDepts = formData.department ? formData.department.split(',').map(d => d.trim()).filter(Boolean) : [];
+    const currentDepts = formData.department 
+      ? formData.department.split(',').map(d => d.trim()).filter(Boolean) 
+      : [];
+    
+    let newDepts;
     if (currentDepts.includes(dept)) {
-      handleChange("department", currentDepts.filter(d => d !== dept).join(', '));
+      newDepts = currentDepts.filter(d => d !== dept);
     } else {
-      handleChange("department", [...currentDepts, dept].join(', '));
+      newDepts = [...currentDepts, dept];
     }
+    
+    handleChange("department", newDepts.join(', '));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -190,11 +196,18 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
               <Label className="text-xs font-bold uppercase text-slate-500">Department(s)</Label>
               <div className="flex flex-wrap gap-2 pt-1">
                 {departments.map((dept) => {
-                  const isSelected = formData.department?.split(',').map(d => d.trim()).includes(dept);
+                  const currentDepts = formData.department 
+                    ? formData.department.split(',').map(d => d.trim()).filter(Boolean) 
+                    : [];
+                  const isSelected = currentDepts.includes(dept);
                   return (
-                    <div 
+                    <button
+                      type="button"
                       key={dept}
-                      onClick={() => toggleDepartment(dept)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleDepartment(dept);
+                      }}
                       className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer border transition-colors ${
                         isSelected 
                           ? 'bg-brand-teal text-white border-brand-teal' 
@@ -202,7 +215,7 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
                       }`}
                     >
                       {dept}
-                    </div>
+                    </button>
                   );
                 })}
               </div>

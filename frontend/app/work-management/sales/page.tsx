@@ -54,6 +54,33 @@ import {
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { useConfirm } from "@/context/ConfirmContext";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+const isAssignedTo = (assignedToData: any, employeeName: string | undefined | null) => {
+  if (!employeeName) return false;
+  if (Array.isArray(assignedToData)) {
+    return assignedToData.includes(employeeName);
+  }
+  return assignedToData === employeeName;
+};
+
+const getAssignedToString = (assignedToData: any) => {
+  if (Array.isArray(assignedToData)) {
+    return assignedToData.join(", ");
+  }
+  return assignedToData || "Unassigned";
+};
+
+const getAssignedToInitials = (assignedToData: any) => {
+  if (Array.isArray(assignedToData) && assignedToData.length > 0) {
+    return (assignedToData[0] || "??").substring(0, 2);
+  }
+  if (typeof assignedToData === 'string') {
+    return (assignedToData || "??").substring(0, 2);
+  }
+  return "??";
+};
+
 export default function SalesPage() {
   const { confirm } = useConfirm();
   const { user } = useUser();
@@ -485,9 +512,9 @@ export default function SalesPage() {
 
   const myTarget = targets.find(t => t.employeeName === user?.name && t.month === selectedMonth && t.year === selectedYear);
   const myAchievement = leads.filter(l => {
-    if (l.status !== "Client Won" || l.assignedTo === user?.name) {
+    if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, user?.name)) {
       const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-      return l.status === "Client Won" && l.assignedTo === user?.name && leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
+      return l.status === "Client Won" && isAssignedTo(l.assignedTo, user?.name) && leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
     }
     return false;
   }).reduce((acc, l) => {
@@ -703,7 +730,7 @@ export default function SalesPage() {
                       onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'assignedTo' })}
                       className="text-[12px] font-bold text-brand-teal cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5"
                     >
-                      {lead.assignedTo || "--"}
+                      {getAssignedToString(lead.assignedTo) || "--"}
                     </span>
                   )}
                 </td>
@@ -1176,7 +1203,7 @@ export default function SalesPage() {
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
                                 const achieved = leads.filter(l => {
-                                  if (l.status !== "Client Won" || l.assignedTo !== t.employeeName) return false;
+                                  if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, t.employeeName)) return false;
                                   const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
                                   
                                   // Month/Year check
@@ -1346,7 +1373,7 @@ export default function SalesPage() {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {leads.filter(l => l.status === "Client Won")
-                          .filter(l => reportEmployeeFilter === "all" || l.assignedTo === reportEmployeeFilter)
+                          .filter(l => reportEmployeeFilter === "all" || isAssignedTo(l.assignedTo, reportEmployeeFilter))
                           .filter(l => {
                             if (!reportDateFilter) return true;
                             const targetDate = dayjs(reportDateFilter).format('YYYY-MM-DD');
@@ -1368,9 +1395,9 @@ export default function SalesPage() {
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-2">
                                   <div className="w-7 h-7 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[10px] font-bold uppercase">
-                                    {(lead.assignedTo || "??").substring(0, 2)}
+                                    {getAssignedToInitials(lead.assignedTo)}
                                   </div>
-                                  <span className="font-bold text-slate-700 text-sm">{lead.assignedTo || "Unassigned"}</span>
+                                  <span className="font-bold text-slate-700 text-sm">{getAssignedToString(lead.assignedTo)}</span>
                                 </div>
                               </td>
                               <td className="px-6 py-4">
