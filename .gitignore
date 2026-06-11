@@ -62,3 +62,9 @@ frontend_err.log
 package-lock.json
 .env.server
 frontend/next-env.d.ts
+
+# Cleanup artifacts
+test_script*.py
+backend_errors.log
+frontend_debug.log
+hrms.db

@@ -153,8 +153,9 @@ export function SalesAnalytics() {
       const yearStr = leadDate.year().toString();
       const monthKeySuffix = `${monthStr}-${yearStr}`;
 
-      assignedList.forEach(empName => {
-        if (!empName) empName = "Unassigned";
+      assignedList.forEach(empNameRaw => {
+        const nameStr = typeof empNameRaw === 'string' ? empNameRaw : String(empNameRaw || "Unassigned");
+        const empName = nameStr;
         const normalizedName = empName.trim().toLowerCase().replace(/\s+/g, ' ');
         const key = `${normalizedName}_${monthKeySuffix}`;
         

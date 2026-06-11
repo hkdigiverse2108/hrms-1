@@ -628,9 +628,12 @@ export default function SalesPage() {
     ? leads 
     : leads.filter((l: any) => {
         const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
-        const isAssigned = assignedList.some((name: string) => name.toLowerCase() === currentUserName.toLowerCase());
+        const isAssigned = assignedList.some((name: any) => {
+          const nameStr = typeof name === 'string' ? name : String(name || "Unassigned");
+          return nameStr.toLowerCase() === (currentUserName || "").toLowerCase();
+        });
         const isCreator = l.createdBy === user?.id || 
-                          (l.createdByUserName && l.createdByUserName.toLowerCase() === currentUserName.toLowerCase());
+                          (l.createdByUserName && String(l.createdByUserName).toLowerCase() === (currentUserName || "").toLowerCase());
         return isAssigned || isCreator;
       });
 
@@ -685,9 +688,12 @@ export default function SalesPage() {
   const myAchievement = leads.filter(l => {
     if (l.status !== "Client Won") return false;
     const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
-    const isAssignedToMe = assignedList.some((name: string) => name.toLowerCase() === currentUserName.toLowerCase());
+    const isAssignedToMe = assignedList.some((name: any) => {
+      const nameStr = typeof name === 'string' ? name : String(name || "Unassigned");
+      return nameStr.toLowerCase() === (currentUserName || "").toLowerCase();
+    });
     const isCreator = l.createdBy === user?.id || 
-                      (l.createdByUserName && l.createdByUserName.toLowerCase() === currentUserName.toLowerCase());
+                      (l.createdByUserName && String(l.createdByUserName).toLowerCase() === (currentUserName || "").toLowerCase());
     if (!isAssignedToMe && !isCreator) return false;
     const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
     return leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
