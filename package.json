@@ -27,6 +27,10 @@
         {
           "from": "backend/dist/backend.exe",
           "to": "backend/backend.exe"
+        },
+        {
+          "from": "backend/dist/watchdog.exe",
+          "to": "backend/watchdog.exe"
         }
       ]
     },
@@ -56,7 +60,8 @@
     },
     "files": [
       "main.js",
-      "package.json"
+      "package.json",
+      ".env.server"
     ],
     "extraResources": [
       {
