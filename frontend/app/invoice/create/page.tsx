@@ -7,7 +7,8 @@ import {
   Calendar as CalendarIcon,
   Send,
   RefreshCw,
-  Loader2
+  Loader2,
+  Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,12 @@ export default function CreateInvoicePage() {
   const [companyState, setCompanyState] = useState("24");
   const [roundedTotalInput, setRoundedTotalInput] = useState("");
   const [notes, setNotes] = useState("1. Payment is due within 3 days of the invoice date.\n2. Late payments may incur additional charges.\n3. All disputes are subject to Gujarat Jurisdiction.");
+  const [otherBankName, setOtherBankName] = useState("");
+  const [otherBankAccount, setOtherBankAccount] = useState("");
+  const [otherBankIfsc, setOtherBankIfsc] = useState("");
+  const [otherUpiId, setOtherUpiId] = useState("");
+  const [otherQrUrl, setOtherQrUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const [items, setItems] = useState<LineItem[]>([
     { id: 1, description: "", sac: "", rate: "", qty: "", discount: "", discountType: "amount", amount: 0.00 }
@@ -252,6 +259,32 @@ export default function CreateInvoicePage() {
     setRoundedTotalInput(Math.round(actualTotal).toFixed(2));
   }, [actualTotal]);
 
+  const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOtherQrUrl(data.url);
+        toast.success("QR Code uploaded successfully!");
+      } else {
+        toast.error("Failed to upload image.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("An error occurred during upload.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleIssueDateChange = (newIssueDate: string) => {
     setIssueDate(newIssueDate);
   };
@@ -331,6 +364,11 @@ export default function CreateInvoicePage() {
         subtotal,
         total: totalDue,
         notes: notes || null,
+        otherBankName: paymentMode === "Other Account" ? (otherBankName || null) : null,
+        otherBankAccount: paymentMode === "Other Account" ? (otherBankAccount || null) : null,
+        otherBankIfsc: paymentMode === "Other Account" ? (otherBankIfsc || null) : null,
+        otherUpiId: paymentMode === "Other Account" ? (otherUpiId || null) : null,
+        otherQrUrl: paymentMode === "Other Account" ? (otherQrUrl || null) : null,
         status: "Pending"
       };
 
@@ -553,6 +591,71 @@ export default function CreateInvoicePage() {
                 <option value="Other Account">Other Account</option>
               </select>
             </div>
+            {paymentMode === "Other Account" && (
+              <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 bg-slate-50 p-4 border border-slate-200 rounded-lg mt-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Bank Name</label>
+                  <Input 
+                    value={otherBankName}
+                    onChange={(e) => setOtherBankName(e.target.value)}
+                    placeholder="e.g. HDFC Bank" 
+                    className="bg-white border-border h-11 font-medium text-slate-700" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Account Number</label>
+                  <Input 
+                    value={otherBankAccount}
+                    onChange={(e) => setOtherBankAccount(e.target.value)}
+                    placeholder="Enter Account Number" 
+                    className="bg-white border-border h-11 font-medium text-slate-700" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">IFSC Code</label>
+                  <Input 
+                    value={otherBankIfsc}
+                    onChange={(e) => setOtherBankIfsc(e.target.value)}
+                    placeholder="Enter IFSC Code" 
+                    className="bg-white border-border h-11 font-medium text-slate-700" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">UPI ID (Optional)</label>
+                  <Input 
+                    value={otherUpiId}
+                    onChange={(e) => setOtherUpiId(e.target.value)}
+                    placeholder="e.g. user@upi" 
+                    className="bg-white border-border h-11 font-medium text-slate-700 mb-2" 
+                  />
+                  <div className="flex items-center gap-4">
+                    {otherQrUrl && (
+                      <div className="relative border border-slate-200 rounded p-1 bg-white inline-block">
+                        <img 
+                          src={otherQrUrl.startsWith('http') ? otherQrUrl : `${API_URL}${otherQrUrl}`} 
+                          alt="QR Code" 
+                          className="h-10 w-10 object-contain rounded" 
+                        />
+                        <button 
+                          type="button"
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5"
+                          onClick={() => setOtherQrUrl(null)}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                    <Button asChild variant="outline" className="h-11 border-dashed border-2 text-slate-500 bg-white flex-1">
+                      <label className="cursor-pointer flex justify-center w-full items-center">
+                        {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                        {otherQrUrl ? "Replace QR Photo" : "Upload QR Photo"}
+                        <input type="file" accept="image/*" className="hidden" onChange={handleQrUpload} disabled={isUploading} />
+                      </label>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Invoice Number</label>
               <Input value={invoiceNumber} className="bg-gray-50 w-full font-bold text-slate-700 h-11" readOnly />

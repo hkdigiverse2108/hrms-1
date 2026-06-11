@@ -669,22 +669,66 @@ export default function ViewInvoicePage() {
           </div>
 
           {/* Bank Details */}
-          <div className="mx-12 my-3 border border-slate-200 rounded-md px-4 py-2.5 flex flex-col gap-2 bg-white shadow-sm">
-            <span className="text-[9.5px] font-bold text-slate-400 tracking-wider uppercase leading-none">
-              BANK DETAILS
-            </span>
-            <div className="flex gap-12 text-[11.5px] text-slate-500 font-medium">
-              <div>
-                Bank: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankName || "Axis Bank"}</span>
-              </div>
-              <div>
-                A/c: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankAccountNumber || "924020057377415"}</span>
-              </div>
-              <div>
-                IFSC: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankIfscCode || "UTIB0002891"}</span>
-              </div>
+          {invoice.paymentMode !== "Cash" && (
+            <div className="mx-12 my-3 border border-slate-200 rounded-md px-4 py-2.5 flex flex-col gap-2 bg-white shadow-sm">
+              <span className="text-[9.5px] font-bold text-slate-400 tracking-wider uppercase leading-none">
+                BANK DETAILS
+              </span>
+              {invoice.paymentMode === "Other Account" ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-x-8 gap-y-2 text-[11.5px] text-slate-500 font-medium">
+                    {invoice.otherBankName && (
+                      <div>
+                        Bank: <span className="font-bold text-[#111827] ml-0.5">{invoice.otherBankName}</span>
+                      </div>
+                    )}
+                    {invoice.otherBankAccount && (
+                      <div>
+                        A/c: <span className="font-bold text-[#111827] ml-0.5">{invoice.otherBankAccount}</span>
+                      </div>
+                    )}
+                    {invoice.otherBankIfsc && (
+                      <div>
+                        IFSC: <span className="font-bold text-[#111827] ml-0.5">{invoice.otherBankIfsc}</span>
+                      </div>
+                    )}
+                    {invoice.otherUpiId && (
+                      <div>
+                        UPI: <span className="font-bold text-[#111827] ml-0.5">{invoice.otherUpiId}</span>
+                      </div>
+                    )}
+                    {!invoice.otherBankName && !invoice.otherBankAccount && !invoice.otherBankIfsc && !invoice.otherUpiId && !invoice.otherQrUrl && (
+                      <span>N/A</span>
+                    )}
+                  </div>
+                  {invoice.otherQrUrl && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[9.5px] font-bold text-slate-400 tracking-wider uppercase leading-none">
+                        SCAN TO PAY
+                      </span>
+                      <img 
+                        src={invoice.otherQrUrl.startsWith('http') ? invoice.otherQrUrl : `${API_URL}${invoice.otherQrUrl}`}
+                        alt="QR Code"
+                        className="w-16 h-16 object-contain rounded border border-slate-200 p-1"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-12 text-[11.5px] text-slate-500 font-medium">
+                  <div>
+                    Bank: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankName || "Axis Bank"}</span>
+                  </div>
+                  <div>
+                    A/c: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankAccountNumber || "924020057377415"}</span>
+                  </div>
+                  <div>
+                    IFSC: <span className="font-bold text-[#111827] ml-0.5">{settings?.bankIfscCode || "UTIB0002891"}</span>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           {/* Terms & Authorized Signatory Row */}
           <div className="mx-12 mt-6 mb-8 grid grid-cols-2 gap-8 items-end">
