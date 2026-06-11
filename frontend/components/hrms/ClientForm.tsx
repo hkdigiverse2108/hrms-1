@@ -109,10 +109,11 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
     }
   };
 
-  const departments = Array.from(new Set([
-    ...(propDepartments && propDepartments.length > 0 ? propDepartments : ["Development", "Sales", "Graphics", "Marketing"]),
-    "Creative"
-  ]));
+  const baseDepts = propDepartments && propDepartments.length > 0 
+    ? propDepartments.map(d => d.trim()) 
+    : ["Development", "Sales", "Graphics", "Marketing"];
+  
+  const departments = Array.from(new Set([...baseDepts, "Creative"]));
 
   const handleChange = (field: keyof ClientFormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
