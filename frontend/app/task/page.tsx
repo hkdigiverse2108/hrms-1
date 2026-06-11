@@ -416,7 +416,7 @@ export default function TaskManagementPage() {
                 <p className="text-sm text-muted-foreground mt-1">Add details for the new task and assign it.</p>
               </DialogHeader>
               
-              <div className="space-y-5 py-4">
+              <div className="space-y-5 py-4 max-h-[65vh] overflow-y-auto pr-2">
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground">Task name <span className="text-red-500">*</span></label>
                   <Input 
