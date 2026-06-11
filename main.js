@@ -97,10 +97,10 @@ function patchNextjsConfig() {
               log(`Updating routes-manifest destination from "${rewrite.destination}" to "${backendUrl}/:path*"`);
               rewrite.destination = `${backendUrl}/:path*`;
               modified = true;
-            } else if (rewrite.source.startsWith('/api/activity/session-')) {
+            } else if (rewrite.source.startsWith('/api/activity/session-') || rewrite.source === '/api/system/info') {
               const suffix = rewrite.source.replace('/api/', '');
               const localDest = `http://127.0.0.1:${BACKEND_PORT}/${suffix}`;
-              log(`Updating routes-manifest local tracker destination from "${rewrite.destination}" to "${localDest}"`);
+              log(`Updating routes-manifest local tracker/info destination from "${rewrite.destination}" to "${localDest}"`);
               rewrite.destination = localDest;
               modified = true;
             }
@@ -114,10 +114,10 @@ function patchNextjsConfig() {
               log(`Updating required-server-files original rewrite from "${rewrite.destination}" to "${backendUrl}/:path*"`);
               rewrite.destination = `${backendUrl}/:path*`;
               modified = true;
-            } else if (rewrite.source.startsWith('/api/activity/session-')) {
+            } else if (rewrite.source.startsWith('/api/activity/session-') || rewrite.source === '/api/system/info') {
               const suffix = rewrite.source.replace('/api/', '');
               const localDest = `http://127.0.0.1:${BACKEND_PORT}/${suffix}`;
-              log(`Updating required-server-files local tracker original rewrite from "${rewrite.destination}" to "${localDest}"`);
+              log(`Updating required-server-files local tracker/info original rewrite from "${rewrite.destination}" to "${localDest}"`);
               rewrite.destination = localDest;
               modified = true;
             }
@@ -139,12 +139,12 @@ function patchNextjsConfig() {
   }
 }
 
-// Perform patching of Next.js stand-alone routing configurations on startup
-patchNextjsConfig();
-
 const BACKEND_PORT = process.env.BACKEND_PORT || '8000';
 const FRONTEND_PORT = process.env.PORT || '3535';
 const HOST = process.env.APP_HOST || '127.0.0.1';
+
+// Perform patching of Next.js stand-alone routing configurations on startup
+patchNextjsConfig();
 
 // Determine the URL to load in the Electron window (always local host for local execution)
 const frontendUrl = `http://127.0.0.1:${FRONTEND_PORT}`;
@@ -177,6 +177,7 @@ function startBackend() {
 
     if (fs.existsSync(launchPath)) {
       backendProcess = spawn(launchPath, [], {
+        cwd: app.getPath('userData'),
         env: { ...process.env, PORT: BACKEND_PORT }
       });
     } else {
@@ -186,7 +187,9 @@ function startBackend() {
       const localBackend = path.join(__dirname, 'backend', 'dist', backendBinaryName);
       const localFallback = fs.existsSync(localWatchdog) ? localWatchdog : localBackend;
       if (fs.existsSync(localFallback)) {
-        backendProcess = spawn(localFallback, []);
+        backendProcess = spawn(localFallback, [], {
+          cwd: app.getPath('userData')
+        });
       }
     }
   } else {

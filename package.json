@@ -70,11 +70,19 @@
       },
       {
         "from": "frontend/.next/static",
-        "to": "app/frontend/.next/static"
+        "to": "app/frontend/.next/standalone/.next/static"
       },
       {
         "from": "frontend/public",
-        "to": "app/frontend/public"
+        "to": "app/frontend/.next/standalone/public"
+      },
+      {
+        "from": "frontend/.next/static",
+        "to": "app/frontend/.next/standalone/frontend/.next/static"
+      },
+      {
+        "from": "frontend/public",
+        "to": "app/frontend/.next/standalone/frontend/public"
       }
     ]
   }

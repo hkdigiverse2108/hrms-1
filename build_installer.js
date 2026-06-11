@@ -49,7 +49,28 @@ function run() {
       hasBackup = true;
 
       console.log('Generating stripped .env.server for packaging...');
-      const envContent = fs.readFileSync(srcEnvServer, 'utf8');
+      const envContent = fs.readFileSync(backupEnvServer, 'utf8');
+      
+      // Parse BACKEND_URL and BACKEND_PORT to patch Next.js config at build time
+      let backendUrl = 'http://127.0.0.1:8000';
+      let backendPort = '8000';
+      envContent.split(/\r?\n/).forEach(line => {
+        line = line.trim();
+        if (line && !line.startsWith('#') && line.includes('=')) {
+          const parts = line.split('=');
+          const key = parts[0].trim().toUpperCase();
+          const value = parts.slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
+          if (key === 'BACKEND_URL') {
+            backendUrl = value.replace(/\/$/, '');
+          } else if (key === 'BACKEND_PORT') {
+            backendPort = value;
+          }
+        }
+      });
+
+      // Run build-time patching on standalone frontend files
+      patchStandalone(backendUrl, backendPort);
+
       const safeLines = envContent.split(/\r?\n/).filter(line => {
         const key = line.split('=')[0].trim().toUpperCase();
         return [
@@ -85,3 +106,71 @@ function run() {
 }
 
 run();
+
+function patchStandalone(backendUrl, backendPort) {
+  console.log(`Patching Next.js source configuration for build time...`);
+  console.log(`Target Backend URL: ${backendUrl}`);
+  console.log(`Target Backend Port: ${backendPort}`);
+
+  const standaloneDir = path.join(__dirname, 'frontend', '.next', 'standalone', 'frontend', '.next');
+  const filesToPatch = [
+    path.join(standaloneDir, 'routes-manifest.json'),
+    path.join(standaloneDir, 'required-server-files.json')
+  ];
+
+  for (const filePath of filesToPatch) {
+    if (fs.existsSync(filePath)) {
+      try {
+        console.log(`Reading configuration file for build-time patching: ${filePath}`);
+        const content = fs.readFileSync(filePath, 'utf8');
+        const data = JSON.parse(content);
+        let modified = false;
+
+        // Patch routes-manifest.json
+        if (data.rewrites && Array.isArray(data.rewrites.beforeFiles)) {
+          data.rewrites.beforeFiles.forEach(rewrite => {
+            if (rewrite.source === '/api/:path*') {
+              console.log(`Updating build-time routes-manifest destination from "${rewrite.destination}" to "${backendUrl}/:path*"`);
+              rewrite.destination = `${backendUrl}/:path*`;
+              modified = true;
+            } else if (rewrite.source.startsWith('/api/activity/session-') || rewrite.source === '/api/system/info') {
+              const suffix = rewrite.source.replace('/api/', '');
+              const localDest = `http://127.0.0.1:${backendPort}/${suffix}`;
+              console.log(`Updating build-time routes-manifest local tracker/info destination from "${rewrite.destination}" to "${localDest}"`);
+              rewrite.destination = localDest;
+              modified = true;
+            }
+          });
+        }
+
+        // Patch required-server-files.json
+        if (data.config && data.config._originalRewrites && Array.isArray(data.config._originalRewrites.beforeFiles)) {
+          data.config._originalRewrites.beforeFiles.forEach(rewrite => {
+            if (rewrite.source === '/api/:path*') {
+              console.log(`Updating build-time required-server-files original rewrite from "${rewrite.destination}" to "${backendUrl}/:path*"`);
+              rewrite.destination = `${backendUrl}/:path*`;
+              modified = true;
+            } else if (rewrite.source.startsWith('/api/activity/session-') || rewrite.source === '/api/system/info') {
+              const suffix = rewrite.source.replace('/api/', '');
+              const localDest = `http://127.0.0.1:${backendPort}/${suffix}`;
+              console.log(`Updating build-time required-server-files local tracker/info original rewrite from "${rewrite.destination}" to "${localDest}"`);
+              rewrite.destination = localDest;
+              modified = true;
+            }
+          });
+        }
+
+        if (modified) {
+          fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+          console.log(`Successfully patched build-time standalone config: ${filePath}`);
+        } else {
+          console.log(`No build-time changes needed in: ${filePath}`);
+        }
+      } catch (err) {
+        console.error(`Error during build-time patch of ${filePath}:`, err.message);
+      }
+    } else {
+      console.warn(`Warning: configuration file not found at ${filePath}`);
+    }
+  }
+}
