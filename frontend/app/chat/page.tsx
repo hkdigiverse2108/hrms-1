@@ -433,19 +433,8 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (currentMessages.length > prevMessagesLength.current) {
-      const lastMessage = currentMessages[currentMessages.length - 1];
-      const isSentByMe = lastMessage?.senderId === user?.id || lastMessage?.isMe;
-      const isInitialLoad = prevMessagesLength.current === 0;
-      
-      if (isSentByMe || isInitialLoad) {
-        scrollToBottom(true);
-      } else if (scrollRef.current) {
-        const threshold = 150;
-        const isNearBottom = scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight <= threshold;
-        if (isNearBottom) {
-          scrollToBottom(true);
-        }
-      }
+      // Always scroll to bottom when a new message arrives
+      scrollToBottom(true);
     } else {
       scrollToBottom();
     }
