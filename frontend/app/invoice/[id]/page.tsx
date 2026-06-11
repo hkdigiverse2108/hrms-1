@@ -693,11 +693,17 @@ export default function ViewInvoicePage() {
               <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
                 TERMS & CONDITIONS
               </span>
-              <ol className="list-decimal pl-3.5 text-[11px] text-gray-600 font-semibold leading-relaxed">
-                <li>Payment is due within 3 days of the invoice date.</li>
-                <li>Late payments may incur additional charges.</li>
-                <li>All disputes are subject to Gujarat Jurisdiction.</li>
-              </ol>
+              {invoice.notes ? (
+                <div className="text-[11px] text-gray-600 font-semibold leading-relaxed whitespace-pre-wrap">
+                  {invoice.notes}
+                </div>
+              ) : (
+                <ol className="list-decimal pl-3.5 text-[11px] text-gray-600 font-semibold leading-relaxed">
+                  <li>Payment is due within 3 days of the invoice date.</li>
+                  <li>Late payments may incur additional charges.</li>
+                  <li>All disputes are subject to Gujarat Jurisdiction.</li>
+                </ol>
+              )}
             </div>
 
             {/* Signature Block */}
