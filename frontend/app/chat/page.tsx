@@ -1072,15 +1072,16 @@ export default function ChatPage() {
       }
       
       // Then, handle URL parsing and search highlighting for non-mention parts
-      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
       const textParts = part.split(urlRegex);
 
       return textParts.map((tp, k) => {
         if (tp.match(urlRegex)) {
+          const href = tp.startsWith('http') ? tp : `https://${tp}`;
           return (
             <a 
               key={`url-${i}-${k}`} 
-              href={tp} 
+              href={href} 
               target="_blank" 
               rel="noopener noreferrer"
               className={cn("no-underline hover:!underline font-medium break-all", isMeBubble ? "!text-white" : "!text-brand-teal")}
