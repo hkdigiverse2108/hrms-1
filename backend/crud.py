@@ -3354,12 +3354,32 @@ async def get_chat_groups(db, user_id: str):
 
 async def get_messages(db, sender_id: str = None, receiver_id: str = None, group_id: str = None):
     if group_id:
-        query = {"groupId": group_id}
+        group_ids = [group_id]
+        if len(group_id) == 24:
+            try:
+                group_ids.append(ObjectId(group_id))
+            except:
+                pass
+        query = {"groupId": {"$in": group_ids}}
     else:
+        sender_ids = [sender_id]
+        if sender_id and len(sender_id) == 24:
+            try:
+                sender_ids.append(ObjectId(sender_id))
+            except:
+                pass
+                
+        receiver_ids = [receiver_id]
+        if receiver_id and len(receiver_id) == 24:
+            try:
+                receiver_ids.append(ObjectId(receiver_id))
+            except:
+                pass
+                
         query = {
             "$or": [
-                {"senderId": sender_id, "receiverId": receiver_id},
-                {"senderId": receiver_id, "receiverId": sender_id}
+                {"senderId": {"$in": sender_ids}, "receiverId": {"$in": receiver_ids}},
+                {"senderId": {"$in": receiver_ids}, "receiverId": {"$in": sender_ids}}
             ]
         }
     cursor = db.messages.find(query).sort("timestamp", 1)
@@ -3376,9 +3396,13 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
     fixed_rows = []
     for row in rows:
         fixed = fix_id(row)
-        if "senderId" in fixed:
-            sender_id_str = fixed["senderId"]
-            fixed["sender"] = employee_cache.get(sender_id_str, "Colleague")
+        if "senderId" in fixed and fixed["senderId"]:
+            fixed["senderId"] = str(fixed["senderId"])
+            fixed["sender"] = employee_cache.get(fixed["senderId"], "Colleague")
+        if "receiverId" in fixed and fixed["receiverId"]:
+            fixed["receiverId"] = str(fixed["receiverId"])
+        if "groupId" in fixed and fixed["groupId"]:
+            fixed["groupId"] = str(fixed["groupId"])
         fixed_rows.append(fixed)
     return fixed_rows
 

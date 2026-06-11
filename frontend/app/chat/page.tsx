@@ -634,6 +634,15 @@ export default function ChatPage() {
 
   const handleSelectChat = (chat: any) => {
     if (!chat) return;
+    
+    // Prevent clearing messages if the same chat is clicked
+    const currentId = selectedChat?.id || selectedChat?.employeeId;
+    const newId = chat.id || chat.employeeId;
+    
+    if (selectedChat && currentId === newId && selectedChat.type === chat.type) {
+      return;
+    }
+
     setSelectedChat(chat);
     setCurrentMessages([]);  // Clear stale messages immediately on chat switch
     setFirstUnreadId(null);
@@ -647,9 +656,10 @@ export default function ChatPage() {
   const fetchMessages = React.useCallback(async () => {
     if (!selectedChat || !user || !user.id) return;
     try {
+      const targetId = selectedChat.id || selectedChat.employeeId;
       const url = (selectedChat.type === 'group' || selectedChat.type === 'general')
-        ? `${API_URL}/chat/messages/${user.id}/${selectedChat.id}?group_id=${selectedChat.id}`
-        : `${API_URL}/chat/messages/${user.id}/${selectedChat.id}`;
+        ? `${API_URL}/chat/messages/${user.id}/${targetId}?group_id=${targetId}`
+        : `${API_URL}/chat/messages/${user.id}/${targetId}`;
       
       const res = await fetch(url);
       if (res.ok) {
@@ -868,10 +878,11 @@ export default function ChatPage() {
     const optimisticText = message || (pendingFile && !isImageFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : ""));
     const tempId = `temp-${Date.now()}`;
 
+    const targetId = selectedChat.id || selectedChat.employeeId;
     let payload: any = {
       senderId: user.id,
-      receiverId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : selectedChat.id,
-      groupId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? selectedChat.id : null,
+      receiverId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : targetId,
+      groupId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? targetId : null,
       text: optimisticText,
       type: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : "personal",
       tempId: tempId
@@ -906,6 +917,25 @@ export default function ChatPage() {
     };
     shouldScrollToBottom.current = true;
     setCurrentMessages(prev => [...prev, optimisticMessage]);
+
+    // Optimistically update the sidebar lists instantly
+    const nowIso = new Date().toISOString();
+    if (selectedChat.type === 'personal') {
+      setChatSummaries(prev => ({
+        ...prev,
+        [targetId]: {
+          ...prev[targetId],
+          lastMessage: optimisticText,
+          timestamp: nowIso,
+          isSeen: true,
+          senderId: user.id
+        }
+      }));
+    } else if (selectedChat.type === 'group') {
+      setChatGroups(prev => prev.map(g => g.id === targetId ? { ...g, lastMessage: optimisticText, lastMessageTime: nowIso } : g));
+    } else if (selectedChat.type === 'general') {
+      setChatChannels(prev => prev.map(c => c.id === targetId ? { ...c, lastMessage: optimisticText, lastMessageTime: nowIso } : c));
+    }
     // Clear input fields immediately so the user gets instant feedback
     setMessage("");
     setReplyingTo(null);
