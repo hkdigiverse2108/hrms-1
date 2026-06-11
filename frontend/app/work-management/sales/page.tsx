@@ -1412,3 +1412,4 @@ export default function SalesPage() {
     </div>
   );
 }
+  
