@@ -7,7 +7,8 @@ import {
   ShieldHalf,
   Loader2,
   ChevronLeft,
-  DollarSign
+  DollarSign,
+  RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter, useParams } from "next/navigation";
@@ -241,6 +242,30 @@ export default function ViewInvoicePage() {
     }
   };
 
+  const handleMarkAsUnpaid = async () => {
+    if (!invoice) return;
+    setIsUpdatingStatus(true);
+    try {
+      const res = await fetch(`${API_URL}/invoices/${invoiceId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Pending" })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setInvoice(updated);
+        toast.success("Invoice successfully marked as Unpaid!");
+      } else {
+        toast.error("Failed to update status");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error updating status");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
   const handleConvertToTaxInvoice = async () => {
     if (!invoice) return;
     const isConfirmed = await confirm({
@@ -399,6 +424,20 @@ export default function ViewInvoicePage() {
                 <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Processing...</>
               ) : (
                 <><DollarSign className="w-3.5 h-3.5 mr-2" />Mark as Paid</>
+              )}
+            </Button>
+          )}
+          {invoice.status === "Paid" && (
+            <Button 
+              variant="outline"
+              className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-medium h-10 px-4"
+              onClick={handleMarkAsUnpaid}
+              disabled={isUpdatingStatus}
+            >
+              {isUpdatingStatus ? (
+                <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Processing...</>
+              ) : (
+                <><RotateCcw className="w-3.5 h-3.5 mr-2" />Mark as Unpaid</>
               )}
             </Button>
           )}

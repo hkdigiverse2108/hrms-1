@@ -70,6 +70,8 @@ export default function EditInvoicePage() {
   const [otherUpiId, setOtherUpiId] = useState("");
   const [otherQrUrl, setOtherQrUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [originalTotal, setOriginalTotal] = useState<number>(0);
+  const [originalStatus, setOriginalStatus] = useState<string>("Pending");
 
   const [items, setItems] = useState<LineItem[]>([
     { id: 1, description: "", sac: "", rate: "", qty: "", discount: "", discountType: "amount", amount: 0.00 }
@@ -151,6 +153,8 @@ export default function EditInvoicePage() {
             setOtherBankIfsc(data.otherBankIfsc || "");
             setOtherUpiId(data.otherUpiId || "");
             setOtherQrUrl(data.otherQrUrl || null);
+            setOriginalTotal(data.total || 0);
+            setOriginalStatus(data.status || "Pending");
             setDiscount((data.discount || 0).toString());
             
             if (data.lineItems && data.lineItems.length > 0) {
@@ -404,7 +408,7 @@ export default function EditInvoicePage() {
         otherBankIfsc: paymentMode === "Other Account" ? (otherBankIfsc || null) : null,
         otherUpiId: paymentMode === "Other Account" ? (otherUpiId || null) : null,
         otherQrUrl: paymentMode === "Other Account" ? (otherQrUrl || null) : null,
-        status: "Pending"
+        status: Math.abs(totalDue - originalTotal) > 0.01 ? "Pending" : originalStatus
       };
 
       const res = await fetch(`${API_URL}/invoices/${invoiceId}`, {
