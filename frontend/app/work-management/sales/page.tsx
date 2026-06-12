@@ -60,6 +60,33 @@ import {
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { useConfirm } from "@/context/ConfirmContext";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+const isAssignedTo = (assignedToData: any, employeeName: string | undefined | null) => {
+  if (!employeeName) return false;
+  if (Array.isArray(assignedToData)) {
+    return assignedToData.includes(employeeName);
+  }
+  return assignedToData === employeeName;
+};
+
+const getAssignedToString = (assignedToData: any) => {
+  if (Array.isArray(assignedToData)) {
+    return assignedToData.join(", ");
+  }
+  return assignedToData || "Unassigned";
+};
+
+const getAssignedToInitials = (assignedToData: any) => {
+  if (Array.isArray(assignedToData) && assignedToData.length > 0) {
+    return (assignedToData[0] || "??").substring(0, 2);
+  }
+  if (typeof assignedToData === 'string') {
+    return (assignedToData || "??").substring(0, 2);
+  }
+  return "??";
+};
+
 const STATUS_REASONS: Record<string, string[]> = {
   "Lead": ["New lead created", "Reopened", "Other"],
   "Contacted": ["Introductory call completed", "Client responded", "Other"],
@@ -702,19 +729,20 @@ export default function SalesPage() {
     return acc + val;
   }, 0);
 
-  const monthlyAchievement = isAdmin 
-    ? leads.filter(l => {
-        if (l.status !== "Client Won") return false;
-        const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-        return leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
-      }).reduce((acc, l) => {
-        const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
-        return acc + val;
-      }, 0)
-    : myAchievement;
-
   const achievementRate = totalMonthlyTarget > 0 ? (monthlyAchievement / totalMonthlyTarget) * 100 : 0;
 
+  const myTarget = targets.find(t => t.employeeName === user?.name && t.month === selectedMonth && t.year === selectedYear);
+  const myAchievement = leads.filter(l => {
+    if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, user?.name)) {
+      const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+      return l.status === "Client Won" && isAssignedTo(l.assignedTo, user?.name) && leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
+    }
+    return false;
+  }).reduce((acc, l) => {
+    const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+    return acc + val;
+  }, 0);
+  
   const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
 
   const stats = [
@@ -1141,40 +1169,12 @@ export default function SalesPage() {
                       </PopoverContent>
                     </Popover>
                   ) : (
-                    <div 
-                      onClick={() => {
-                        if (canEditLead(lead)) {
-                          setInlineEditing({ id: lead.id, field: 'assignedTo' });
-                          const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
-                          setSelectedAssignees(assignedList);
-                        }
-                      }}
-                      className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1"
+                    <span 
+                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'assignedTo' })}
+                      className="text-[12px] font-bold text-brand-teal cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5"
                     >
-                      {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 ? (
-                        lead.assignedTo.map((name: string) => (
-                          <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
-                            {name}
-                            {canEditLead(lead) && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
-                                  const updated = assignedList.filter((n: string) => n !== name);
-                                  handleInlineUpdate(lead.id, 'assignedTo', updated);
-                                }}
-                                className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
-                              >
-                                <X className="w-2.5 h-2.5" />
-                              </button>
-                            )}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-slate-400 italic text-xs">Unassigned</span>
-                      )}
-                    </div>
+                      {getAssignedToString(lead.assignedTo) || "--"}
+                    </span>
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -1850,7 +1850,26 @@ export default function SalesPage() {
                               .filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
-                                let achieved = t.currentAchievement || 0;
+                                const achieved = leads.filter(l => {
+                                  if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, t.employeeName)) return false;
+                                  const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+                                  
+                                  // Month/Year check
+                                  const monthMatch = leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
+                                  if (!monthMatch) return false;
+
+                                  // Weekly check
+                                  if (t.type === "Weekly") {
+                                    const dayOfMonth = leadDate.date();
+                                    const weekNum = Math.ceil(dayOfMonth / 7);
+                                    return weekNum === t.week;
+                                  }
+                                  return true;
+                                }).reduce((acc, l) => {
+                                  const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+                                  return acc + val;
+                                }, 0);
+                                
                                 const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
                                 const earnedIncentive = t.incentiveAmount || 0;
 
@@ -1965,70 +1984,114 @@ export default function SalesPage() {
               </div>
             </TabsContent>
 
-
+            <TabsContent value="reports">
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="px-6 py-4 border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
+                  <CardTitle className="text-sm font-bold text-slate-700">Sales Performance Report</CardTitle>
+                  <div className="flex items-center gap-3">
+                    <Select value={reportEmployeeFilter} onValueChange={setReportEmployeeFilter}>
+                      <SelectTrigger className="h-8 w-[150px] text-xs">
+                        <SelectValue placeholder="Filter Employee" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Employees</SelectItem>
+                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
+                          <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="relative">
+                      <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                      <Input 
+                        type="date" 
+                        className="h-8 pl-8 text-xs w-[140px]" 
+                        value={reportDateFilter}
+                        onChange={(e) => setReportDateFilter(e.target.value)}
+                      />
+                    </div>
+                    {(reportEmployeeFilter !== "all" || reportDateFilter) && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 px-2 text-[10px] text-slate-400 hover:text-slate-600"
+                        onClick={() => {
+                          setReportEmployeeFilter("all");
+                          setReportDateFilter("");
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/50 border-b border-slate-100">
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Employee Name</th>
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lead (Company)</th>
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Income</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {leads.filter(l => l.status === "Client Won")
+                          .filter(l => reportEmployeeFilter === "all" || isAssignedTo(l.assignedTo, reportEmployeeFilter))
+                          .filter(l => {
+                            if (!reportDateFilter) return true;
+                            const targetDate = dayjs(reportDateFilter).format('YYYY-MM-DD');
+                            const leadClosedDate = l.closedDate ? dayjs(l.closedDate).format('YYYY-MM-DD') : null;
+                            const leadDate = dayjs(l.date).format('YYYY-MM-DD');
+                            
+                            // Match either closed date or creation date if closed date is missing
+                            return leadClosedDate === targetDate || (!leadClosedDate && leadDate === targetDate);
+                          })
+                          .sort((a, b) => new Date(b.closedDate || 0).getTime() - new Date(a.closedDate || 0).getTime())
+                          .map((lead) => (
+                            <tr key={lead.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="px-6 py-4 text-xs text-slate-500 font-medium">
+                                <div className="flex items-center gap-1.5">
+                                  <Calendar className="w-3 h-3 text-emerald-500" />
+                                  {lead.closedDate || lead.date}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[10px] font-bold uppercase">
+                                    {getAssignedToInitials(lead.assignedTo)}
+                                  </div>
+                                  <span className="font-bold text-slate-700 text-sm">{getAssignedToString(lead.assignedTo)}</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="font-bold text-slate-900 text-sm">{lead.company}</span>
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">Converted</Badge>
+                              </td>
+                              <td className="px-6 py-4 text-right font-bold text-slate-900 text-sm text-emerald-600">
+                                {lead.expectedIncome}
+                              </td>
+                            </tr>
+                          ))}
+                        {leads.filter(l => l.status === "Client Won").length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
+                              No converted leads found for reporting.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </>
         )}
-
       </Tabs>
-
-      <Dialog open={!!statusChangeData} onOpenChange={(open) => { if (!open) setStatusChangeData(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reason for Status Change</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Why did you change the status to {statusChangeData?.newStatus}?</Label>
-              <Select value={selectedReason} onValueChange={(val) => { setSelectedReason(val); if (val !== "Other") setCustomReason(""); }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a reason" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusChangeData?.newStatus && STATUS_REASONS[statusChangeData.newStatus]?.map((r) => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedReason === "Other" && (
-              <div className="space-y-2">
-                <Label htmlFor="customReason">Specify Reason</Label>
-                <Input 
-                  id="customReason" 
-                  placeholder="Enter custom reason..." 
-                  value={customReason} 
-                  onChange={(e) => setCustomReason(e.target.value)} 
-                />
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end gap-3 border-t pt-4">
-            <Button variant="outline" onClick={() => setStatusChangeData(null)}>Cancel</Button>
-            <Button 
-              className="bg-brand-teal hover:bg-brand-teal-light text-white" 
-              onClick={handleStatusChangeSubmit}
-              disabled={!selectedReason || (selectedReason === "Other" && !customReason.trim())}
-            >
-              Confirm
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 border-b border-slate-100 shrink-0">
-            <DialogTitle>Generate Client Details</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-hidden">
-            <ClientForm
-              initialData={clientFormData || undefined}
-              onSubmit={handleClientSubmit}
-              isSubmitting={isClientSubmitting}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <ActivityLogDialog 
         open={isLogsDialogOpen}
@@ -2038,69 +2101,6 @@ export default function SalesPage() {
         logs={leadLogs}
         isLoading={isLogsLoading}
       />
-
-      <Dialog open={isBreakdownOpen} onOpenChange={setIsBreakdownOpen}>
-        <DialogContent className="sm:max-w-3xl max-w-[95vw]">
-          <DialogHeader>
-            <DialogTitle>Incentive Breakdown</DialogTitle>
-          </DialogHeader>
-          <div className="mt-4">
-            {selectedBreakdown.length > 0 ? (
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 border-b">
-                    <tr>
-                      <th className="px-4 py-3 font-semibold text-slate-600">Client / Invoice</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600">Category</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600">Type</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Invoice Value</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Slab %</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Earned</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedBreakdown.map((item, idx) => (
-                      <tr key={idx} className="border-b last:border-0 hover:bg-slate-50/50">
-                        <td className="px-4 py-3">
-                          <p className="font-medium">{item.clientName}</p>
-                          {item.invoiceNumber && <p className="text-[10px] text-slate-400">{item.invoiceNumber}</p>}
-                        </td>
-                        <td className="px-4 py-3">{item.category}</td>
-                        <td className="px-4 py-3">
-                          {item.isRecurring ? (
-                            <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded text-[10px] font-bold">Recurring</span>
-                          ) : (
-                            <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">First-time</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums">
-                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.subtotal || 0)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium">{item.slabPercentage}%</td>
-                        <td className="px-4 py-3 text-right text-brand-teal font-bold">
-                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.earnedIncentive || 0)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-slate-50 border-t">
-                    <tr>
-                      <td colSpan={5} className="px-4 py-3 text-right font-bold text-slate-700">Total Incentive:</td>
-                      <td className="px-4 py-3 text-right font-bold text-brand-teal text-base">
-                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(
-                          selectedBreakdown.reduce((sum, item) => sum + (item.earnedIncentive || 0), 0)
-                        )}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500 text-center py-8">No breakdown data available.</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
