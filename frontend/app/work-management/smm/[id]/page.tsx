@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { ContentCalendarTable } from "@/components/hrms/ContentCalendarTable";
 import { toast } from "sonner";
 
 const noScrollbarStyle = `
@@ -212,7 +213,7 @@ export default function ClientDetailsPage() {
         </div>
       </div>
 
-
+      <ContentCalendarTable clientId={params.id as string} />
 
       {/* Activity Log Dialog */}
       <ActivityLogDialog 

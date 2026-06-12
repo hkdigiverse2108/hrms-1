@@ -4704,5 +4704,50 @@ async def delete_schedule(db, schedule_id: str):
     res = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
     return res.deleted_count > 0
 
+# --- Content Calendar Operations ---
+async def get_content_calendar_entries(db, client_id: str, month_year: str = None):
+    query = {"clientId": client_id}
+    if month_year:
+        query["monthYear"] = month_year
+    cursor = db.content_calendar_entries.find(query)
+    entries = await cursor.to_list(length=1000)
+    return [fix_id(e) for e in entries]
 
+async def create_content_calendar_entry(db, entry_data: dict):
+    new_doc = await db.content_calendar_entries.insert_one(entry_data)
+    created = await db.content_calendar_entries.find_one({"_id": new_doc.inserted_id})
+    return fix_id(created)
 
+async def update_content_calendar_entry(db, entry_id: str, update_data: dict):
+    if not ObjectId.is_valid(entry_id):
+        return None
+    await db.content_calendar_entries.update_one(
+        {"_id": ObjectId(entry_id)},
+        {"$set": update_data}
+    )
+    updated = await db.content_calendar_entries.find_one({"_id": ObjectId(entry_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_content_calendar_entry(db, entry_id: str):
+    if not ObjectId.is_valid(entry_id):
+        return False
+    res = await db.content_calendar_entries.delete_one({"_id": ObjectId(entry_id)})
+    return res.deleted_count > 0
+
+async def get_content_calendar_settings(db, client_id: str, month_year: str):
+    settings = await db.content_calendar_settings.find_one({
+        "clientId": client_id,
+        "monthYear": month_year
+    })
+    if settings:
+        return fix_id(settings)
+    return None
+
+async def upsert_content_calendar_settings(db, client_id: str, month_year: str, update_data: dict):
+    result = await db.content_calendar_settings.find_one_and_update(
+        {"clientId": client_id, "monthYear": month_year},
+        {"$set": update_data},
+        upsert=True,
+        return_document=True
+    )
+    return fix_id(result)

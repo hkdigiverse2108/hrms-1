@@ -1699,5 +1699,76 @@ class Schedule(ScheduleBase):
     class Config:
         from_attributes = True
 
+# Content Calendar Schemas
+class ContentCalendarEntryBase(BaseModel):
+    clientId: str
+    monthYear: str  # Format: "YYYY-MM"
+    postingDate: Optional[str] = None
+    postingDay: Optional[str] = None
+    postReel: Optional[str] = None
+    concept: Optional[str] = None
+    topic: Optional[str] = None
+    reference: Optional[str] = None
+    scriptDate: Optional[str] = None
+    scriptLink: Optional[str] = None
+    shootDate: Optional[str] = None
+    shootLink: Optional[str] = None
+    editingStart: Optional[str] = None
+    finalReelLink: Optional[str] = None
+    finalPostLink: Optional[str] = None
+    approval: Optional[str] = None
+    isApproved: Optional[str] = None
+    thumbnailLink: Optional[str] = None
+    postingLinkOfIg: Optional[str] = None
+    actualPostingDate: Optional[str] = None
 
+class ContentCalendarEntryCreate(ContentCalendarEntryBase):
+    pass
+
+class ContentCalendarEntryUpdate(BaseModel):
+    postingDate: Optional[str] = None
+    postingDay: Optional[str] = None
+    postReel: Optional[str] = None
+    concept: Optional[str] = None
+    topic: Optional[str] = None
+    reference: Optional[str] = None
+    scriptDate: Optional[str] = None
+    scriptLink: Optional[str] = None
+    shootDate: Optional[str] = None
+    shootLink: Optional[str] = None
+    editingStart: Optional[str] = None
+    finalReelLink: Optional[str] = None
+    finalPostLink: Optional[str] = None
+    approval: Optional[str] = None
+    isApproved: Optional[str] = None
+    thumbnailLink: Optional[str] = None
+    postingLinkOfIg: Optional[str] = None
+    actualPostingDate: Optional[str] = None
+
+class ContentCalendarEntry(ContentCalendarEntryBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+class ContentCalendarSettingsBase(BaseModel):
+    clientId: str
+    monthYear: str
+    scriptDateOffset: int = 14
+    shootDateOffset: int = 12
+    editingStartOffset: int = 6
+    approvalOffset: int = 5
+
+class ContentCalendarSettingsCreate(ContentCalendarSettingsBase):
+    pass
+
+class ContentCalendarSettingsUpdate(BaseModel):
+    scriptDateOffset: Optional[int] = None
+    shootDateOffset: Optional[int] = None
+    editingStartOffset: Optional[int] = None
+    approvalOffset: Optional[int] = None
+
+class ContentCalendarSettings(ContentCalendarSettingsBase):
+    id: str
+    class Config:
+        from_attributes = True
 
