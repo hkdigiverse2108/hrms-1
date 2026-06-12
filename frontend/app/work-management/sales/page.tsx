@@ -728,21 +728,8 @@ export default function SalesPage() {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
     return acc + val;
   }, 0);
-
   const achievementRate = totalMonthlyTarget > 0 ? (monthlyAchievement / totalMonthlyTarget) * 100 : 0;
 
-  const myTarget = targets.find(t => t.employeeName === user?.name && t.month === selectedMonth && t.year === selectedYear);
-  const myAchievement = leads.filter(l => {
-    if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, user?.name)) {
-      const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-      return l.status === "Client Won" && isAssignedTo(l.assignedTo, user?.name) && leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
-    }
-    return false;
-  }).reduce((acc, l) => {
-    const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
-    return acc + val;
-  }, 0);
-  
   const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
 
   const stats = [
