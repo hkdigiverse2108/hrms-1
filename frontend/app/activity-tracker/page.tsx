@@ -44,7 +44,7 @@ export default function ActivityTrackerPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState("Today");
   const [selectedEmployee, setSelectedEmployee] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -290,7 +290,7 @@ export default function ActivityTrackerPage() {
       </PageHeader>
 
       {/* Main Stats Overviews */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
         {/* Total Clicks Card */}
         <Card className="shadow-xs border-slate-200/80">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -327,46 +327,6 @@ export default function ActivityTrackerPage() {
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Accumulated key presses for filtered period
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Live Session Clicks Card */}
-        <Card className="shadow-xs border-slate-200/80 bg-gradient-to-br from-teal-50/20 to-emerald-50/10">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-semibold text-teal-700 uppercase">
-              Current Session Clicks
-            </CardTitle>
-            <div className="p-2 bg-teal-100 text-teal-600 rounded-lg animate-pulse">
-              <MousePointerClick className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-teal-700">
-              {liveClicks.toLocaleString()}
-            </div>
-            <p className="text-xs text-teal-600/70 mt-1">
-              Clicks since app/page loaded (Real-time)
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Live Session Keystrokes Card */}
-        <Card className="shadow-xs border-slate-200/80 bg-gradient-to-br from-cyan-50/20 to-blue-50/10">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-semibold text-cyan-700 uppercase">
-              Current Session Keys
-            </CardTitle>
-            <div className="p-2 bg-cyan-100 text-cyan-600 rounded-lg animate-pulse">
-              <Keyboard className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-cyan-700">
-              {liveKeystrokes.toLocaleString()}
-            </div>
-            <p className="text-xs text-cyan-600/70 mt-1">
-              Key presses since loading page (Real-time)
             </p>
           </CardContent>
         </Card>

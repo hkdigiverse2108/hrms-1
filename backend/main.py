@@ -81,8 +81,11 @@ async def lifespan(app):
         except Exception:
             pass
             
-        await crud.register_pc_device(db, hostname, local_ip, os_name, os_version)
-        print(f"[PC Registration] Registered device: {hostname} ({local_ip})")
+        if os_name != "Linux":
+            await crud.register_pc_device(db, hostname, local_ip, os_name, os_version)
+            print(f"[PC Registration] Registered device: {hostname} ({local_ip})")
+        else:
+            print("[PC Registration] Skipping registration (running on Linux/Production server).")
     except Exception as e:
         print(f"[PC Registration] Failed to register PC: {e}")
 
