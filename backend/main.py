@@ -1219,12 +1219,19 @@ async def get_ws_info(request: Request):
     ws_url = None
     if backend_url:
         scheme = "wss" if backend_url.startswith("https") else "ws"
-        clean_url = backend_url.replace("https://", "").replace("http://", "")
-        ws_url = f"{scheme}://{clean_url}/chat/ws"
+        clean_url = backend_url.replace("https://", "").replace("http://", "").rstrip("/")
+        if "localhost" not in clean_url and "127.0.0.1" not in clean_url and not clean_url.endswith("/api"):
+            ws_url = f"{scheme}://{clean_url}/api/chat/ws"
+        else:
+            ws_url = f"{scheme}://{clean_url}/chat/ws"
     else:
         # Fallback using request host
         scheme = "wss" if request.url.scheme == "https" else "ws"
-        ws_url = f"{scheme}://{request.url.netloc}/chat/ws"
+        clean_url = request.url.netloc.rstrip("/")
+        if "localhost" not in clean_url and "127.0.0.1" not in clean_url:
+            ws_url = f"{scheme}://{clean_url}/api/chat/ws"
+        else:
+            ws_url = f"{scheme}://{clean_url}/chat/ws"
         
     return {"port": port_val, "url": ws_url}
 

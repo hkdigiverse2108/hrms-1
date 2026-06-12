@@ -96,7 +96,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const data = await res.json();
           if (data.url) {
-            wsUrl = `${data.url}/${user.id}`;
+            let cleanUrl = data.url;
+            if (
+              !cleanUrl.includes("localhost") &&
+              !cleanUrl.includes("127.0.0.1") &&
+              !cleanUrl.includes("/api") &&
+              !cleanUrl.includes("192.168.") &&
+              !cleanUrl.includes("10.") &&
+              !cleanUrl.includes("172.")
+            ) {
+              cleanUrl = cleanUrl.replace("/chat/ws", "/api/chat/ws");
+            }
+            wsUrl = `${cleanUrl}/${user.id}`;
           } else {
             const host = window.location.hostname;
             const port = window.location.port;
