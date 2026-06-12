@@ -14,7 +14,8 @@ import {
   Eye,
   Loader2,
   CheckCircle2,
-  X
+  X,
+  RotateCcw
 } from "lucide-react";
 import {
   Popover,
@@ -134,6 +135,27 @@ export default function AllInvoicesPage() {
         const updated = await res.json();
         setInvoices(invoices.map(inv => inv.id === id ? updated : inv));
         toast.success(`Invoice marked as Paid!`);
+      } else {
+        toast.error("Failed to update status");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error updating status");
+    }
+  };
+
+  const handleMarkAsUnpaid = async (id: string) => {
+    try {
+      const res = await fetch(`${API_URL}/invoices/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Pending" })
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setInvoices(invoices.map(inv => inv.id === id ? updated : inv));
+        toast.success(`Invoice marked as Unpaid!`);
       } else {
         toast.error("Failed to update status");
       }
@@ -498,6 +520,17 @@ export default function AllInvoicesPage() {
                             title="Mark as Paid"
                           >
                             <CheckCircle2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {invoice.status === "Paid" && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleMarkAsUnpaid(invoice.id)}
+                            title="Mark as Unpaid"
+                          >
+                            <RotateCcw className="w-4 h-4" />
                           </Button>
                         )}
                         {invoice.invoiceType === "Proforma Invoice" && (

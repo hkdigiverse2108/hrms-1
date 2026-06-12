@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useChatContext } from '@/context/ChatContext';
 
 /**
@@ -9,10 +9,15 @@ import { useChatContext } from '@/context/ChatContext';
  */
 export function useAppEvent(targetEvent: string, callback: (data: any) => void) {
   const { lastEvent } = useChatContext();
+  const savedCallback = useRef(callback);
+
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     if (lastEvent && lastEvent.event === targetEvent) {
-      callback(lastEvent.data);
+      savedCallback.current(lastEvent.data);
     }
-  }, [lastEvent, targetEvent, callback]);
+  }, [lastEvent, targetEvent]);
 }

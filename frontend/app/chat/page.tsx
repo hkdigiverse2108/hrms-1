@@ -65,7 +65,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import {
@@ -408,31 +408,57 @@ export default function ChatPage() {
   const isSendingRef = useRef(false);
 
 
+  const prevMessagesLength = useRef(0);
+
   const scrollToBottom = useCallback((force = false) => {
     if (scrollRef.current && (shouldScrollToBottom.current || force)) {
+      const el = scrollRef.current;
+      el.scrollTop = el.scrollHeight;
+      
       setTimeout(() => {
         if (scrollRef.current) {
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
       }, 50);
+
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 150);
+      
       shouldScrollToBottom.current = false;
     }
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [currentMessages, typingUsers, scrollToBottom]);
+    if (currentMessages.length > prevMessagesLength.current) {
+      const lastMessage = currentMessages[currentMessages.length - 1];
+      const isSentByMe = lastMessage?.senderId === user?.id || lastMessage?.isMe;
+      const isInitialLoad = prevMessagesLength.current === 0;
+      
+      if (isSentByMe || isInitialLoad) {
+        scrollToBottom(true);
+      } else if (scrollRef.current) {
+        const threshold = 150;
+        const isNearBottom = scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight <= threshold;
+        if (isNearBottom) {
+          scrollToBottom(true);
+        }
+      }
+    } else {
+      scrollToBottom();
+    }
+    prevMessagesLength.current = currentMessages.length;
+  }, [currentMessages, typingUsers, user?.id, scrollToBottom]);
 
   useEffect(() => {
     if (selectedChat) {
+      prevMessagesLength.current = 0;
       shouldScrollToBottom.current = true;
-      setTimeout(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-      }, 200);
+      scrollToBottom(true);
     }
-  }, [selectedChat?.id]);
+  }, [selectedChat?.id, scrollToBottom]);
 
   const fetchEmployees = async () => {
     try {
@@ -608,6 +634,15 @@ export default function ChatPage() {
 
   const handleSelectChat = (chat: any) => {
     if (!chat) return;
+    
+    // Prevent clearing messages if the same chat is clicked
+    const currentId = selectedChat?.id || selectedChat?.employeeId;
+    const newId = chat.id || chat.employeeId;
+    
+    if (selectedChat && currentId === newId && selectedChat.type === chat.type) {
+      return;
+    }
+
     setSelectedChat(chat);
     setCurrentMessages([]);  // Clear stale messages immediately on chat switch
     setFirstUnreadId(null);
@@ -621,9 +656,10 @@ export default function ChatPage() {
   const fetchMessages = React.useCallback(async () => {
     if (!selectedChat || !user || !user.id) return;
     try {
+      const targetId = selectedChat.id || selectedChat.employeeId;
       const url = (selectedChat.type === 'group' || selectedChat.type === 'general')
-        ? `${API_URL}/chat/messages/${user.id}/${selectedChat.id}?group_id=${selectedChat.id}`
-        : `${API_URL}/chat/messages/${user.id}/${selectedChat.id}`;
+        ? `${API_URL}/chat/messages/${user.id}/${targetId}?group_id=${targetId}`
+        : `${API_URL}/chat/messages/${user.id}/${targetId}`;
       
       const res = await fetch(url);
       if (res.ok) {
@@ -842,10 +878,11 @@ export default function ChatPage() {
     const optimisticText = message || (pendingFile && !isImageFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : ""));
     const tempId = `temp-${Date.now()}`;
 
+    const targetId = selectedChat.id || selectedChat.employeeId;
     let payload: any = {
       senderId: user.id,
-      receiverId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : selectedChat.id,
-      groupId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? selectedChat.id : null,
+      receiverId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : targetId,
+      groupId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? targetId : null,
       text: optimisticText,
       type: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : "personal",
       tempId: tempId
@@ -880,6 +917,25 @@ export default function ChatPage() {
     };
     shouldScrollToBottom.current = true;
     setCurrentMessages(prev => [...prev, optimisticMessage]);
+
+    // Optimistically update the sidebar lists instantly
+    const nowIso = new Date().toISOString();
+    if (selectedChat.type === 'personal') {
+      setChatSummaries(prev => ({
+        ...prev,
+        [targetId]: {
+          ...prev[targetId],
+          lastMessage: optimisticText,
+          timestamp: nowIso,
+          isSeen: true,
+          senderId: user.id
+        }
+      }));
+    } else if (selectedChat.type === 'group') {
+      setChatGroups(prev => prev.map(g => g.id === targetId ? { ...g, lastMessage: optimisticText, lastMessageTime: nowIso } : g));
+    } else if (selectedChat.type === 'general') {
+      setChatChannels(prev => prev.map(c => c.id === targetId ? { ...c, lastMessage: optimisticText, lastMessageTime: nowIso } : c));
+    }
     // Clear input fields immediately so the user gets instant feedback
     setMessage("");
     setReplyingTo(null);
@@ -1026,15 +1082,36 @@ export default function ChatPage() {
         );
       }
       
-      // Then, handle search highlighting for non-mention parts
-      if (!messageSearchQuery) return part;
-      
-      const searchParts = part.split(new RegExp(`(${messageSearchQuery})`, 'gi'));
-      return searchParts.map((sp, j) => 
-        sp.toLowerCase() === messageSearchQuery.toLowerCase() ? 
-          <mark key={`search-${i}-${j}`} className="bg-yellow-200 text-slate-900 rounded-sm px-0.5">{sp}</mark> : 
-          sp
-      );
+      // Then, handle URL parsing and search highlighting for non-mention parts
+      const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+      const textParts = part.split(urlRegex);
+
+      return textParts.map((tp, k) => {
+        if (tp.match(urlRegex)) {
+          const href = tp.startsWith('http') ? tp : `https://${tp}`;
+          return (
+            <a 
+              key={`url-${i}-${k}`} 
+              href={href} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className={cn("no-underline hover:!underline font-medium break-all", isMeBubble ? "!text-white" : "!text-brand-teal")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {tp}
+            </a>
+          );
+        }
+
+        if (!messageSearchQuery) return tp;
+        
+        const searchParts = tp.split(new RegExp(`(${messageSearchQuery})`, 'gi'));
+        return searchParts.map((sp, j) => 
+          sp.toLowerCase() === messageSearchQuery.toLowerCase() ? 
+            <mark key={`search-${i}-${k}-${j}`} className="bg-yellow-200 text-slate-900 rounded-sm px-0.5">{sp}</mark> : 
+            sp
+        );
+      });
     });
 
     return withMentions;
@@ -1659,7 +1736,7 @@ export default function ChatPage() {
                     <div className="relative">
                       <Avatar className="w-12 h-12 border-2 border-white shadow-sm ring-1 ring-border">
                         {chat.avatar ? (
-                          <AvatarImage src={chat.avatar} />
+                          <AvatarImage src={getAvatarUrl(chat.avatar)} />
                         ) : (
                           <AvatarFallback className="bg-brand-light text-brand-teal font-bold uppercase">
                             {chat.name[0]}
@@ -1733,7 +1810,7 @@ export default function ChatPage() {
                     <div className="relative">
                       <Avatar className="w-12 h-12 border-2 border-white shadow-sm ring-1 ring-border">
                         {group.avatar ? (
-                          <AvatarImage src={group.avatar} />
+                          <AvatarImage src={getAvatarUrl(group.avatar)} />
                         ) : (
                           <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
                             <Users className="w-6 h-6" />
@@ -1821,7 +1898,7 @@ export default function ChatPage() {
                     <div className="relative">
                       <Avatar className="w-12 h-12 border-2 border-white shadow-sm ring-1 ring-border">
                         {channel.avatar ? (
-                          <AvatarImage src={channel.avatar} />
+                          <AvatarImage src={getAvatarUrl(channel.avatar)} />
                         ) : (
                           <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
                             <Hash className="w-5 h-5 text-brand-teal" />
@@ -1976,7 +2053,7 @@ export default function ChatPage() {
                             
                             <div className="flex gap-3">
                               <Avatar className="w-10 h-10 rounded-lg shrink-0">
-                                <AvatarImage src={sender?.profilePhoto} />
+                                <AvatarImage src={getAvatarUrl(sender?.profilePhoto)} />
                                 <AvatarFallback className="bg-brand-teal text-white rounded-lg font-bold">
                                   {sender?.name?.[0]}
                                 </AvatarFallback>
@@ -2086,7 +2163,7 @@ export default function ChatPage() {
                     <div className="relative shrink-0">
                       <Avatar className="w-11 h-11 border border-border">
                         {selectedChat.avatar ? (
-                          <AvatarImage src={selectedChat.avatar} />
+                          <AvatarImage src={getAvatarUrl(selectedChat.avatar)} />
                         ) : (
                           <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs uppercase">
                             {selectedChat.name[0]}
@@ -2113,7 +2190,7 @@ export default function ChatPage() {
                               const member = employees.find((e: any) => e.id === memberId);
                               return (
                                 <Avatar key={memberId} className="w-5 h-5 border-2 border-white ring-1 ring-border shrink-0">
-                                  <AvatarImage src={member?.profilePhoto} />
+                                  <AvatarImage src={getAvatarUrl(member?.profilePhoto)} />
                                   <AvatarFallback className="text-[8px] bg-brand-light text-brand-teal font-bold">
                                     {member?.name?.[0] || "?"}
                                   </AvatarFallback>
@@ -2249,7 +2326,7 @@ export default function ChatPage() {
               ) : displayMessages.map((msg, index) => {
                 const isGroup = selectedChat.type === 'group' || selectedChat.type === 'general';
                 const sender = isGroup ? employees.find((e: any) => e.id === msg.senderId) : null;
-                const avatarSrc = isGroup ? (sender?.profilePhoto ? (sender.profilePhoto.startsWith('http') ? sender.profilePhoto : `${API_URL}/uploads/${sender.profilePhoto}`) : null) : selectedChat.avatar;
+                const avatarSrc = isGroup ? getAvatarUrl(sender?.profilePhoto) : getAvatarUrl(selectedChat.avatar);
                 const avatarFallback = isGroup ? (sender?.name?.[0] || msg.sender?.[0] || "U") : selectedChat.name[0];
                 const displayName = isGroup ? (sender?.name || msg.sender || "User") : selectedChat.name;
 
@@ -2490,7 +2567,7 @@ export default function ChatPage() {
                                                     title={voter.name || "User"}
                                                   >
                                                     {voter.profilePhoto ? (
-                                                      <img src={voter.profilePhoto.startsWith("http") ? voter.profilePhoto : `${API_URL}/uploads/${voter.profilePhoto}`} alt="" className="w-full h-full object-cover" />
+                                                      <img src={getAvatarUrl(voter.profilePhoto)} alt="" className="w-full h-full object-cover" />
                                                     ) : (
                                                       <div className="w-full h-full flex items-center justify-center text-[8px] font-bold text-slate-500 bg-slate-200">
                                                         {(voter.name || "?")[0].toUpperCase()}
@@ -2833,7 +2910,7 @@ export default function ChatPage() {
                                   className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-50 rounded-xl text-left transition-all"
                                 >
                                   <Avatar className="w-7 h-7 shrink-0">
-                                    <AvatarImage src={emp.profilePhoto} />
+                                    <AvatarImage src={getAvatarUrl(emp.profilePhoto)} />
                                     <AvatarFallback className="bg-brand-teal/10 text-brand-teal font-bold text-[10px]">{initials}</AvatarFallback>
                                   </Avatar>
                                   <div className="min-w-0">
@@ -2997,7 +3074,7 @@ export default function ChatPage() {
                   className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-gray-100"
                 >
                   <Avatar className="w-10 h-10 border border-border">
-                    {chat.avatar && <AvatarImage src={chat.avatar} />}
+                    {chat.avatar && <AvatarImage src={getAvatarUrl(chat.avatar)} />}
                     <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
                       {chat.name[0]}
                     </AvatarFallback>
@@ -3055,7 +3132,7 @@ export default function ChatPage() {
                       onCheckedChange={() => handleToggleMember(emp.id)}
                     />
                     <Avatar className="w-8 h-8">
-                      <AvatarImage src={emp.avatar} />
+                      <AvatarImage src={getAvatarUrl(emp.avatar)} />
                       <AvatarFallback className="bg-brand-light text-brand-teal text-[10px]">{emp.name ? emp.name[0]?.toUpperCase() : "?"}</AvatarFallback>
                     </Avatar>
                     <label
@@ -3135,7 +3212,7 @@ export default function ChatPage() {
                   <Avatar className="w-10 h-10 border border-border">
                     {emp.profilePhoto && (
                       <AvatarImage 
-                        src={emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`} 
+                        src={getAvatarUrl(emp.profilePhoto)} 
                       />
                     )}
                     <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
@@ -3169,7 +3246,7 @@ export default function ChatPage() {
               return (
                 <div key={memberId} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-xl transition-colors">
                   <Avatar className="w-10 h-10 border border-border">
-                    <AvatarImage src={member.profilePhoto} />
+                    <AvatarImage src={getAvatarUrl(member.profilePhoto)} />
                     <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-xs">
                       {member.name[0]}
                     </AvatarFallback>
@@ -3209,7 +3286,7 @@ export default function ChatPage() {
               <div className="bg-[#2a2d31]/50 border border-white/5 rounded-2xl p-6 mb-8">
                 <div className="flex items-start gap-4">
                   <Avatar className="w-10 h-10 border border-white/10">
-                    <AvatarImage src={messageToDelete.isMe ? user?.profilePhoto : selectedChat?.avatar} />
+                    <AvatarImage src={getAvatarUrl(messageToDelete.isMe ? user?.profilePhoto : selectedChat?.avatar)} />
                     <AvatarFallback className="bg-brand-teal text-white font-bold uppercase text-xs">
                       {(messageToDelete.isMe ? user?.name : selectedChat?.name)?.[0]}
                     </AvatarFallback>

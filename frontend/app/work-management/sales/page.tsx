@@ -60,6 +60,8 @@ import {
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { useConfirm } from "@/context/ConfirmContext";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
 const STATUS_REASONS: Record<string, string[]> = {
   "Lead": ["New lead created", "Reopened", "Other"],
   "Contacted": ["Introductory call completed", "Client responded", "Other"],
@@ -67,6 +69,31 @@ const STATUS_REASONS: Record<string, string[]> = {
   "On Hold": ["Client request", "Budget constraint", "No contact from client", "Other"],
   "Client Won": ["Contract signed", "Requirements finalized", "Payment received", "Other"],
   "Client Lost": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
+};
+
+const isAssignedTo = (assignedToData: any, employeeName: string | undefined | null) => {
+  if (!employeeName) return false;
+  if (Array.isArray(assignedToData)) {
+    return assignedToData.includes(employeeName);
+  }
+  return assignedToData === employeeName;
+};
+
+const getAssignedToString = (assignedToData: any) => {
+  if (Array.isArray(assignedToData)) {
+    return assignedToData.join(", ");
+  }
+  return assignedToData || "Unassigned";
+};
+
+const getAssignedToInitials = (assignedToData: any) => {
+  if (Array.isArray(assignedToData) && assignedToData.length > 0) {
+    return (assignedToData[0] || "??").substring(0, 2);
+  }
+  if (typeof assignedToData === 'string') {
+    return (assignedToData || "??").substring(0, 2);
+  }
+  return "??";
 };
 
 export default function SalesPage() {
@@ -715,6 +742,7 @@ export default function SalesPage() {
 
   const achievementRate = totalMonthlyTarget > 0 ? (monthlyAchievement / totalMonthlyTarget) * 100 : 0;
 
+
   const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
 
   const stats = [
@@ -1151,6 +1179,7 @@ export default function SalesPage() {
                       }}
                       className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1"
                     >
+<<<<<<< HEAD
                       {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 ? (
                         lead.assignedTo.map((name: string) => (
                           <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
@@ -1175,6 +1204,10 @@ export default function SalesPage() {
                         <span className="text-slate-400 italic text-xs">Unassigned</span>
                       )}
                     </div>
+=======
+                      {getAssignedToString(lead.assignedTo) || "--"}
+                    </span>
+>>>>>>> 7b46f595af51f98a75e2a8b82ccc2cb9dc369e60
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -1850,7 +1883,30 @@ export default function SalesPage() {
                               .filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
+<<<<<<< HEAD
                                 let achieved = t.currentAchievement || 0;
+=======
+                                const achieved = leads.filter(l => {
+                                  if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, t.employeeName)) return false;
+                                  const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+                                  
+                                  // Month/Year check
+                                  const monthMatch = leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
+                                  if (!monthMatch) return false;
+
+                                  // Weekly check
+                                  if (t.type === "Weekly") {
+                                    const dayOfMonth = leadDate.date();
+                                    const weekNum = Math.ceil(dayOfMonth / 7);
+                                    return weekNum === t.week;
+                                  }
+                                  return true;
+                                }).reduce((acc, l) => {
+                                  const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+                                  return acc + val;
+                                }, 0);
+                                
+>>>>>>> 7b46f595af51f98a75e2a8b82ccc2cb9dc369e60
                                 const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
                                 const earnedIncentive = t.incentiveAmount || 0;
 
@@ -1965,7 +2021,115 @@ export default function SalesPage() {
               </div>
             </TabsContent>
 
+<<<<<<< HEAD
 
+=======
+            <TabsContent value="reports">
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="px-6 py-4 border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
+                  <CardTitle className="text-sm font-bold text-slate-700">Sales Performance Report</CardTitle>
+                  <div className="flex items-center gap-3">
+                    <Select value={reportEmployeeFilter} onValueChange={setReportEmployeeFilter}>
+                      <SelectTrigger className="h-8 w-[150px] text-xs">
+                        <SelectValue placeholder="Filter Employee" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Employees</SelectItem>
+                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
+                          <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="relative">
+                      <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                      <Input 
+                        type="date" 
+                        className="h-8 pl-8 text-xs w-[140px]" 
+                        value={reportDateFilter}
+                        onChange={(e) => setReportDateFilter(e.target.value)}
+                      />
+                    </div>
+                    {(reportEmployeeFilter !== "all" || reportDateFilter) && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 px-2 text-[10px] text-slate-400 hover:text-slate-600"
+                        onClick={() => {
+                          setReportEmployeeFilter("all");
+                          setReportDateFilter("");
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/50 border-b border-slate-100">
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Employee Name</th>
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lead (Company)</th>
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
+                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Income</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {leads.filter(l => l.status === "Client Won")
+                          .filter(l => reportEmployeeFilter === "all" || isAssignedTo(l.assignedTo, reportEmployeeFilter))
+                          .filter(l => {
+                            if (!reportDateFilter) return true;
+                            const targetDate = dayjs(reportDateFilter).format('YYYY-MM-DD');
+                            const leadClosedDate = l.closedDate ? dayjs(l.closedDate).format('YYYY-MM-DD') : null;
+                            const leadDate = dayjs(l.date).format('YYYY-MM-DD');
+                            
+                            // Match either closed date or creation date if closed date is missing
+                            return leadClosedDate === targetDate || (!leadClosedDate && leadDate === targetDate);
+                          })
+                          .sort((a, b) => new Date(b.closedDate || 0).getTime() - new Date(a.closedDate || 0).getTime())
+                          .map((lead) => (
+                            <tr key={lead.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="px-6 py-4 text-xs text-slate-500 font-medium">
+                                <div className="flex items-center gap-1.5">
+                                  <Calendar className="w-3 h-3 text-emerald-500" />
+                                  {lead.closedDate || lead.date}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[10px] font-bold uppercase">
+                                    {getAssignedToInitials(lead.assignedTo)}
+                                  </div>
+                                  <span className="font-bold text-slate-700 text-sm">{getAssignedToString(lead.assignedTo)}</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="font-bold text-slate-900 text-sm">{lead.company}</span>
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">Converted</Badge>
+                              </td>
+                              <td className="px-6 py-4 text-right font-bold text-slate-900 text-sm text-emerald-600">
+                                {lead.expectedIncome}
+                              </td>
+                            </tr>
+                          ))}
+                        {leads.filter(l => l.status === "Client Won").length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
+                              No converted leads found for reporting.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+>>>>>>> 7b46f595af51f98a75e2a8b82ccc2cb9dc369e60
           </>
         )}
 
@@ -2104,3 +2268,4 @@ export default function SalesPage() {
     </div>
   );
 }
+  
