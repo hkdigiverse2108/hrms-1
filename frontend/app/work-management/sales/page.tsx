@@ -151,8 +151,8 @@ export default function SalesPage() {
   const [statusChangeData, setStatusChangeData] = useState<{ leadId: string, newStatus: string, keepEditing?: boolean } | null>(null);
   const [selectedReason, setSelectedReason] = useState("");
   const [customReason, setCustomReason] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState<string>("All");
-  const [selectedYear, setSelectedYear] = useState<string | number>("All");
+  const [selectedMonth, setSelectedMonth] = useState<string>(dayjs().format("MMMM"));
+  const [selectedYear, setSelectedYear] = useState<string | number>(dayjs().year());
   const [targets, setTargets] = useState<any[]>([]);
   const [incentiveSlabs, setIncentiveSlabs] = useState<any[]>([]);
   const [isTargetSubmitting, setIsTargetSubmitting] = useState(false);
@@ -1300,14 +1300,12 @@ export default function SalesPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-[180px]">
                         <DropdownMenuItem onClick={() => fetchLeadLogs(lead)} className="cursor-pointer font-medium">
-                          <HistoryIcon className="w-4 h-4 mr-2 text-brand-teal" />
                           View History
                         </DropdownMenuItem>
                         {canDeleteSales && (
                           <>
                             <div className="h-px bg-slate-100 my-1" />
                             <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
-                              <Trash2 className="w-4 h-4 mr-2" />
                               Delete Lead
                             </DropdownMenuItem>
                           </>
@@ -1909,6 +1907,7 @@ export default function SalesPage() {
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Period</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Target</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Achieved</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-emerald-600">Incentive Base</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-indigo-600">Earned</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-brand-teal">Progress</th>
                             {isAdmin && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
@@ -1921,6 +1920,10 @@ export default function SalesPage() {
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
                                 let achieved = t.currentAchievement || 0;
+                                let calcIncentiveBase = (t.breakdown && t.breakdown.length > 0)
+                                  ? t.breakdown.reduce((sum: number, b: any) => sum + (b.incentiveBase !== undefined ? b.incentiveBase : (b.subtotal || 0)), 0)
+                                  : achieved;
+                                let incentiveBase = t.incentiveBase !== undefined ? t.incentiveBase : calcIncentiveBase;
                                 const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
                                 const earnedIncentive = t.incentiveAmount || 0;
 
@@ -1961,7 +1964,10 @@ export default function SalesPage() {
                                       <span className="font-bold text-slate-900 text-sm">₹{t.targetAmount?.toLocaleString()}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                      <span className="font-bold text-emerald-600 text-sm">₹{achieved.toLocaleString()}</span>
+                                      <span className="font-bold text-slate-900 text-sm">₹{achieved.toLocaleString()}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <span className="font-bold text-emerald-600 text-sm">₹{incentiveBase.toLocaleString()}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                       <div className="flex flex-col items-end">
@@ -2228,6 +2234,7 @@ export default function SalesPage() {
                       <th className="px-4 py-3 font-semibold text-slate-600">Category</th>
                       <th className="px-4 py-3 font-semibold text-slate-600">Type</th>
                       <th className="px-4 py-3 font-semibold text-slate-600 text-right">Invoice Value</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Incentive Base</th>
                       <th className="px-4 py-3 font-semibold text-slate-600 text-right">Slab %</th>
                       <th className="px-4 py-3 font-semibold text-slate-600 text-right">Earned</th>
                     </tr>
@@ -2249,6 +2256,9 @@ export default function SalesPage() {
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">
                           {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.subtotal || 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-emerald-600 font-medium">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.incentiveBase !== undefined ? item.incentiveBase : (item.subtotal || 0))}
                         </td>
                         <td className="px-4 py-3 text-right font-medium">{item.slabPercentage}%</td>
                         <td className="px-4 py-3 text-right text-brand-teal font-bold">
