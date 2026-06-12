@@ -1008,22 +1008,26 @@ export default function ChatPage() {
       toast.error(`This attachment is not available for download (URL: ${url}). Please send a NEW file to test.`);
       return;
     }
-    const fullUrl = url.startsWith('http') ? url : `${API_URL}${url}`;
+    const fullUrl = url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith(API_URL) ? url : `${API_URL}${url}`;
     
     try {
       const response = await fetch(fullUrl);
+      if (!response.ok) {
+        toast.error(`Failed to download: File not found or unavailable on the server.`);
+        return; // Don't throw to avoid Next.js error overlay, just exit.
+      }
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = filename;
+      link.download = filename || 'download';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
     } catch (err) {
-      console.error("Download error:", err);
+      console.warn("Download fallback:", err);
       // Fallback to direct link if fetch fails
       window.open(fullUrl, '_blank');
     }
