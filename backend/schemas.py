@@ -799,6 +799,7 @@ class ClientBase(BaseModel):
     gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = "active"
+    whatsappGroup: Optional[str] = None
     services: Optional[str] = None
     festivalPost: Optional[str] = None
     post: Optional[int] = 0
@@ -833,6 +834,7 @@ class ClientUpdate(BaseModel):
     gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = None
+    whatsappGroup: Optional[str] = None
     services: Optional[str] = None
     festivalPost: Optional[str] = None
     post: Optional[int] = None

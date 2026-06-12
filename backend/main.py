@@ -767,6 +767,13 @@ async def delete_event(event_id: str, db=Depends(get_db)): return await crud.del
 async def read_clients(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_clients(db, skip=skip, limit=limit)
 
+@app.get("/clients/{client_id}", response_model=schemas.Client)
+async def read_client(client_id: str, db=Depends(get_db)):
+    client = await crud.get_client(db, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return client
+
 @app.post("/clients", response_model=schemas.Client)
 async def create_client(client: schemas.ClientCreate, db=Depends(get_db)):
     return await crud.create_client(db, client=client)
@@ -868,6 +875,28 @@ async def read_task_logs(
     db=Depends(get_db)
 ):
     return await crud.get_task_logs(db, taskId=taskId, projectId=projectId, clientId=clientId, dailyReportId=dailyReportId, monthlyReportId=monthlyReportId)
+
+@app.post("/task-logs", response_model=schemas.TaskLog)
+async def create_task_log(log: schemas.TaskLogBase, db=Depends(get_db)):
+    await crud.log_activity(
+        db=db,
+        action=log.action,
+        performedBy=log.performedBy,
+        userName=log.userName,
+        details=log.details,
+        taskId=log.taskId,
+        projectId=log.projectId,
+        clientId=log.clientId,
+        leadId=log.leadId,
+        dailyReportId=log.dailyReportId,
+        monthlyReportId=log.monthlyReportId
+    )
+    # Fetch the latest log we just created
+    doc = await db.task_logs.find_one({"clientId": log.clientId, "action": log.action}, sort=[("_id", -1)])
+    if doc:
+        from bson import ObjectId
+        doc["id"] = str(doc["_id"])
+    return doc
 # Marketing Reports Endpoints
 @app.post("/marketing/reports/daily", response_model=schemas.MarketingDailyReport)
 async def create_marketing_daily_report(report: schemas.MarketingDailyReportCreate, db=Depends(get_db)):

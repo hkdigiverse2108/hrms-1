@@ -2319,6 +2319,12 @@ async def get_clients(db, skip: int = 0, limit: int = 100):
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
+async def get_client(db, client_id: str):
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    if doc:
+        return fix_id(doc)
+    return None
+
 async def create_client(db, client: schemas.ClientCreate):
     client_dict = client.dict()
     performedBy = client_dict.pop("performedBy", "Unknown")

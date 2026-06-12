@@ -40,6 +40,8 @@ const DEFAULT_MODULES = [
   { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
   { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
   { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
+  { moduleName: 'marketing', displayName: 'Marketing', tabUrl: '/work-management/marketing-reports' },
+  { moduleName: 'creative', displayName: 'SMM', tabUrl: '/work-management/smm' },
   { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
   { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
   { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
