@@ -125,8 +125,12 @@ function patchNextjsConfig() {
         }
         
         if (modified) {
-          fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-          log(`Successfully patched: ${filePath}`);
+          try {
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+            log(`Successfully patched: ${filePath}`);
+          } catch (writeErr) {
+            log(`Warning: Failed to write patched config to ${filePath} (${writeErr.message}). Next.js will use existing values.`);
+          }
         } else {
           log(`No changes needed or matching rewrites found in: ${filePath}`);
         }
@@ -379,6 +383,41 @@ function createWindow() {
         }
       }, 300);
     }
+  });
+
+  ipcMain.on('save-session', (event, sessionData) => {
+    try {
+      const sessionPath = path.join(app.getPath('userData'), 'session.json');
+      fs.writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2), 'utf8');
+      log('Session saved to session.json');
+    } catch (err) {
+      log(`Failed to save session: ${err.message}`);
+    }
+  });
+
+  ipcMain.on('clear-session', () => {
+    try {
+      const sessionPath = path.join(app.getPath('userData'), 'session.json');
+      if (fs.existsSync(sessionPath)) {
+        fs.unlinkSync(sessionPath);
+        log('Session cleared from session.json');
+      }
+    } catch (err) {
+      log(`Failed to clear session: ${err.message}`);
+    }
+  });
+
+  ipcMain.handle('get-session', async () => {
+    try {
+      const sessionPath = path.join(app.getPath('userData'), 'session.json');
+      if (fs.existsSync(sessionPath)) {
+        const data = fs.readFileSync(sessionPath, 'utf8');
+        return JSON.parse(data);
+      }
+    } catch (err) {
+      log(`Failed to read session: ${err.message}`);
+    }
+    return null;
   });
 
   // Load the resolved frontend URL

@@ -75,7 +75,7 @@ function run() {
         const key = line.split('=')[0].trim().toUpperCase();
         return [
           'BACKEND_PORT', 'PORT', 'APP_HOST', 'AUTO_START_BACKEND',
-          'BACKEND_URL', 'ALLOWED_ORIGINS'
+          'BACKEND_URL', 'ALLOWED_ORIGINS', 'MONGO_URL', 'MONGO_DB', 'JWT_SECRET'
         ].includes(key);
       });
       fs.writeFileSync(srcEnvServer, safeLines.join('\n'), 'utf8');

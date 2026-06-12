@@ -1214,7 +1214,19 @@ async def get_ws_info(request: Request):
         port_val = int(backend_port)
     except ValueError:
         port_val = 8000
-    return {"port": port_val}
+    
+    backend_url = os.environ.get("BACKEND_URL", "")
+    ws_url = None
+    if backend_url:
+        scheme = "wss" if backend_url.startswith("https") else "ws"
+        clean_url = backend_url.replace("https://", "").replace("http://", "")
+        ws_url = f"{scheme}://{clean_url}/chat/ws"
+    else:
+        # Fallback using request host
+        scheme = "wss" if request.url.scheme == "https" else "ws"
+        ws_url = f"{scheme}://{request.url.netloc}/chat/ws"
+        
+    return {"port": port_val, "url": ws_url}
 
 @app.websocket("/chat/ws/{user_id}")
 async def chat_websocket_endpoint(websocket: WebSocket, user_id: str):

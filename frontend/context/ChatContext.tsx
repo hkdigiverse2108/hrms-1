@@ -95,18 +95,22 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         if (!active) return;
         if (res.ok) {
           const data = await res.json();
-          const host = window.location.hostname;
-          const port = window.location.port;
-          const isLocal = host === "localhost" || 
-                          host === "127.0.0.1" || 
-                          host.startsWith("192.168.") || 
-                          host.startsWith("10.") || 
-                          host.startsWith("172.") || 
-                          host.endsWith(".local") ||
-                          (port !== "" && port !== "80" && port !== "443");
-          
-          if (isLocal && data.port) {
-            wsUrl = `${wsProtocol}//${host}:${data.port}/chat/ws/${user.id}`;
+          if (data.url) {
+            wsUrl = `${data.url}/${user.id}`;
+          } else {
+            const host = window.location.hostname;
+            const port = window.location.port;
+            const isLocal = host === "localhost" || 
+                            host === "127.0.0.1" || 
+                            host.startsWith("192.168.") || 
+                            host.startsWith("10.") || 
+                            host.startsWith("172.") || 
+                            host.endsWith(".local") ||
+                            (port !== "" && port !== "80" && port !== "443");
+            
+            if (isLocal && data.port) {
+              wsUrl = `${wsProtocol}//${host}:${data.port}/chat/ws/${user.id}`;
+            }
           }
         }
       } catch (err) {
@@ -205,7 +209,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                setUnreadCounts(prev => ({ ...prev, [messageChatId]: (prev[messageChatId] || 0) + 1 }));
 
                const isDnd = localStorage.getItem("globalDndEnabled") === "true";
-               if (!isDnd && !data.isMe) {
+               if (!isDnd && data.senderId !== user.id) {
                  const mutedChatsStr = localStorage.getItem("mutedChats");
                  const mutedChats = mutedChatsStr ? JSON.parse(mutedChatsStr) : [];
                  const isMuted = mutedChats.includes(messageChatId);

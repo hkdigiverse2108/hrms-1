@@ -939,6 +939,7 @@ export default function ChatPage() {
     // Clear input fields immediately so the user gets instant feedback
     setMessage("");
     setReplyingTo(null);
+    stopTyping();
     const capturedFile = pendingFile;
     setPendingFile(null);
 
@@ -1357,6 +1358,27 @@ export default function ChatPage() {
   };
 
   // Typing logic
+  const stopTyping = () => {
+    if (!user || !selectedChat) return;
+    const chatId = selectedChat.id || selectedChat.employeeId;
+    if (!chatId) return;
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "typing",
+        chatId: chatId,
+        isTyping: false
+      }));
+    } else {
+      fetch(`${API_URL}/chat/typing?chat_id=${chatId}&user_id=${user.id}&is_typing=false`, { method: 'POST' });
+    }
+  };
+
   const handleTyping = () => {
     if (!user || !selectedChat) return;
     const chatId = selectedChat.id || selectedChat.employeeId;
@@ -1376,15 +1398,7 @@ export default function ChatPage() {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     
     typingTimeoutRef.current = setTimeout(() => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({
-          type: "typing",
-          chatId: chatId,
-          isTyping: false
-        }));
-      } else {
-        fetch(`${API_URL}/chat/typing?chat_id=${chatId}&user_id=${user.id}&is_typing=false`, { method: 'POST' });
-      }
+      stopTyping();
     }, 3000);
   };
 

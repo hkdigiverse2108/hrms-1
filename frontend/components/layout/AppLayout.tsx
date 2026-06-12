@@ -79,6 +79,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
     });
   });
 
+  // Request Desktop Notification Permission globally on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().then(permission => {
+        console.log("Desktop notification permission status:", permission);
+      });
+    }
+  }, []);
+
   // Authentication Guard
   useEffect(() => {
     if (!isLoading && !user && !isAuthPage) {

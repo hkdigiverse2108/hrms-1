@@ -77,55 +77,83 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [timeAnchor]);
  
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        
-        const userId = parsedUser.id || parsedUser._id;
-        if (userId) {
-          const fetchUrl = `${API_URL}/employees/${userId}`;
-          console.log("Syncing user data from:", fetchUrl);
-          const token = localStorage.getItem('token');
-          const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
-          // Fetch fresh user data to get updated permissions
-          fetch(fetchUrl, { headers })
-            .then(res => {
-              if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-              return res.json();
-            })
-            .then(freshUser => {
-              if (freshUser && !freshUser.detail) {
-                // Fetch permissions separately
-                fetch(`${API_URL}/user-permissions/${userId}`, { headers })
-                  .then(pRes => pRes.ok ? pRes.json() : { permissions: [] })
-                  .then(pData => {
-                    const updatedUser = { 
-                      ...freshUser, 
-                      permissions: pData?.permissions || [] 
-                    };
-                    localStorage.setItem('user', JSON.stringify(updatedUser));
-                    setUser(updatedUser);
-                  });
-              }
-            })
-            .catch(err => console.warn("Failed to sync user data:", err));
+    const initializeUser = async () => {
+      let storedUser = localStorage.getItem('user');
+      let storedToken = localStorage.getItem('token');
+      
+      // Fallback: check Electron native session file
+      if (!storedUser && typeof window !== 'undefined' && (window as any).electronAPI?.getSession) {
+        try {
+          const session = await (window as any).electronAPI.getSession();
+          if (session && session.user && session.token) {
+            console.log("Restoring user session from Electron session.json");
+            localStorage.setItem('user', JSON.stringify(session.user));
+            localStorage.setItem('token', session.token);
+            storedUser = JSON.stringify(session.user);
+            storedToken = session.token;
+          }
+        } catch (err) {
+          console.warn("Failed to get session from Electron:", err);
         }
-      } catch (err) {
-        console.warn("Failed to parse user", err);
-        localStorage.removeItem('user');
       }
-    }
-    setIsLoading(false);
+
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser);
+          
+          const userId = parsedUser.id || parsedUser._id;
+          if (userId) {
+            const fetchUrl = `${API_URL}/employees/${userId}`;
+            console.log("Syncing user data from:", fetchUrl);
+            const token = storedToken || localStorage.getItem('token');
+            const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            // Fetch fresh user data to get updated permissions
+            const res = await fetch(fetchUrl, { headers });
+            if (res.ok) {
+              const freshUser = await res.json();
+              if (freshUser && !freshUser.detail) {
+                const pRes = await fetch(`${API_URL}/user-permissions/${userId}`, { headers });
+                const pData = pRes.ok ? await pRes.json() : { permissions: [] };
+                const updatedUser = { 
+                  ...freshUser, 
+                  permissions: pData?.permissions || [] 
+                };
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+                setUser(updatedUser);
+                
+                // Keep Electron session file in sync
+                if (typeof window !== 'undefined' && (window as any).electronAPI?.saveSession) {
+                  (window as any).electronAPI.saveSession({ user: updatedUser, token });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to parse user:", err);
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+          if (typeof window !== 'undefined' && (window as any).electronAPI?.clearSession) {
+            (window as any).electronAPI.clearSession();
+          }
+        }
+      }
+      setIsLoading(false);
+    };
+
+    initializeUser();
   }, []);
- 
+  
   const login = (userData: User & { token?: string }) => {
     localStorage.setItem('user', JSON.stringify(userData));
     if (userData.token) {
       localStorage.setItem('token', userData.token);
     }
     setUser(userData);
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.saveSession) {
+      (window as any).electronAPI.saveSession({ user: userData, token: userData.token });
+    }
   };
  
   const updateUser = (updates: Partial<User>) => {
@@ -133,6 +161,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       const updatedUser = { ...user, ...updates };
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setUser(updatedUser);
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.saveSession) {
+        const token = localStorage.getItem('token');
+        (window as any).electronAPI.saveSession({ user: updatedUser, token });
+      }
     }
   };
  
@@ -140,6 +172,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
     setUser(null);
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.clearSession) {
+      (window as any).electronAPI.clearSession();
+    }
   };
 
   // Periodic check to automatically log out inactive users
