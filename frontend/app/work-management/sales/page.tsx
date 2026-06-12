@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import dayjs from "dayjs";
 import { SalesAnalytics } from "./components/SalesAnalytics";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -26,7 +26,8 @@ import {
   History as HistoryIcon,
   Flame,
   X,
-  BarChart2
+  BarChart2,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -137,6 +138,7 @@ export default function SalesPage() {
   const [reportDateFilter, setReportDateFilter] = useState(dayjs().format("YYYY-MM-DD"));
   const [selectedLeadForLogs, setSelectedLeadForLogs] = useState<any>(null);
   const [leadLogs, setLeadLogs] = useState<any[]>([]);
+  const clientSubmittingRef = useRef(false);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const [statusChangeData, setStatusChangeData] = useState<{ leadId: string, newStatus: string, keepEditing?: boolean } | null>(null);
@@ -460,6 +462,8 @@ export default function SalesPage() {
 
   const handleClientSubmit = async (data: ClientFormData) => {
     if (!convertingLeadId) return;
+    if (clientSubmittingRef.current) return;
+    clientSubmittingRef.current = true;
     setIsClientSubmitting(true);
     try {
       const clientRes = await fetch(`${API_URL}/clients`, {
@@ -503,6 +507,7 @@ export default function SalesPage() {
       console.error("Error creating client:", err);
       toast.error("An error occurred while creating client");
     } finally {
+      clientSubmittingRef.current = false;
       setIsClientSubmitting(false);
     }
   };
@@ -1111,9 +1116,8 @@ export default function SalesPage() {
                             !selectedAssignees.every((name: string) => originalList.includes(name));
                           if (hasChanged) {
                             handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees);
-                          } else {
-                            setInlineEditing(null);
                           }
+                          setInlineEditing(null);
                         }
                       }}
                     >
@@ -1179,7 +1183,6 @@ export default function SalesPage() {
                       }}
                       className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1"
                     >
-<<<<<<< HEAD
                       {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 ? (
                         lead.assignedTo.map((name: string) => (
                           <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
@@ -1204,10 +1207,6 @@ export default function SalesPage() {
                         <span className="text-slate-400 italic text-xs">Unassigned</span>
                       )}
                     </div>
-=======
-                      {getAssignedToString(lead.assignedTo) || "--"}
-                    </span>
->>>>>>> 7b46f595af51f98a75e2a8b82ccc2cb9dc369e60
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -1857,10 +1856,35 @@ export default function SalesPage() {
                 )}
 
                 <Card className={`border-none shadow-sm bg-white overflow-hidden ${canEditSales ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
-                  <CardHeader className="border-b border-slate-100">
+                  <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between py-4">
                     <CardTitle className="text-sm font-bold text-slate-700">
                       {canEditSales ? "Sales Performance Targets" : "My Performance Targets"}
                     </CardTitle>
+                    {canEditSales && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const toastId = toast.loading("Recalculating all sales targets...");
+                          try {
+                            const res = await fetch(`${API_URL}/sales-targets/recalculate-all`, { method: "POST" });
+                            if (res.ok) {
+                              const data = await res.json();
+                              toast.success(data.message || "Recalculated successfully", { id: toastId });
+                              fetchTargets();
+                            } else {
+                              toast.error("Failed to recalculate targets", { id: toastId });
+                            }
+                          } catch (e) {
+                            toast.error("Error recalculating targets", { id: toastId });
+                          }
+                        }}
+                        className="h-8 gap-2 border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Recalculate All</span>
+                      </Button>
+                    )}
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
@@ -1883,30 +1907,7 @@ export default function SalesPage() {
                               .filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
-<<<<<<< HEAD
                                 let achieved = t.currentAchievement || 0;
-=======
-                                const achieved = leads.filter(l => {
-                                  if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, t.employeeName)) return false;
-                                  const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-                                  
-                                  // Month/Year check
-                                  const monthMatch = leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
-                                  if (!monthMatch) return false;
-
-                                  // Weekly check
-                                  if (t.type === "Weekly") {
-                                    const dayOfMonth = leadDate.date();
-                                    const weekNum = Math.ceil(dayOfMonth / 7);
-                                    return weekNum === t.week;
-                                  }
-                                  return true;
-                                }).reduce((acc, l) => {
-                                  const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
-                                  return acc + val;
-                                }, 0);
-                                
->>>>>>> 7b46f595af51f98a75e2a8b82ccc2cb9dc369e60
                                 const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
                                 const earnedIncentive = t.incentiveAmount || 0;
 
@@ -2021,115 +2022,6 @@ export default function SalesPage() {
               </div>
             </TabsContent>
 
-<<<<<<< HEAD
-
-=======
-            <TabsContent value="reports">
-              <Card className="border-none shadow-sm bg-white overflow-hidden">
-                <CardHeader className="px-6 py-4 border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="text-sm font-bold text-slate-700">Sales Performance Report</CardTitle>
-                  <div className="flex items-center gap-3">
-                    <Select value={reportEmployeeFilter} onValueChange={setReportEmployeeFilter}>
-                      <SelectTrigger className="h-8 w-[150px] text-xs">
-                        <SelectValue placeholder="Filter Employee" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Employees</SelectItem>
-                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
-                          <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="relative">
-                      <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                      <Input 
-                        type="date" 
-                        className="h-8 pl-8 text-xs w-[140px]" 
-                        value={reportDateFilter}
-                        onChange={(e) => setReportDateFilter(e.target.value)}
-                      />
-                    </div>
-                    {(reportEmployeeFilter !== "all" || reportDateFilter) && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-8 px-2 text-[10px] text-slate-400 hover:text-slate-600"
-                        onClick={() => {
-                          setReportEmployeeFilter("all");
-                          setReportDateFilter("");
-                        }}
-                      >
-                        Clear
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50/50 border-b border-slate-100">
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Employee Name</th>
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lead (Company)</th>
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
-                          <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Income</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {leads.filter(l => l.status === "Client Won")
-                          .filter(l => reportEmployeeFilter === "all" || isAssignedTo(l.assignedTo, reportEmployeeFilter))
-                          .filter(l => {
-                            if (!reportDateFilter) return true;
-                            const targetDate = dayjs(reportDateFilter).format('YYYY-MM-DD');
-                            const leadClosedDate = l.closedDate ? dayjs(l.closedDate).format('YYYY-MM-DD') : null;
-                            const leadDate = dayjs(l.date).format('YYYY-MM-DD');
-                            
-                            // Match either closed date or creation date if closed date is missing
-                            return leadClosedDate === targetDate || (!leadClosedDate && leadDate === targetDate);
-                          })
-                          .sort((a, b) => new Date(b.closedDate || 0).getTime() - new Date(a.closedDate || 0).getTime())
-                          .map((lead) => (
-                            <tr key={lead.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="px-6 py-4 text-xs text-slate-500 font-medium">
-                                <div className="flex items-center gap-1.5">
-                                  <Calendar className="w-3 h-3 text-emerald-500" />
-                                  {lead.closedDate || lead.date}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-7 h-7 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[10px] font-bold uppercase">
-                                    {getAssignedToInitials(lead.assignedTo)}
-                                  </div>
-                                  <span className="font-bold text-slate-700 text-sm">{getAssignedToString(lead.assignedTo)}</span>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className="font-bold text-slate-900 text-sm">{lead.company}</span>
-                              </td>
-                              <td className="px-6 py-4 text-center">
-                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">Converted</Badge>
-                              </td>
-                              <td className="px-6 py-4 text-right font-bold text-slate-900 text-sm text-emerald-600">
-                                {lead.expectedIncome}
-                              </td>
-                            </tr>
-                          ))}
-                        {leads.filter(l => l.status === "Client Won").length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
-                              No converted leads found for reporting.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
->>>>>>> 7b46f595af51f98a75e2a8b82ccc2cb9dc369e60
           </>
         )}
 
