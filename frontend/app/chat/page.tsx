@@ -1548,16 +1548,85 @@ export default function ChatPage() {
       });
   }, [employees, user?.id, chatSummaries]);
 
-  // Auto-select the most recent active conversation on page load
+  // Auto-select the most recent active conversation on page load or when notification is clicked
   useEffect(() => {
     if (!selectedChat && chats.length > 0) {
+      if (typeof window !== "undefined") {
+        const targetId = localStorage.getItem("selectedChatIdOnMount");
+        const targetType = localStorage.getItem("selectedChatTypeOnMount");
+        if (targetId) {
+          localStorage.removeItem("selectedChatIdOnMount");
+          localStorage.removeItem("selectedChatTypeOnMount");
+          
+          const foundChat = chats.find(c => String(c.id) === String(targetId));
+          if (foundChat) {
+            handleSelectChat(foundChat);
+            return;
+          }
+          if (targetType === 'general') {
+            const chan = chatChannels.find(c => String(c.id) === String(targetId));
+            if (chan) {
+              handleSelectChat({ ...chan, type: 'general' });
+              setActiveTab("General");
+              return;
+            }
+          } else if (targetType === 'group') {
+            const grp = chatGroups.find(g => String(g.id) === String(targetId));
+            if (grp) {
+              handleSelectChat({ ...grp, type: 'group' });
+              setActiveTab("Groups");
+              return;
+            }
+          }
+        }
+      }
+
       // chats is already sorted by timestamp descending, so chats[0] is the most recent
       const mostRecentChat = chats.find(c => c.timestamp) || chats[0];
       if (mostRecentChat) {
         handleSelectChat(mostRecentChat);
       }
     }
-  }, [chats, selectedChat]);
+  }, [chats, selectedChat, chatChannels, chatGroups, handleSelectChat]);
+
+  // Listen for notification clicks when already on the chat page
+  useEffect(() => {
+    const handleNotificationClick = () => {
+      const targetId = localStorage.getItem("selectedChatIdOnMount");
+      const targetType = localStorage.getItem("selectedChatTypeOnMount");
+      if (targetId) {
+        localStorage.removeItem("selectedChatIdOnMount");
+        localStorage.removeItem("selectedChatTypeOnMount");
+        
+        const foundChat = chats.find(c => String(c.id) === String(targetId));
+        if (foundChat) {
+          handleSelectChat(foundChat);
+          return;
+        }
+        
+        // Try channels
+        const chan = chatChannels.find(c => String(c.id) === String(targetId));
+        if (chan) {
+          handleSelectChat({ ...chan, type: 'general' });
+          setActiveTab("General");
+          return;
+        }
+        
+        // Try groups
+        const grp = chatGroups.find(g => String(g.id) === String(targetId));
+        if (grp) {
+          handleSelectChat({ ...grp, type: 'group' });
+          setActiveTab("Groups");
+          return;
+        }
+      }
+    };
+
+    window.addEventListener("chat-notification-click", handleNotificationClick);
+    return () => {
+      window.removeEventListener("chat-notification-click", handleNotificationClick);
+    };
+  }, [chats, chatChannels, chatGroups, handleSelectChat]);
 
   const filteredChats = chats.filter((c: any) => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase())

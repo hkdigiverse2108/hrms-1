@@ -292,14 +292,31 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                          console.warn(e);
                        }
 
-                       // Desktop Notification
-                       if ("Notification" in window && Notification.permission === "granted" && (!isTabActive || !isChatPage)) {
-                         const senderName = data.sender || "Colleague";
-                         const body = data.text || "Sent an attachment";
-                         const title = data.groupId ? `💬 ${senderName} (Group Chat)` : `💬 ${senderName}`;
-                         const notif = new Notification(title, { body, icon: "/favicon.ico" });
-                         notif.onclick = () => { window.focus(); };
-                       }
+                        // Desktop Notification
+                        if ("Notification" in window && Notification.permission === "granted" && (!isTabActive || !isChatPage)) {
+                          const senderName = data.sender || "Colleague";
+                          const body = data.text || "Sent an attachment";
+                          const title = data.groupId ? `💬 ${senderName} (Group Chat)` : `💬 ${senderName}`;
+                          const notif = new Notification(title, { body, icon: "/favicon.ico" });
+                          notif.onclick = () => {
+                            if (typeof window !== "undefined") {
+                              localStorage.setItem("selectedChatIdOnMount", messageChatId);
+                              localStorage.setItem("selectedChatTypeOnMount", isGroupMsg ? 'group' : 'personal');
+                              
+                              if (window.electronAPI && window.electronAPI.focusWindow) {
+                                window.electronAPI.focusWindow();
+                              } else {
+                                window.focus();
+                              }
+                              
+                              if (window.location.pathname !== "/chat") {
+                                window.location.href = "/chat";
+                              } else {
+                                window.dispatchEvent(new Event("chat-notification-click"));
+                              }
+                            }
+                          };
+                        }
                      }
                    }
                  }
