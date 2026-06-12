@@ -3136,6 +3136,7 @@ async def create_message(db, message: schemas.ChatMessageCreate):
             emp = await db.employees.find_one({"_id": ObjectId(message_dict["senderId"])})
             if emp:
                 message_dict["sender"] = emp.get("name", "Colleague")
+                message_dict["senderAvatar"] = emp.get("profilePhoto") or ""
         except Exception:
             pass
     return message_dict
@@ -3220,7 +3221,13 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
     try:
         employees_cursor = db.employees.find()
         employees_list = await employees_cursor.to_list(length=1000)
-        employee_cache = {str(emp["_id"]): emp.get("name", "Colleague") for emp in employees_list}
+        employee_cache = {
+            str(emp["_id"]): {
+                "name": emp.get("name", "Colleague"),
+                "photo": emp.get("profilePhoto") or ""
+            }
+            for emp in employees_list
+        }
     except Exception:
         employee_cache = {}
 
@@ -3229,7 +3236,9 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
         fixed = fix_id(row)
         if "senderId" in fixed and fixed["senderId"]:
             fixed["senderId"] = str(fixed["senderId"])
-            fixed["sender"] = employee_cache.get(fixed["senderId"], "Colleague")
+            emp_info = employee_cache.get(fixed["senderId"], {"name": "Colleague", "photo": ""})
+            fixed["sender"] = emp_info["name"]
+            fixed["senderAvatar"] = emp_info["photo"]
         if "receiverId" in fixed and fixed["receiverId"]:
             fixed["receiverId"] = str(fixed["receiverId"])
         if "groupId" in fixed and fixed["groupId"]:

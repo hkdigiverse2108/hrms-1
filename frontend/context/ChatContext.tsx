@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import { useUser } from "@/hooks/useUser";
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 
 interface ChatEvent {
   event: string;
@@ -307,8 +307,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                         if ("Notification" in window && Notification.permission === "granted" && (!isTabActive || !isChatPage)) {
                           const senderName = data.sender || "Colleague";
                           const body = data.text || "Sent an attachment";
-                          const title = data.groupId ? `💬 ${senderName} (Group Chat)` : `💬 ${senderName}`;
-                          const notif = new Notification(title, { body, icon: "/favicon.ico" });
+                          const title = "HariKrushn DigiVerse LLP";
+                          const notificationBody = `${senderName}\n${body}`;
+                          
+                          let avatarUrl = "/favicon.ico";
+                          if (data.senderAvatar) {
+                            const resolved = getAvatarUrl(data.senderAvatar);
+                            if (resolved) {
+                              avatarUrl = resolved.startsWith("/")
+                                ? `${window.location.origin}${resolved}`
+                                : resolved;
+                            }
+                          }
+
+                          const notif = new Notification(title, { 
+                            body: notificationBody, 
+                            icon: avatarUrl 
+                          });
                           notif.onclick = () => {
                             if (typeof window !== "undefined") {
                               localStorage.setItem("selectedChatIdOnMount", messageChatId);

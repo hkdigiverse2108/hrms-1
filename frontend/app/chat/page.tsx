@@ -722,9 +722,24 @@ export default function ChatPage() {
                 const isTabInactive = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
                 if (isTabInactive && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
                   const senderName = selectedChat.name || lastMsg.sender || "Colleague";
-                  new Notification(`Message from ${senderName}`, {
-                    body: lastMsg.text || "Sent an attachment",
-                    icon: selectedChat.avatar || "/favicon.ico"
+                  const body = lastMsg.text || "Sent an attachment";
+                  const title = "HariKrushn DigiVerse LLP";
+                  const notificationBody = `${senderName}\n${body}`;
+                  
+                  let avatarUrl = "/favicon.ico";
+                  const avatarPath = selectedChat.avatar || selectedChat.profilePhoto || lastMsg.senderAvatar;
+                  if (avatarPath) {
+                    const resolved = getAvatarUrl(avatarPath);
+                    if (resolved) {
+                      avatarUrl = resolved.startsWith("/")
+                        ? `${window.location.origin}${resolved}`
+                        : resolved;
+                    }
+                  }
+
+                  new Notification(title, {
+                    body: notificationBody,
+                    icon: avatarUrl
                   });
                 }
               }

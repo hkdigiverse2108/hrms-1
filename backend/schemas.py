@@ -1232,6 +1232,7 @@ class ChatMessageBase(BaseModel):
     type: str = "personal" # personal, group
     isMe: Optional[bool] = None # Helper for frontend
     sender: Optional[str] = None # Resolved sender name
+    senderAvatar: Optional[str] = None # Resolved sender avatar photo path
     timestamp: Optional[str] = None
     tempId: Optional[str] = None
     isEdited: bool = False

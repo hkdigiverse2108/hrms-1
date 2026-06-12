@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Menu, Tray } = require('electron');
+app.setAppUserModelId("com.hrms.app");
 const path = require('path');
 const { spawn, fork } = require('child_process');
 const fs = require('fs');
