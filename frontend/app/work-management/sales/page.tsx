@@ -450,7 +450,11 @@ export default function SalesPage() {
       });
 
       if (res.ok) {
-        toast.success("Lead updated successfully");
+        if (field === 'assignedTo') {
+          toast.success("Assigned employees updated successfully!");
+        } else {
+          toast.success("Lead updated successfully");
+        }
         fetchLeads();
       } else {
         toast.error(`Update failed: ${res.status}`);
@@ -1112,15 +1116,15 @@ export default function SalesPage() {
                       open={true} 
                       onOpenChange={(open) => {
                         if (!open) {
-                          const originalList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+                          const originalList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
                           const hasChanged = originalList.length !== selectedAssignees.length || 
                             !originalList.every((name: string) => selectedAssignees.includes(name)) ||
                             !selectedAssignees.every((name: string) => originalList.includes(name));
                           if (hasChanged) {
-                            handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees);
-                          } else {
-                            setInlineEditing(null);
+                            setLeads(leads.map(l => l.id === lead.id ? { ...l, assignedTo: selectedAssignees } : l));
+                            handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees, true);
                           }
+                          setInlineEditing(null);
                         }
                       }}
                     >
@@ -1180,7 +1184,7 @@ export default function SalesPage() {
                       onClick={() => {
                         if (canEditLead(lead)) {
                           setInlineEditing({ id: lead.id, field: 'assignedTo' });
-                          const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+                          const assignedList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
                           setSelectedAssignees(assignedList);
                         }
                       }}
