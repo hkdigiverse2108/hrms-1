@@ -101,6 +101,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         try {
           const parsedUser = JSON.parse(storedUser);
           setUser(parsedUser);
+          setIsLoading(false); // Disable loading spinner immediately for instant UI boot
           
           const userId = parsedUser.id || parsedUser._id;
           if (userId) {
@@ -109,26 +110,32 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             const token = storedToken || localStorage.getItem('token');
             const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
             
-            // Fetch fresh user data to get updated permissions
-            const res = await fetch(fetchUrl, { headers });
-            if (res.ok) {
-              const freshUser = await res.json();
-              if (freshUser && !freshUser.detail) {
-                const pRes = await fetch(`${API_URL}/user-permissions/${userId}`, { headers });
-                const pData = pRes.ok ? await pRes.json() : { permissions: [] };
-                const updatedUser = { 
-                  ...freshUser, 
-                  permissions: pData?.permissions || [] 
-                };
-                localStorage.setItem('user', JSON.stringify(updatedUser));
-                setUser(updatedUser);
-                
-                // Keep Electron session file in sync
-                if (typeof window !== 'undefined' && (window as any).electronAPI?.saveSession) {
-                  (window as any).electronAPI.saveSession({ user: updatedUser, token });
+            // Sync permissions and profile data in the background
+            (async () => {
+              try {
+                const res = await fetch(fetchUrl, { headers });
+                if (res.ok) {
+                  const freshUser = await res.json();
+                  if (freshUser && !freshUser.detail) {
+                    const pRes = await fetch(`${API_URL}/user-permissions/${userId}`, { headers });
+                    const pData = pRes.ok ? await pRes.json() : { permissions: [] };
+                    const updatedUser = { 
+                      ...freshUser, 
+                      permissions: pData?.permissions || [] 
+                    };
+                    localStorage.setItem('user', JSON.stringify(updatedUser));
+                    setUser(updatedUser);
+                    
+                    // Keep Electron session file in sync
+                    if (typeof window !== 'undefined' && (window as any).electronAPI?.saveSession) {
+                      (window as any).electronAPI.saveSession({ user: updatedUser, token });
+                    }
+                  }
                 }
+              } catch (bgErr) {
+                console.warn("Background user sync failed:", bgErr);
               }
-            }
+            })();
           }
         } catch (err) {
           console.warn("Failed to parse user:", err);
@@ -137,9 +144,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           if (typeof window !== 'undefined' && (window as any).electronAPI?.clearSession) {
             (window as any).electronAPI.clearSession();
           }
+          setIsLoading(false);
         }
+      } else {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     initializeUser();

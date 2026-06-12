@@ -426,26 +426,22 @@ function createWindow() {
 
   // Polling helper to wait until the Next.js server starts listening
   let retries = 0;
-  const maxRetries = 30;
+  const maxRetries = 150; // 150 retries * 150ms = 22.5 seconds max wait time
   
   function loadPage() {
     mainWindow.loadURL(frontendUrl).catch(() => {
       retries++;
       if (retries < maxRetries) {
-        log(`Page load failed. Next.js might still be booting, retrying in 1s (${retries}/${maxRetries})...`);
-        setTimeout(loadPage, 1000);
+        log(`Page load failed. Next.js might still be booting, retrying in 150ms (${retries}/${maxRetries})...`);
+        setTimeout(loadPage, 150);
       } else {
         log('ERROR: Next.js server failed to respond in time.');
       }
     });
   }
 
-  // Delay slightly if local to let servers boot, load immediately if remote
-  if (isRemoteHost) {
-    loadPage();
-  } else {
-    setTimeout(loadPage, 2000);
-  }
+  // Load immediately without any artificial timeout delay!
+  loadPage();
 
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
