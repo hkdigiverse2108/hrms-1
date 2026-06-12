@@ -79,19 +79,26 @@ const isAssignedTo = (assignedToData: any, employeeName: string | undefined | nu
   return assignedToData === employeeName;
 };
 
+const extractName = (val: any): string => {
+  if (!val) return "";
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') return val.name || val.firstName || String(val);
+  return String(val);
+};
+
 const getAssignedToString = (assignedToData: any) => {
   if (Array.isArray(assignedToData)) {
-    return assignedToData.join(", ");
+    return assignedToData.map(extractName).filter(Boolean).join(", ");
   }
-  return assignedToData || "Unassigned";
+  return assignedToData ? extractName(assignedToData) : "Unassigned";
 };
 
 const getAssignedToInitials = (assignedToData: any) => {
   if (Array.isArray(assignedToData) && assignedToData.length > 0) {
-    return (assignedToData[0] || "??").substring(0, 2);
+    return (extractName(assignedToData[0]) || "??").substring(0, 2);
   }
-  if (typeof assignedToData === 'string') {
-    return (assignedToData || "??").substring(0, 2);
+  if (assignedToData) {
+    return (extractName(assignedToData) || "??").substring(0, 2);
   }
   return "??";
 };
@@ -142,8 +149,8 @@ export default function SalesPage() {
   const [statusChangeData, setStatusChangeData] = useState<{ leadId: string, newStatus: string, keepEditing?: boolean } | null>(null);
   const [selectedReason, setSelectedReason] = useState("");
   const [customReason, setCustomReason] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState(dayjs().format("MMMM"));
-  const [selectedYear, setSelectedYear] = useState(dayjs().year());
+  const [selectedMonth, setSelectedMonth] = useState<string>("All");
+  const [selectedYear, setSelectedYear] = useState<string | number>("All");
   const [targets, setTargets] = useState<any[]>([]);
   const [incentiveSlabs, setIncentiveSlabs] = useState<any[]>([]);
   const [isTargetSubmitting, setIsTargetSubmitting] = useState(false);
@@ -705,8 +712,8 @@ export default function SalesPage() {
     return acc + val;
   }, 0);
 
-  const monthlyTargets = targets.filter(t => t.month === selectedMonth && t.year === selectedYear);
-  const myTarget = targets.find(t => t.employeeName?.toLowerCase() === currentUserName.toLowerCase() && t.month === selectedMonth && t.year === selectedYear);
+  const monthlyTargets = targets.filter(t => (selectedMonth === "All" || t.month === selectedMonth) && (selectedYear === "All" || t.year === selectedYear));
+  const myTarget = targets.find(t => t.employeeName?.toLowerCase() === currentUserName.toLowerCase() && (selectedMonth === "All" || t.month === selectedMonth) && (selectedYear === "All" || t.year === selectedYear));
 
   const totalMonthlyTarget = isAdmin 
     ? monthlyTargets.reduce((acc, t) => acc + t.targetAmount, 0)
@@ -723,7 +730,7 @@ export default function SalesPage() {
                       (l.createdByUserName && String(l.createdByUserName).toLowerCase() === (currentUserName || "").toLowerCase());
     if (!isAssignedToMe && !isCreator) return false;
     const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-    return leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
+    return (selectedMonth === "All" || leadDate.format("MMMM") === selectedMonth) && (selectedYear === "All" || leadDate.year() === selectedYear);
   }).reduce((acc, l) => {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
     return acc + val;
@@ -733,7 +740,7 @@ export default function SalesPage() {
     ? leads.filter(l => {
         if (l.status !== "Client Won") return false;
         const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-        return leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
+        return (selectedMonth === "All" || leadDate.format("MMMM") === selectedMonth) && (selectedYear === "All" || leadDate.year() === selectedYear);
       }).reduce((acc, l) => {
         const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
         return acc + val;
@@ -1179,7 +1186,6 @@ export default function SalesPage() {
                       }}
                       className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1"
                     >
-<<<<<<< HEAD
                       {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 ? (
                         lead.assignedTo.map((name: string) => (
                           <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
@@ -1204,10 +1210,6 @@ export default function SalesPage() {
                         <span className="text-slate-400 italic text-xs">Unassigned</span>
                       )}
                     </div>
-=======
-                      {getAssignedToString(lead.assignedTo) || "--"}
-                    </span>
->>>>>>> 7b46f595af51f98a75e2a8b82ccc2cb9dc369e60
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -1333,21 +1335,23 @@ export default function SalesPage() {
           <div className="hidden lg:flex items-center gap-2 bg-white border border-slate-100 rounded-xl px-2 py-1 shadow-sm">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="h-8 w-[110px] border-none text-[11px] font-bold text-slate-600 focus:ring-0">
-                <SelectValue />
+                <SelectValue placeholder="Month" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="All">All Months</SelectItem>
                 {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
                   <SelectItem key={m} value={m}>{m}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <div className="w-px h-4 bg-slate-100" />
-            <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(parseInt(val))}>
+            <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(val === "All" ? "All" : parseInt(val))}>
               <SelectTrigger className="h-8 w-[80px] border-none text-[11px] font-bold text-slate-600 focus:ring-0">
-                <SelectValue />
+                <SelectValue placeholder="Year" />
               </SelectTrigger>
               <SelectContent>
-                {[2024, 2025, 2026].map(y => (
+                <SelectItem value="All">All Years</SelectItem>
+                {Array.from({ length: 21 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                 ))}
               </SelectContent>
@@ -1414,7 +1418,7 @@ export default function SalesPage() {
             <TabsTrigger value="targets" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
               Monthly Targets
             </TabsTrigger>
-            {canEditSales && (
+            {isAdmin && (
               <button 
                 onClick={() => router.push('/work-management/sales/analytics')}
                 className="ml-1 text-foreground px-6 py-2 text-sm font-bold flex items-center gap-2 rounded-sm transition-all"
@@ -1471,7 +1475,7 @@ export default function SalesPage() {
 
             <TabsContent value="targets">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {canEditSales && (
+                {isAdmin && (
                   <div className="lg:col-span-1 space-y-6">
                     <Card className="border-none shadow-sm bg-white overflow-hidden">
                       <CardHeader className="border-b border-slate-100">
@@ -1856,10 +1860,10 @@ export default function SalesPage() {
                   </div>
                 )}
 
-                <Card className={`border-none shadow-sm bg-white overflow-hidden ${canEditSales ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                <Card className={`border-none shadow-sm bg-white overflow-hidden ${isAdmin ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
                   <CardHeader className="border-b border-slate-100">
                     <CardTitle className="text-sm font-bold text-slate-700">
-                      {canEditSales ? "Sales Performance Targets" : "My Performance Targets"}
+                      {isAdmin ? "Sales Performance Targets" : "My Performance Targets"}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
@@ -1874,39 +1878,16 @@ export default function SalesPage() {
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Achieved</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-indigo-600">Earned</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-brand-teal">Progress</th>
-                            {canEditSales && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
+                            {isAdmin && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {targets.filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase()).length > 0 ? (
+                          {targets.filter(t => isAdmin || t.employeeName?.toLowerCase() === currentUserName.toLowerCase()).length > 0 ? (
                             targets
-                              .filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
+                              .filter(t => isAdmin || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
-<<<<<<< HEAD
                                 let achieved = t.currentAchievement || 0;
-=======
-                                const achieved = leads.filter(l => {
-                                  if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, t.employeeName)) return false;
-                                  const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-                                  
-                                  // Month/Year check
-                                  const monthMatch = leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
-                                  if (!monthMatch) return false;
-
-                                  // Weekly check
-                                  if (t.type === "Weekly") {
-                                    const dayOfMonth = leadDate.date();
-                                    const weekNum = Math.ceil(dayOfMonth / 7);
-                                    return weekNum === t.week;
-                                  }
-                                  return true;
-                                }).reduce((acc, l) => {
-                                  const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
-                                  return acc + val;
-                                }, 0);
-                                
->>>>>>> 7b46f595af51f98a75e2a8b82ccc2cb9dc369e60
                                 const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
                                 const earnedIncentive = t.incentiveAmount || 0;
 
@@ -1981,7 +1962,7 @@ export default function SalesPage() {
                                         </div>
                                       </div>
                                     </td>
-                                    {canEditSales && (
+                                    {isAdmin && (
                                       <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-1">
                                           {canDeleteSales && (
@@ -2021,9 +2002,6 @@ export default function SalesPage() {
               </div>
             </TabsContent>
 
-<<<<<<< HEAD
-
-=======
             <TabsContent value="reports">
               <Card className="border-none shadow-sm bg-white overflow-hidden">
                 <CardHeader className="px-6 py-4 border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
@@ -2129,7 +2107,6 @@ export default function SalesPage() {
                 </CardContent>
               </Card>
             </TabsContent>
->>>>>>> 7b46f595af51f98a75e2a8b82ccc2cb9dc369e60
           </>
         )}
 
