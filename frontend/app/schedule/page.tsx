@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
 import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
@@ -240,10 +240,12 @@ export default function SchedulePage() {
   /* ───── helpers ───── */
   const [bulkSelectKey, setBulkSelectKey] = useState(0);
 
-  const handleBulkAdd = (type: "department" | "designation", value: string) => {
-    if (!value) return;
+  const handleBulkAdd = (combinedValue: string) => {
+    if (!combinedValue) return;
+    const [type, ...rest] = combinedValue.split(":");
+    const value = rest.join(":");
     const matchingEmpIds = employees
-      .filter(e => e[type] === value && e.id !== form.employeeId && e.employeeId !== form.employeeId)
+      .filter(e => e[type as "department" | "designation" | "role"] === value && e.id !== form.employeeId && e.employeeId !== form.employeeId)
       .map(e => String(e.id));
     
     const newAttendees = Array.from(new Set([...form.attendees, ...matchingEmpIds]));
@@ -576,6 +578,8 @@ export default function SchedulePage() {
                 <AntSelect
                   mode="multiple"
                   allowClear
+                  showSearch
+                  optionFilterProp="label"
                   className="w-full"
                   placeholder="Select colleagues"
                   value={form.attendees}
@@ -583,21 +587,34 @@ export default function SchedulePage() {
                   options={employees.filter(e => e.id !== form.employeeId && e.employeeId !== form.employeeId).map(emp => ({ label: emp.name, value: emp.id }))}
                   getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
                 />
-                <div className="flex gap-2 mt-2">
-                  <Select key={`dept-${bulkSelectKey}`} value={undefined} onValueChange={(v) => handleBulkAdd("department", v)}>
-                    <SelectTrigger className="flex-1 text-xs h-8"><SelectValue placeholder="Add by Team" /></SelectTrigger>
+                <div className="flex mt-2">
+                  <Select key={`bulk-${bulkSelectKey}`} value={undefined} onValueChange={handleBulkAdd}>
+                    <SelectTrigger className="flex-1 text-xs h-8"><SelectValue placeholder="Bulk Add (by Team, Position, Role)" /></SelectTrigger>
                     <SelectContent>
-                      {Array.from(new Set(employees.map(e => e.department).filter(Boolean))).map(dep => (
-                        <SelectItem key={String(dep)} value={String(dep)}>{String(dep)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select key={`desig-${bulkSelectKey}`} value={undefined} onValueChange={(v) => handleBulkAdd("designation", v)}>
-                    <SelectTrigger className="flex-1 text-xs h-8"><SelectValue placeholder="Add by Position" /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from(new Set(employees.map(e => e.designation).filter(Boolean))).map(des => (
-                        <SelectItem key={String(des)} value={String(des)}>{String(des)}</SelectItem>
-                      ))}
+                      {Array.from(new Set(employees.map(e => e.department).filter(Boolean))).length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Teams</SelectLabel>
+                          {Array.from(new Set(employees.map(e => e.department).filter(Boolean))).map(dep => (
+                            <SelectItem key={`dept-${dep}`} value={`department:${dep}`}>{String(dep)}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {Array.from(new Set(employees.map(e => e.designation).filter(Boolean))).length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Positions</SelectLabel>
+                          {Array.from(new Set(employees.map(e => e.designation).filter(Boolean))).map(des => (
+                            <SelectItem key={`desig-${des}`} value={`designation:${des}`}>{String(des)}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {Array.from(new Set(employees.map(e => e.role).filter(Boolean))).length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Roles</SelectLabel>
+                          {Array.from(new Set(employees.map(e => e.role).filter(Boolean))).map(role => (
+                            <SelectItem key={`role-${role}`} value={`role:${role}`}>{String(role)}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
