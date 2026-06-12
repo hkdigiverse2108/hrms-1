@@ -300,8 +300,9 @@ async def get_attendance_status(employee_id: str, db=Depends(get_db)):
     return status if status else {"status": "Logged Out"}
 
 @app.post("/attendance/punch-in/{employee_id}")
-async def punch_in(employee_id: str, db=Depends(get_db)):
-    result = await crud.punch_in(db, employee_id)
+async def punch_in(employee_id: str, payload: Optional[schemas.PunchInRequest] = None, db=Depends(get_db)):
+    punch_in_time = payload.punch_in_time if payload else None
+    result = await crud.punch_in(db, employee_id, punch_in_time=punch_in_time)
     if not result:
         raise HTTPException(status_code=400, detail="Punch in failed")
     return result
@@ -337,8 +338,9 @@ async def delete_multiple_attendance(request: dict, db=Depends(get_db)):
     return {"message": f"Deleted {len(attendance_ids)} records"}
 
 @app.post("/attendance/punch-out/{employee_id}")
-async def punch_out(employee_id: str, db=Depends(get_db)):
-    result = await crud.punch_out(db, employee_id)
+async def punch_out(employee_id: str, payload: Optional[schemas.PunchOutRequest] = None, db=Depends(get_db)):
+    punch_out_time = payload.punch_out_time if payload else None
+    result = await crud.punch_out(db, employee_id, punch_out_time=punch_out_time)
     if not result:
         raise HTTPException(status_code=400, detail="Punch out failed")
     return result

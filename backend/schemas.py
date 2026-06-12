@@ -292,6 +292,12 @@ class AttendanceUpdate(BaseModel):
 class PunchRequest(BaseModel):
     employeeId: str
 
+class PunchInRequest(BaseModel):
+    punch_in_time: Optional[str] = None
+
+class PunchOutRequest(BaseModel):
+    punch_out_time: Optional[str] = None
+
 class LeaveRequestBase(BaseModel):
     employee_id: str
     employee_name: str
@@ -1489,6 +1495,9 @@ class TimeRecoveryBase(BaseModel):
     reason: str
     status: str = 'pending' # pending, approved, rejected
     created_at: Optional[RobustDatetime] = None
+    recovery_type: Optional[str] = 'break' # 'break', 'meeting', 'work', etc.
+    start_time: Optional[str] = None # HH:MM:SS format
+    end_time: Optional[str] = None # HH:MM:SS format
 
 class TimeRecoveryCreate(TimeRecoveryBase):
     pass
