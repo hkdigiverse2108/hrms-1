@@ -1721,6 +1721,7 @@ class RegisteredPCBase(BaseModel):
     blockYoutube: Optional[bool] = False
     blockApps: Optional[List[str]] = []
     blockUrls: Optional[List[str]] = []
+    activeEmployee: Optional[str] = ""
 
 class RegisteredPCUpdate(BaseModel):
     blockChrome: Optional[bool] = None

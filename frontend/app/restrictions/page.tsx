@@ -336,6 +336,7 @@ export default function RestrictionsPage() {
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-500 font-semibold bg-slate-50/50">
                       <th className="py-3 px-4">Hostname</th>
+                      <th className="py-3 px-4">Active User</th>
                       <th className="py-3 px-4">IP Address</th>
                       <th className="py-3 px-4">OS</th>
                       <th className="py-3 px-4">Restrictions</th>
@@ -345,7 +346,7 @@ export default function RestrictionsPage() {
                   <tbody>
                     {filteredPcs.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-slate-400">
+                        <td colSpan={6} className="py-8 text-center text-slate-400">
                           No registered PCs found.
                         </td>
                       </tr>
@@ -360,6 +361,7 @@ export default function RestrictionsPage() {
                         return (
                           <tr key={pc.id} className="border-b border-slate-100 hover:bg-slate-50/30 transition-colors">
                             <td className="py-3.5 px-4 font-mono font-medium text-slate-800">{pc.hostname}</td>
+                            <td className="py-3.5 px-4 text-slate-600 font-semibold">{pc.activeEmployee || "None / Inactive"}</td>
                             <td className="py-3.5 px-4 font-mono text-slate-600">{pc.ipAddress}</td>
                             <td className="py-3.5 px-4 text-slate-600">{pc.os}</td>
                             <td className="py-3.5 px-4">

@@ -66,6 +66,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
  
   // Listen for global WebSocket broadcast alerts
   useAppEvent("system_alert", (data) => {
+    // If running in Electron, request window focus so it pops up in foreground
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      (window as any).electronAPI.focusWindow();
+    }
     Modal.warning({
       title: data.title || "System Announcement",
       content: data.message,

@@ -277,12 +277,53 @@ export default function ActivityTrackerPage() {
         title="Activity Tracker"
         description="Monitor user input statistics such as keyboard keypresses and mouse clicks."
       >
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchData} size="sm" className="border-slate-200">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Admin Select Employee */}
+          {isAdminOrHR && (
+            <Select onValueChange={setSelectedEmployee} value={selectedEmployee}>
+              <SelectTrigger className="w-[180px] bg-white h-9 text-xs">
+                <SelectValue placeholder="All Employees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Employees</SelectItem>
+                {employees.map(emp => (
+                  <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Filter Date */}
+          <Select onValueChange={setDateFilter} value={dateFilter}>
+            <SelectTrigger className="w-[130px] bg-white h-9 text-xs">
+              <SelectValue placeholder="Date Range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Time</SelectItem>
+              <SelectItem value="Today">Today</SelectItem>
+              <SelectItem value="This Week">This Week</SelectItem>
+              <SelectItem value="This Month">This Month</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Search Input */}
+          {isAdminOrHR && (
+            <div className="relative w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search employee..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-8 bg-white h-9 text-xs animate-none"
+              />
+            </div>
+          )}
+
+          <Button variant="outline" onClick={fetchData} size="sm" className="border-slate-200 h-9">
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button variant="outline" onClick={handleExport} size="sm" className="border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white">
+          <Button variant="outline" onClick={handleExport} size="sm" className="border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white h-9">
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
@@ -552,49 +593,6 @@ export default function ActivityTrackerPage() {
       <Card className="shadow-xs border-slate-200/80">
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between pb-4 gap-4 border-b border-slate-100">
           <CardTitle className="text-base font-bold text-slate-800">Detailed Logs</CardTitle>
-          
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            {/* Admin Select Employee */}
-            {isAdminOrHR && (
-              <Select onValueChange={setSelectedEmployee} value={selectedEmployee}>
-                <SelectTrigger className="w-full sm:w-[180px] bg-white">
-                  <SelectValue placeholder="All Employees" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Employees</SelectItem>
-                  {employees.map(emp => (
-                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            {/* Filter Date */}
-            <Select onValueChange={setDateFilter} value={dateFilter}>
-              <SelectTrigger className="w-full sm:w-[150px] bg-white">
-                <SelectValue placeholder="Date Range" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All Time</SelectItem>
-                <SelectItem value="Today">Today</SelectItem>
-                <SelectItem value="This Week">This Week</SelectItem>
-                <SelectItem value="This Month">This Month</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Search Input */}
-            {isAdminOrHR && (
-              <div className="relative w-full sm:w-[220px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search employee..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-white"
-                />
-              </div>
-            )}
-          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">

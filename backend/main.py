@@ -1665,15 +1665,34 @@ async def get_activity_stats(employeeId: Optional[str] = None, db=Depends(get_db
 
 
 @app.post("/activity/session-active/{employee_id}")
-async def set_active_session(employee_id: str):
+async def set_active_session(employee_id: str, db=Depends(get_db)):
     import input_tracker
     await input_tracker.set_active_user(employee_id)
+    
+    # Update activeEmployee in registered_pcs for current hostname
+    import socket
+    from bson import ObjectId
+    user_doc = await db.employees.find_one(
+        {"_id": ObjectId(employee_id)} if len(employee_id) == 24 else {"_id": employee_id}
+    )
+    if user_doc:
+        await db.registered_pcs.update_one(
+            {"hostname": socket.gethostname()},
+            {"$set": {"activeEmployee": user_doc.get("name", "Unknown")}}
+        )
     return {"message": "Session tracking started"}
 
 @app.post("/activity/session-inactive")
-async def clear_active_session():
+async def clear_active_session(db=Depends(get_db)):
     import input_tracker
     input_tracker.clear_active_user()
+    
+    # Clear activeEmployee in registered_pcs for current hostname
+    import socket
+    await db.registered_pcs.update_one(
+        {"hostname": socket.gethostname()},
+        {"$set": {"activeEmployee": ""}}
+    )
     return {"message": "Session tracking stopped"}
 
 # --- PC Device Restrictions & Broadcasts APIs ---

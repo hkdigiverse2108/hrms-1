@@ -39,7 +39,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": true
+      "deleteAppDataOnUninstall": true,
+      "include": "installer.nsh"
     },
     "mac": {
       "target": [
@@ -61,6 +62,7 @@
     },
     "files": [
       "main.js",
+      "preload.js",
       "package.json",
       ".env.server"
     ],

@@ -356,7 +356,28 @@ function createWindow() {
     show: !startMinimized,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+
+  const { ipcMain } = require('electron');
+  ipcMain.on('focus-window', () => {
+    log('Received focus-window IPC event. Bringing window to foreground.');
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.show();
+      mainWindow.focus();
+      // Force window to foreground by temporarily turning on always-on-top
+      mainWindow.setAlwaysOnTop(true);
+      mainWindow.setVisibleOnAllWorkspaces(true);
+      setTimeout(() => {
+        if (mainWindow) {
+          mainWindow.setAlwaysOnTop(false);
+        }
+      }, 300);
     }
   });
 
