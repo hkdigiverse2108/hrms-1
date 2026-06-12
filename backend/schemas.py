@@ -1571,6 +1571,7 @@ class InvoiceBase(BaseModel):
     otherQrUrl: Optional[str] = None
     status: str = "Pending"  # Pending, Paid, Overdue
     invoiceType: str = "Tax Invoice"  # Tax Invoice, Proforma Invoice
+    incentiveAmountBase: Optional[float] = None
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1599,10 +1600,12 @@ class InvoiceUpdate(BaseModel):
     otherQrUrl: Optional[str] = None
     status: Optional[str] = None
     invoiceType: Optional[str] = None
+    incentiveAmountBase: Optional[float] = None
 
 class Invoice(InvoiceBase):
     id: str
     timestamp: str
+    paymentDate: Optional[str] = None
     class Config:
         from_attributes = True
 

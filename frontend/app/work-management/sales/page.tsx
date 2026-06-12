@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import dayjs from "dayjs";
 import { SalesAnalytics } from "./components/SalesAnalytics";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -26,7 +26,8 @@ import {
   History as HistoryIcon,
   Flame,
   X,
-  BarChart2
+  BarChart2,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -144,6 +145,7 @@ export default function SalesPage() {
   const [reportDateFilter, setReportDateFilter] = useState(dayjs().format("YYYY-MM-DD"));
   const [selectedLeadForLogs, setSelectedLeadForLogs] = useState<any>(null);
   const [leadLogs, setLeadLogs] = useState<any[]>([]);
+  const clientSubmittingRef = useRef(false);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const [statusChangeData, setStatusChangeData] = useState<{ leadId: string, newStatus: string, keepEditing?: boolean } | null>(null);
@@ -471,6 +473,8 @@ export default function SalesPage() {
 
   const handleClientSubmit = async (data: ClientFormData) => {
     if (!convertingLeadId) return;
+    if (clientSubmittingRef.current) return;
+    clientSubmittingRef.current = true;
     setIsClientSubmitting(true);
     try {
       const clientRes = await fetch(`${API_URL}/clients`, {
@@ -514,6 +518,7 @@ export default function SalesPage() {
       console.error("Error creating client:", err);
       toast.error("An error occurred while creating client");
     } finally {
+      clientSubmittingRef.current = false;
       setIsClientSubmitting(false);
     }
   };
@@ -1121,8 +1126,7 @@ export default function SalesPage() {
                             !originalList.every((name: string) => selectedAssignees.includes(name)) ||
                             !selectedAssignees.every((name: string) => originalList.includes(name));
                           if (hasChanged) {
-                            setLeads(leads.map(l => l.id === lead.id ? { ...l, assignedTo: selectedAssignees } : l));
-                            handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees, true);
+                            handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees);
                           }
                           setInlineEditing(null);
                         }
@@ -1865,10 +1869,35 @@ export default function SalesPage() {
                 )}
 
                 <Card className={`border-none shadow-sm bg-white overflow-hidden ${isAdmin ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
-                  <CardHeader className="border-b border-slate-100">
+                  <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between py-4">
                     <CardTitle className="text-sm font-bold text-slate-700">
                       {isAdmin ? "Sales Performance Targets" : "My Performance Targets"}
                     </CardTitle>
+                    {canEditSales && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const toastId = toast.loading("Recalculating all sales targets...");
+                          try {
+                            const res = await fetch(`${API_URL}/sales-targets/recalculate-all`, { method: "POST" });
+                            if (res.ok) {
+                              const data = await res.json();
+                              toast.success(data.message || "Recalculated successfully", { id: toastId });
+                              fetchTargets();
+                            } else {
+                              toast.error("Failed to recalculate targets", { id: toastId });
+                            }
+                          } catch (e) {
+                            toast.error("Error recalculating targets", { id: toastId });
+                          }
+                        }}
+                        className="h-8 gap-2 border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Recalculate All</span>
+                      </Button>
+                    )}
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
