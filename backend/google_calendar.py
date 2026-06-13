@@ -99,3 +99,22 @@ def delete_event(credentials, google_event_id):
     except Exception as e:
         print(f"Error deleting Google Calendar event: {e}")
         return False
+
+def list_events(credentials, time_min, time_max):
+    """Lists events from the primary calendar within a time range."""
+    service = get_calendar_service(credentials)
+    if not service:
+        return []
+        
+    try:
+        events_result = service.events().list(
+            calendarId='primary', 
+            timeMin=time_min,
+            timeMax=time_max, 
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        return events_result.get('items', [])
+    except Exception as e:
+        print(f"Error fetching Google Calendar events: {e}")
+        return []
