@@ -1454,6 +1454,7 @@ class SalesTargetBase(BaseModel):
     endDate: Optional[str] = None
     targetAmount: float = 0
     currentAchievement: float = 0
+    incentiveBase: Optional[float] = 0
     incentiveAmount: float = 0
     breakdown: Optional[List[dict]] = []
     createdAt: Optional[str] = None
@@ -1571,6 +1572,7 @@ class InvoiceBase(BaseModel):
     otherQrUrl: Optional[str] = None
     status: str = "Pending"  # Pending, Paid, Overdue
     invoiceType: str = "Tax Invoice"  # Tax Invoice, Proforma Invoice
+    incentiveAmountBase: Optional[float] = None
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1599,10 +1601,12 @@ class InvoiceUpdate(BaseModel):
     otherQrUrl: Optional[str] = None
     status: Optional[str] = None
     invoiceType: Optional[str] = None
+    incentiveAmountBase: Optional[float] = None
 
 class Invoice(InvoiceBase):
     id: str
     timestamp: str
+    paymentDate: Optional[str] = None
     class Config:
         from_attributes = True
 

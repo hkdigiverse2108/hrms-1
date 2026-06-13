@@ -128,7 +128,10 @@ export function Header() {
               ? data 
               : data.filter((l: any) => {
                   const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
-                  const isAssigned = assignedList.some((name: string) => name.toLowerCase() === currentUserName.toLowerCase());
+                  const isAssigned = assignedList.some((nameObj: any) => {
+                    const nameStr = typeof nameObj === 'string' ? nameObj : (nameObj?.name || nameObj?.firstName || String(nameObj));
+                    return nameStr.toLowerCase() === currentUserName.toLowerCase();
+                  });
                   const isCreator = l.createdBy === user?.id || 
                                     (l.createdByUserName && l.createdByUserName.toLowerCase() === currentUserName.toLowerCase());
                   return isAssigned || isCreator;

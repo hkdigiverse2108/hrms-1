@@ -1442,6 +1442,31 @@ async def delete_incentive_slab(slab_id: str, db=Depends(get_db)):
     await crud.delete_incentive_slab(db, slab_id)
     return {"message": "Incentive slab deleted successfully"}
 
+@app.post("/sales-targets/recalculate-all")
+async def recalculate_all_sales_targets(db=Depends(get_db)):
+    """Manually trigger recalculation of all sales targets from all paid invoices."""
+    try:
+        targets = await db.sales_targets.find().to_list(length=10000)
+        recalculated = 0
+        for t in targets:
+            emp_id = str(t.get("employeeId", ""))
+            target_type = t.get("type", "Monthly")
+            month = t.get("month")
+            year = t.get("year")
+            week = t.get("week")
+            start_date = t.get("startDate")
+            end_date = t.get("endDate")
+            
+            await crud.recalculate_sales_target(
+                db, emp_id, month, year, target_type, week,
+                startDate=start_date, endDate=end_date
+            )
+            recalculated += 1
+        
+        return {"message": f"Successfully recalculated {recalculated} sales targets"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # User Permission Routes
 @app.get("/user-permissions/{employee_id}", response_model=Optional[schemas.UserPermission])
 async def read_user_permissions(employee_id: str, db=Depends(get_db)):

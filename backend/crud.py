@@ -2955,27 +2955,6 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
             if not update_data.get("closedDate"):
                 update_data["closedDate"] = get_now().strftime("%Y-%m-%d")
             
-            # Auto-create Client
-            client_company = update_data.get("company", old_lead.get("company")) or "Unknown Company"
-            client_contact = update_data.get("contact", old_lead.get("contact")) or "Unknown Contact"
-            client_email = update_data.get("email", old_lead.get("email"))
-            client_phone = update_data.get("phone", old_lead.get("phone")) or ""
-            
-            new_client = schemas.ClientCreate(
-                name=client_contact,
-                companyName=client_company,
-                email=client_email,
-                phone=client_phone,
-                status="active",
-                department="Sales",
-                performedBy=performedBy,
-                userName=userName
-            )
-            try:
-                await create_client(db, new_client)
-            except Exception as e:
-                print(f"Failed to auto-create client: {e}")
-            
         if update_data.get("status") in ["On Hold", "Client Won", "Client Loss"]:
             update_data["isHot"] = False
             
@@ -3027,7 +3006,13 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
             for emp_name in assigned_to:
                 if not emp_name:
                     continue
-                emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name.strip()}$", "$options": "i"}})
+                if isinstance(emp_name, dict):
+                    emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+                if not emp_name:
+                    continue
+                import re
+                emp_name_escaped = re.escape(str(emp_name).strip())
+                emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
                 if not emp:
                     continue
                 ld_str = updated_lead.get("closedDate") or updated_lead.get("date")
@@ -4186,64 +4171,61 @@ async def update_incentive_slab(db, slab_id: str, slab_update: schemas.Incentive
     )
     return fix_id(result)
 
-async def calculate_sales_incentive(db, category_revenues: dict, employee_id: str, employee_name: str, is_recurring: bool = False):
-    # Fetch slabs assigned to this specific employee (match by name) and matching the recurring flag
+async def calculate_sales_incentive(db, total_amount: float, invoice_amount: float, employee_id: str, employee_name: str, category: str = None, is_recurring: bool = False):
+    if total_amount <= 0 or invoice_amount <= 0:
+        return 0.0, 0.0
+        
+    # Fetch slabs assigned to this specific employee (match by name)
     cursor = db.incentive_slabs.find({
-        "employees": {"$in": [employee_id, employee_name]},
-        "isRecurring": is_recurring
+        "employees": {"$in": [employee_id, employee_name]}
     }).sort("minAmount", 1)
     slabs = await cursor.to_list(length=100)
     
-    # If no custom slabs exist for this employee, fetch global default slabs matching the recurring flag
+    # If no custom slabs exist for this employee, fetch global default slabs
     if not slabs:
         cursor = db.incentive_slabs.find({
             "$or": [
                 {"employees": {"$exists": False}},
                 {"employees": {"$size": 0}},
                 {"employees": None}
-            ],
-            "isRecurring": is_recurring
+            ]
         }).sort("minAmount", 1)
         slabs = await cursor.to_list(length=100)
     
     if not slabs:
-        return 0.0, {}
+        return 0.0, 0.0
 
-    total_incentive = 0.0
-    category_percentages = {}
-    
-    # Evaluate incentive independently for each category's revenue
-    for category, cat_revenue in category_revenues.items():
-        if cat_revenue <= 0:
+    valid_slabs = []
+    for slab in slabs:
+        slab_recurring = slab.get("isRecurring", False)
+        if slab_recurring != is_recurring:
             continue
             
-        # Filter slabs applicable to this specific category
-        applicable_slabs = []
-        for slab in slabs:
-            slab_categories = slab.get("clientCategories", [])
-            # A slab applies if it has no categories specified (global) OR if it explicitly includes this category
-            if not slab_categories or category in slab_categories:
-                applicable_slabs.append(slab)
+        slab_cats = slab.get("clientCategories", [])
+        if slab_cats and category:
+            if category not in slab_cats:
+                continue
                 
-        if not applicable_slabs:
-            continue
+        valid_slabs.append(slab)
+        
+    if not valid_slabs:
+        valid_slabs = slabs
+        
+    tier_slab = None
+    for slab in valid_slabs:
+        if total_amount >= slab["minAmount"] and total_amount <= slab["maxAmount"]:
+            tier_slab = slab
+            break
             
-        # Find the specific tier for this category's revenue
-        tier_slab = None
-        for slab in applicable_slabs:
-            if cat_revenue >= slab["minAmount"] and cat_revenue <= slab["maxAmount"]:
-                tier_slab = slab
-                break
-                
-        # If revenue exceeds all slab maxAmounts, use the highest slab
-        if not tier_slab and cat_revenue > applicable_slabs[-1]["minAmount"]:
-            tier_slab = applicable_slabs[-1]
-            
-        if tier_slab:
-            total_incentive += round((cat_revenue * tier_slab["percentage"]) / 100, 2)
-            category_percentages[category] = tier_slab["percentage"]
-            
-    return total_incentive, category_percentages
+    # If total_amount exceeds all slab maxAmounts, use the highest slab
+    if not tier_slab and total_amount > valid_slabs[-1]["minAmount"]:
+        tier_slab = valid_slabs[-1]
+        
+    if tier_slab:
+        earned = round((invoice_amount * tier_slab["percentage"]) / 100, 2)
+        return earned, tier_slab["percentage"]
+        
+    return 0.0, 0.0
 
 async def recalculate_sales_target(db, employee_id: str, month: str, year: int, target_type: str = "Monthly", week: Optional[int] = None):
     try:
@@ -4279,35 +4261,48 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
         
         async def process_invoices_for_emp(invoices_list):
             achievement = 0.0
-            cat_revenues = {}
+            incentive_achievement = 0.0
             matched_invoices = []
             for inv in invoices_list:
                 try:
-                    c_name_orig = inv.get("clientName", "").strip()
+                    c_name_orig = str(inv.get("clientName", "")).strip()
                     if not c_name_orig:
                         continue
                         
-                    c_name_lower = c_name_orig.lower()
+                    import re
+                    c_name_escaped = re.escape(c_name_orig)
+                    regex_pattern = f"^\\s*{c_name_escaped}\\s*$"
                     
-                    # Find matching leads in python
-                    matching_leads = [
-                        lead for lead in all_won_leads
-                        if lead.get("company", "").strip().lower() == c_name_lower or 
-                           lead.get("contact", "").strip().lower() == c_name_lower
-                    ]
+                    leads_cursor = db.leads.find({
+                        "status": "Client Won",
+                        "$or": [
+                            {"company": {"$regex": regex_pattern, "$options": "i"}},
+                            {"contact": {"$regex": regex_pattern, "$options": "i"}}
+                        ]
+                    })
+                    matching_leads = await leads_cursor.to_list(length=100)
                     
                     if not matching_leads:
                         continue
                         
-                    # Find a lead assigned to this employee
                     assigned_lead = None
                     for lead in matching_leads:
-                        assigned = lead.get("assignedTo", [])
-                        if not isinstance(assigned, list):
-                            assigned = [assigned]
+                        raw_assigned = lead.get("assignedTo", [])
+                        # safely extract names regardless of nesting or dicts
+                        def extract_names(item):
+                            if isinstance(item, list):
+                                res = []
+                                for x in item: res.extend(extract_names(x))
+                                return res
+                            elif isinstance(item, dict):
+                                return [item.get("value", "") or item.get("label", "")]
+                            else:
+                                return [str(item)]
+                                
+                        assigned_names = extract_names(raw_assigned)
                         
-                        for name in assigned:
-                            if name and " ".join(str(name).split()).lower() == emp_name_norm:
+                        for name in assigned_names:
+                            if name and " ".join(name.split()).lower() == emp_name_norm:
                                 assigned_lead = lead
                                 break
                         if assigned_lead:
@@ -4325,19 +4320,22 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
                     elif isinstance(inv_date_str, date) and not isinstance(inv_date_str, datetime):
                         ld = datetime(inv_date_str.year, inv_date_str.month, inv_date_str.day)
                     else:
-                        date_str = str(inv_date_str).strip()
+                        try:
+                            ld = datetime.fromisoformat(str(inv_date_str).strip()).replace(tzinfo=None)
+                        except Exception:
+                            date_str = str(inv_date_str).strip()
                         try:
                             ld = datetime.fromisoformat(date_str)
                             if ld.tzinfo:
                                 ld = ld.replace(tzinfo=None)
                         except ValueError:
                             for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%b %d, %Y", "%d/%m/%Y", "%d-%m-%Y"):
-                                try:
-                                    ld = datetime.strptime(date_str, fmt)
+                                    try:
+                                        ld = datetime.strptime(date_str, fmt)
                                     if ld.tzinfo:
                                         ld = ld.replace(tzinfo=None)
-                                    break
-                                except Exception: continue
+                                        break
+                                    except Exception: continue
                     
                     if not ld: continue
                     
@@ -4358,60 +4356,64 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
                             if lead_week != week:
                                 continue
                     
-                    subtotal = float(inv.get("subtotal", 0))
-                    achievement += subtotal
+                    actual_base = float(inv.get("subtotal", 0))
+                    raw_inc_base = inv.get("incentiveAmountBase")
+                    if raw_inc_base == "":
+                        inc_base = actual_base
+                    else:
+                        inc_base = float(raw_inc_base if raw_inc_base is not None else actual_base)
                     
-                    # Identify the client's primary department (category)
-                    client = next((c for c in all_clients if c.get("companyName", "").strip().lower() == c_name_lower), None)
-                    dept_str = client.get("department", "Unknown") if client else "Unknown"
-                    departments = [d.strip() for d in dept_str.split(',')] if dept_str else ["Unknown"]
-                    primary_dept = departments[0] if departments else "Unknown"
+                    achievement += actual_base
+                    incentive_achievement += inc_base
                     
-                    cat_revenues[primary_dept] = cat_revenues.get(primary_dept, 0) + subtotal
+                    category = assigned_lead.get("category", "Other") if assigned_lead else "Other"
+                    is_recurring = inv in recurring_paid_invoices
+                    
                     matched_invoices.append({
                         "invoiceId": str(inv.get("_id", "")),
                         "invoiceNumber": inv.get("invoiceNumber", ""),
                         "clientName": c_name_orig,
-                        "category": primary_dept,
-                        "subtotal": subtotal
+                        "subtotal": actual_base,
+                        "incentiveBase": inc_base,
+                        "category": category,
+                        "isRecurring": is_recurring,
+                        "slabPercentage": 0.0,
+                        "earnedIncentive": 0.0
                     })
                 except Exception as e:
                     print(f"Error processing invoice in recalculate_sales_target: {e}")
                     continue
-            return achievement, cat_revenues, matched_invoices
+            
+            # Second pass: calculate incentives now that we have total incentive_achievement
+            final_matched_invoices = []
+            for item in matched_invoices:
+                earned, slab_pct = await calculate_sales_incentive(
+                    db,
+                    total_amount=item["incentiveBase"],
+                    invoice_amount=item["incentiveBase"],
+                    employee_id=employee_id,
+                    employee_name=emp_name,
+                    category=item["category"],
+                    is_recurring=item["isRecurring"]
+                )
+                item["slabPercentage"] = slab_pct
+                item["earnedIncentive"] = earned
+                final_matched_invoices.append(item)
+                
+            return achievement, incentive_achievement, final_matched_invoices
                 
         # 2. Calculate Achievements & Incentive
-        achieve_first, cat_rev_first, matched_first = await process_invoices_for_emp(first_paid_invoices)
-        achieve_recurring, cat_rev_recurring, matched_recurring = await process_invoices_for_emp(recurring_paid_invoices)
+        total_achievement, total_incentive_base, matched_all = await process_invoices_for_emp(all_paid_invoices)
         
-        total_achievement = achieve_first + achieve_recurring
+        incentive = sum([mi.get("earnedIncentive", 0.0) for mi in matched_all])
         
-        incentive_first, percentages_first = await calculate_sales_incentive(db, cat_rev_first, employee_id, emp_name, is_recurring=False)
-        incentive_recurring, percentages_recurring = await calculate_sales_incentive(db, cat_rev_recurring, employee_id, emp_name, is_recurring=True)
-        incentive = incentive_first + incentive_recurring
-        
-        breakdown = []
-        for mi in matched_first:
-            pct = percentages_first.get(mi["category"], 0.0)
-            earned = round((mi["subtotal"] * pct) / 100, 2)
-            mi["isRecurring"] = False
-            mi["slabPercentage"] = pct
-            mi["earnedIncentive"] = earned
-            breakdown.append(mi)
-            
-        for mi in matched_recurring:
-            pct = percentages_recurring.get(mi["category"], 0.0)
-            earned = round((mi["subtotal"] * pct) / 100, 2)
-            mi["isRecurring"] = True
-            mi["slabPercentage"] = pct
-            mi["earnedIncentive"] = earned
-            breakdown.append(mi)
+        breakdown = matched_all
         
         # 3. Update Target record
         emp_obj_id = ObjectId(employee_id) if isinstance(employee_id, str) and len(employee_id) == 24 else employee_id
         
         target_query = {
-            "employeeId": emp_obj_id,
+            "employeeId": {"$in": [employee_id, emp_obj_id]},
             "type": target_type
         }
         if target_type == "Weekly":
@@ -4423,13 +4425,10 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
             target_query,
             {"$set": {
                 "currentAchievement": total_achievement,
+                "incentiveBase": total_incentive_base,
                 "incentiveAmount": incentive,
                 "breakdown": breakdown
-            }, "$setOnInsert": {
-                "employeeName": emp.get("name", "Unknown") if emp else "Unknown",
-                "targetAmount": 0
-            }},
-            upsert=True
+            }}
         )
     except Exception as e:
         print(f"Global error in recalculate_sales_target: {e}")
@@ -4692,84 +4691,71 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
 
 # Invoice CRUD
 async def _trigger_sales_target_recalculation(db, invoice_doc):
-    client_name = invoice_doc.get("clientName", "").strip().lower()
-    
-    # In-memory lead matching to bypass database regex stripping issues
-    leads_cursor = db.leads.find({"status": "Client Won"})
-    all_won_leads = await leads_cursor.to_list(length=10000)
-    
-    matched_leads = [
-        lead for lead in all_won_leads
-        if lead.get("company", "").strip().lower() == client_name or 
-           lead.get("contact", "").strip().lower() == client_name
-    ]
-    
-    for lead in matched_leads:
-        assigned_to = lead.get("assignedTo", [])
-        if not isinstance(assigned_to, list):
-            assigned_to = [assigned_to] if assigned_to else []
+    try:
+        client_name = invoice_doc.get("clientName") or ""
+        import re
+        client_name_escaped = re.escape(client_name)
+        lead = await db.leads.find_one({
+            "status": "Client Won",
+            "$or": [
+                {"company": {"$regex": f"^{client_name_escaped}$", "$options": "i"}},
+                {"contact": {"$regex": f"^{client_name_escaped}$", "$options": "i"}}
+            ]
+        })
         
-        for emp_name in assigned_to:
-            if not emp_name:
-                continue
-            emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name.strip()}$", "$options": "i"}})
-            if not emp:
-                continue
+        if lead:
+            assigned_to = lead.get("assignedTo", [])
+            if not isinstance(assigned_to, list):
+                assigned_to = [assigned_to] if assigned_to else []
             
-            pd_str = invoice_doc.get("paymentDate") or invoice_doc.get("timestamp")
-            try:
-                pd = None
-                if isinstance(pd_str, datetime):
-                    pd = pd_str.replace(tzinfo=None)
-                elif isinstance(pd_str, date):
-                    pd = datetime(pd_str.year, pd_str.month, pd_str.day)
-                else:
-                    date_str = str(pd_str).strip()
-                    try:
-                        pd = datetime.fromisoformat(date_str)
-                        if pd.tzinfo:
-                            pd = pd.replace(tzinfo=None)
-                    except ValueError:
-                        for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%b %d, %Y", "%d/%m/%Y", "%d-%m-%Y"):
-                            try:
-                                pd = datetime.strptime(date_str, fmt)
-                                if pd.tzinfo:
-                                    pd = pd.replace(tzinfo=None)
-                                break
-                            except Exception: continue
+            for emp_name in assigned_to:
+                if not emp_name:
+                    continue
+                if isinstance(emp_name, dict):
+                    emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+                if not emp_name:
+                    continue
+                import re
+                emp_name_escaped = re.escape(str(emp_name).strip())
+                emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
+                if not emp:
+                    continue
                 
-                if not pd:
-                    pd = get_now()
+                pd_str = invoice_doc.get("paymentDate") or invoice_doc.get("timestamp")
+                try:
+                    from datetime import datetime
+                    pd = datetime.fromisoformat(pd_str) if pd_str else get_now()
+                    month_name = pd.strftime("%B")
+                    week_num = (pd.day - 1) // 7 + 1
+                    emp_id_str = str(emp["_id"])
                     
-                month_name = pd.strftime("%B")
-                week_num = (pd.day - 1) // 7 + 1
-                emp_id_str = str(emp["_id"])
-                
-                await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Monthly")
-                await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Weekly", week_num)
-                
-                emp_obj_id = ObjectId(emp_id_str) if len(emp_id_str) == 24 else None
-                emp_query = [emp_id_str]
-                if emp_obj_id:
-                    emp_query.append(emp_obj_id)
+                    await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Monthly")
+                    await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Weekly", week_num)
                     
-                custom_targets_cursor = db.sales_targets.find({
-                    "employeeId": {"$in": emp_query},
-                    "type": "Custom"
-                })
-                async for t in custom_targets_cursor:
-                    await recalculate_sales_target(
-                        db,
-                        emp_id_str,
-                        t.get("month"),
-                        t.get("year"),
-                        "Custom",
-                        startDate=t.get("startDate"),
-                        endDate=t.get("endDate")
-                    )
-                await run_payroll_processing(db, month_name, pd.year)
-            except Exception as e:
-                print(f"Error triggering recalculate_sales_target from invoice: {e}")
+                    emp_obj_id = ObjectId(emp_id_str) if len(emp_id_str) == 24 else None
+                    emp_query = [emp_id_str]
+                    if emp_obj_id:
+                        emp_query.append(emp_obj_id)
+                        
+                    custom_targets_cursor = db.sales_targets.find({
+                        "employeeId": {"$in": emp_query},
+                        "type": "Custom"
+                    })
+                    async for t in custom_targets_cursor:
+                        await recalculate_sales_target(
+                            db,
+                            emp_id_str,
+                            t.get("month"),
+                            t.get("year"),
+                            "Custom",
+                            startDate=t.get("startDate"),
+                            endDate=t.get("endDate")
+                        )
+                    await run_payroll_processing(db, month_name, pd.year)
+                except Exception as e:
+                    print(f"Error triggering recalculate_sales_target from invoice: {e}")
+    except Exception as e:
+        print(f"Global error in _trigger_sales_target_recalculation: {e}")
 
 async def create_invoice(db, invoice: schemas.InvoiceCreate):
     invoice_dict = invoice.dict()
@@ -4808,8 +4794,9 @@ async def update_invoice(db, invoice_id: str, invoice_update: schemas.InvoiceUpd
     await db.invoices.update_one({"_id": ObjectId(invoice_id)}, {"$set": update_data})
     updated_doc = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
     
-    if is_paid and not was_paid and updated_doc:
-        await _trigger_sales_target_recalculation(db, updated_doc)
+    if is_paid and updated_doc:
+        if not was_paid or "incentiveAmountBase" in update_data:
+            await _trigger_sales_target_recalculation(db, updated_doc)
                     
     return fix_id(updated_doc) if updated_doc else None
 

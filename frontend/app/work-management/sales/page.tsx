@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import dayjs from "dayjs";
 import { SalesAnalytics } from "./components/SalesAnalytics";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -26,7 +26,8 @@ import {
   History as HistoryIcon,
   Flame,
   X,
-  BarChart2
+  BarChart2,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +63,15 @@ import { useConfirm } from "@/context/ConfirmContext";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
+const STATUS_REASONS: Record<string, string[]> = {
+  "Lead": ["New lead created", "Reopened", "Other"],
+  "Contacted": ["Introductory call completed", "Client responded", "Other"],
+  "Proposal Sent": ["Proposal document ready", "Pricing discussed", "Other"],
+  "On Hold": ["Client request", "Budget constraint", "No contact from client", "Other"],
+  "Client Won": ["Contract signed", "Requirements finalized", "Payment received", "Other"],
+  "Client Lost": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
+};
+
 const isAssignedTo = (assignedToData: any, employeeName: string | undefined | null) => {
   if (!employeeName) return false;
   if (Array.isArray(assignedToData)) {
@@ -70,30 +80,28 @@ const isAssignedTo = (assignedToData: any, employeeName: string | undefined | nu
   return assignedToData === employeeName;
 };
 
+const extractName = (val: any): string => {
+  if (!val) return "";
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') return val.name || val.firstName || String(val);
+  return String(val);
+};
+
 const getAssignedToString = (assignedToData: any) => {
   if (Array.isArray(assignedToData)) {
-    return assignedToData.join(", ");
+    return assignedToData.map(extractName).filter(Boolean).join(", ");
   }
-  return assignedToData || "Unassigned";
+  return assignedToData ? extractName(assignedToData) : "Unassigned";
 };
 
 const getAssignedToInitials = (assignedToData: any) => {
   if (Array.isArray(assignedToData) && assignedToData.length > 0) {
-    return (assignedToData[0] || "??").substring(0, 2);
+    return (extractName(assignedToData[0]) || "??").substring(0, 2);
   }
-  if (typeof assignedToData === 'string') {
-    return (assignedToData || "??").substring(0, 2);
+  if (assignedToData) {
+    return (extractName(assignedToData) || "??").substring(0, 2);
   }
   return "??";
-};
-
-const STATUS_REASONS: Record<string, string[]> = {
-  "Lead": ["New lead created", "Reopened", "Other"],
-  "Contacted": ["Introductory call completed", "Client responded", "Other"],
-  "Proposal Sent": ["Proposal document ready", "Pricing discussed", "Other"],
-  "On Hold": ["Client request", "Budget constraint", "No contact from client", "Other"],
-  "Client Won": ["Contract signed", "Requirements finalized", "Payment received", "Other"],
-  "Client Lost": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
 };
 
 export default function SalesPage() {
@@ -137,13 +145,14 @@ export default function SalesPage() {
   const [reportDateFilter, setReportDateFilter] = useState(dayjs().format("YYYY-MM-DD"));
   const [selectedLeadForLogs, setSelectedLeadForLogs] = useState<any>(null);
   const [leadLogs, setLeadLogs] = useState<any[]>([]);
+  const clientSubmittingRef = useRef(false);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const [statusChangeData, setStatusChangeData] = useState<{ leadId: string, newStatus: string, keepEditing?: boolean } | null>(null);
   const [selectedReason, setSelectedReason] = useState("");
   const [customReason, setCustomReason] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState(dayjs().format("MMMM"));
-  const [selectedYear, setSelectedYear] = useState(dayjs().year());
+  const [selectedMonth, setSelectedMonth] = useState<string>(dayjs().format("MMMM"));
+  const [selectedYear, setSelectedYear] = useState<string | number>(dayjs().year());
   const [targets, setTargets] = useState<any[]>([]);
   const [incentiveSlabs, setIncentiveSlabs] = useState<any[]>([]);
   const [isTargetSubmitting, setIsTargetSubmitting] = useState(false);
@@ -443,7 +452,11 @@ export default function SalesPage() {
       });
 
       if (res.ok) {
-        toast.success("Lead updated successfully");
+        if (field === 'assignedTo') {
+          toast.success("Assigned employees updated successfully!");
+        } else {
+          toast.success("Lead updated successfully");
+        }
         fetchLeads();
       } else {
         toast.error(`Update failed: ${res.status}`);
@@ -460,6 +473,8 @@ export default function SalesPage() {
 
   const handleClientSubmit = async (data: ClientFormData) => {
     if (!convertingLeadId) return;
+    if (clientSubmittingRef.current) return;
+    clientSubmittingRef.current = true;
     setIsClientSubmitting(true);
     try {
       const clientRes = await fetch(`${API_URL}/clients`, {
@@ -503,6 +518,7 @@ export default function SalesPage() {
       console.error("Error creating client:", err);
       toast.error("An error occurred while creating client");
     } finally {
+      clientSubmittingRef.current = false;
       setIsClientSubmitting(false);
     }
   };
@@ -705,8 +721,8 @@ export default function SalesPage() {
     return acc + val;
   }, 0);
 
-  const monthlyTargets = targets.filter(t => t.month === selectedMonth && t.year === selectedYear);
-  const myTarget = targets.find(t => t.employeeName?.toLowerCase() === currentUserName.toLowerCase() && t.month === selectedMonth && t.year === selectedYear);
+  const monthlyTargets = targets.filter(t => (selectedMonth === "All" || t.month === selectedMonth) && (selectedYear === "All" || t.year === selectedYear));
+  const myTarget = targets.find(t => t.employeeName?.toLowerCase() === currentUserName.toLowerCase() && (selectedMonth === "All" || t.month === selectedMonth) && (selectedYear === "All" || t.year === selectedYear));
 
   const totalMonthlyTarget = isAdmin 
     ? monthlyTargets.reduce((acc, t) => acc + t.targetAmount, 0)
@@ -723,12 +739,25 @@ export default function SalesPage() {
                       (l.createdByUserName && String(l.createdByUserName).toLowerCase() === (currentUserName || "").toLowerCase());
     if (!isAssignedToMe && !isCreator) return false;
     const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-    return leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
+    return (selectedMonth === "All" || leadDate.format("MMMM") === selectedMonth) && (selectedYear === "All" || leadDate.year() === selectedYear);
   }).reduce((acc, l) => {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
     return acc + val;
   }, 0);
+
+  const monthlyAchievement = isAdmin 
+    ? leads.filter(l => {
+        if (l.status !== "Client Won") return false;
+        const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+        return (selectedMonth === "All" || leadDate.format("MMMM") === selectedMonth) && (selectedYear === "All" || leadDate.year() === selectedYear);
+      }).reduce((acc, l) => {
+        const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+        return acc + val;
+      }, 0)
+    : myAchievement;
+
   const achievementRate = totalMonthlyTarget > 0 ? (monthlyAchievement / totalMonthlyTarget) * 100 : 0;
+
 
   const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
 
@@ -1092,15 +1121,14 @@ export default function SalesPage() {
                       open={true} 
                       onOpenChange={(open) => {
                         if (!open) {
-                          const originalList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+                          const originalList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
                           const hasChanged = originalList.length !== selectedAssignees.length || 
                             !originalList.every((name: string) => selectedAssignees.includes(name)) ||
                             !selectedAssignees.every((name: string) => originalList.includes(name));
                           if (hasChanged) {
                             handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees);
-                          } else {
-                            setInlineEditing(null);
                           }
+                          setInlineEditing(null);
                         }
                       }}
                     >
@@ -1156,12 +1184,40 @@ export default function SalesPage() {
                       </PopoverContent>
                     </Popover>
                   ) : (
-                    <span 
-                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'assignedTo' })}
-                      className="text-[12px] font-bold text-brand-teal cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5"
+                    <div 
+                      onClick={() => {
+                        if (canEditLead(lead)) {
+                          setInlineEditing({ id: lead.id, field: 'assignedTo' });
+                          const assignedList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
+                          setSelectedAssignees(assignedList);
+                        }
+                      }}
+                      className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1"
                     >
-                      {getAssignedToString(lead.assignedTo) || "--"}
-                    </span>
+                      {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 ? (
+                        lead.assignedTo.map((name: string) => (
+                          <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
+                            {name}
+                            {canEditLead(lead) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+                                  const updated = assignedList.filter((n: string) => n !== name);
+                                  handleInlineUpdate(lead.id, 'assignedTo', updated);
+                                }}
+                                className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-slate-400 italic text-xs">Unassigned</span>
+                      )}
+                    </div>
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -1244,14 +1300,12 @@ export default function SalesPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-[180px]">
                         <DropdownMenuItem onClick={() => fetchLeadLogs(lead)} className="cursor-pointer font-medium">
-                          <HistoryIcon className="w-4 h-4 mr-2 text-brand-teal" />
                           View History
                         </DropdownMenuItem>
                         {canDeleteSales && (
                           <>
                             <div className="h-px bg-slate-100 my-1" />
                             <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
-                              <Trash2 className="w-4 h-4 mr-2" />
                               Delete Lead
                             </DropdownMenuItem>
                           </>
@@ -1287,21 +1341,23 @@ export default function SalesPage() {
           <div className="hidden lg:flex items-center gap-2 bg-white border border-slate-100 rounded-xl px-2 py-1 shadow-sm">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="h-8 w-[110px] border-none text-[11px] font-bold text-slate-600 focus:ring-0">
-                <SelectValue />
+                <SelectValue placeholder="Month" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="All">All Months</SelectItem>
                 {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
                   <SelectItem key={m} value={m}>{m}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <div className="w-px h-4 bg-slate-100" />
-            <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(parseInt(val))}>
+            <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(val === "All" ? "All" : parseInt(val))}>
               <SelectTrigger className="h-8 w-[80px] border-none text-[11px] font-bold text-slate-600 focus:ring-0">
-                <SelectValue />
+                <SelectValue placeholder="Year" />
               </SelectTrigger>
               <SelectContent>
-                {[2024, 2025, 2026].map(y => (
+                <SelectItem value="All">All Years</SelectItem>
+                {Array.from({ length: 21 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                 ))}
               </SelectContent>
@@ -1368,7 +1424,7 @@ export default function SalesPage() {
             <TabsTrigger value="targets" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
               Monthly Targets
             </TabsTrigger>
-            {canEditSales && (
+            {isAdmin && (
               <button 
                 onClick={() => router.push('/work-management/sales/analytics')}
                 className="ml-1 text-foreground px-6 py-2 text-sm font-bold flex items-center gap-2 rounded-sm transition-all"
@@ -1425,7 +1481,7 @@ export default function SalesPage() {
 
             <TabsContent value="targets">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {canEditSales && (
+                {isAdmin && (
                   <div className="lg:col-span-1 space-y-6">
                     <Card className="border-none shadow-sm bg-white overflow-hidden">
                       <CardHeader className="border-b border-slate-100">
@@ -1810,11 +1866,36 @@ export default function SalesPage() {
                   </div>
                 )}
 
-                <Card className={`border-none shadow-sm bg-white overflow-hidden ${canEditSales ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
-                  <CardHeader className="border-b border-slate-100">
+                <Card className={`border-none shadow-sm bg-white overflow-hidden ${isAdmin ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                  <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between py-4">
                     <CardTitle className="text-sm font-bold text-slate-700">
-                      {canEditSales ? "Sales Performance Targets" : "My Performance Targets"}
+                      {isAdmin ? "Sales Performance Targets" : "My Performance Targets"}
                     </CardTitle>
+                    {canEditSales && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const toastId = toast.loading("Recalculating all sales targets...");
+                          try {
+                            const res = await fetch(`${API_URL}/sales-targets/recalculate-all`, { method: "POST" });
+                            if (res.ok) {
+                              const data = await res.json();
+                              toast.success(data.message || "Recalculated successfully", { id: toastId });
+                              fetchTargets();
+                            } else {
+                              toast.error("Failed to recalculate targets", { id: toastId });
+                            }
+                          } catch (e) {
+                            toast.error("Error recalculating targets", { id: toastId });
+                          }
+                        }}
+                        className="h-8 gap-2 border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Recalculate All</span>
+                      </Button>
+                    )}
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
@@ -1826,37 +1907,23 @@ export default function SalesPage() {
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Period</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Target</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Achieved</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-emerald-600">Incentive Base</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-indigo-600">Earned</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-brand-teal">Progress</th>
-                            {canEditSales && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
+                            {isAdmin && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {targets.filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase()).length > 0 ? (
+                          {targets.filter(t => isAdmin || t.employeeName?.toLowerCase() === currentUserName.toLowerCase()).length > 0 ? (
                             targets
-                              .filter(t => canEditSales || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
+                              .filter(t => isAdmin || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
-                                const achieved = leads.filter(l => {
-                                  if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, t.employeeName)) return false;
-                                  const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-                                  
-                                  // Month/Year check
-                                  const monthMatch = leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
-                                  if (!monthMatch) return false;
-
-                                  // Weekly check
-                                  if (t.type === "Weekly") {
-                                    const dayOfMonth = leadDate.date();
-                                    const weekNum = Math.ceil(dayOfMonth / 7);
-                                    return weekNum === t.week;
-                                  }
-                                  return true;
-                                }).reduce((acc, l) => {
-                                  const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
-                                  return acc + val;
-                                }, 0);
-                                
+                                let achieved = t.currentAchievement || 0;
+                                let calcIncentiveBase = (t.breakdown && t.breakdown.length > 0)
+                                  ? t.breakdown.reduce((sum: number, b: any) => sum + (b.incentiveBase !== undefined ? b.incentiveBase : (b.subtotal || 0)), 0)
+                                  : achieved;
+                                let incentiveBase = t.incentiveBase !== undefined ? t.incentiveBase : calcIncentiveBase;
                                 const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
                                 const earnedIncentive = t.incentiveAmount || 0;
 
@@ -1897,7 +1964,10 @@ export default function SalesPage() {
                                       <span className="font-bold text-slate-900 text-sm">₹{t.targetAmount?.toLocaleString()}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                      <span className="font-bold text-emerald-600 text-sm">₹{achieved.toLocaleString()}</span>
+                                      <span className="font-bold text-slate-900 text-sm">₹{achieved.toLocaleString()}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <span className="font-bold text-emerald-600 text-sm">₹{incentiveBase.toLocaleString()}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                       <div className="flex flex-col items-end">
@@ -1931,7 +2001,7 @@ export default function SalesPage() {
                                         </div>
                                       </div>
                                     </td>
-                                    {canEditSales && (
+                                    {isAdmin && (
                                       <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-1">
                                           {canDeleteSales && (
@@ -2088,6 +2158,73 @@ export default function SalesPage() {
         logs={leadLogs}
         isLoading={isLogsLoading}
       />
+
+      <Dialog open={isBreakdownOpen} onOpenChange={setIsBreakdownOpen}>
+        <DialogContent className="sm:max-w-3xl max-w-[95vw]">
+          <DialogHeader>
+            <DialogTitle>Incentive Breakdown</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {selectedBreakdown.length > 0 ? (
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Client / Invoice</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Category</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Type</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Invoice Value</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Incentive Base</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Slab %</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Earned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedBreakdown.map((item, idx) => (
+                      <tr key={idx} className="border-b last:border-0 hover:bg-slate-50/50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium">{item.clientName}</p>
+                          {item.invoiceNumber && <p className="text-[10px] text-slate-400">{item.invoiceNumber}</p>}
+                        </td>
+                        <td className="px-4 py-3">{item.category}</td>
+                        <td className="px-4 py-3">
+                          {item.isRecurring ? (
+                            <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded text-[10px] font-bold">Recurring</span>
+                          ) : (
+                            <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">First-time</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.subtotal || 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-emerald-600 font-medium">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.incentiveBase !== undefined ? item.incentiveBase : (item.subtotal || 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium">{item.slabPercentage}%</td>
+                        <td className="px-4 py-3 text-right text-brand-teal font-bold">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.earnedIncentive || 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50 border-t">
+                    <tr>
+                      <td colSpan={5} className="px-4 py-3 text-right font-bold text-slate-700">Total Incentive:</td>
+                      <td className="px-4 py-3 text-right font-bold text-brand-teal text-base">
+                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(
+                          selectedBreakdown.reduce((sum, item) => sum + (item.earnedIncentive || 0), 0)
+                        )}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 text-center py-8">No breakdown data available.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
