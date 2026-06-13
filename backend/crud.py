@@ -5243,10 +5243,17 @@ async def sync_google_events(db, employee_id: str, start_date_str: str, end_date
         print(f"Error syncing Google Calendar events: {e}")
 
 async def get_schedules(db, employee_id: str = None, date_str: str = None, date_from: str = None, date_to: str = None):
-    if employee_id and (date_str or (date_from and date_to)):
+    if date_str or (date_from and date_to):
         d_from = date_from or date_str
         d_to = date_to or date_str
-        await sync_google_events(db, employee_id, d_from, d_to)
+        if employee_id:
+            await sync_google_events(db, employee_id, d_from, d_to)
+        else:
+            cursor = db.employees.find({"googleCalendarTokens": {"$exists": True, "$ne": None}})
+            employees_with_tokens = await cursor.to_list(length=1000)
+            tasks = [sync_google_events(db, str(emp["_id"]), d_from, d_to) for emp in employees_with_tokens]
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
         
     query = {}
     if employee_id:
