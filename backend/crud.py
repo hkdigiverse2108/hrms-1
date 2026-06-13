@@ -1,9 +1,12 @@
 from bson import ObjectId
 from datetime import datetime, timedelta, timezone, date
 from typing import List, Optional, Dict
+import asyncio
 import schemas
 import auth
 import calendar
+import google_auth
+import google_calendar
 import pytz
 from websocket import manager as ws_manager
 
@@ -5182,6 +5185,23 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None, date_
     return [fix_id(s) for s in schedules]
 
 async def create_schedule(db, schedule_data: dict):
+    # Try to push to Google Calendar
+    emp_id = schedule_data.get("employeeId")
+    if emp_id:
+        query = {"employeeId": emp_id}
+        if ObjectId.is_valid(emp_id):
+            query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+        emp = await db.employees.find_one(query)
+        if emp and emp.get("googleCalendarTokens"):
+            try:
+                creds = google_auth.get_credentials(emp.get("googleCalendarTokens"))
+                if creds:
+                    event_id = await asyncio.to_thread(google_calendar.create_event, creds, schedule_data)
+                    if event_id:
+                        schedule_data["googleEventId"] = event_id
+            except Exception as e:
+                print(f"Error syncing new schedule to Google Calendar: {e}")
+
     new_doc = await db.schedules.insert_one(schedule_data)
     created = await db.schedules.find_one({"_id": new_doc.inserted_id})
     return fix_id(created)
@@ -5189,17 +5209,59 @@ async def create_schedule(db, schedule_data: dict):
 async def update_schedule(db, schedule_id: str, schedule_data: dict):
     if not ObjectId.is_valid(schedule_id):
         return None
+        
+    existing = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    
     await db.schedules.update_one(
         {"_id": ObjectId(schedule_id)},
         {"$set": schedule_data}
     )
     updated = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    
+    # Sync update to Google Calendar
+    if updated and existing:
+        emp_id = updated.get("employeeId")
+        google_event_id = updated.get("googleEventId") or existing.get("googleEventId")
+        if emp_id and google_event_id:
+            query = {"employeeId": emp_id}
+            if ObjectId.is_valid(emp_id):
+                query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+            emp = await db.employees.find_one(query)
+            if emp and emp.get("googleCalendarTokens"):
+                try:
+                    creds = google_auth.get_credentials(emp.get("googleCalendarTokens"))
+                    if creds:
+                        await asyncio.to_thread(google_calendar.update_event, creds, google_event_id, updated)
+                except Exception as e:
+                    print(f"Error syncing updated schedule to Google Calendar: {e}")
+
     return fix_id(updated) if updated else None
 
 async def delete_schedule(db, schedule_id: str):
     if not ObjectId.is_valid(schedule_id):
         return False
+        
+    existing = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+        
     res = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
+    
+    # Sync delete to Google Calendar
+    if res.deleted_count > 0 and existing:
+        emp_id = existing.get("employeeId")
+        google_event_id = existing.get("googleEventId")
+        if emp_id and google_event_id:
+            query = {"employeeId": emp_id}
+            if ObjectId.is_valid(emp_id):
+                query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+            emp = await db.employees.find_one(query)
+            if emp and emp.get("googleCalendarTokens"):
+                try:
+                    creds = google_auth.get_credentials(emp.get("googleCalendarTokens"))
+                    if creds:
+                        await asyncio.to_thread(google_calendar.delete_event, creds, google_event_id)
+                except Exception as e:
+                    print(f"Error syncing deleted schedule to Google Calendar: {e}")
+                    
     return res.deleted_count > 0
 
 

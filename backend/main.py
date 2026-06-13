@@ -11,6 +11,7 @@ from bson import ObjectId
 from database import get_db
 import holidays as pyholidays
 from websocket import manager as ws_manager
+import google_auth
 
 import asyncio
 print("MAIN PATH:", __file__, flush=True)
@@ -1635,6 +1636,82 @@ async def delete_schedule(schedule_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return {"message": "Schedule deleted successfully"}
+
+# --- Google Calendar Integration API ---
+from fastapi.responses import RedirectResponse
+
+@app.get("/auth/google/url")
+async def get_google_auth_url(employeeId: str):
+    """Generates the Google OAuth URL to link a user's account."""
+    try:
+        url = google_auth.get_authorization_url(state=employeeId)
+        return RedirectResponse(url=url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/google/callback")
+async def google_auth_callback(code: str, state: str, db=Depends(get_db)):
+    """Handles the OAuth callback, exchanges code for tokens, and saves them."""
+    try:
+        # State parameter carries the employeeId
+        employee_id = state
+        tokens = google_auth.fetch_tokens(code, state)
+        
+        from bson import ObjectId
+        query = {"employeeId": employee_id}
+        if ObjectId.is_valid(employee_id):
+            query = {"$or": [{"employeeId": employee_id}, {"_id": ObjectId(employee_id)}]}
+            
+        # Save tokens to the employee document
+        result = await db.employees.update_one(
+            query,
+            {"$set": {"googleCalendarTokens": tokens}}
+        )
+        
+        if result.modified_count == 0:
+            print(f"Warning: Failed to update Google Calendar Tokens for user {employee_id}. User not found.")
+            
+        # Redirect the user back to the frontend schedule page
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3535")
+        return RedirectResponse(url=f"{frontend_url}/schedule?google_linked=true")
+    except Exception as e:
+        print(f"Google OAuth Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to link Google Calendar.")
+
+@app.post("/auth/google/disconnect")
+async def disconnect_google_calendar(employeeId: str, db=Depends(get_db)):
+    try:
+        from bson import ObjectId
+        query = {"employeeId": employeeId}
+        if ObjectId.is_valid(employeeId):
+            query = {"$or": [{"employeeId": employeeId}, {"_id": ObjectId(employeeId)}]}
+            
+        result = await db.employees.update_one(
+            query,
+            {"$unset": {"googleCalendarTokens": ""}}
+        )
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Employee not found or already disconnected.")
+        return {"message": "Successfully disconnected Google Calendar."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/webhooks/google-calendar")
+async def google_calendar_webhook(request: Request, db=Depends(get_db)):
+    """
+    Receives push notifications from Google Calendar when an event changes.
+    The headers will contain 'X-Goog-Resource-ID' and 'X-Goog-Channel-ID'.
+    """
+    # Verify the request is from Google (you might want to verify headers)
+    channel_id = request.headers.get('X-Goog-Channel-ID')
+    resource_id = request.headers.get('X-Goog-Resource-ID')
+    
+    # Normally, you would use these IDs to look up which user's calendar changed,
+    # then fetch the latest events using the 'syncToken' you previously stored,
+    # and update your local 'schedules' collection accordingly.
+    
+    # Returning 200 OK to acknowledge receipt of the webhook.
+    return {"status": "ok"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
