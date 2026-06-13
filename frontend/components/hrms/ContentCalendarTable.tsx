@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
-import { Loader2, Plus, Trash2, Save, X, Check, Maximize, Minimize, Settings2, Download, History } from "lucide-react";
+import { Loader2, Plus, Trash2, Save, X, Check, Maximize, Minimize, Settings2, Download, History, Calendar as CalendarIcon, ChevronDownIcon } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 
 interface ContentCalendarTableProps {
   clientId: string;
@@ -20,15 +22,25 @@ interface ContentCalendarTableProps {
 export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [entries, setEntries] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [monthYear, setMonthYear] = useState(() => {
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
+  const monthYear = selectedDate ? selectedDate.substring(0, 7) : (() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
+  })();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const { confirm } = useConfirm();
+
+  const currentMonthDate = React.useMemo(() => {
+    if (!monthYear) return new Date();
+    const [year, month] = monthYear.split('-');
+    return new Date(parseInt(year), parseInt(month) - 1, 1);
+  }, [monthYear]);
 
   const [holidays, setHolidays] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>({
@@ -43,6 +55,9 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false);
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<any[]>([]);
+
+  const [selectedDates, setSelectedDates] = useState<Date[] | undefined>([]);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
   const handleOpenLogs = (entry: any) => {
     setCurrentLogs(entry.logs || []);
@@ -146,6 +161,135 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       }
     } catch (error) {
       toast.error("Failed to add new row");
+    }
+  };
+
+  const handleAddRowWithDate = async (dateString: string) => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
+
+      let payload: any = {
+        clientId,
+        monthYear,
+        postingDate: dateString,
+        updatedBy: userName
+      };
+
+      try {
+        let d: Date | undefined;
+        if (dateString.includes("-")) {
+          d = new Date(dateString);
+        } else if (dateString.includes("/")) {
+          const parts = dateString.split("/");
+          d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+        }
+        if (d && !isNaN(d.getTime())) {
+          payload.postingDay = d.toLocaleDateString("en-US", { weekday: "long" });
+
+          const isHoliday = (date: Date) => {
+            const dStr = date.toISOString().split('T')[0];
+            return holidays.some(h => h.date && h.date.startsWith(dStr));
+          };
+
+          const subtractDays = (startDate: Date, workingDaysToSubtract: number) => {
+            let currentDate = new Date(startDate);
+            let daysSubtracted = 0;
+            while (daysSubtracted < workingDaysToSubtract) {
+              currentDate.setDate(currentDate.getDate() - 1);
+              const dayOfWeek = currentDate.getDay();
+              if (dayOfWeek !== 0 && !isHoliday(currentDate)) {
+                daysSubtracted++;
+              }
+            }
+            return currentDate.toISOString().split('T')[0];
+          };
+
+          const parseOffset = (val: any, defaultVal: number) => {
+            const num = Number(val);
+            return (!isNaN(num) && num > 0) ? num : defaultVal;
+          };
+
+          const scriptOffset = parseOffset(settings?.scriptDateOffset, 14);
+          const shootOffset = parseOffset(settings?.shootDateOffset, 12);
+          const editingOffset = parseOffset(settings?.editingStartOffset, 6);
+          const approvalOffset = parseOffset(settings?.approvalOffset, 5);
+
+          payload.scriptDate = subtractDays(d, scriptOffset);
+          payload.shootDate = subtractDays(d, shootOffset);
+          payload.editingStart = subtractDays(d, editingOffset);
+          payload.approval = subtractDays(d, approvalOffset);
+        }
+      } catch (e) {
+        console.error("Error parsing date", e);
+      }
+
+      const res = await fetch(`${API_URL}/content-calendar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const newEntry = await res.json();
+        setEntries(prev => [...prev, newEntry]);
+      }
+    } catch (error) {
+      toast.error("Failed to add new row");
+    }
+  };
+
+  useEffect(() => {
+    if (entries && entries.length > 0) {
+      const existingDates = entries
+        .filter(e => e.postingDate)
+        .map(e => {
+          const [y, m, d] = e.postingDate.split('-');
+          return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+        });
+      setSelectedDates(existingDates);
+    } else {
+      setSelectedDates([]);
+    }
+  }, [entries]);
+
+  const handleSyncDates = async () => {
+    setIsDatePickerOpen(false); // Close popover immediately
+    
+    let addedCount = 0;
+    let deletedCount = 0;
+
+    const selectedStrings = (selectedDates || []).map(date => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    });
+
+    // 1. Delete rows that were unselected
+    for (const entry of entries) {
+      if (entry.postingDate && !selectedStrings.includes(entry.postingDate)) {
+        try {
+          await fetch(`${API_URL}/content-calendar/${entry.id}`, { method: "DELETE" });
+          deletedCount++;
+        } catch (error) {
+          console.error("Failed to delete", error);
+        }
+      }
+    }
+
+    // 2. Add rows that are newly selected
+    for (const dateString of selectedStrings) {
+      const exists = entries.some(e => e.postingDate === dateString);
+      if (!exists) {
+        await handleAddRowWithDate(dateString);
+        addedCount++;
+      }
+    }
+    
+    if (addedCount > 0 || deletedCount > 0) {
+      toast.success(`Added ${addedCount} row(s) and deleted ${deletedCount} row(s)`);
+      fetchEntries();
     }
   };
 
@@ -417,6 +561,18 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     ? "fixed inset-0 z-50 bg-slate-50 flex flex-col" 
     : "bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col mt-6 min-h-[calc(100vh-350px)]";
 
+  const [pickerView, setPickerView] = useState<'days' | 'months'>('days');
+  const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
+
+  useEffect(() => {
+    if (isDatePickerOpen) {
+      setPickerView('days');
+      setPickerYear(currentMonthDate.getFullYear());
+    }
+  }, [isDatePickerOpen, currentMonthDate]);
+
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
   return (
     <div className={containerClasses}>
       <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 bg-white">
@@ -425,12 +581,91 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
           <p className="text-xs text-slate-500">Plan and track content creation and posting</p>
         </div>
         <div className="flex items-center gap-3">
-          <Input 
-            type="month" 
-            value={monthYear} 
-            onChange={(e) => setMonthYear(e.target.value)} 
-            className="w-[180px] h-9"
-          />
+          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-[180px] justify-start text-left font-normal h-9 bg-white">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {currentMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start" side="bottom">
+              {pickerView === 'days' ? (
+                <>
+                  <div className="flex justify-center pt-3 pb-1 border-b border-slate-100">
+                    <Button variant="ghost" size="sm" className="h-8 text-[15px] font-semibold hover:bg-slate-100 text-slate-800" onClick={() => setPickerView('months')}>
+                      {currentMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                      <ChevronDownIcon className="ml-1 h-4 w-4 text-slate-400" />
+                    </Button>
+                  </div>
+                  <div className="p-2 [&_[data-selected=true]]:!bg-brand-teal/15 [&_[data-selected=true]]:!text-brand-teal [&_[data-selected=true]]:!font-bold [&_[data-selected=true]]:!rounded-md [&_[data-selected-single=true]]:!bg-brand-teal/15 [&_[data-selected-single=true]]:!text-brand-teal [&_[data-selected-single=true]]:!font-bold [&_[data-selected-single=true]]:!rounded-md">
+                    <Calendar
+                      mode="multiple"
+                      selected={selectedDates}
+                      onSelect={setSelectedDates}
+                      month={currentMonthDate}
+                      onMonthChange={(date) => {
+                        const y = date.getFullYear();
+                        const m = String(date.getMonth() + 1).padStart(2, '0');
+                        setSelectedDate(`${y}-${m}-01`);
+                      }}
+                      className="border-0 p-0"
+                      classNames={{
+                        month_caption: 'hidden', 
+                        nav: 'hidden', 
+                        head_cell: 'text-slate-400 font-medium text-[0.8rem] w-9',
+                        cell: 'text-center text-sm p-0 relative [&:has([aria-selected])]:bg-transparent focus-within:relative focus-within:z-20',
+                        day: 'h-9 w-9 p-0 font-normal hover:bg-slate-100 rounded-md transition-colors',
+                      }}
+                    />
+                  </div>
+                  <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center gap-4 rounded-b-md">
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedDates([])} className="text-slate-500 hover:text-slate-900">
+                      Clear
+                    </Button>
+                    <Button size="sm" className="bg-brand-teal text-white hover:bg-teal-700 shadow-sm px-4" onClick={handleSyncDates}>
+                      Apply Changes
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="p-4 w-[280px]">
+                  <div className="flex justify-between items-center mb-4 bg-slate-100 rounded-md p-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPickerYear(y => y - 1)}>&lt;</Button>
+                    <span className="font-bold text-slate-700">{pickerYear}</span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPickerYear(y => y + 1)}>&gt;</Button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {monthNames.map((m, i) => {
+                      const isCurrentMonth = currentMonthDate.getMonth() === i && currentMonthDate.getFullYear() === pickerYear;
+                      return (
+                        <Button 
+                          key={m} 
+                          variant={isCurrentMonth ? "default" : "outline"}
+                          className={`h-12 ${isCurrentMonth ? 'bg-brand-teal text-white hover:bg-teal-700' : 'hover:bg-slate-100 hover:text-brand-teal text-slate-700'}`}
+                          onClick={() => {
+                            const mStr = String(i + 1).padStart(2, '0');
+                            setSelectedDate(`${pickerYear}-${mStr}-01`);
+                            setPickerView('days');
+                          }}
+                        >
+                          {m}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-4 flex justify-between">
+                    <Button variant="ghost" size="sm" onClick={() => setPickerView('days')}>Back</Button>
+                    <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => {
+                      const now = new Date();
+                      setSelectedDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`);
+                      setPickerYear(now.getFullYear());
+                      setPickerView('days');
+                    }}>This month</Button>
+                  </div>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
           <Button onClick={() => { setSettingsForm(settings); setIsSettingsOpen(true); }} size="icon" variant="outline" title="Settings">
             <Settings2 className="w-4 h-4 text-slate-600" />
           </Button>
@@ -629,7 +864,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
               {entries.length === 0 ? (
                 <tr>
                   <td colSpan={tableHeaders.length} className="px-4 py-8 text-center text-slate-500">
-                    No entries for this month. Click "Add Row" to start planning.
+                    No entries for this month. Click "Add Row" or "Select Dates" to start planning.
                   </td>
                 </tr>
               ) : (
