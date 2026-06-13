@@ -4724,6 +4724,7 @@ async def sync_google_events(db, employee_id: str, start_date_str: str, end_date
                 {"googleEventId": event_id},
                 {"$set": {
                     "employeeId": employee_id,
+                    "employeeName": emp.get("name") or "Unknown",
                     "title": summary,
                     "description": description,
                     "date": schedule_date,

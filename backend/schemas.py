@@ -1671,7 +1671,7 @@ class ScheduleBase(BaseModel):
     title: str
     description: Optional[str] = None
     employeeId: str
-    employeeName: str
+    employeeName: Optional[str] = "Unknown"
     date: RobustDate
     startTime: str
     endTime: str
