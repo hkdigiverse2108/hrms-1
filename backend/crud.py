@@ -4332,8 +4332,8 @@ async def recalculate_sales_target(db, employee_id: str, month: str, year: int, 
                             for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%b %d, %Y", "%d/%m/%Y", "%d-%m-%Y"):
                                     try:
                                         ld = datetime.strptime(date_str, fmt)
-                                    if ld.tzinfo:
-                                        ld = ld.replace(tzinfo=None)
+                                        if ld.tzinfo:
+                                            ld = ld.replace(tzinfo=None)
                                         break
                                     except Exception: continue
                     
