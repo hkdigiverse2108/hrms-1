@@ -4714,6 +4714,13 @@ async def get_content_calendar_entries(db, client_id: str, month_year: str = Non
     return [fix_id(e) for e in entries]
 
 async def create_content_calendar_entry(db, entry_data: dict):
+    updated_by = entry_data.pop("updatedBy", "Unknown User")
+    entry_data["logs"] = [{
+        "timestamp": datetime.now(IST).isoformat(),
+        "action": "Row created",
+        "details": "Initial entry created",
+        "userName": updated_by
+    }]
     new_doc = await db.content_calendar_entries.insert_one(entry_data)
     created = await db.content_calendar_entries.find_one({"_id": new_doc.inserted_id})
     return fix_id(created)
@@ -4721,6 +4728,30 @@ async def create_content_calendar_entry(db, entry_data: dict):
 async def update_content_calendar_entry(db, entry_id: str, update_data: dict):
     if not ObjectId.is_valid(entry_id):
         return None
+        
+    existing = await db.content_calendar_entries.find_one({"_id": ObjectId(entry_id)})
+    if not existing:
+        return None
+        
+    changes = []
+    updated_by = update_data.get("updatedBy", "Unknown User")
+    for key, val in update_data.items():
+        if key not in ["logs", "clientId", "monthYear", "id", "_id", "updated_at", "created_at", "updatedAt", "createdAt", "updatedBy"]:
+            old_val = existing.get(key)
+            if old_val != val:
+                changes.append(f"'{key}' changed to '{val or ''}'")
+                
+    if changes:
+        new_log = {
+            "timestamp": datetime.now(IST).isoformat(),
+            "action": "Row updated",
+            "details": ", ".join(changes),
+            "userName": updated_by
+        }
+        logs = existing.get("logs", [])
+        logs.append(new_log)
+        update_data["logs"] = logs
+        
     await db.content_calendar_entries.update_one(
         {"_id": ObjectId(entry_id)},
         {"$set": update_data}

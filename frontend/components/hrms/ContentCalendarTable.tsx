@@ -4,7 +4,9 @@ import React, { useState, useEffect } from "react";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
-import { Loader2, Plus, Trash2, Save, X, Check, Maximize, Minimize, Settings2 } from "lucide-react";
+import { Loader2, Plus, Trash2, Save, X, Check, Maximize, Minimize, Settings2, Download, History } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -38,6 +40,30 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsForm, setSettingsForm] = useState<any>({});
 
+  const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false);
+  const [logsDialogOpen, setLogsDialogOpen] = useState(false);
+  const [currentLogs, setCurrentLogs] = useState<any[]>([]);
+
+  const handleOpenLogs = (entry: any) => {
+    setCurrentLogs(entry.logs || []);
+    setLogsDialogOpen(true);
+  };
+  const tableHeaders = [
+    "Posting Date", "Posting Day", "Post/Reel", "Concept", "Topic", "Reference",
+    "Script Date", "Script Link", "Shoot Date", "Shoot Link", "Editing Start",
+    "Final Reel Link", "Final Post Link", "Approval by Het", "Is Approved", "Thumbnail Link",
+    "Posting Link IG", "Actual Posting Date", ""
+  ];
+
+  const fieldKeys = [
+    "postingDate", "postingDay", "postReel", "concept", "topic", "reference",
+    "scriptDate", "scriptLink", "shootDate", "shootLink", "editingStart",
+    "finalReelLink", "finalPostLink", "approval", "isApproved", "thumbnailLink",
+    "postingLinkOfIg", "actualPostingDate"
+  ];
+  
+  const [selectedColumnsForPdf, setSelectedColumnsForPdf] = useState<string[]>(tableHeaders.filter(h => h !== ""));
+
   useEffect(() => {
     // Fetch all holidays once
     fetch(`${API_URL}/holidays`)
@@ -51,8 +77,10 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       const res = await fetch(`${API_URL}/content-calendar-settings?clientId=${clientId}&monthYear=${monthYear}`);
       if (res.ok) {
         const data = await res.json();
-        setSettings(data);
-        setSettingsForm(data);
+        if (data && Object.keys(data).length > 0) {
+          setSettings((prev: any) => ({ ...prev, ...data }));
+          setSettingsForm((prev: any) => ({ ...prev, ...data }));
+        }
       }
     } catch (err) {
       console.error("Failed to fetch settings", err);
@@ -98,12 +126,17 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
 
   const handleAddRow = async () => {
     try {
+      const storedUser = localStorage.getItem('user');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
+
       const res = await fetch(`${API_URL}/content-calendar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId,
           monthYear,
+          updatedBy: userName
         }),
       });
       if (res.ok) {
@@ -126,14 +159,47 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     setEditForm({});
   };
 
+  useEffect(() => {
+    if (!editingId) return;
+
+    const timeoutId = setTimeout(async () => {
+      setIsSaving(true);
+      const storedUser = localStorage.getItem('user');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
+
+      try {
+        const res = await fetch(`${API_URL}/content-calendar/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...editForm, updatedBy: userName }),
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          setEntries((prev) => prev.map(e => e.id === editingId ? updated : e));
+        }
+      } catch (error) {
+        console.error("Auto-save failed", error);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timeoutId);
+  }, [editForm, editingId]);
+
   const handleSaveRow = async () => {
     if (!editingId) return;
     setIsSaving(true);
+    const storedUser = localStorage.getItem('user');
+    const user = storedUser ? JSON.parse(storedUser) : null;
+    const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
+
     try {
       const res = await fetch(`${API_URL}/content-calendar/${editingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({ ...editForm, updatedBy: userName }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -204,19 +270,78 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
 
 
 
-  const tableHeaders = [
-    "Posting Date", "Posting Day", "Post/Reel", "Concept", "Topic", "Reference",
-    "Script Date", "Script Link", "Shoot Date", "Shoot Link", "Editing Start",
-    "Final Reel Link", "Final Post Link", "Approval by Het", "Is Approved", "Thumbnail Link",
-    "Posting Link IG", "Actual Posting Date", ""
-  ];
+  const handleDownloadPdf = () => {
+    if (entries.length === 0) {
+      toast.error("No entries to download");
+      return;
+    }
+    
+    if (selectedColumnsForPdf.length === 0) {
+      toast.error("Please select at least one column");
+      return;
+    }
 
-  const fieldKeys = [
-    "postingDate", "postingDay", "postReel", "concept", "topic", "reference",
-    "scriptDate", "scriptLink", "shootDate", "shootLink", "editingStart",
-    "finalReelLink", "finalPostLink", "approval", "isApproved", "thumbnailLink",
-    "postingLinkOfIg", "actualPostingDate"
-  ];
+    const doc = new jsPDF("landscape");
+    
+    const pageWidth = doc.internal.pageSize.width;
+
+    // Corporate Letterhead Style
+    // Company Name
+    doc.setFontSize(22);
+    doc.setTextColor(13, 148, 136); // Brand teal
+    doc.setFont("helvetica", "bold");
+    doc.text("Harikrushna Digiverse LLP", 14, 20);
+
+    // Document Title
+    doc.setFontSize(14);
+    doc.setTextColor(50, 50, 50);
+    doc.setFont("helvetica", "normal");
+    doc.text("Content Calendar", 14, 28);
+
+    // Right-aligned meta details
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Month: ${monthYear}`, pageWidth - 14, 20, { align: "right" });
+
+    // Decorative separator line
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.5);
+    doc.line(14, 32, pageWidth - 14, 32);
+
+    const columnsToRender = selectedColumnsForPdf;
+    const indicesToRender = columnsToRender.map(col => tableHeaders.indexOf(col));
+
+    const tableData = entries.map(entry => {
+      return indicesToRender.map(idx => {
+        const key = fieldKeys[idx];
+        let val = entry[key] || "";
+        return val;
+      });
+    });
+
+    autoTable(doc, {
+      head: [columnsToRender],
+      body: tableData,
+      startY: 38,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", font: "helvetica" },
+      headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: 'bold', halign: 'center' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { top: 38, right: 14, bottom: 20, left: 14 }
+    });
+
+    // Add Footer with Page Numbers
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`Page ${i} of ${pageCount}  |  Harikrushna Digiverse LLP`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: "center" });
+    }
+
+    doc.save(`Content-Calendar-${monthYear}.pdf`);
+    setIsPdfDialogOpen(false);
+  };
 
   const formatDateDisplay = (dateString: any) => {
     if (!dateString) return null;
@@ -264,10 +389,21 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
             };
 
             // Calculate dates if they aren't already manually set
-            if (!prev.scriptDate) updates.scriptDate = subtractDays(d, settings.scriptDateOffset);
-            if (!prev.shootDate) updates.shootDate = subtractDays(d, settings.shootDateOffset);
-            if (!prev.editingStart) updates.editingStart = subtractDays(d, settings.editingStartOffset);
-            if (!prev.approval) updates.approval = subtractDays(d, settings.approvalOffset);
+            const parseOffset = (val: any, defaultVal: number) => {
+              const num = Number(val);
+              return (!isNaN(num) && num > 0) ? num : defaultVal;
+            };
+
+            const scriptOffset = parseOffset(settings?.scriptDateOffset, 14);
+            const shootOffset = parseOffset(settings?.shootDateOffset, 12);
+            const editingOffset = parseOffset(settings?.editingStartOffset, 6);
+            const approvalOffset = parseOffset(settings?.approvalOffset, 5);
+
+            // ALWAYS recalculate if the user changes the posting date, overriding any existing calculated values
+            updates.scriptDate = subtractDays(d, scriptOffset);
+            updates.shootDate = subtractDays(d, shootOffset);
+            updates.editingStart = subtractDays(d, editingOffset);
+            updates.approval = subtractDays(d, approvalOffset);
           }
         }
       } catch (e) {
@@ -297,6 +433,10 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
           />
           <Button onClick={() => { setSettingsForm(settings); setIsSettingsOpen(true); }} size="icon" variant="outline" title="Settings">
             <Settings2 className="w-4 h-4 text-slate-600" />
+          </Button>
+          <Button onClick={() => setIsPdfDialogOpen(true)} size="sm" variant="outline" className="text-slate-700">
+            <Download className="w-4 h-4 mr-1" />
+            PDF
           </Button>
           <Button onClick={handleAddRow} size="sm" className="bg-brand-teal hover:bg-teal-700">
             <Plus className="w-4 h-4 mr-1" />
@@ -338,6 +478,134 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
             <Button variant="outline" onClick={() => setIsSettingsOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveSettings} className="bg-brand-teal text-white">Save Changes</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isPdfDialogOpen} onOpenChange={setIsPdfDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Download PDF</DialogTitle>
+            <DialogDescription>
+              Select the columns you want to include in the PDF export.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="flex justify-between items-center mb-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedColumnsForPdf(tableHeaders.filter(h => h !== ""))}
+                className="h-8 text-xs"
+              >
+                Select All
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedColumnsForPdf([])}
+                className="h-8 text-xs text-slate-500"
+              >
+                Clear All
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto p-1">
+              {tableHeaders.filter(h => h !== "").map((header, idx) => (
+                <div key={idx} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id={`col-${idx}`}
+                    checked={selectedColumnsForPdf.includes(header)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedColumnsForPdf([...selectedColumnsForPdf, header]);
+                      } else {
+                        setSelectedColumnsForPdf(selectedColumnsForPdf.filter(h => h !== header));
+                      }
+                    }}
+                    className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal"
+                  />
+                  <Label htmlFor={`col-${idx}`} className="text-sm cursor-pointer">{header}</Label>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPdfDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleDownloadPdf} className="bg-brand-teal text-white">Download</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={logsDialogOpen} onOpenChange={setLogsDialogOpen}>
+        <DialogContent className="max-w-2xl p-0 border-none bg-[#fbfcfc] rounded-2xl overflow-hidden">
+          <div className="px-6 py-6 flex items-start gap-4 relative">
+            <div className="h-10 w-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 mt-1">
+              <History className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-[22px] font-bold text-slate-900">Row Activity History</DialogTitle>
+              <DialogDescription className="text-xs text-slate-500 mt-1 italic">
+                Content Calendar
+              </DialogDescription>
+            </div>
+          </div>
+          
+          <div className="px-6 pb-6 max-h-[60vh] overflow-y-auto">
+            {currentLogs.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-8">No activity logs found for this row.</p>
+            ) : (
+              <div className="relative pl-0 ml-10 space-y-6">
+                {/* Continuous Timeline Line */}
+                <div className="absolute left-[-15px] top-4 bottom-4 w-0.5 bg-slate-200" />
+                
+                {currentLogs.slice().reverse().map((log: any, i: number) => {
+                  const cleanedDetails = log.details 
+                    ? log.details.split(', ').filter((part: string) => !part.includes('created_at') && !part.includes('updated_at') && !part.includes('createdAt') && !part.includes('updatedAt'))
+                    : [];
+                  
+                  const actionText = log.action === "Row created" ? "CREATED" : "UPDATED";
+                  const actionColor = log.action === "Row created" ? "text-blue-600 bg-blue-50 border-blue-100" : "text-emerald-600 bg-emerald-50 border-emerald-100";
+
+                  return (
+                    <div key={i} className="relative">
+                      {/* Timeline dot */}
+                      <div className="absolute -left-[20px] top-[18px] h-[11px] w-[11px] rounded-full border-[2.5px] border-emerald-600 bg-white z-10" />
+                      
+                      {/* Card */}
+                      <div className="bg-white p-5 rounded-2xl border border-slate-100/60 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] ml-2">
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="font-bold text-slate-900 text-[15px]">{log.userName || "Unknown User"}</h4>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
+                          </span>
+                        </div>
+                        
+                        <div className={`inline-flex px-2.5 py-0.5 rounded-md text-[10px] font-bold border ${actionColor} mb-4 tracking-wider`}>
+                          {actionText}
+                        </div>
+                        
+                        <ul className="space-y-2 text-[13px] text-slate-600 list-disc pl-5 marker:text-slate-400">
+                          {cleanedDetails.length > 0 ? (
+                            cleanedDetails.map((detail: string, j: number) => (
+                              <li key={j}>{detail}</li>
+                            ))
+                          ) : (
+                            <li>{log.details || "Initial entry created"}</li>
+                          )}
+                        </ul>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          
+          <div className="px-6 py-4 flex justify-end">
+            <Button onClick={() => setLogsDialogOpen(false)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 rounded-lg font-medium shadow-sm">
+              Close
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -447,6 +715,9 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                             </>
                           ) : (
                             <>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-500 hover:text-brand-teal hover:bg-slate-50" onClick={() => handleOpenLogs(entry)} title="Activity Logs">
+                                <History className="h-3.5 w-3.5" />
+                              </Button>
                               <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDeleteRow(entry.id)}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>

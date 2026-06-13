@@ -132,10 +132,7 @@ export default function ClientDetailsPage() {
           <p className="text-slate-500 text-sm mt-1">{client.name}</p>
         </div>
         <div className="ml-auto flex gap-2">
-          <Button variant="outline" onClick={fetchLogs} className="bg-white hover:bg-slate-50 text-slate-700">
-            <History className="w-4 h-4 mr-2" />
-            History Logs
-          </Button>
+          {/* Action buttons can go here */}
         </div>
       </div>
 

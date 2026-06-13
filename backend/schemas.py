@@ -1721,6 +1721,7 @@ class ContentCalendarEntryBase(BaseModel):
     thumbnailLink: Optional[str] = None
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
+    logs: Optional[List[dict]] = None
 
 class ContentCalendarEntryCreate(ContentCalendarEntryBase):
     pass
