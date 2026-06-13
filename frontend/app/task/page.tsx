@@ -8,7 +8,6 @@ import {
   Calendar as CalendarIcon,
   Flag,
   MoreHorizontal,
-  Download,
   Loader2,
   Trash2,
   History
@@ -47,6 +46,8 @@ const getStatusBadge = (status: string) => {
   switch (s) {
     case "in-progress": 
     case "in progress": return "bg-brand-light/50 text-brand-teal border-brand-teal/20";
+    case "on-hold":
+    case "on hold":
     case "pending": 
     case "review": return "bg-amber-100/50 text-amber-700 border-amber-200";
     case "to do": 
@@ -62,6 +63,8 @@ const getStatusDot = (status: string) => {
   switch (s) {
     case "in-progress": 
     case "in progress": return "bg-brand-teal";
+    case "on-hold":
+    case "on hold":
     case "pending": 
     case "review": return "bg-amber-500";
     case "to do": 
@@ -203,19 +206,46 @@ export default function TaskManagementPage() {
 
   const handleUpdateField = async (taskId: string, field: string, value: string) => {
     try {
+      const payload: any = { 
+        [field]: value,
+        performedBy: user?.id,
+        userName: user?.name
+      };
+
+      if (field === 'status' && value === 'on-hold') {
+        payload.dueDate = null;
+      }
+
       const res = await fetch(`${API_URL}/tasks/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          [field]: value,
-          performedBy: user?.id,
-          userName: user?.name
-        })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         toast.success(`Updated successfully!`);
+        
+        if (field === 'status' && value === 'on-hold') {
+          toast.info("Due date cleared since task is on hold.");
+        }
+        
+        if (field === 'status' && value !== 'on-hold' && value !== 'completed') {
+          const currentTask = tasks.find(t => t.id === taskId);
+          if (currentTask && currentTask.status === 'on-hold' && !currentTask.dueDate) {
+            toast.warning("Task resumed! Please set a new due date.");
+          }
+        }
+
         // Optimistically update locally
-        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, [field]: value } : t));
+        setTasks(prev => prev.map(t => {
+          if (t.id === taskId) {
+            const updatedTask = { ...t, [field]: value };
+            if (field === 'status' && value === 'on-hold') {
+              updatedTask.dueDate = null as any;
+            }
+            return updatedTask;
+          }
+          return t;
+        }));
       } else {
         toast.error(`Failed to update`);
       }
@@ -330,6 +360,29 @@ export default function TaskManagementPage() {
     }
   };
 
+  const handleUpdateAssignees = async (taskId: string, newAssignedToIds: string[]) => {
+    try {
+      const res = await fetch(`${API_URL}/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          assignedToIds: newAssignedToIds,
+          performedBy: user?.id,
+          userName: user?.name
+        })
+      });
+      if (res.ok) {
+        toast.success("Assignees updated!");
+        fetchTasks();
+      } else {
+        toast.error("Failed to update assignees");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error updating assignees");
+    }
+  };
+
   // Filter State
   const [activeStatuses, setActiveStatuses] = useState<string[]>([]);
   const [activePriorities, setActivePriorities] = useState<string[]>([]);
@@ -348,7 +401,7 @@ export default function TaskManagementPage() {
   };
 
   const filteredTasks = tasks.filter(task => {
-    const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status);
+    const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status) || (activeStatuses.includes('on-hold') && task.status === 'pending') || (activeStatuses.includes('pending') && task.status === 'on-hold');
     const priorityMatch = activePriorities.length === 0 || activePriorities.includes(task.priority?.toLowerCase() || "");
     const assigneeMatch = activeAssignees.length === 0 || 
       (task.assignedToIds && activeAssignees.some(id => task.assignedToIds.includes(id))) || 
@@ -371,10 +424,19 @@ export default function TaskManagementPage() {
       dateMatch = false; // Filter out tasks with no due date if a date filter is applied
     }
     
-    const myAssignedMatch = !assignedToMe || task.assignedToId === user?.id || (task.assignedToIds && task.assignedToIds.includes(user?.id));
-    const myCreatedMatch = !createdByMe || task.assignedById === user?.id;
+    const isAssignedToMe = task.assignedToId === user?.id || (task.assignedToIds && task.assignedToIds.includes(user?.id));
+    const isCreatedByMe = task.assignedById === user?.id;
+    
+    let ownershipMatch = true;
+    if (assignedToMe && createdByMe) {
+      ownershipMatch = isAssignedToMe || isCreatedByMe;
+    } else if (assignedToMe) {
+      ownershipMatch = isAssignedToMe;
+    } else if (createdByMe) {
+      ownershipMatch = isCreatedByMe;
+    }
 
-    return statusMatch && priorityMatch && assigneeMatch && dateMatch && myAssignedMatch && myCreatedMatch;
+    return statusMatch && priorityMatch && assigneeMatch && dateMatch && ownershipMatch;
   });
 
   const sortedTasks = [...filteredTasks].sort((a, b) => {
@@ -529,10 +591,10 @@ export default function TaskManagementPage() {
                               To do
                             </div>
                           </SelectItem>
-                          <SelectItem value="pending">
+                          <SelectItem value="on-hold">
                             <div className="flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                              Pending
+                              On Hold
                             </div>
                           </SelectItem>
                           <SelectItem value="in-progress">
@@ -701,7 +763,7 @@ export default function TaskManagementPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { title: "To do", count: tasks.filter(t => t.status === 'todo').length.toString().padStart(2, '0'), desc: "New tasks waiting to be picked up.", dot: "bg-slate-400" },
-          { title: "Pending", count: tasks.filter(t => t.status === 'pending').length.toString().padStart(2, '0'), desc: "Tasks paused for approval or feedback.", dot: "bg-amber-400" },
+          { title: "On Hold", count: tasks.filter(t => t.status === 'on-hold' || t.status === 'pending').length.toString().padStart(2, '0'), desc: "Tasks paused for approval or feedback.", dot: "bg-amber-400" },
           { title: "In progress", count: tasks.filter(t => t.status === 'in-progress').length.toString().padStart(2, '0'), desc: "Active work items currently being handled.", dot: "bg-brand-teal" },
           { title: "Due Tasks", count: tasks.filter(t => t.dueDate && t.status !== 'completed' && t.dueDate <= todayStr).length.toString().padStart(2, '0'), desc: "Tasks that are due today or overdue.", dot: "bg-red-500", highlight: true },
           { title: "Completed", count: tasks.filter(t => t.status === 'completed').length.toString().padStart(2, '0'), desc: "Completed tasks reviewed and closed.", dot: "bg-emerald-600" },
@@ -728,7 +790,7 @@ export default function TaskManagementPage() {
                 <div className="flex flex-wrap gap-1.5">
                   {[
                     { value: "todo", label: "To do", dot: "bg-slate-400" },
-                    { value: "pending", label: "Pending", dot: "bg-amber-400" },
+                    { value: "on-hold", label: "On Hold", dot: "bg-amber-400" },
                     { value: "in-progress", label: "In progress", dot: "bg-brand-teal" },
                     { value: "completed", label: "Completed", dot: "bg-emerald-600" }
                   ].map(status => {
@@ -871,27 +933,30 @@ export default function TaskManagementPage() {
                       />
                     </PopoverContent>
                   </Popover>
-                  
-                  {(activeStatuses.length > 0 || activePriorities.length > 0 || activeAssignees.length > 0 || activeDateRange) && (
-                    <Button 
-                      variant="ghost" 
-                      className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 h-9"
-                      onClick={() => {
-                        setActiveStatuses([]);
-                        setActivePriorities([]);
-                        setActiveAssignees([]);
-                        setActiveDateRange(undefined);
-                      }}
-                    >
-                      Clear
-                    </Button>
-                  )}
                 </div>
               </div>
 
               {/* Quick Filters */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Quick Filters</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground uppercase tracking-wider">Quick Filters</label>
+                  {(activeStatuses.length > 0 || activePriorities.length > 0 || activeAssignees.length > 0 || activeDateRange || assignedToMe || createdByMe) && (
+                    <Button 
+                      variant="ghost" 
+                      className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 h-auto py-0"
+                      onClick={() => {
+                        setActiveStatuses([]);
+                        setActivePriorities([]);
+                        setActiveAssignees([]);
+                        setActiveDateRange(undefined);
+                        setAssignedToMe(false);
+                        setCreatedByMe(false);
+                      }}
+                    >
+                      Clear All
+                    </Button>
+                  )}
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <div 
                     onClick={() => setAssignedToMe(!assignedToMe)}
@@ -1000,58 +1065,152 @@ export default function TaskManagementPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      {task.assignedToIds && task.assignedToIds.length > 1 ? (
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                      {canEdit ? (
                         <Popover>
                           <PopoverTrigger asChild>
-                            <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex -space-x-2 overflow-hidden">
-                                {(task.assignedToNames || []).slice(0, 3).map((name: string, i: number) => (
-                                  <Avatar key={i} className="w-6 h-6 border-2 border-white">
+                            <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded-md border border-transparent hover:border-border transition-colors w-max">
+                              {task.assignedToIds && task.assignedToIds.length > 1 ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex -space-x-2 overflow-hidden">
+                                    {(task.assignedToNames || []).slice(0, 3).map((name: string, i: number) => (
+                                      <Avatar key={i} className="w-6 h-6 border-2 border-white">
+                                        <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
+                                          {name.split(' ').map((n:any) => n[0]).join('')}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                    ))}
+                                    {(task.assignedToNames?.length || 0) > 3 && (
+                                      <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 z-10">
+                                        +{(task.assignedToNames?.length || 0) - 3}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span className="text-xs font-medium text-foreground">
+                                    {task.assignedToNames?.length || 0} Assignees
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="w-6 h-6">
+                                    <AvatarImage src={task.avatar} />
                                     <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                                      {name.split(' ').map((n:any) => n[0]).join('')}
+                                      {((task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'U').split(' ').map((n:any) => n[0]).join('')}
                                     </AvatarFallback>
                                   </Avatar>
-                                ))}
-                                {(task.assignedToNames?.length || 0) > 3 && (
-                                  <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 z-10">
-                                    +{(task.assignedToNames?.length || 0) - 3}
-                                  </div>
-                                )}
-                              </div>
-                              <span className="text-xs font-medium text-foreground hover:underline">
-                                {task.assignedToNames?.length || 0} Assignees
-                              </span>
+                                  <span className="font-medium text-foreground text-sm line-clamp-1">
+                                    {(task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'Unassigned'}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[200px] p-3" align="start">
-                            <div className="space-y-2">
-                              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Assignees</h4>
-                              <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-1">
-                                {(task.assignedToNames || []).map((name: string, i: number) => (
-                                  <div key={i} className="flex items-center gap-2">
-                                    <Avatar className="w-6 h-6">
-                                      <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                                        {name.split(' ').map((n:any) => n[0]).join('')}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    <span className="text-sm font-medium text-foreground">{name}</span>
-                                  </div>
-                                ))}
+                          <PopoverContent className="w-[280px] p-3" align="start">
+                            <div className="space-y-3">
+                              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Update Assignees</h4>
+                              <Input
+                                placeholder="Search employees..."
+                                value={assigneeSearch}
+                                onChange={(e) => setAssigneeSearch(e.target.value)}
+                                className="h-8 text-xs"
+                              />
+                              <div className="border border-border rounded-md max-h-[160px] overflow-y-auto bg-white p-1 space-y-0.5">
+                                {employees.filter(emp => `${emp.firstName} ${emp.lastName}`.toLowerCase().includes(assigneeSearch.toLowerCase())).map(emp => {
+                                  const currentIds = task.assignedToIds || (task.assignedToId ? [task.assignedToId] : []);
+                                  const isSelected = currentIds.includes(emp.id);
+                                  return (
+                                    <div 
+                                      key={emp.id} 
+                                      className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-md cursor-pointer transition-colors"
+                                      onClick={() => {
+                                        const updatedIds = isSelected 
+                                          ? currentIds.filter((id: string) => id !== emp.id)
+                                          : [...currentIds, emp.id];
+                                        handleUpdateAssignees(task.id, updatedIds);
+                                        // optimistic update
+                                        setTasks(prev => prev.map(t => t.id === task.id ? { 
+                                          ...t, 
+                                          assignedToIds: updatedIds, 
+                                          assignedToNames: updatedIds.map((id:string) => employees.find((e:any) => e.id === id)).filter(Boolean).map((e:any) => `${e.firstName} ${e.lastName}`) 
+                                        } : t));
+                                      }}
+                                    >
+                                      <input 
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        readOnly
+                                        className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal w-4 h-4 cursor-pointer"
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <Avatar className="w-6 h-6">
+                                          <AvatarFallback className="text-[10px] bg-brand-light text-brand-teal font-medium">
+                                            {emp.firstName[0]}{emp.lastName[0]}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <span className="text-xs font-medium text-foreground">{emp.firstName} {emp.lastName}</span>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </div>
                           </PopoverContent>
                         </Popover>
                       ) : (
-                        <div className="flex items-center gap-3">
-                          <Avatar className="w-6 h-6">
-                            <AvatarImage src={task.avatar} />
-                            <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                              {((task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'U').split(' ').map((n:any) => n[0]).join('')}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="font-medium text-foreground text-sm">{(task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee}</span>
-                        </div>
+                        task.assignedToIds && task.assignedToIds.length > 1 ? (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex -space-x-2 overflow-hidden">
+                                  {(task.assignedToNames || []).slice(0, 3).map((name: string, i: number) => (
+                                    <Avatar key={i} className="w-6 h-6 border-2 border-white">
+                                      <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
+                                        {name.split(' ').map((n:any) => n[0]).join('')}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  ))}
+                                  {(task.assignedToNames?.length || 0) > 3 && (
+                                    <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 z-10">
+                                      +{(task.assignedToNames?.length || 0) - 3}
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-xs font-medium text-foreground hover:underline">
+                                  {task.assignedToNames?.length || 0} Assignees
+                                </span>
+                              </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[200px] p-3" align="start">
+                              <div className="space-y-2">
+                                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Assignees</h4>
+                                <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-1">
+                                  {(task.assignedToNames || []).map((name: string, i: number) => (
+                                    <div key={i} className="flex items-center gap-2">
+                                      <Avatar className="w-6 h-6">
+                                        <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
+                                          {name.split(' ').map((n:any) => n[0]).join('')}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span className="text-sm font-medium text-foreground">{name}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <Avatar className="w-6 h-6">
+                              <AvatarImage src={task.avatar} />
+                              <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
+                                {((task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'U').split(' ').map((n:any) => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="font-medium text-foreground text-sm line-clamp-1">
+                              {(task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'Unassigned'}
+                            </span>
+                          </div>
+                        )
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -1076,10 +1235,10 @@ export default function TaskManagementPage() {
                               To do
                             </div>
                           </SelectItem>
-                          <SelectItem value="pending">
+                          <SelectItem value="on-hold">
                             <div className="flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                              Pending
+                              On Hold
                             </div>
                           </SelectItem>
                           <SelectItem value="in-progress">
@@ -1169,25 +1328,25 @@ export default function TaskManagementPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <button 
-                        onClick={() => fetchTaskLogs(task.id)}
-                        className="p-1.5 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/20 rounded-md transition-colors inline-flex items-center justify-center mr-1"
-                        title="View Logs"
-                      >
-                        <History className="w-4 h-4" />
-                      </button>
-                      {canDeleteTask(task) && (
+                      <td className="px-6 py-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <button 
-                          onClick={() => setTaskToDelete(task.id)}
-                          className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded-md transition-colors inline-flex items-center justify-center"
-                          title="Delete Task"
+                          onClick={() => fetchTaskLogs(task.id)}
+                          className="p-1.5 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/20 rounded-md transition-colors inline-flex items-center justify-center mr-1"
+                          title="View Logs"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <History className="w-4 h-4" />
                         </button>
-                      )}
-                    </td>
-                  </tr>
+                        {canDeleteTask(task) && (
+                          <button 
+                            onClick={() => setTaskToDelete(task.id)}
+                            className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded-md transition-colors inline-flex items-center justify-center"
+                            title="Delete Task"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
                 ))}
               </tbody>
             </table>
