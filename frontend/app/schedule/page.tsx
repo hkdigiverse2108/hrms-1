@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
-import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -118,6 +118,24 @@ export default function SchedulePage() {
       if (res.ok) setEmployees(await res.json());
     } catch (err) {
       console.error("Error fetching employees:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    if (!user) return;
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${API_URL}/auth/google/disconnect?employeeId=${user.id || user.employeeId}`, {
+        method: 'POST'
+      });
+      if (!res.ok) throw new Error("Failed to disconnect");
+      
+      toast.success("Google Calendar disconnected.");
+      window.location.href = "/schedule";
+    } catch (error) {
+      toast.error("Failed to disconnect Google Calendar.");
     }
   };
 
@@ -806,6 +824,45 @@ export default function SchedulePage() {
                 );
               })}
             </div>
+
+            {/* Google Calendar Integration */}
+            <div className="p-4 border-t border-border bg-gray-50/80 shrink-0">
+              {user?.googleCalendarTokens ? (
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <div className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold px-3 py-2 rounded-lg flex items-center justify-center gap-2">
+                    <CalendarCheck className="h-4 w-4" />
+                    Google Calendar Connected
+                  </div>
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={handleDisconnectGoogle}
+                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8 text-xs font-medium"
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  type="button"
+                  onClick={() => {
+                    if (user) {
+                      window.location.href = `${API_URL}/auth/google/url?employeeId=${user.id || user.employeeId}`;
+                    }
+                  }}
+                  className="w-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:text-brand-teal font-semibold text-xs shadow-sm"
+                >
+                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.36,22 12.22,22C17.74,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"
+                    />
+                  </svg>
+                  Connect Google Calendar
+                </Button>
+              )}
+            </div>
+
           </div>
         </div>
 

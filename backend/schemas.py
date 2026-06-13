@@ -190,6 +190,7 @@ class EmployeeBase(BaseModel):
     requiredDocuments: Optional[List[str]] = []
     securityDepositExempt: Optional[bool] = False
     securityDepositDirectPayments: Optional[List[Dict[str, Any]]] = []
+    googleCalendarTokens: Optional[Dict[str, Any]] = None
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -1677,6 +1678,7 @@ class ScheduleBase(BaseModel):
     type: str  # e.g., 'meeting', 'busy', 'out_of_office', 'work'
     attendees: Optional[List[str]] = []
     createdBy: Optional[str] = None
+    googleEventId: Optional[str] = None
 
 class ScheduleCreate(ScheduleBase):
     pass
