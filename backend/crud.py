@@ -5156,7 +5156,98 @@ async def delete_asset_category(db, category_id: str, performed_by: str = "Syste
     return True
 
 # --- Schedule Operations ---
+async def sync_google_events(db, employee_id: str, start_date_str: str, end_date_str: str):
+    if not employee_id:
+        return
+        
+    query = {"employeeId": employee_id}
+    if ObjectId.is_valid(employee_id):
+        query = {"$or": [{"employeeId": employee_id}, {"_id": ObjectId(employee_id)}]}
+    emp = await db.employees.find_one(query)
+    
+    if not emp or not emp.get("googleCalendarTokens"):
+        return
+        
+    try:
+        creds = google_auth.get_credentials(emp.get("googleCalendarTokens"))
+        if not creds:
+            return
+            
+        tz = pytz.timezone('Asia/Kolkata')
+        
+        try:
+            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+        except Exception:
+            return
+            
+        try:
+            end_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+        except Exception:
+            end_dt = start_dt
+            
+        time_min_dt = tz.localize(datetime.combine(start_dt, datetime.min.time()))
+        time_max_dt = tz.localize(datetime.combine(end_dt, datetime.max.time()))
+        
+        time_min = time_min_dt.isoformat()
+        time_max = time_max_dt.isoformat()
+        
+        events = await asyncio.to_thread(google_calendar.list_events, creds, time_min, time_max)
+        if not events:
+            return
+            
+        for event in events:
+            event_id = event.get('id')
+            summary = event.get('summary', 'Google Calendar Event')
+            description = event.get('description', '')
+            
+            start = event.get('start', {})
+            end = event.get('end', {})
+            
+            start_time_str = start.get('dateTime') or start.get('date')
+            end_time_str = end.get('dateTime') or end.get('date')
+            
+            if not start_time_str or not end_time_str:
+                continue
+                
+            try:
+                if 'T' in start_time_str:
+                    s_dt = datetime.fromisoformat(start_time_str).astimezone(tz)
+                    e_dt = datetime.fromisoformat(end_time_str).astimezone(tz)
+                else:
+                    s_dt = datetime.strptime(start_time_str, "%Y-%m-%d")
+                    e_dt = datetime.strptime(end_time_str, "%Y-%m-%d")
+            except Exception:
+                continue
+                
+            local_start = s_dt.strftime("%H:%M")
+            local_end = e_dt.strftime("%H:%M")
+            
+            schedule_date = datetime.combine(s_dt.date(), datetime.min.time())
+            
+            await db.schedules.update_one(
+                {"googleEventId": event_id},
+                {"$set": {
+                    "employeeId": employee_id,
+                    "title": summary,
+                    "description": description,
+                    "date": schedule_date,
+                    "startTime": local_start,
+                    "endTime": local_end,
+                    "googleEventId": event_id,
+                    "type": "Google Event"
+                }},
+                upsert=True
+            )
+            
+    except Exception as e:
+        print(f"Error syncing Google Calendar events: {e}")
+
 async def get_schedules(db, employee_id: str = None, date_str: str = None, date_from: str = None, date_to: str = None):
+    if employee_id and (date_str or (date_from and date_to)):
+        d_from = date_from or date_str
+        d_to = date_to or date_str
+        await sync_google_events(db, employee_id, d_from, d_to)
+        
     query = {}
     if employee_id:
         query["employeeId"] = employee_id
@@ -5170,7 +5261,6 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None, date_
         try:
             start = datetime.strptime(date_from, "%Y-%m-%d")
             end = datetime.strptime(date_to, "%Y-%m-%d")
-            # Build list of all date variants (string + datetime) for each day in range
             date_variants = []
             current = start
             while current <= end:
