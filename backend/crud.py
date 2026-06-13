@@ -2955,27 +2955,6 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
             if not update_data.get("closedDate"):
                 update_data["closedDate"] = get_now().strftime("%Y-%m-%d")
             
-            # Auto-create Client
-            client_company = update_data.get("company", old_lead.get("company")) or "Unknown Company"
-            client_contact = update_data.get("contact", old_lead.get("contact")) or "Unknown Contact"
-            client_email = update_data.get("email", old_lead.get("email"))
-            client_phone = update_data.get("phone", old_lead.get("phone")) or ""
-            
-            new_client = schemas.ClientCreate(
-                name=client_contact,
-                companyName=client_company,
-                email=client_email,
-                phone=client_phone,
-                status="active",
-                department="Sales",
-                performedBy=performedBy,
-                userName=userName
-            )
-            try:
-                await create_client(db, new_client)
-            except Exception as e:
-                print(f"Failed to auto-create client: {e}")
-            
         if update_data.get("status") in ["On Hold", "Client Won", "Client Loss"]:
             update_data["isHot"] = False
             
@@ -4395,7 +4374,7 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
             for item in matched_invoices:
                 earned, slab_pct = await calculate_sales_incentive(
                     db,
-                    total_amount=incentive_achievement,
+                    total_amount=item["incentiveBase"],
                     invoice_amount=item["incentiveBase"],
                     employee_id=employee_id,
                     employee_name=emp_name,
