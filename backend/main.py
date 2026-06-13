@@ -1649,6 +1649,7 @@ async def get_google_auth_url(employeeId: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/google/callback")
 @app.get("/api/google/callback")
 async def google_auth_callback(code: str, state: str, db=Depends(get_db)):
     """Handles the OAuth callback, exchanges code for tokens, and saves them."""
