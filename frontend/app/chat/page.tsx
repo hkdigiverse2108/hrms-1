@@ -711,9 +711,24 @@ export default function ChatPage() {
                 const isTabInactive = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
                 if (isTabInactive && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
                   const senderName = selectedChat.name || lastMsg.sender || "Colleague";
-                  new Notification(`Message from ${senderName}`, {
-                    body: lastMsg.text || "Sent an attachment",
-                    icon: selectedChat.avatar || "/favicon.ico"
+                  const body = lastMsg.text || "Sent an attachment";
+                  const title = "HariKrushn DigiVerse LLP";
+                  const notificationBody = `${senderName}\n${body}`;
+                  
+                  let avatarUrl = "/favicon.ico";
+                  const avatarPath = selectedChat.avatar || selectedChat.profilePhoto || lastMsg.senderAvatar;
+                  if (avatarPath) {
+                    const resolved = getAvatarUrl(avatarPath);
+                    if (resolved) {
+                      avatarUrl = resolved.startsWith("/")
+                        ? `${window.location.origin}${resolved}`
+                        : resolved;
+                    }
+                  }
+
+                  new Notification(title, {
+                    body: notificationBody,
+                    icon: avatarUrl
                   });
                 }
               }
@@ -928,6 +943,7 @@ export default function ChatPage() {
     // Clear input fields immediately so the user gets instant feedback
     setMessage("");
     setReplyingTo(null);
+    stopTyping();
     const capturedFile = pendingFile;
     setPendingFile(null);
 
@@ -1350,6 +1366,27 @@ export default function ChatPage() {
   };
 
   // Typing logic
+  const stopTyping = () => {
+    if (!user || !selectedChat) return;
+    const chatId = selectedChat.id || selectedChat.employeeId;
+    if (!chatId) return;
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "typing",
+        chatId: chatId,
+        isTyping: false
+      }));
+    } else {
+      fetch(`${API_URL}/chat/typing?chat_id=${chatId}&user_id=${user.id}&is_typing=false`, { method: 'POST' });
+    }
+  };
+
   const handleTyping = () => {
     if (!user || !selectedChat) return;
     const chatId = selectedChat.id || selectedChat.employeeId;
@@ -1369,15 +1406,7 @@ export default function ChatPage() {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     
     typingTimeoutRef.current = setTimeout(() => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({
-          type: "typing",
-          chatId: chatId,
-          isTyping: false
-        }));
-      } else {
-        fetch(`${API_URL}/chat/typing?chat_id=${chatId}&user_id=${user.id}&is_typing=false`, { method: 'POST' });
-      }
+      stopTyping();
     }, 3000);
   };
 

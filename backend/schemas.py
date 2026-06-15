@@ -307,6 +307,12 @@ class AttendanceUpdate(BaseModel):
 class PunchRequest(BaseModel):
     employeeId: str
 
+class PunchInRequest(BaseModel):
+    punch_in_time: Optional[str] = None
+
+class PunchOutRequest(BaseModel):
+    punch_out_time: Optional[str] = None
+
 class LeaveRequestBase(BaseModel):
     employee_id: str
     employee_name: str
@@ -1260,6 +1266,7 @@ class ChatMessageBase(BaseModel):
     type: str = "personal" # personal, group
     isMe: Optional[bool] = None # Helper for frontend
     sender: Optional[str] = None # Resolved sender name
+    senderAvatar: Optional[str] = None # Resolved sender avatar photo path
     timestamp: Optional[str] = None
     tempId: Optional[str] = None
     isEdited: bool = False
@@ -1529,6 +1536,9 @@ class TimeRecoveryBase(BaseModel):
     reason: str
     status: str = 'pending' # pending, approved, rejected
     created_at: Optional[RobustDatetime] = None
+    recovery_type: Optional[str] = 'break' # 'break', 'meeting', 'work', etc.
+    start_time: Optional[str] = None # HH:MM:SS format
+    end_time: Optional[str] = None # HH:MM:SS format
 
 class TimeRecoveryCreate(TimeRecoveryBase):
     pass
@@ -1741,6 +1751,52 @@ class Schedule(ScheduleBase):
     id: str
     class Config:
         from_attributes = True
+
+
+# User Input Stats Schemas
+class UserInputStatsBase(BaseModel):
+    employeeId: str
+    employeeName: str
+    date: str  # YYYY-MM-DD
+    clicks: int
+    keystrokes: int
+    lastActive: Optional[RobustDatetime] = None
+    applications: Optional[dict] = {}
+    domains: Optional[dict] = {}
+
+class UserInputStatsCreate(BaseModel):
+    clicks: int
+    keystrokes: int
+    applications: Optional[dict] = {}
+    domains: Optional[dict] = {}
+
+class UserInputStats(UserInputStatsBase):
+    id: str
+
+
+# Registered PC & Restriction Schemas
+class RegisteredPCBase(BaseModel):
+    hostname: str
+    ipAddress: Optional[str] = None
+    os: Optional[str] = None
+    osVersion: Optional[str] = None
+    firstSeen: Optional[RobustDatetime] = None
+    lastSeen: Optional[RobustDatetime] = None
+    blockChrome: Optional[bool] = False
+    blockYoutube: Optional[bool] = False
+    blockApps: Optional[List[str]] = []
+    blockUrls: Optional[List[str]] = []
+    activeEmployee: Optional[str] = ""
+
+class RegisteredPCUpdate(BaseModel):
+    blockChrome: Optional[bool] = None
+    blockYoutube: Optional[bool] = None
+    blockApps: Optional[List[str]] = None
+    blockUrls: Optional[List[str]] = None
+
+class RegisteredPC(RegisteredPCBase):
+    id: str
+
 
 
 

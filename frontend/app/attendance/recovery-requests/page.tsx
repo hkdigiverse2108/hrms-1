@@ -100,6 +100,20 @@ export default function RecoveryRequestsPage() {
                       <Calendar className="w-3.5 h-3.5 text-brand-teal" />
                       <span className="font-semibold text-slate-600 tracking-tight">Date:</span> {dayjs(req.date).format('MMM D, YYYY')}
                     </div>
+                    {req.recovery_type && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <span className="font-semibold text-slate-600 tracking-tight">Type:</span> 
+                        <Badge variant="outline" className="capitalize ml-1 text-[10px] py-0 px-1 border-brand-teal text-brand-teal bg-brand-light/10">
+                          {req.recovery_type}
+                        </Badge>
+                      </div>
+                    )}
+                    {req.start_time && req.end_time && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="w-3.5 h-3.5 text-brand-teal" />
+                        <span className="font-semibold text-slate-600 tracking-tight">Time:</span> {dayjs(`2000-01-01 ${req.start_time}`).format('hh:mm A')} - {dayjs(`2000-01-01 ${req.end_time}`).format('hh:mm A')}
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Clock className="w-3.5 h-3.5 text-brand-teal" />
                       <span className="font-semibold text-slate-600 tracking-tight">Sent:</span> {dayjs(req.created_at).fromNow()}
