@@ -955,6 +955,7 @@ async def create_task_log(log: schemas.TaskLogBase, db=Depends(get_db)):
         doc["id"] = str(doc["_id"])
     return doc
 
+from pydantic import BaseModel
 class TaskLogUpdate(BaseModel):
     details: str
 
