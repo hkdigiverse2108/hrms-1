@@ -1649,7 +1649,7 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
             user_fixed["permissions"] = []
             
         # Generate JWT token
-        token = auth.create_access_token(data={"sub": user_id})
+        token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", "")})
         
         # The frontend expects {user: ...} right now, we'll wrap it in main.py
         # Actually main.py returns {"message": "...", "user": user}
@@ -1670,7 +1670,7 @@ async def get_attendance_status(db, employee_id: str):
     record = records[0] if records else None
     return fix_id(record)
 
-async def punch_in(db, employee_id: str):
+async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
     employee = await get_employee(db, employee_id)
     if not employee:
         return None
@@ -1679,7 +1679,12 @@ async def punch_in(db, employee_id: str):
     today_str = today.strftime("%Y-%m-%d")
     today_dt_naive = datetime.strptime(today_str, "%Y-%m-%d")
     today_dt_aware = today_dt_naive.replace(tzinfo=IST)
-    now_time_str = today.strftime("%H:%M:%S")
+    if punch_in_time:
+        now_time_str = punch_in_time
+        if len(now_time_str.split(':')) == 2:
+            now_time_str = f"{now_time_str}:00"
+    else:
+        now_time_str = today.strftime("%H:%M:%S")
 
     # Check if there is an approved half-day leave for today
     half_day_type = None
@@ -1777,7 +1782,7 @@ async def punch_in(db, employee_id: str):
                     start_time_obj = datetime.strptime(office_start.strip(), "%I:%M %p")
                     
         limit_time_obj = start_time_obj + timedelta(minutes=buffer_mins)
-        current_time_str = today.strftime("%H:%M")
+        current_time_str = now_time_str[:5]
         current_time_obj = datetime.strptime(current_time_str, "%H:%M")
         
         if current_time_obj > limit_time_obj:
@@ -1864,12 +1869,17 @@ async def punch_in(db, employee_id: str):
         attendance_data.pop("_id")
     return attendance_data
 
-async def punch_out(db, employee_id: str):
+async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
     status = await get_attendance_status(db, employee_id)
     if not status:
         return None
     
-    now = get_now()
+    if punch_out_time:
+        if len(punch_out_time.split(':')) == 2:
+            punch_out_time = f"{punch_out_time}:00"
+        now = parse_datetime(status['date'], punch_out_time)
+    else:
+        now = get_now()
     # Use lastPunchIn if available to calculate session duration, otherwise fallback to checkIn
     start_time_str = status.get("lastPunchIn") or status["checkIn"]
     check_in_time = parse_datetime(status['date'], start_time_str)
@@ -3290,6 +3300,7 @@ async def create_message(db, message: schemas.ChatMessageCreate):
             emp = await db.employees.find_one({"_id": ObjectId(message_dict["senderId"])})
             if emp:
                 message_dict["sender"] = emp.get("name", "Colleague")
+                message_dict["senderAvatar"] = emp.get("profilePhoto") or ""
         except Exception:
             pass
     return message_dict
@@ -3374,7 +3385,13 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
     try:
         employees_cursor = db.employees.find()
         employees_list = await employees_cursor.to_list(length=1000)
-        employee_cache = {str(emp["_id"]): emp.get("name", "Colleague") for emp in employees_list}
+        employee_cache = {
+            str(emp["_id"]): {
+                "name": emp.get("name", "Colleague"),
+                "photo": emp.get("profilePhoto") or ""
+            }
+            for emp in employees_list
+        }
     except Exception:
         employee_cache = {}
 
@@ -3383,7 +3400,9 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
         fixed = fix_id(row)
         if "senderId" in fixed and fixed["senderId"]:
             fixed["senderId"] = str(fixed["senderId"])
-            fixed["sender"] = employee_cache.get(fixed["senderId"], "Colleague")
+            emp_info = employee_cache.get(fixed["senderId"], {"name": "Colleague", "photo": ""})
+            fixed["sender"] = emp_info["name"]
+            fixed["senderAvatar"] = emp_info["photo"]
         if "receiverId" in fixed and fixed["receiverId"]:
             fixed["receiverId"] = str(fixed["receiverId"])
         if "groupId" in fixed and fixed["groupId"]:
@@ -4553,128 +4572,209 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
         try:
             import re
             from datetime import datetime
-            reason = doc.get('reason', '')
             
-            # Fuzzy search for attendance (find all records for the day)
-            search_query = {
-                '$or': [
-                    {'employeeId': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
-                    {'employee_id': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
-                    {'employeeName': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}},
-                    {'employee_name': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}}
-                ],
-                'date': doc['date']
-            }
-            print(f"DEBUG: Searching all attendance records for date: {doc['date']}")
-            cursor = db.attendance.find(search_query)
-            attn_list = await cursor.to_list(length=100)
+            recovery_type = doc.get('recovery_type')
+            start_time = doc.get('start_time')
+            end_time = doc.get('end_time')
             
-            if not attn_list:
-                print(f"ERROR: No attendance found for query.")
-                return fix_id(doc)
-
-            # Helper to recalculate and save
-            async def apply_updates(attn_record, updated_breaks):
-                if attn_record.get('checkIn') and attn_record.get('checkOut'):
-                    try:
-                        ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
-                        co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
-                        diff = co - ci
-                        h, r = divmod(diff.total_seconds(), 3600)
-                        m, _ = divmod(r, 60)
-                        attn_record['workHours'] = f"{int(h)}h {int(m)}m"
-                    except Exception: pass
+            if recovery_type and start_time and end_time:
+                # Modern type-based approval logic
+                search_query = {
+                    '$or': [
+                        {'employeeId': doc['employee_id']},
+                        {'employee_id': doc['employee_id']}
+                    ],
+                    'date': doc['date']
+                }
+                print(f"DEBUG: Searching attendance records for recovery: {doc['date']}")
+                cursor = db.attendance.find(search_query)
+                attn_list = await cursor.to_list(length=100)
                 
-                await db.attendance.update_one(
-                    {'_id': attn_record['_id']},
-                    {'$set': {
-                        'breaks': updated_breaks,
-                        'checkIn': attn_record.get('checkIn'),
-                        'workHours': attn_record.get('workHours'),
-                        'status': 'Logged'
-                    }}
-                )
-
-            # Case 1: Break Timing Correction
-            break_match = re.search(r'Break-In:\s*(\d{1,2}:\d{2}(?::\d{2})?),?\s*Actual Break-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
-            if break_match:
-                break_in, break_out = break_match.group(1), break_match.group(2)
-                # Ensure 2-digit hour for consistency
-                if len(break_in.split(':')[0]) == 1: break_in = '0' + break_in
-                if len(break_out.split(':')[0]) == 1: break_out = '0' + break_out
-
-                print(f"DEBUG: Processing break correction: {break_in} to {break_out}")
-
-                for attn in attn_list:
-                    updated = False
-                    breaks = attn.get('breaks', [])
+                if attn_list:
+                    attn = attn_list[0]
                     
-                    # Find the BEST matching break (closest startTime)
-                    best_break = None
-                    min_diff = 16 # Must be within 15 mins
-                    
-                    for b in breaks:
+                    # Compute duration
+                    ci_dt = datetime.strptime(start_time, "%H:%M:%S" if ":" in start_time else "%H:%M")
+                    co_dt = datetime.strptime(end_time, "%H:%M:%S" if ":" in end_time else "%H:%M")
+                    duration_seconds = (co_dt - ci_dt).total_seconds()
+                    if duration_seconds < 0:
+                        duration_seconds += 86400
+                        
+                    if recovery_type in ['meeting', 'work']:
+                        # Add a new session to punches
+                        punches = attn.get('punches') or []
+                        punches = [dict(p) for p in punches]
+                        
+                        fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
+                        fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
+                        
+                        punches.append({
+                            "punchIn": fmt_start,
+                            "punchOut": fmt_end,
+                            "type": recovery_type
+                        })
+                        
+                        # Increase accumulated seconds
+                        accumulated = attn.get("accumulatedWorkSeconds") or 0
+                        new_accumulated = accumulated + duration_seconds
+                        
+                        # Recalculate workHours string
+                        hours, remainder = divmod(int(new_accumulated), 3600)
+                        minutes, _ = divmod(remainder, 60)
+                        work_hours = f"{hours}h {minutes}m"
+                        
+                        await db.attendance.update_one(
+                            {'_id': attn['_id']},
+                            {'$set': {
+                                'punches': punches,
+                                'accumulatedWorkSeconds': new_accumulated,
+                                'workHours': work_hours,
+                                'status': 'Logged'
+                            }}
+                        )
+                    elif recovery_type == 'break':
+                        # Add a new break
+                        breaks = attn.get('breaks') or []
+                        breaks = [dict(b) for b in breaks]
+                        
+                        fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
+                        fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
+                        
+                        breaks.append({
+                            "startTime": fmt_start,
+                            "endTime": fmt_end,
+                            "duration": str(int(duration_seconds // 60))
+                        })
+                        
+                        await db.attendance.update_one(
+                            {'_id': attn['_id']},
+                            {'$set': {
+                                'breaks': breaks,
+                                'status': 'Logged'
+                            }}
+                        )
+            else:
+                reason = doc.get('reason', '')
+                
+                # Fuzzy search for attendance (find all records for the day)
+                search_query = {
+                    '$or': [
+                        {'employeeId': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
+                        {'employee_id': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
+                        {'employeeName': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}},
+                        {'employee_name': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}}
+                    ],
+                    'date': doc['date']
+                }
+                print(f"DEBUG: Searching all attendance records for date: {doc['date']}")
+                cursor = db.attendance.find(search_query)
+                attn_list = await cursor.to_list(length=100)
+                
+                if not attn_list:
+                    print(f"ERROR: No attendance found for query.")
+                    return fix_id(doc)
+    
+                # Helper to recalculate and save
+                async def apply_updates(attn_record, updated_breaks):
+                    if attn_record.get('checkIn') and attn_record.get('checkOut'):
                         try:
-                            db_h, db_m = map(int, b.get('startTime', '00:00').split(':')[:2])
-                            req_h, req_m = map(int, break_in.split(':')[:2])
-                            diff = abs((db_h * 60 + db_m) - (req_h * 60 + req_m))
-                            if diff < min_diff:
-                                min_diff = diff
-                                best_break = b
-                        except Exception: continue
-                    
-                    if best_break:
-                        print(f"DEBUG: Best match found in record {attn['_id']} with {min_diff} mins diff")
-                        best_break['endTime'] = break_out
-                        fmt = '%H:%M:%S' if len(break_in.split(':')) == 3 else '%H:%M'
-                        t1, t2 = datetime.strptime(break_in, fmt), datetime.strptime(break_out, fmt)
-                        best_break['duration'] = str(int((t2 - t1).total_seconds() / 60))
-                        updated = True
-                    else:
-                        # Check if this record's time range covers the requested break
-                        try:
-                            cin_h, cin_m = map(int, attn['checkIn'].split(':')[:2])
-                            cout_h, cout_m = map(int, attn.get('checkOut', '23:59:59').split(':')[:2])
-                            req_h, req_m = map(int, break_in.split(':')[:2])
-                            if (cin_h * 60 + cin_m) <= (req_h * 60 + req_m) <= (cout_h * 60 + cout_m):
-                                print(f"DEBUG: Adding NEW break to record {attn['_id']}")
-                                fmt = '%H:%M:%S' if len(break_in.split(':')) == 3 else '%H:%M'
-                                t1, t2 = datetime.strptime(break_in, fmt), datetime.strptime(break_out, fmt)
-                                breaks.append({
-                                    "startTime": break_in if len(break_in.split(':')) == 3 else f"{break_in}:00",
-                                    "endTime": break_out if len(break_out.split(':')) == 3 else f"{break_out}:00",
-                                    "duration": str(int((t2 - t1).total_seconds() / 60))
-                                })
-                                updated = True
+                            ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
+                            co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
+                            diff = co - ci
+                            h, r = divmod(diff.total_seconds(), 3600)
+                            m, _ = divmod(r, 60)
+                            attn_record['workHours'] = f"{int(h)}h {int(m)}m"
                         except Exception: pass
-
-                    if updated:
-                        await apply_updates(attn, breaks)
-
-            # Case 2: Late Arrival Correction
-            if "Late" in reason or "Punch-in" in reason:
-                time_match = re.search(r'Actual:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
-                if time_match:
-                    actual_time = time_match.group(1)
-                    if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
-                    print(f"DEBUG: Processing Late Arrival correction: {actual_time}")
-                    earliest_attn = min(attn_list, key=lambda x: x.get('checkIn', '23:59:59'))
-                    earliest_attn['checkIn'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
-                    await apply_updates(earliest_attn, earliest_attn.get('breaks', []))
-
-            # Case 3: Punch-Out Correction
-            if "Punch-Out" in reason:
-                time_match = re.search(r'Actual Punch-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
-                if time_match:
-                    actual_time = time_match.group(1)
-                    if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
-                    print(f"DEBUG: Processing Punch-Out correction: {actual_time}")
                     
-                    # Apply to the latest record of the day
-                    latest_attn = max(attn_list, key=lambda x: x.get('checkIn', '00:00:00'))
-                    latest_attn['checkOut'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
-                    await apply_updates(latest_attn, latest_attn.get('breaks', []))
-
+                    await db.attendance.update_one(
+                        {'_id': attn_record['_id']},
+                        {'$set': {
+                            'breaks': updated_breaks,
+                            'checkIn': attn_record.get('checkIn'),
+                            'workHours': attn_record.get('workHours'),
+                            'status': 'Logged'
+                        }}
+                    )
+    
+                # Case 1: Break Timing Correction
+                break_match = re.search(r'Break-In:\s*(\d{1,2}:\d{2}(?::\d{2})?),?\s*Actual Break-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
+                if break_match:
+                    break_in, break_out = break_match.group(1), break_match.group(2)
+                    # Ensure 2-digit hour for consistency
+                    if len(break_in.split(':')[0]) == 1: break_in = '0' + break_in
+                    if len(break_out.split(':')[0]) == 1: break_out = '0' + break_out
+    
+                    print(f"DEBUG: Processing break correction: {break_in} to {break_out}")
+    
+                    for attn in attn_list:
+                        updated = False
+                        breaks = attn.get('breaks', [])
+                        
+                        # Find the BEST matching break (closest startTime)
+                        best_break = None
+                        min_diff = 16 # Must be within 15 mins
+                        
+                        for b in breaks:
+                            try:
+                                db_h, db_m = map(int, b.get('startTime', '00:00').split(':')[:2])
+                                req_h, req_m = map(int, break_in.split(':')[:2])
+                                diff = abs((db_h * 60 + db_m) - (req_h * 60 + req_m))
+                                if diff < min_diff:
+                                    min_diff = diff
+                                    best_break = b
+                            except Exception: continue
+                        
+                        if best_break:
+                            print(f"DEBUG: Best match found in record {attn['_id']} with {min_diff} mins diff")
+                            best_break['endTime'] = break_out
+                            fmt = '%H:%M:%S' if len(break_in.split(':')) == 3 else '%H:%M'
+                            t1, t2 = datetime.strptime(break_in, fmt), datetime.strptime(break_out, fmt)
+                            best_break['duration'] = str(int((t2 - t1).total_seconds() / 60))
+                            updated = True
+                        else:
+                            # Check if this record's time range covers the requested break
+                            try:
+                                cin_h, cin_m = map(int, attn['checkIn'].split(':')[:2])
+                                cout_h, cout_m = map(int, attn.get('checkOut', '23:59:59').split(':')[:2])
+                                req_h, req_m = map(int, break_in.split(':')[:2])
+                                if (cin_h * 60 + cin_m) <= (req_h * 60 + req_m) <= (cout_h * 60 + cout_m):
+                                    print(f"DEBUG: Adding NEW break to record {attn['_id']}")
+                                    fmt = '%H:%M:%S' if len(break_in.split(':')) == 3 else '%H:%M'
+                                    t1, t2 = datetime.strptime(break_in, fmt), datetime.strptime(break_out, fmt)
+                                    breaks.append({
+                                        "startTime": break_in if len(break_in.split(':')) == 3 else f"{break_in}:00",
+                                        "endTime": break_out if len(break_out.split(':')) == 3 else f"{break_out}:00",
+                                        "duration": str(int((t2 - t1).total_seconds() / 60))
+                                    })
+                                    updated = True
+                            except Exception: pass
+    
+                        if updated:
+                            await apply_updates(attn, breaks)
+    
+                # Case 2: Late Arrival Correction
+                if "Late" in reason or "Punch-in" in reason:
+                    time_match = re.search(r'Actual:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
+                    if time_match:
+                        actual_time = time_match.group(1)
+                        if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
+                        print(f"DEBUG: Processing Late Arrival correction: {actual_time}")
+                        earliest_attn = min(attn_list, key=lambda x: x.get('checkIn', '23:59:59'))
+                        earliest_attn['checkIn'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
+                        await apply_updates(earliest_attn, earliest_attn.get('breaks', []))
+    
+                # Case 3: Punch-Out Correction
+                if "Punch-Out" in reason:
+                    time_match = re.search(r'Actual Punch-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
+                    if time_match:
+                        actual_time = time_match.group(1)
+                        if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
+                        print(f"DEBUG: Processing Punch-Out correction: {actual_time}")
+                        
+                        # Apply to the latest record of the day
+                        latest_attn = max(attn_list, key=lambda x: x.get('checkIn', '00:00:00'))
+                        latest_attn['checkOut'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
+                        await apply_updates(latest_attn, latest_attn.get('breaks', []))
         except Exception as e:
             print(f"Correction logic error: {e}")
     return fix_id(doc)
@@ -5191,6 +5291,111 @@ async def delete_schedule(db, schedule_id: str):
         return False
     res = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
     return res.deleted_count > 0
+# --- User Activity Input Tracking Operations ---
+async def track_user_activity(db, employee_id: str, clicks: int, keystrokes: int, applications: Optional[dict] = None, domains: Optional[dict] = None):
+    # Find the employee first to get their name
+    employee = None
+    if ObjectId.is_valid(employee_id):
+        employee = await db.employees.find_one({"_id": ObjectId(employee_id)})
+    if not employee:
+        employee = await db.employees.find_one({"_id": employee_id})
+    if not employee:
+        employee = await db.employees.find_one({"employeeId": employee_id})
 
+    employee_name = "Unknown Employee"
+    if employee:
+        employee_name = employee.get("name") or f"{employee.get('firstName', '')} {employee.get('lastName', '')}".strip() or "Unnamed"
+
+    today_str = get_now().strftime("%Y-%m-%d")
+
+    # Construct increments dynamically
+    inc_updates = {
+        "clicks": clicks,
+        "keystrokes": keystrokes
+    }
+
+    if applications:
+        for app, seconds in applications.items():
+            # Replace dots with underscores to prevent MongoDB path errors
+            safe_app = app.replace(".", "_")
+            inc_updates[f"applications.{safe_app}"] = seconds
+
+    if domains:
+        for domain, seconds in domains.items():
+            safe_domain = domain.replace(".", "_")
+            inc_updates[f"domains.{safe_domain}"] = seconds
+
+    # Upsert the daily record for this user
+    await db.user_input_stats.update_one(
+        {"employeeId": employee_id, "date": today_str},
+        {
+            "$set": {
+                "employeeName": employee_name,
+                "lastActive": get_now()
+            },
+            "$inc": inc_updates
+        },
+        upsert=True
+    )
+    
+    updated = await db.user_input_stats.find_one({"employeeId": employee_id, "date": today_str})
+    return fix_id(updated)
+
+async def get_user_activity_stats(db, employee_id: str = None):
+    query = {}
+    if employee_id:
+        query["employeeId"] = employee_id
+    cursor = db.user_input_stats.find(query)
+    stats = await cursor.to_list(length=10000)
+    return [fix_id(s) for s in stats]
+
+
+# --- Registered PC Device Operations ---
+async def register_pc_device(db, hostname: str, ip_address: str, os_name: str, os_version: str):
+    await db.registered_pcs.update_one(
+        {"hostname": hostname},
+        {
+            "$set": {
+                "ipAddress": ip_address,
+                "os": os_name,
+                "osVersion": os_version,
+                "lastSeen": get_now()
+            },
+            "$setOnInsert": {
+                "firstSeen": get_now(),
+                "blockChrome": False,
+                "blockYoutube": False,
+                "blockApps": [],
+                "blockUrls": []
+            }
+        },
+        upsert=True
+    )
+    return await db.registered_pcs.find_one({"hostname": hostname})
+
+async def get_registered_pcs(db):
+    cursor = db.registered_pcs.find({})
+    pcs = await cursor.to_list(length=1000)
+    return [fix_id(pc) for pc in pcs]
+
+async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool] = None, block_youtube: Optional[bool] = None, block_apps: Optional[List[str]] = None, block_urls: Optional[List[str]] = None):
+    update_fields = {}
+    if block_chrome is not None:
+        update_fields["blockChrome"] = block_chrome
+    if block_youtube is not None:
+        update_fields["blockYoutube"] = block_youtube
+    if block_apps is not None:
+        update_fields["blockApps"] = block_apps
+    if block_urls is not None:
+        update_fields["blockUrls"] = block_urls
+        
+    if update_fields:
+        await db.registered_pcs.update_one(
+            {"hostname": hostname},
+            {"$set": update_fields}
+        )
+    
+    updated = await db.registered_pcs.find_one({"hostname": hostname})
+    return fix_id(updated) if updated else None
 
 

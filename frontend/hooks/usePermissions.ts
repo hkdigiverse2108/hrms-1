@@ -38,9 +38,10 @@ export function usePermissions(moduleName?: string) {
   }
 
   const checkPermission = (module: string, action: 'canAdd' | 'canEdit' | 'canDelete' | 'canView') => {
-    if (!permissions) return false
     // Admin override
     if (user?.role?.toLowerCase() === 'admin' || user?.name === 'Admin Admin') return true
+    
+    if (!permissions) return false
     
     const modulePerm = permissions.find((p: any) => p.moduleName === module)
     return modulePerm ? modulePerm[action] : false

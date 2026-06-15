@@ -24,6 +24,7 @@ import {
   GraduationCap,
   Landmark,
   Menu as MenuIcon,
+  Activity,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -193,12 +194,16 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, workspaceChildren));
     }
     
-    if (user) {
+    if (isAdmin || checkPermission('remarks', 'canView')) {
       menuItems.push(getItem(<Link href="/remarks">Penalty</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />));
     }
 
     if (isAdmin || checkPermission('review', 'canView')) {
       menuItems.push(getItem(<Link href="/review">Remarks</Link>, "/review", <Star className="w-5 h-5" />));
+    }
+
+    if (isAdmin || checkPermission('activity-tracker', 'canView')) {
+      menuItems.push(getItem(<Link href="/activity-tracker">Activity Tracker</Link>, "/activity-tracker", <Activity className="w-5 h-5" />));
     }
 
     const invoiceChildren: MenuItem[] = [];
@@ -237,6 +242,10 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem(<Link href="/settings">Settings</Link>, "/settings", <Settings className="w-5 h-5" />));
     }
 
+    if (isAdmin) {
+      menuItems.push(getItem(<Link href="/restrictions">Restrictions</Link>, "/restrictions", <ShieldHalf className="w-5 h-5" />));
+    }
+
     return menuItems;
   }, [user, settings, pathname, permissions, checkPermission]);
 
@@ -257,6 +266,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/task")) return ["/task"];
     if (pathname.startsWith("/remarks")) return ["/remarks"];
     if (pathname.startsWith("/review")) return ["/review"];
+    if (pathname.startsWith("/activity-tracker")) return ["/activity-tracker"];
     if (pathname.startsWith("/invoice")) {
       if (pathname === "/invoice/create" && searchParams.get("type") === "Proforma") {
         return ["/invoice/create?type=Proforma"];
@@ -267,6 +277,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (pathname.startsWith("/chat")) return ["/chat"];
     if (pathname.startsWith("/recruitment")) return [pathname];
     if (pathname.startsWith("/payroll")) return [pathname];
+    if (pathname.startsWith("/restrictions")) return ["/restrictions"];
     return [];
   };
 

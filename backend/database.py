@@ -6,20 +6,36 @@ from datetime import datetime
 import pytz
 from bson import ObjectId
 
-# Get the absolute path to the project root (one level up from 'backend' folder)
-BASE_DIR = Path(__file__).resolve().parent.parent
-
+# Get the absolute path to the project root or resources directory
+import sys
 import platform
 
-# Load environment variables from root directory
 env_files = [".env.server", ".env"]
 if platform.system() == "Darwin":
     env_files = [".env", ".env.server"]
 
-for env_file in env_files:
-    env_path = BASE_DIR / env_file
-    if env_path.exists():
-        load_dotenv(dotenv_path=str(env_path))
+# Detect if running as a packaged PyInstaller app
+if getattr(sys, 'frozen', False):
+    exe_dir = Path(sys.executable).resolve().parent
+    possible_dirs = [
+        exe_dir,
+        exe_dir.parent / 'app',
+        exe_dir.parent.parent,
+        exe_dir.parent
+    ]
+else:
+    base_dir = Path(__file__).resolve().parent.parent
+    possible_dirs = [base_dir]
+
+env_loaded = False
+for d in possible_dirs:
+    for env_file in env_files:
+        env_path = d / env_file
+        if env_path.exists():
+            load_dotenv(dotenv_path=str(env_path), override=True)
+            env_loaded = True
+            break
+    if env_loaded:
         break
 
 MONGO_URL = os.getenv("MONGO_URL")

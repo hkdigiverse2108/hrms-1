@@ -1,6 +1,9 @@
-# Environment files
+# Environment files — NEVER commit these (contain DB credentials, secrets)
 .env
-
+.env.server
+.env.local
+.env.production
+.env.server.bak
 # Python
 __pycache__/
 *.py[cod]
@@ -23,9 +26,17 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# PyInstaller — auto-generated, machine-specific, do NOT commit
+*.spec
+
+# Backend uploads (user files)
 backend/uploads/*
 !backend/uploads/.gitkeep
-venv
+
+# Virtual environments
+venv/
+.venv/
 
 # Node
 node_modules/
@@ -35,10 +46,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+package-lock.json
 
-# Databases
+# Databases (local SQLite, etc.)
 *.db
 *.sqlite3
+hrms.db
 
 # OS files
 .DS_Store
@@ -48,23 +61,32 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Virtual Environment
-.venv/
-
-# Logs and runtime
+# Logs and runtime files
 *.log
 app.pid
-scratch/
-uploads/
 backend_out.log
 backend_err.log
 frontend_err.log
-package-lock.json
-.env.server
-frontend/next-env.d.ts
-
-# Cleanup artifacts
-test_script*.py
 backend_errors.log
 frontend_debug.log
-hrms.db
+watchdog.log
+hrms-desktop.log
+
+# Scratch/temporary/test scripts — local debug only, not for production
+scratch/
+uploads/
+debug_import.py
+test_msgs.py
+fix_admins.py
+list_routes.py
+migrate_attendance_dates.py
+update_schemas.py
+update_schemas_interview.py
+seed_penalties.py
+seed_v2.py
+
+# Frontend generated
+frontend/next-env.d.ts
+
+# Root level temp files
+test_script*.py
