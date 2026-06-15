@@ -163,6 +163,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         console.log("[ChatContext] WebSocket connected ✅");
         setWs(websocket);
         reconnectAttempts = 0;
+
+        // Start heartbeat ping interval to keep connection alive through proxies (Nginx/Cloudflare)
+        const pingInterval = setInterval(() => {
+          if (websocket.readyState === WebSocket.OPEN) {
+            websocket.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 30000);
+        (websocket as any).pingInterval = pingInterval;
       };
 
       websocket.onclose = (event) => {
@@ -170,15 +178,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         console.log("[ChatContext] WebSocket closed ❌ code:", event.code, "reason:", event.reason);
         setWs(null);
         wsRef.current = null;
-        if (reconnectAttempts < 10) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 3000);
-          reconnectTimeout = setTimeout(() => {
-            if (active) {
-              reconnectAttempts++;
-              connectWebSocket();
-            }
-          }, delay);
+        
+        if ((websocket as any).pingInterval) {
+          clearInterval((websocket as any).pingInterval);
         }
+
+        // Reconnect indefinitely with an exponential backoff capped at 30 seconds
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+        reconnectTimeout = setTimeout(() => {
+          if (active) {
+            reconnectAttempts++;
+            connectWebSocket();
+          }
+        }, delay);
       };
 
       websocket.onerror = (err) => {
@@ -304,7 +316,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                        }
 
                         // Desktop Notification
-                        if (typeof window !== "undefined" && (!isTabActive || !isChatPage)) {
+                        if (typeof window !== "undefined" && !isUserViewingThisChat) {
                           const senderName = data.sender || "Colleague";
                           const body = data.text || "Sent an attachment";
                           const title = "HariKrushn DigiVerse LLP";

@@ -5567,26 +5567,38 @@ async def get_user_activity_stats(db, employee_id: str = None):
 
 # --- Registered PC Device Operations ---
 async def register_pc_device(db, hostname: str, ip_address: str, os_name: str, os_version: str):
-    await db.registered_pcs.update_one(
-        {"hostname": hostname},
-        {
-            "$set": {
-                "ipAddress": ip_address,
-                "os": os_name,
-                "osVersion": os_version,
-                "lastSeen": get_now()
-            },
-            "$setOnInsert": {
-                "firstSeen": get_now(),
-                "blockChrome": False,
-                "blockYoutube": False,
-                "blockApps": [],
-                "blockUrls": []
-            }
-        },
-        upsert=True
+    import re
+    existing = await db.registered_pcs.find_one(
+        {"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}}
     )
-    return await db.registered_pcs.find_one({"hostname": hostname})
+    if existing:
+        await db.registered_pcs.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {
+                    "ipAddress": ip_address,
+                    "os": os_name,
+                    "osVersion": os_version,
+                    "lastSeen": get_now()
+                }
+            }
+        )
+        return await db.registered_pcs.find_one({"_id": existing["_id"]})
+    else:
+        new_pc = {
+            "hostname": hostname,
+            "ipAddress": ip_address,
+            "os": os_name,
+            "osVersion": os_version,
+            "lastSeen": get_now(),
+            "firstSeen": get_now(),
+            "blockChrome": False,
+            "blockYoutube": False,
+            "blockApps": [],
+            "blockUrls": []
+        }
+        await db.registered_pcs.insert_one(new_pc)
+        return new_pc
 
 async def get_registered_pcs(db):
     cursor = db.registered_pcs.find({})
@@ -5594,6 +5606,7 @@ async def get_registered_pcs(db):
     return [fix_id(pc) for pc in pcs]
 
 async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool] = None, block_youtube: Optional[bool] = None, block_apps: Optional[List[str]] = None, block_urls: Optional[List[str]] = None):
+    import re
     update_fields = {}
     if block_chrome is not None:
         update_fields["blockChrome"] = block_chrome
@@ -5606,11 +5619,9 @@ async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool]
         
     if update_fields:
         await db.registered_pcs.update_one(
-            {"hostname": hostname},
+            {"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}},
             {"$set": update_fields}
         )
     
-    updated = await db.registered_pcs.find_one({"hostname": hostname})
+    updated = await db.registered_pcs.find_one({"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}})
     return fix_id(updated) if updated else None
-
-
