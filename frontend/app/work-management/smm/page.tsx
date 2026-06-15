@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { 
   Users,
@@ -30,7 +31,7 @@ import { useConfirm } from "@/context/ConfirmContext";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { WhatsAppSmmDialog } from "@/components/hrms/WhatsAppSmmDialog";
 import { WhatsAppIcon } from "@/components/hrms/WhatsAppIcon";
-import { useRouter } from "next/navigation";
+import { SmmMeetingDialog } from "@/components/hrms/SmmMeetingDialog";
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -78,6 +79,7 @@ function EditableCell({ client, field, type = "text", options = [], value, rende
 }
 
 export default function CreativeClientsPage() {
+  const router = useRouter();
   const { confirm } = useConfirm();
   const { user } = useUser();
   const [clients, setClients] = useState<any[]>([]);
@@ -93,7 +95,6 @@ export default function CreativeClientsPage() {
   const [activeClient, setActiveClient] = useState<any>(null);
   const [waDialogOpen, setWaDialogOpen] = useState(false);
   const [waClient, setWaClient] = useState<any>(null);
-  const router = useRouter();
 
   const fetchLogs = async (client: any) => {
     setIsLoadingLogs(true);
@@ -315,6 +316,13 @@ export default function CreativeClientsPage() {
                     >
                       <WhatsAppIcon className="w-4 h-4" />
                     </Button>
+                    <SmmMeetingDialog 
+                      client={client} 
+                      onUpdate={fetchClients} 
+                      userId={user?.userId} 
+                      userName={user?.name} 
+                    />
+
                     <Button 
                       variant="ghost" 
                       size="icon" 

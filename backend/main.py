@@ -783,6 +783,18 @@ async def update_client(client_id: str, client_update: schemas.ClientUpdate, db=
     print("DEBUG: update_client incoming payload:", client_update.dict(exclude_unset=True))
     return await crud.update_client(db, client_id, client_update)
 
+@app.post("/clients/{client_id}/meetings", response_model=schemas.Client)
+async def add_client_meeting(client_id: str, meeting: schemas.Meeting, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.add_client_meeting(db, client_id, meeting, performedBy=performedBy, userName=userName)
+
+@app.put("/clients/{client_id}/meetings/{meeting_idx}", response_model=schemas.Client)
+async def update_client_meeting(client_id: str, meeting_idx: int, meeting: schemas.Meeting, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.update_client_meeting(db, client_id, meeting_idx, meeting, performedBy=performedBy, userName=userName)
+
+@app.delete("/clients/{client_id}/meetings/{meeting_idx}", response_model=schemas.Client)
+async def delete_client_meeting(client_id: str, meeting_idx: int, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.delete_client_meeting(db, client_id, meeting_idx, performedBy=performedBy, userName=userName)
+
 @app.delete("/clients/{client_id}")
 async def delete_client(client_id: str, db=Depends(get_db)):
     success = await crud.delete_client(db, client_id)
@@ -1680,6 +1692,29 @@ async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSett
     return await crud.upsert_content_calendar_settings(
         db, settings.clientId, settings.monthYear, settings.model_dump()
     )
+
+# Dynamic Feedback Forms
+
+@app.post("/forms", response_model=schemas.FeedbackForm)
+async def create_feedback_form(form: schemas.FeedbackFormCreate, createdBy: Optional[str] = None, db=Depends(get_db)):
+    return await crud.create_feedback_form(db, form, createdBy=createdBy or "Unknown")
+
+@app.get("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def get_feedback_form(form_id: str, db=Depends(get_db)):
+    form = await crud.get_feedback_form(db, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return form
+
+@app.get("/forms/client/{client_id}", response_model=List[schemas.FeedbackForm])
+async def get_client_feedback_forms(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_feedback_forms(db, client_id)
+
+@app.post("/forms/{form_id}/responses", response_model=schemas.FeedbackResponse)
+async def submit_feedback_response(form_id: str, response: schemas.FeedbackResponseCreate, db=Depends(get_db)):
+    if response.formId != form_id:
+        raise HTTPException(status_code=400, detail="Form ID mismatch")
+    return await crud.create_feedback_response(db, response)
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))

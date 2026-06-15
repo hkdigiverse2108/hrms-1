@@ -739,6 +739,49 @@ class PenaltyTypeUpdate(BaseModel):
 class PenaltyType(PenaltyTypeBase):
     id: str
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    timestamp: str
+
+class ChatContext(BaseModel):
+    taskId: Optional[str] = None
+    projectId: Optional[str] = None
+    taskTitle: Optional[str] = None
+
+class ChatRequest(BaseModel):
+    message: str
+    context: Optional[ChatContext] = None
+    history: List[ChatMessage] = []
+
+# Dynamic Feedback Forms
+class FeedbackFormField(BaseModel):
+    id: str
+    type: str # text, textarea, rating, radio, checkbox
+    label: str
+    required: bool = False
+    options: Optional[List[str]] = None
+
+class FeedbackFormCreate(BaseModel):
+    clientId: str
+    title: str
+    description: Optional[str] = None
+    fields: List[FeedbackFormField] = []
+
+class FeedbackForm(FeedbackFormCreate):
+    id: str
+    createdAt: str
+    createdBy: Optional[str] = None
+
+class FeedbackResponseCreate(BaseModel):
+    formId: str
+    clientId: str
+    answers: Dict[str, Any]
+
+class FeedbackResponse(FeedbackResponseCreate):
+    id: str
+    submittedAt: str
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -819,6 +862,7 @@ class ClientBase(BaseModel):
     interviewerName: Optional[str] = None
     interviewNotes: Optional[str] = None
     createdDate: Optional[RobustDate] = None
+    meetings: Optional[List[dict]] = []
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -848,6 +892,7 @@ class ClientUpdate(BaseModel):
     dailyBudget: Optional[float] = None
     remarks: Optional[str] = None
     responsibility: Optional[str] = None
+    meetings: Optional[List[dict]] = []
     dailyFollowup: Optional[str] = None
     interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
@@ -869,6 +914,7 @@ class ProjectBase(BaseModel):
     description: Optional[str] = None
     clientId: str
     clientName: Optional[str] = None
+    meetings: Optional[List[dict]] = []
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
@@ -1040,6 +1086,11 @@ class TaskLog(TaskLogBase):
 # Sales Lead Schemas
 class FollowUp(BaseModel):
     date: RobustDate
+    note: str
+    performedBy: Optional[str] = None
+
+class Meeting(BaseModel):
+    date: str
     note: str
     performedBy: Optional[str] = None
 

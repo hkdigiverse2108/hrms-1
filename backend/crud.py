@@ -2373,6 +2373,49 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
     doc = await db.clients.find_one({"_id": ObjectId(client_id)})
     return fix_id(doc)
 
+async def add_client_meeting(db, client_id: str, meeting: schemas.Meeting, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    meeting_dict = meeting.dict()
+    if not meeting_dict.get("date"):
+        meeting_dict["date"] = get_now().strftime("%Y-%m-%d %H:%M")
+        
+    await db.clients.update_one(
+        {"_id": ObjectId(client_id)},
+        {"$push": {"meetings": meeting_dict}}
+    )
+    
+    # Log activity
+    await log_activity(db, "Client Meeting Added", performedBy, userName, f"Added meeting: {meeting_dict.get('note', 'No notes provided')}", clientId=client_id)
+    
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
+async def update_client_meeting(db, client_id: str, meeting_idx: int, meeting: schemas.Meeting, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    meeting_dict = meeting.dict()
+    
+    await db.clients.update_one(
+        {"_id": ObjectId(client_id)},
+        {"$set": {f"meetings.{meeting_idx}": meeting_dict}}
+    )
+    
+    # Log activity
+    await log_activity(db, "Client Meeting Updated", performedBy, userName, f"Updated meeting at index {meeting_idx}: {meeting_dict.get('note', 'No notes provided')}", clientId=client_id)
+    
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
+async def delete_client_meeting(db, client_id: str, meeting_idx: int, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    client = await db.clients.find_one({"_id": ObjectId(client_id)})
+    if client and "meetings" in client and len(client["meetings"]) > meeting_idx:
+        meetings = client["meetings"]
+        deleted_meeting = meetings.pop(meeting_idx)
+        await db.clients.update_one(
+            {"_id": ObjectId(client_id)},
+            {"$set": {"meetings": meetings}}
+        )
+        await log_activity(db, "Client Meeting Deleted", performedBy, userName, f"Deleted meeting: {deleted_meeting.get('note', 'No notes provided')}", clientId=client_id)
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
 async def delete_client(db, client_id: str):
     client = await db.clients.find_one({"_id": ObjectId(client_id)})
     
@@ -4775,10 +4818,38 @@ async def get_content_calendar_settings(db, client_id: str, month_year: str):
     return None
 
 async def upsert_content_calendar_settings(db, client_id: str, month_year: str, update_data: dict):
-    result = await db.content_calendar_settings.find_one_and_update(
+    if "_id" in update_data:
+        del update_data["_id"]
+    await db.content_calendar_settings.update_one(
         {"clientId": client_id, "monthYear": month_year},
         {"$set": update_data},
-        upsert=True,
-        return_document=True
+        upsert=True
     )
-    return fix_id(result)
+    return await get_content_calendar_settings(db, client_id, month_year)
+
+# Dynamic Feedback Forms
+
+async def create_feedback_form(db, form: schemas.FeedbackFormCreate, createdBy: str = "Unknown"):
+    form_dict = form.dict()
+    form_dict["createdAt"] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+    form_dict["createdBy"] = createdBy
+    res = await db.feedback_forms.insert_one(form_dict)
+    doc = await db.feedback_forms.find_one({"_id": res.inserted_id})
+    return fix_id(doc)
+
+async def get_feedback_form(db, form_id: str):
+    if not ObjectId.is_valid(form_id):
+        return None
+    doc = await db.feedback_forms.find_one({"_id": ObjectId(form_id)})
+    return fix_id(doc) if doc else None
+
+async def get_client_feedback_forms(db, client_id: str):
+    cursor = db.feedback_forms.find({"clientId": client_id}).sort("createdAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def create_feedback_response(db, response: schemas.FeedbackResponseCreate):
+    resp_dict = response.dict()
+    resp_dict["submittedAt"] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+    res = await db.feedback_responses.insert_one(resp_dict)
+    doc = await db.feedback_responses.find_one({"_id": res.inserted_id})
+    return fix_id(doc)
