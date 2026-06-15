@@ -131,7 +131,8 @@ export default function SalesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [pipelineDateFilter, setPipelineDateFilter] = useState("all");
+  const [pipelineDateFilter, setPipelineDateFilter] = useState("today");
+  const [salesEmployeeFilter, setSalesEmployeeFilter] = useState("all");
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [inlineEditing, setInlineEditing] = useState<{ id: string, field: string } | null>(null);
@@ -667,9 +668,18 @@ export default function SalesPage() {
     }
   };
 
+  const filteredByEmployeeLeads = leads.filter((l: any) => {
+    if (salesEmployeeFilter === "all") return true;
+    const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+    return assignedList.some((name: any) => {
+      const nameStr = typeof name === 'string' ? name : String(name || "Unassigned");
+      return nameStr.toLowerCase() === salesEmployeeFilter.toLowerCase();
+    });
+  });
+
   const visibleLeads = isAdmin 
-    ? leads 
-    : leads.filter((l: any) => {
+    ? filteredByEmployeeLeads 
+    : filteredByEmployeeLeads.filter((l: any) => {
         const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
         const isAssigned = assignedList.some((name: any) => {
           const nameStr = typeof name === 'string' ? name : String(name || "Unassigned");
@@ -687,13 +697,13 @@ export default function SalesPage() {
   });
 
   const activeLeads = visibleLeads.filter(l => {
-    const isNotWon = l.status !== "Client Won";
+    const isActive = l.status !== "Client Won" && l.status !== "Client Lost";
     if (pipelineDateFilter === "today") {
       const today = dayjs().format('YYYY-MM-DD');
       const leadDate = dayjs(l.date).format('YYYY-MM-DD');
-      return isNotWon && leadDate === today;
+      return isActive && leadDate === today;
     }
-    return isNotWon;
+    return isActive;
   });
 
   const convertedLeads = visibleLeads.filter(l => {
@@ -707,13 +717,36 @@ export default function SalesPage() {
   });
 
   const hotLeads = visibleLeads.filter(l => {
-    const isHot = l.isHot === true;
+    const isActiveHot = l.isHot === true && l.status !== "Client Won" && l.status !== "Client Lost";
     if (pipelineDateFilter === "today") {
       const today = dayjs().format('YYYY-MM-DD');
       const leadDate = dayjs(l.date).format('YYYY-MM-DD');
-      return isHot && leadDate === today;
+      return isActiveHot && leadDate === today;
     }
-    return isHot;
+    return isActiveHot;
+  });
+
+  const overdueUpcomingLeads = visibleLeads.filter((l: any) => {
+    const isNotWon = l.status !== "Client Won";
+    if (!isNotWon) return false;
+    
+    const hasFollowUp = !!l.nextFollowUpDate;
+    const hasHoldResume = !!l.holdResumeDate && l.status === "On Hold";
+    
+    if (!hasFollowUp && !hasHoldResume) return false;
+
+    if (pipelineDateFilter === "today") {
+      const today = dayjs().startOf('day');
+      const followUpDate = l.nextFollowUpDate ? dayjs(l.nextFollowUpDate).startOf('day') : null;
+      const resumeDate = l.holdResumeDate && l.status === "On Hold" ? dayjs(l.holdResumeDate).startOf('day') : null;
+      
+      const isFollowUpDue = followUpDate && (followUpDate.isSame(today) || followUpDate.isBefore(today));
+      const isResumeDue = resumeDate && (resumeDate.isSame(today) || resumeDate.isBefore(today));
+      
+      return isFollowUpDue || isResumeDue;
+    }
+    
+    return true;
   });
 
   const totalRevenue = convertedLeads.reduce((acc, l) => {
@@ -1408,26 +1441,30 @@ export default function SalesPage() {
         ))}
       </div>
 
-      <Tabs defaultValue="active" className="w-full">
-        <div className="flex items-center justify-between mb-4 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
-          <TabsList className="bg-slate-100/50 p-1">
-            <TabsTrigger value="active" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
+      <Tabs defaultValue="overdue" className="w-full">
+        <div className="flex flex-row items-center justify-between gap-4 mb-4 bg-white p-2 rounded-xl border border-slate-100 shadow-sm overflow-x-auto">
+          <TabsList className="bg-slate-100/50 p-1 flex-nowrap h-auto justify-start shrink-0">
+            <TabsTrigger value="overdue" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold flex items-center gap-1.5 whitespace-nowrap">
+              <Clock className="w-4 h-4 text-rose-500" />
+              Follow-up due ({overdueUpcomingLeads.length})
+            </TabsTrigger>
+            <TabsTrigger value="active" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold whitespace-nowrap">
               Active Pipeline ({activeLeads.length})
             </TabsTrigger>
-            <TabsTrigger value="hot" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold flex items-center gap-1.5">
+            <TabsTrigger value="hot" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold flex items-center gap-1.5 whitespace-nowrap">
               <Flame className="w-4 h-4 text-orange-500 fill-orange-500" />
               Hot Leads ({hotLeads.length})
             </TabsTrigger>
-            <TabsTrigger value="converted" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
-              Converted Successes ({convertedLeads.length})
+            <TabsTrigger value="converted" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold whitespace-nowrap">
+              Converted Leads ({convertedLeads.length})
             </TabsTrigger>
-            <TabsTrigger value="targets" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
-              Monthly Targets
+            <TabsTrigger value="targets" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold whitespace-nowrap">
+              Targets
             </TabsTrigger>
             {isAdmin && (
               <button 
                 onClick={() => router.push('/work-management/sales/analytics')}
-                className="ml-1 text-foreground px-6 py-2 text-sm font-bold flex items-center gap-2 rounded-sm transition-all"
+                className="ml-1 text-foreground px-4 py-2 text-sm font-bold flex items-center gap-2 rounded-sm transition-all whitespace-nowrap"
               >
                 <TrendingUp className="w-4 h-4" />
                 Sales Analytics
@@ -1435,16 +1472,30 @@ export default function SalesPage() {
             )}
           </TabsList>
 
-          <div className="flex items-center gap-2 mr-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input 
-                placeholder="Search..." 
-                className="pl-9 h-9 w-[180px] border-slate-200 focus-visible:ring-brand-teal"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-2 self-start xl:self-auto w-full xl:w-auto justify-start xl:justify-end shrink-0">
+            {isAdmin && (
+              <Select value={salesEmployeeFilter} onValueChange={setSalesEmployeeFilter}>
+                <SelectTrigger className="w-[150px] h-9 border-slate-200">
+                  <SelectValue placeholder="Employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Employees</SelectItem>
+                  {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => (
+                    <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Select value={pipelineDateFilter} onValueChange={setPipelineDateFilter}>
+              <SelectTrigger className="w-[120px] h-9 border-slate-200">
+                <SelectValue placeholder="Date Filter" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today's Leads</SelectItem>
+                <SelectItem value="all">All Leads</SelectItem>
+              </SelectContent>
+            </Select>
+
           </div>
         </div>
 
@@ -1455,6 +1506,14 @@ export default function SalesPage() {
           </div>
         ) : (
           <>
+            <TabsContent value="overdue">
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardContent className="p-0">
+                  <LeadTable data={overdueUpcomingLeads} type="active" />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="active">
               <Card className="border-none shadow-sm bg-white overflow-hidden">
                 <CardContent className="p-0">
