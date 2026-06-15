@@ -194,7 +194,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem("Workspace", "workspace", <MonitorPlay className="w-5 h-5" />, workspaceChildren));
     }
     
-    if (user) {
+    if (isAdmin || checkPermission('remarks', 'canView')) {
       menuItems.push(getItem(<Link href="/remarks">Penalty</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />));
     }
 
@@ -202,7 +202,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       menuItems.push(getItem(<Link href="/review">Remarks</Link>, "/review", <Star className="w-5 h-5" />));
     }
 
-    if (user) {
+    if (isAdmin || checkPermission('activity-tracker', 'canView')) {
       menuItems.push(getItem(<Link href="/activity-tracker">Activity Tracker</Link>, "/activity-tracker", <Activity className="w-5 h-5" />));
     }
 

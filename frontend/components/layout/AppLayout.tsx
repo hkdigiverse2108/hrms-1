@@ -58,8 +58,10 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/review")) return "review";
   if (pathname.startsWith("/invoice")) return "invoice";
   if (pathname.startsWith("/chat")) return "chat";
+  if (pathname.startsWith("/task")) return "personal-tasks";
+  if (pathname.startsWith("/schedule")) return "schedule";
   if (pathname.startsWith("/settings")) return "settings";
-  if (pathname.startsWith("/activity-tracker")) return null;
+  if (pathname.startsWith("/activity-tracker")) return "activity-tracker";
   
   return null;
 }
