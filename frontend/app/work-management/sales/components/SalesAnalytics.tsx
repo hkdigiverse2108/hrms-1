@@ -107,18 +107,22 @@ export function SalesAnalytics() {
       let matchesDate = true;
       if (dateRange.start && dateRange.end) {
         const leadDate = dayjs(lead.date);
-        matchesDate = leadDate.isBetween(dateRange.start, dateRange.end, 'day', '[]');
+        matchesDate = leadDate.isAfter(dayjs(dateRange.start).subtract(1, 'day'), 'day') && 
+                      leadDate.isBefore(dayjs(dateRange.end).add(1, 'day'), 'day');
       } else if (dateRange.start) {
-        matchesDate = dayjs(lead.date).isAfter(dayjs(dateRange.start).subtract(1, 'day'));
+        matchesDate = dayjs(lead.date).isAfter(dayjs(dateRange.start).subtract(1, 'day'), 'day');
       } else if (dateRange.end) {
-        matchesDate = dayjs(lead.date).isBefore(dayjs(dateRange.end).add(1, 'day'));
+        matchesDate = dayjs(lead.date).isBefore(dayjs(dateRange.end).add(1, 'day'), 'day');
       }
 
       // Employee Filter
       let matchesEmp = true;
       if (selectedEmployee !== 'all') {
         const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
-        matchesEmp = assignedList.some(name => name.toLowerCase() === selectedEmployee.toLowerCase());
+        matchesEmp = assignedList.some(emp => {
+          const empName = typeof emp === 'string' ? emp : (emp?.name || emp?.employeeName || "");
+          return empName.trim().toLowerCase().replace(/\s+/g, ' ') === selectedEmployee.trim().toLowerCase().replace(/\s+/g, ' ');
+        });
       }
 
       // Source Filter
@@ -229,7 +233,7 @@ export function SalesAnalytics() {
     if (maxRev === 0 && employeeData.length > 0) topPerformer = "No Revenue Yet";
 
     return { totalLeads, wonLeads: wonLeads.length, totalRevenue, winRate, employeeData, totalTargetValue, activePipeline, topPerformer };
-  }, [filteredLeads, employees, targets]);
+  }, [filteredLeads, employees, targets, dateRange, selectedEmployee]);
 
   // Apply Sort
   const displayData = useMemo(() => {
@@ -522,23 +526,49 @@ export function SalesAnalytics() {
                     <p className="font-bold text-slate-700">{emp.name}</p>
                   </td>
                   <td className="px-6 py-3 text-center text-xs font-medium text-slate-500">{emp.duration}</td>
-                  <td className="px-6 py-3 text-center text-slate-600">{emp.assigned}</td>
-                  <td className="px-6 py-3 text-center text-slate-600">{emp.active}</td>
+                  <td className="px-6 py-3 text-center text-slate-600">{emp.assigned || '-'}</td>
+                  <td className="px-6 py-3 text-center text-slate-600">{emp.active || '-'}</td>
                   <td className="px-6 py-3 text-center">
-                    <span className={emp.hot > 0 ? "text-orange-600 font-medium" : "text-slate-400"}>{emp.hot}</span>
+                    <span className={emp.hot > 0 ? "text-orange-600 font-medium" : "text-slate-400"}>{emp.hot || '-'}</span>
                   </td>
                   <td className="px-6 py-3 text-center">
-                    <span className="bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-md text-xs font-bold">{emp.won}</span>
+                    {emp.won > 0 ? (
+                      <span className="bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-md text-xs font-bold">{emp.won}</span>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
                   </td>
                   <td className="px-6 py-3 text-center">
-                    <span className={emp.lost > 0 ? "text-red-500 font-medium" : "text-slate-400"}>{emp.lost}</span>
+                    <span className={emp.lost > 0 ? "text-red-500 font-medium" : "text-slate-400"}>{emp.lost || '-'}</span>
                   </td>
-                  <td className="px-6 py-3 text-right text-slate-600 font-medium">{emp.winRate.toFixed(1)}%</td>
-                  <td className="px-6 py-3 text-right font-medium text-slate-700">₹{emp.target.toLocaleString()}</td>
-                  <td className="px-6 py-3 text-right font-bold text-emerald-600">₹{emp.revenue.toLocaleString()}</td>
-                  <td className="px-6 py-3 text-right font-bold text-indigo-600 bg-indigo-50/20 border-l border-slate-50">₹{emp.incentivesEarned.toLocaleString()}</td>
+                  <td className="px-6 py-3 text-right text-slate-600 font-medium">{emp.assigned > 0 ? emp.winRate.toFixed(1) + '%' : '-'}</td>
+                  <td className="px-6 py-3 text-right font-medium text-slate-700">{emp.target > 0 ? `₹${emp.target.toLocaleString()}` : '-'}</td>
+                  <td className="px-6 py-3 text-right font-bold text-emerald-600">{emp.revenue > 0 ? `₹${emp.revenue.toLocaleString()}` : '-'}</td>
+                  <td className="px-6 py-3 text-right font-bold text-indigo-600 bg-indigo-50/20 border-l border-slate-50">{emp.incentivesEarned > 0 ? `₹${emp.incentivesEarned.toLocaleString()}` : '-'}</td>
                 </tr>
               ))}
+              {displayData.length > 0 && (
+                <tr className="bg-slate-100/80 font-bold text-slate-800 border-t-2 border-slate-200 shadow-sm">
+                  <td colSpan={2} className="px-6 py-4 text-right uppercase tracking-wider text-xs">
+                    Grand Total
+                  </td>
+                  <td className="px-6 py-4 text-center text-slate-700">{displayData.reduce((sum, d) => sum + d.assigned, 0)}</td>
+                  <td className="px-6 py-4 text-center text-slate-700">{displayData.reduce((sum, d) => sum + d.active, 0)}</td>
+                  <td className="px-6 py-4 text-center text-orange-600">{displayData.reduce((sum, d) => sum + d.hot, 0)}</td>
+                  <td className="px-6 py-4 text-center text-emerald-600">{displayData.reduce((sum, d) => sum + d.won, 0)}</td>
+                  <td className="px-6 py-4 text-center text-red-500">{displayData.reduce((sum, d) => sum + d.lost, 0)}</td>
+                  <td className="px-6 py-4 text-right text-slate-700">
+                    {(() => {
+                      const assigned = displayData.reduce((sum, d) => sum + d.assigned, 0);
+                      const won = displayData.reduce((sum, d) => sum + d.won, 0);
+                      return assigned > 0 ? (won / assigned * 100).toFixed(1) + '%' : '0.0%';
+                    })()}
+                  </td>
+                  <td className="px-6 py-4 text-right text-slate-700">₹{displayData.reduce((sum, d) => sum + d.target, 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right text-emerald-600">₹{displayData.reduce((sum, d) => sum + d.revenue, 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right text-indigo-600 bg-indigo-50/30 border-l border-slate-100">₹{displayData.reduce((sum, d) => sum + d.incentivesEarned, 0).toLocaleString()}</td>
+                </tr>
+              )}
               {displayData.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-6 py-12 text-center">
