@@ -133,7 +133,7 @@ function patchStandalone(backendUrl, backendPort) {
               console.log(`Updating build-time routes-manifest destination from "${rewrite.destination}" to "${backendUrl}/:path*"`);
               rewrite.destination = `${backendUrl}/:path*`;
               modified = true;
-            } else if (rewrite.source.startsWith('/api/activity/session-') || rewrite.source === '/api/system/info') {
+            } else if (rewrite.source.startsWith('/api/activity/') || rewrite.source === '/api/system/info') {
               const suffix = rewrite.source.replace('/api/', '');
               const localDest = `http://127.0.0.1:${backendPort}/${suffix}`;
               console.log(`Updating build-time routes-manifest local tracker/info destination from "${rewrite.destination}" to "${localDest}"`);
@@ -150,7 +150,7 @@ function patchStandalone(backendUrl, backendPort) {
               console.log(`Updating build-time required-server-files original rewrite from "${rewrite.destination}" to "${backendUrl}/:path*"`);
               rewrite.destination = `${backendUrl}/:path*`;
               modified = true;
-            } else if (rewrite.source.startsWith('/api/activity/session-') || rewrite.source === '/api/system/info') {
+            } else if (rewrite.source.startsWith('/api/activity/') || rewrite.source === '/api/system/info') {
               const suffix = rewrite.source.replace('/api/', '');
               const localDest = `http://127.0.0.1:${backendPort}/${suffix}`;
               console.log(`Updating build-time required-server-files local tracker/info original rewrite from "${rewrite.destination}" to "${localDest}"`);
