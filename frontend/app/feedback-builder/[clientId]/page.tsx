@@ -169,9 +169,6 @@ function FeedbackBuilderContent({ clientId, router, user }: any) {
               <Button variant="outline" className="justify-start border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 shadow-none px-3" onClick={() => addField('select')}>
                 <ListTodo className="w-4 h-4 mr-2 text-slate-400 shrink-0" /> <span className="truncate">Dropdown</span>
               </Button>
-              <Button variant="outline" className="justify-start border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 shadow-none px-3 col-span-2" onClick={() => addField('checkbox')}>
-                <ListTodo className="w-4 h-4 mr-2 text-slate-400 shrink-0" /> <span className="truncate">Checkboxes</span>
-              </Button>
             </div>
 
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Specific Data</h3>
@@ -249,7 +246,6 @@ function FeedbackBuilderContent({ clientId, router, user }: any) {
                           <SelectItem value="date">Date</SelectItem>
                           <SelectItem value="rating">Star Rating</SelectItem>
                           <SelectItem value="radio">Multiple Choice</SelectItem>
-                          <SelectItem value="checkbox">Checkboxes</SelectItem>
                           <SelectItem value="select">Dropdown</SelectItem>
                         </SelectContent>
                       </Select>
