@@ -4198,6 +4198,119 @@ async def get_employee_time_recoveries(db, employee_id: str):
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
 
+def recalculate_attendance_seconds(punches: list, breaks: list) -> tuple:
+    """
+    Given a list of raw punches and breaks, sort and merge them,
+    and calculate the total accumulated work seconds from the completed punches.
+    Returns: (merged_punches, sorted_breaks, accumulated_seconds)
+    """
+    def parse_time(time_str):
+        if not time_str:
+            return 0
+        parts = time_str.split(':')
+        try:
+            h = int(parts[0])
+            m = int(parts[1])
+            s = int(parts[2]) if len(parts) > 2 else 0
+            return h * 3600 + m * 60 + s
+        except Exception:
+            return 0
+
+    # Sort breaks
+    sorted_breaks = sorted(breaks, key=lambda b: parse_time(b.get("startTime") or "00:00:00"))
+    for b in sorted_breaks:
+        if b.get("startTime") and len(b["startTime"].split(':')) == 2:
+            b["startTime"] = f"{b['startTime']}:00"
+        if b.get("endTime") and len(b["endTime"].split(':')) == 2:
+            b["endTime"] = f"{b['endTime']}:00"
+
+    # 1. Sort punches by punchIn
+    sorted_punches = sorted(punches, key=lambda p: parse_time(p.get("punchIn") or "00:00:00"))
+
+    # 2. Merge overlapping/contiguous punches
+    merged_punches = []
+    for p in sorted_punches:
+        p_copy = dict(p)
+        if not p_copy.get("punchIn"):
+            continue
+        # normalize format to HH:MM:SS
+        in_parts = p_copy["punchIn"].split(':')
+        if len(in_parts) == 2:
+            p_copy["punchIn"] = f"{p_copy['punchIn']}:00"
+        
+        out_time = p_copy.get("punchOut")
+        if out_time:
+            out_parts = out_time.split(':')
+            if len(out_parts) == 2:
+                p_copy["punchOut"] = f"{out_time}:00"
+        
+        if not merged_punches:
+            merged_punches.append(p_copy)
+            continue
+        
+        last = merged_punches[-1]
+        
+        # If the last punch has no punchOut, it's active.
+        if not last.get("punchOut"):
+            merged_punches.append(p_copy)
+            continue
+            
+        last_out_sec = parse_time(last["punchOut"])
+        curr_in_sec = parse_time(p_copy["punchIn"])
+        
+        if curr_in_sec <= last_out_sec:
+            # Overlap or contiguous! Merge them.
+            if not p_copy.get("punchOut"):
+                new_out = None
+            else:
+                curr_out_sec = parse_time(p_copy["punchOut"])
+                if curr_out_sec > last_out_sec:
+                    new_out = p_copy["punchOut"]
+                else:
+                    new_out = last["punchOut"]
+            
+            last["punchOut"] = new_out
+            if last.get("type") == "meeting" or p_copy.get("type") == "meeting":
+                last["type"] = "meeting"
+            else:
+                last["type"] = p_copy.get("type") or last.get("type") or "work"
+        else:
+            merged_punches.append(p_copy)
+
+    # 3. Calculate accumulated seconds for completed punches
+    total_seconds = 0.0
+    for p in merged_punches:
+        punch_out_str = p.get("punchOut")
+        if not punch_out_str:
+            continue
+        
+        p_in_sec = parse_time(p["punchIn"])
+        p_out_sec = parse_time(punch_out_str)
+        duration = p_out_sec - p_in_sec
+        if duration < 0:
+            duration += 86400  # handle cross-midnight if any
+            
+        # Find break overlaps
+        break_overlap_sec = 0.0
+        for b in sorted_breaks:
+            b_start_str = b.get("startTime")
+            b_end_str = b.get("endTime")
+            if b_start_str and b_end_str:
+                b_in_sec = parse_time(b_start_str)
+                b_out_sec = parse_time(b_end_str)
+                if b_out_sec < b_in_sec:
+                    b_out_sec += 86400
+                
+                # Intersection of [p_in_sec, p_out_sec] and [b_in_sec, b_out_sec]
+                overlap_start = max(p_in_sec, b_in_sec)
+                overlap_end = min(p_out_sec, b_out_sec)
+                if overlap_start < overlap_end:
+                    break_overlap_sec += (overlap_end - overlap_start)
+                    
+        total_seconds += max(0.0, duration - break_overlap_sec)
+
+    return merged_punches, sorted_breaks, total_seconds
+
 async def update_time_recovery_status(db, recovery_id: str, status: str):
     await db.time_recovery.update_one(
         {'_id': ObjectId(recovery_id)},
@@ -4237,59 +4350,45 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     if duration_seconds < 0:
                         duration_seconds += 86400
                         
+                    punches = attn.get('punches') or []
+                    punches = [dict(p) for p in punches]
+                    breaks = attn.get('breaks') or []
+                    breaks = [dict(b) for b in breaks]
+                    
+                    fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
+                    fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
+
                     if recovery_type in ['meeting', 'work']:
-                        # Add a new session to punches
-                        punches = attn.get('punches') or []
-                        punches = [dict(p) for p in punches]
-                        
-                        fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
-                        fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
-                        
                         punches.append({
                             "punchIn": fmt_start,
                             "punchOut": fmt_end,
                             "type": recovery_type
                         })
-                        
-                        # Increase accumulated seconds
-                        accumulated = attn.get("accumulatedWorkSeconds") or 0
-                        new_accumulated = accumulated + duration_seconds
-                        
-                        # Recalculate workHours string
-                        hours, remainder = divmod(int(new_accumulated), 3600)
-                        minutes, _ = divmod(remainder, 60)
-                        work_hours = f"{hours}h {minutes}m"
-                        
-                        await db.attendance.update_one(
-                            {'_id': attn['_id']},
-                            {'$set': {
-                                'punches': punches,
-                                'accumulatedWorkSeconds': new_accumulated,
-                                'workHours': work_hours,
-                                'status': 'Logged'
-                            }}
-                        )
                     elif recovery_type == 'break':
-                        # Add a new break
-                        breaks = attn.get('breaks') or []
-                        breaks = [dict(b) for b in breaks]
-                        
-                        fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
-                        fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
-                        
                         breaks.append({
                             "startTime": fmt_start,
                             "endTime": fmt_end,
                             "duration": str(int(duration_seconds // 60))
                         })
-                        
-                        await db.attendance.update_one(
-                            {'_id': attn['_id']},
-                            {'$set': {
-                                'breaks': breaks,
-                                'status': 'Logged'
-                            }}
-                        )
+                    
+                    # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
+                    merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
+                    
+                    # Recalculate workHours string
+                    hours, remainder = divmod(int(new_accumulated), 3600)
+                    minutes, _ = divmod(remainder, 60)
+                    work_hours = f"{hours}h {minutes}m"
+                    
+                    await db.attendance.update_one(
+                        {'_id': attn['_id']},
+                        {'$set': {
+                            'punches': merged_punches,
+                            'breaks': sorted_breaks,
+                            'accumulatedWorkSeconds': new_accumulated,
+                            'workHours': work_hours,
+                            'status': 'Logged'
+                        }}
+                    )
             else:
                 reason = doc.get('reason', '')
                 
@@ -4414,6 +4513,29 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                         await apply_updates(latest_attn, latest_attn.get('breaks', []))
         except Exception as e:
             print(f"Correction logic error: {e}")
+
+    if doc:
+        try:
+            status_title = "Approved" if status == "approved" else "Rejected"
+            emp_notification = {
+                "employee_id": doc["employee_id"],
+                "title": f"Time Recovery {status_title}",
+                "message": f"Your time recovery request for {doc['date']} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
+                "type": "attendance",
+                "reference_id": str(doc["_id"]),
+                "is_read": False,
+                "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+            }
+            await db.notifications.insert_one(emp_notification)
+            
+            # Broadcast the notification via WebSocket to the employee
+            await ws_manager.send_personal_message(doc["employee_id"], "new_notification", fix_id(emp_notification))
+            
+            # Broadcast attendance_update via WebSocket to the employee
+            await ws_manager.send_personal_message(doc["employee_id"], "attendance_update", {})
+        except Exception as ws_err:
+            print(f"Error sending recovery status update websocket / notification: {ws_err}")
+
     return fix_id(doc)
 
 # Invoice CRUD
