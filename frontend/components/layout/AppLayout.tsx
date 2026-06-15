@@ -92,9 +92,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const lastActivityTimeRef = useRef<number>(Date.now());
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Inactivity timeout setting (10 seconds for testing, production is 5 * 60 * 1000)
-  const INACTIVITY_TIMEOUT_MS = 10 * 1000;
-
   // Trigger retroactive punch-out due to inactivity
   const handleInactivityPunchOut = useCallback(async () => {
     if (!user || showRecoveryModal) return;
