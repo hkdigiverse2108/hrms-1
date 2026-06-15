@@ -322,7 +322,30 @@ export default function CreativeClientsPage() {
                       userId={user?.userId} 
                       userName={user?.name} 
                     />
-
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 z-10"
+                      title="View Forms & Feedback"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/work-management/smm/${client.id}/feedback`);
+                      }}
+                    >
+                      <ClipboardList className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-slate-400 hover:text-brand-teal hover:bg-teal-50 z-10"
+                      title="Create Feedback Form"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/feedback-builder/${client.id}`);
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
                     <Button 
                       variant="ghost" 
                       size="icon" 

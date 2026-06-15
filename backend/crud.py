@@ -5058,3 +5058,35 @@ async def create_feedback_response(db, response: schemas.FeedbackResponseCreate)
     res = await db.feedback_responses.insert_one(resp_dict)
     doc = await db.feedback_responses.find_one({"_id": res.inserted_id})
     return fix_id(doc)
+
+async def get_form_responses(db, form_id: str):
+    cursor = db.feedback_responses.find({"formId": form_id}).sort("submittedAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def get_client_form_responses(db, client_id: str):
+    cursor = db.feedback_responses.find({"clientId": client_id}).sort("submittedAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def update_feedback_form(db, form_id: str, form_data: schemas.FeedbackFormCreate):
+    if not ObjectId.is_valid(form_id):
+        return None
+    
+    update_data = form_data.dict()
+    res = await db.feedback_forms.update_one(
+        {"_id": ObjectId(form_id)},
+        {"$set": update_data}
+    )
+    if res.modified_count == 0 and res.matched_count == 0:
+        return None
+    return await get_feedback_form(db, form_id)
+
+async def delete_feedback_form(db, form_id: str):
+    if not ObjectId.is_valid(form_id):
+        return False
+        
+    # Cascade delete responses first
+    await db.feedback_responses.delete_many({"formId": form_id})
+    
+    # Delete the form
+    res = await db.feedback_forms.delete_one({"_id": ObjectId(form_id)})
+    return res.deleted_count > 0

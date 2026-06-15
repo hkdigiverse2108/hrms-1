@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Star, CheckCircle2 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
@@ -134,8 +135,9 @@ export default function PublicFeedbackPage() {
                   {field.required && <span className="text-red-500 ml-1">*</span>}
                 </Label>
 
-                {field.type === 'text' && (
+                {['text', 'number', 'email', 'date', 'phone'].includes(field.type) && (
                   <Input 
+                    type={field.type === 'phone' ? 'tel' : field.type}
                     placeholder="Your answer"
                     value={answers[field.id] || ''}
                     onChange={(e) => handleAnswerChange(field.id, e.target.value)}
@@ -167,6 +169,51 @@ export default function PublicFeedbackPage() {
                       </div>
                     ))}
                   </RadioGroup>
+                )}
+
+                {field.type === 'select' && (
+                  <Select
+                    value={answers[field.id] || ''}
+                    onValueChange={(val) => handleAnswerChange(field.id, val)}
+                  >
+                    <SelectTrigger className="w-full mt-2 focus-visible:ring-brand-teal">
+                      <SelectValue placeholder="Select an option" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {field.options?.map((opt: string, i: number) => (
+                        <SelectItem key={i} value={opt}>{opt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {field.type === 'checkbox' && (
+                  <div className="space-y-3 pt-2">
+                    {field.options?.map((opt: string, i: number) => {
+                      const isChecked = (answers[field.id] || []).includes(opt);
+                      return (
+                        <div key={i} className="flex items-center space-x-3">
+                          <input 
+                            type="checkbox"
+                            id={`${field.id}-${i}`}
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const currentAnswers = answers[field.id] || [];
+                              if (e.target.checked) {
+                                handleAnswerChange(field.id, [...currentAnswers, opt]);
+                              } else {
+                                handleAnswerChange(field.id, currentAnswers.filter((a: string) => a !== opt));
+                              }
+                            }}
+                            className="w-4 h-4 text-brand-teal border-slate-300 rounded focus:ring-brand-teal"
+                          />
+                          <Label htmlFor={`${field.id}-${i}`} className="text-sm font-normal text-slate-700 cursor-pointer">
+                            {opt}
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
 
                 {field.type === 'rating' && (

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Edit, History, Building2, MapPin, Mail, Phone, Link as LinkIcon, Loader2 } from "lucide-react";
+import { ArrowLeft, Edit, History, Building2, MapPin, Mail, Phone, Link as LinkIcon, Loader2, ClipboardList } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -32,7 +32,7 @@ export default function ClientDetailsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Edit Modal State
-  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Logs State
@@ -80,10 +80,10 @@ export default function ClientDetailsPage() {
     }
   };
 
-  const handleEditSubmit = async (formData: ClientFormData) => {
+  const handleUpdateClient = async (formData: ClientFormData) => {
     setIsSubmitting(true);
     try {
-      const payload = { ...formData, department: "Graphics" }; // Ensure department
+      const payload = { ...formData, department: "Graphics" };
       const res = await fetch(`${API_URL}/clients/${client.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -92,8 +92,8 @@ export default function ClientDetailsPage() {
 
       if (res.ok) {
         toast.success("Client details updated!");
-        setEditModalOpen(false);
-        fetchClient(); // Refresh data
+        setModalOpen(false);
+        fetchClient();
       } else {
         toast.error("Failed to update client");
       }
@@ -132,7 +132,14 @@ export default function ClientDetailsPage() {
           <p className="text-slate-500 text-sm mt-1">{client.name}</p>
         </div>
         <div className="ml-auto flex gap-2">
-          {/* Action buttons can go here */}
+          <Button variant="outline" className="text-slate-600 border-slate-200 hover:bg-slate-50" onClick={() => router.push(`/work-management/smm/${client.id}/feedback`)}>
+            <ClipboardList className="w-4 h-4 mr-2" />
+            View Feedback
+          </Button>
+          <Button variant="outline" className="text-slate-600 border-slate-200 hover:bg-slate-50" onClick={() => setModalOpen(true)}>
+            <Edit className="w-4 h-4 mr-2" />
+            Edit Details
+          </Button>
         </div>
       </div>
 
@@ -212,7 +219,6 @@ export default function ClientDetailsPage() {
 
       <ContentCalendarTable clientId={params.id as string} />
 
-      {/* Activity Log Dialog */}
       <ActivityLogDialog 
         open={logsOpen} 
         onOpenChange={setLogsOpen}
@@ -220,6 +226,19 @@ export default function ClientDetailsPage() {
         logs={clientLogs}
         isLoading={isLoadingLogs}
       />
+
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+          </DialogHeader>
+          <ClientForm
+            initialData={client}
+            onSubmit={handleUpdateClient}
+            isLoading={isSubmitting}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
     </>
   );

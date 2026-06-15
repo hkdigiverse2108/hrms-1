@@ -72,7 +72,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, isLoading, logout } = useUserContext();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
-  const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/");
 
   // Inactivity auto-punch-out and recovery states
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
@@ -174,7 +174,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   // Check pending recovery status on mount and window focus
   const checkPendingRecovery = useCallback(async () => {
-    if (!user || isAuthPage) return;
+    if (!user || isPublicPage) return;
 
     // 1. Check localStorage for already flagged states
     const pendingStr = localStorage.getItem("inactivity_punch_out_recovery_pending");
@@ -274,7 +274,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         console.error("Focus sync error:", err);
       }
     }
-  }, [user, isAuthPage, resetInactivityTimer]);
+  }, [user, isPublicPage, resetInactivityTimer]);
 
   const handleRecoverySubmit = async () => {
     if (!recoveryForm.reason.trim()) {
@@ -349,7 +349,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   // Setup inactivity tracking
   useEffect(() => {
-    if (!user || isAuthPage) return;
+    if (!user || isPublicPage) return;
 
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
 
@@ -372,7 +372,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", checkPendingRecovery);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     };
-  }, [user, isAuthPage, resetInactivityTimer, checkPendingRecovery, showRecoveryModal]);
+  }, [user, isPublicPage, resetInactivityTimer, checkPendingRecovery, showRecoveryModal]);
 
   // Listen for global WebSocket broadcast alerts
   useAppEvent("system_alert", (data) => {
@@ -400,16 +400,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   // Authentication Guard
   useEffect(() => {
-    if (!isLoading && !user && !isAuthPage) {
+    if (!isLoading && !user && !isPublicPage) {
       router.push("/login");
     }
-  }, [user, isLoading, isAuthPage, router]);
+  }, [user, isLoading, isPublicPage, router]);
  
-  if (isAuthPage) {
+  if (isPublicPage) {
     return <main className="flex-1 w-full h-screen bg-white">{children}</main>;
   }
  
-  if (isLoading || (!user && !isAuthPage) || (user && permissionsLoading)) {
+  if (isLoading || (!user && !isPublicPage) || (user && permissionsLoading)) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-white">
         <div className="w-10 h-10 border-4 border-brand-teal border-t-transparent rounded-full animate-spin"></div>

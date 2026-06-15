@@ -1919,11 +1919,33 @@ async def get_feedback_form(form_id: str, db=Depends(get_db)):
 async def get_client_feedback_forms(client_id: str, db=Depends(get_db)):
     return await crud.get_client_feedback_forms(db, client_id)
 
+@app.put("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def update_feedback_form(form_id: str, form: schemas.FeedbackFormCreate, db=Depends(get_db)):
+    updated_form = await crud.update_feedback_form(db, form_id, form)
+    if not updated_form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return updated_form
+
+@app.delete("/forms/{form_id}")
+async def delete_feedback_form(form_id: str, db=Depends(get_db)):
+    deleted = await crud.delete_feedback_form(db, form_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return {"message": "Form deleted successfully"}
+
 @app.post("/forms/{form_id}/responses", response_model=schemas.FeedbackResponse)
 async def submit_feedback_response(form_id: str, response: schemas.FeedbackResponseCreate, db=Depends(get_db)):
     if response.formId != form_id:
         raise HTTPException(status_code=400, detail="Form ID mismatch")
     return await crud.create_feedback_response(db, response)
+
+@app.get("/forms/{form_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_form_responses(form_id: str, db=Depends(get_db)):
+    return await crud.get_form_responses(db, form_id)
+
+@app.get("/forms/client/{client_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_client_form_responses(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_form_responses(db, client_id)
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
