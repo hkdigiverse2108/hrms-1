@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 for env_file in [".env.server", ".env"]:
     env_path = BASE_DIR / env_file
     if env_path.exists():
-        load_dotenv(dotenv_path=str(env_path))
+        load_dotenv(dotenv_path=str(env_path), override=True)
         break
 
 MONGO_URL = os.getenv("MONGO_URL")

@@ -722,9 +722,24 @@ export default function ChatPage() {
                 const isTabInactive = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
                 if (isTabInactive && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
                   const senderName = selectedChat.name || lastMsg.sender || "Colleague";
-                  new Notification(`Message from ${senderName}`, {
-                    body: lastMsg.text || "Sent an attachment",
-                    icon: selectedChat.avatar || "/favicon.ico"
+                  const body = lastMsg.text || "Sent an attachment";
+                  const title = "HariKrushn DigiVerse LLP";
+                  const notificationBody = `${senderName}\n${body}`;
+                  
+                  let avatarUrl = "/favicon.ico";
+                  const avatarPath = selectedChat.avatar || selectedChat.profilePhoto || lastMsg.senderAvatar;
+                  if (avatarPath) {
+                    const resolved = getAvatarUrl(avatarPath);
+                    if (resolved) {
+                      avatarUrl = resolved.startsWith("/")
+                        ? `${window.location.origin}${resolved}`
+                        : resolved;
+                    }
+                  }
+
+                  new Notification(title, {
+                    body: notificationBody,
+                    icon: avatarUrl
                   });
                 }
               }
@@ -939,6 +954,7 @@ export default function ChatPage() {
     // Clear input fields immediately so the user gets instant feedback
     setMessage("");
     setReplyingTo(null);
+    stopTyping();
     const capturedFile = pendingFile;
     setPendingFile(null);
 
@@ -1357,6 +1373,27 @@ export default function ChatPage() {
   };
 
   // Typing logic
+  const stopTyping = () => {
+    if (!user || !selectedChat) return;
+    const chatId = selectedChat.id || selectedChat.employeeId;
+    if (!chatId) return;
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "typing",
+        chatId: chatId,
+        isTyping: false
+      }));
+    } else {
+      fetch(`${API_URL}/chat/typing?chat_id=${chatId}&user_id=${user.id}&is_typing=false`, { method: 'POST' });
+    }
+  };
+
   const handleTyping = () => {
     if (!user || !selectedChat) return;
     const chatId = selectedChat.id || selectedChat.employeeId;
@@ -1376,15 +1413,7 @@ export default function ChatPage() {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     
     typingTimeoutRef.current = setTimeout(() => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({
-          type: "typing",
-          chatId: chatId,
-          isTyping: false
-        }));
-      } else {
-        fetch(`${API_URL}/chat/typing?chat_id=${chatId}&user_id=${user.id}&is_typing=false`, { method: 'POST' });
-      }
+      stopTyping();
     }, 3000);
   };
 
@@ -1534,16 +1563,85 @@ export default function ChatPage() {
       });
   }, [employees, user?.id, chatSummaries]);
 
-  // Auto-select the most recent active conversation on page load
+  // Auto-select the most recent active conversation on page load or when notification is clicked
   useEffect(() => {
     if (!selectedChat && chats.length > 0) {
+      if (typeof window !== "undefined") {
+        const targetId = localStorage.getItem("selectedChatIdOnMount");
+        const targetType = localStorage.getItem("selectedChatTypeOnMount");
+        if (targetId) {
+          localStorage.removeItem("selectedChatIdOnMount");
+          localStorage.removeItem("selectedChatTypeOnMount");
+          
+          const foundChat = chats.find(c => String(c.id) === String(targetId));
+          if (foundChat) {
+            handleSelectChat(foundChat);
+            return;
+          }
+          if (targetType === 'general') {
+            const chan = chatChannels.find(c => String(c.id) === String(targetId));
+            if (chan) {
+              handleSelectChat({ ...chan, type: 'general' });
+              setActiveTab("General");
+              return;
+            }
+          } else if (targetType === 'group') {
+            const grp = chatGroups.find(g => String(g.id) === String(targetId));
+            if (grp) {
+              handleSelectChat({ ...grp, type: 'group' });
+              setActiveTab("Groups");
+              return;
+            }
+          }
+        }
+      }
+
       // chats is already sorted by timestamp descending, so chats[0] is the most recent
       const mostRecentChat = chats.find(c => c.timestamp) || chats[0];
       if (mostRecentChat) {
         handleSelectChat(mostRecentChat);
       }
     }
-  }, [chats, selectedChat]);
+  }, [chats, selectedChat, chatChannels, chatGroups, handleSelectChat]);
+
+  // Listen for notification clicks when already on the chat page
+  useEffect(() => {
+    const handleNotificationClick = () => {
+      const targetId = localStorage.getItem("selectedChatIdOnMount");
+      const targetType = localStorage.getItem("selectedChatTypeOnMount");
+      if (targetId) {
+        localStorage.removeItem("selectedChatIdOnMount");
+        localStorage.removeItem("selectedChatTypeOnMount");
+        
+        const foundChat = chats.find(c => String(c.id) === String(targetId));
+        if (foundChat) {
+          handleSelectChat(foundChat);
+          return;
+        }
+        
+        // Try channels
+        const chan = chatChannels.find(c => String(c.id) === String(targetId));
+        if (chan) {
+          handleSelectChat({ ...chan, type: 'general' });
+          setActiveTab("General");
+          return;
+        }
+        
+        // Try groups
+        const grp = chatGroups.find(g => String(g.id) === String(targetId));
+        if (grp) {
+          handleSelectChat({ ...grp, type: 'group' });
+          setActiveTab("Groups");
+          return;
+        }
+      }
+    };
+
+    window.addEventListener("chat-notification-click", handleNotificationClick);
+    return () => {
+      window.removeEventListener("chat-notification-click", handleNotificationClick);
+    };
+  }, [chats, chatChannels, chatGroups, handleSelectChat]);
 
   const filteredChats = chats.filter((c: any) => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase())

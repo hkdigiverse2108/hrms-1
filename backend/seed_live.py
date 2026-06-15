@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 for env_file in [".env.server", ".env"]:
     env_path = BASE_DIR / env_file
     if env_path.exists():
-        load_dotenv(dotenv_path=str(env_path))
+        load_dotenv(dotenv_path=str(env_path), override=True)
         break
 
 MONGO_URL = os.getenv("MONGO_URL")
@@ -68,8 +68,8 @@ def seed():
     ])
 
     # 2. Super Admin Employee
-    # Hash the password properly using your auth.py logic so login works!
-    admin_password = get_password_hash("Admin@123")
+    # The application uses plain-text password comparison in crud.py, so we store it directly as plain-text.
+    admin_password = "Admin@123"
     
     seed_collection("employees", [
         {
