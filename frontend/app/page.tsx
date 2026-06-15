@@ -424,6 +424,7 @@ export default function DashboardPage() {
       if (res.ok) {
         await fetchStatus();
         await fetchHistory();
+        window.dispatchEvent(new Event("attendance-update"));
       } else {
         const errorData = await res.json().catch(() => ({}));
         toast.error(`Action failed: ${errorData.detail || 'Server error'}`);

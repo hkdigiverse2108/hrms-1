@@ -27,6 +27,10 @@ const nextConfig = {
           destination: `http://127.0.0.1:${localBackendPort}/activity/session-inactive`,
         },
         {
+          source: '/api/activity/last-active',
+          destination: `http://127.0.0.1:${localBackendPort}/activity/last-active`,
+        },
+        {
           source: '/api/system/info',
           destination: `http://127.0.0.1:${localBackendPort}/system/info`,
         },
