@@ -1512,8 +1512,9 @@ async def delete_incentive_slab(slab_id: str, db=Depends(get_db)):
 @app.post("/sales-targets/recalculate-all")
 async def recalculate_all_sales_targets(db=Depends(get_db)):
     """Manually trigger recalculation of all sales targets from all paid invoices."""
+    print("Recalculate all sales targets triggered!")
     try:
-        targets = await db.sales_targets.find().to_list(length=10000)
+        targets = await db.sales_targets.find({}).to_list(length=10000)
         recalculated = 0
         for t in targets:
             emp_id = str(t.get("employeeId", ""))
@@ -1530,8 +1531,12 @@ async def recalculate_all_sales_targets(db=Depends(get_db)):
             )
             recalculated += 1
         
+        print(f"Successfully recalculated {recalculated} targets")
         return {"message": f"Successfully recalculated {recalculated} sales targets"}
     except Exception as e:
+        print(f"Error in recalculate-all: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 # User Permission Routes
