@@ -747,6 +747,13 @@ export default function SalesPage() {
     }
     
     return true;
+  }).sort((a: any, b: any) => {
+    const getDueDate = (l: any) => {
+      if (l.status === "On Hold" && l.holdResumeDate) return dayjs(l.holdResumeDate).valueOf();
+      if (l.nextFollowUpDate) return dayjs(l.nextFollowUpDate).valueOf();
+      return dayjs("2099-12-31").valueOf();
+    };
+    return getDueDate(a) - getDueDate(b);
   });
 
   const totalRevenue = convertedLeads.reduce((acc, l) => {
@@ -801,7 +808,7 @@ export default function SalesPage() {
     { title: "Target (Monthly)", value: `₹${totalMonthlyTarget.toLocaleString()}`, trend: selectedMonth, trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
   ];
 
-  const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' | 'hot' }) => {
+  const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' | 'hot' | 'overdue' }) => {
     const statusContainerRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -847,6 +854,14 @@ export default function SalesPage() {
         const catB = getLeadCategory(b);
         if (catA !== catB) {
           return catA - catB;
+        }
+        if (type === 'overdue') {
+          const getDueDate = (l: any) => {
+            if (l.status === "On Hold" && l.holdResumeDate) return dayjs(l.holdResumeDate).valueOf();
+            if (l.nextFollowUpDate) return dayjs(l.nextFollowUpDate).valueOf();
+            return dayjs("2099-12-31").valueOf();
+          };
+          return getDueDate(a) - getDueDate(b);
         }
         return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
       });
@@ -1306,11 +1321,16 @@ export default function SalesPage() {
                     {lead.nextFollowUpDate && (() => {
                       const today = dayjs().startOf('day');
                       const nextDate = dayjs(lead.nextFollowUpDate).startOf('day');
-                      const isDue = today.isSame(nextDate) || today.isAfter(nextDate);
+                      const isMissed = today.isAfter(nextDate);
+                      const isDueToday = today.isSame(nextDate);
                       return (
                         <div className="flex flex-col gap-0.5 shrink-0">
-                          {isDue ? (
+                          {isMissed ? (
                             <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                              Follow-up Missed
+                            </Badge>
+                          ) : isDueToday ? (
+                            <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
                               Follow-up Due
                             </Badge>
                           ) : (
@@ -1509,7 +1529,7 @@ export default function SalesPage() {
             <TabsContent value="overdue">
               <Card className="border-none shadow-sm bg-white overflow-hidden">
                 <CardContent className="p-0">
-                  <LeadTable data={overdueUpcomingLeads} type="active" />
+                  <LeadTable data={overdueUpcomingLeads} type="overdue" />
                 </CardContent>
               </Card>
             </TabsContent>
