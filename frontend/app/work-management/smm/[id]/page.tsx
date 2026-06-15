@@ -136,10 +136,6 @@ export default function ClientDetailsPage() {
             <ClipboardList className="w-4 h-4 mr-2" />
             View Feedback
           </Button>
-          <Button variant="outline" className="text-slate-600 border-slate-200 hover:bg-slate-50" onClick={() => setModalOpen(true)}>
-            <Edit className="w-4 h-4 mr-2" />
-            Edit Details
-          </Button>
         </div>
       </div>
 
