@@ -4321,6 +4321,51 @@ async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
     doc['created_at'] = get_now().isoformat()
     result = await db.time_recovery.insert_one(doc)
     doc['_id'] = result.inserted_id
+
+    # Send notifications to Admins and HRs (except sender)
+    try:
+        sender_id = doc.get("employee_id")
+        sender = await get_employee(db, sender_id)
+        sender_role = str(sender.get("role", "")).lower() if sender else "employee"
+        
+        # If the sender is an Admin, no notifications are sent at all
+        if sender_role != "admin":
+            # Fetch all Admins and HRs
+            admins_and_hrs = await db.employees.find({
+                "role": {"$regex": "^(Admin|HR)$", "$options": "i"}
+            }).to_list(length=1000)
+            
+            for staff in admins_and_hrs:
+                staff_id = str(staff["_id"])
+                
+                # Exclude the sender themselves
+                if staff_id == sender_id:
+                    continue
+                
+                # Create the notification document
+                notification = {
+                    "employee_id": staff_id,
+                    "title": "New Time Recovery Request",
+                    "message": f"{doc.get('employee_name', 'An employee')} has submitted a time recovery request for {doc.get('date')}.",
+                    "type": "attendance",
+                    "reference_id": str(doc["_id"]),
+                    "is_read": False,
+                    "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+                }
+                
+                # Insert to db
+                await db.notifications.insert_one(notification)
+                
+                # Broadcast via WebSocket
+                try:
+                    notification_fixed = fix_id(notification)
+                    await ws_manager.send_personal_message(staff_id, "new_notification", notification_fixed)
+                except Exception as ws_err:
+                    print(f"Error broadcasting time recovery notification to {staff_id}: {ws_err}")
+                    
+    except Exception as e:
+        print(f"Error creating notifications for time recovery: {e}")
+
     return fix_id(doc)
 
 async def get_time_recoveries(db, skip: int = 0, limit: int = 100):
