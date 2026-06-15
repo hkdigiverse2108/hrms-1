@@ -1122,7 +1122,7 @@ export default function AttendancePage() {
                     {/* Combine and Sort All Events Chronologically */}
                     {(() => {
                       const events = [
-                        ...(selectedRecord.punches || []).flatMap((p: any, i: number) => {
+                        ...([...(selectedRecord.punches || [])].sort((a: any, b: any) => (a.punchIn || '').localeCompare(b.punchIn || ''))).flatMap((p: any, i: number) => {
                           const isMeeting = p.type === 'meeting';
                           const items = [{
                             time: p.punchIn,
