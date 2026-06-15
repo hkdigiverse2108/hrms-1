@@ -1821,6 +1821,11 @@ async def clear_active_session(db=Depends(get_db)):
     )
     return {"message": "Session tracking stopped"}
 
+@app.get("/activity/last-active")
+async def get_last_active():
+    import input_tracker
+    return {"last_active": input_tracker.get_last_global_activity_time()}
+
 # --- PC Device Restrictions & Broadcasts APIs ---
 import socket
 import platform
