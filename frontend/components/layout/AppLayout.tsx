@@ -129,6 +129,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
       const isCurrentlyPunchedIn = statusData && statusData.checkIn && statusData.checkIn !== "--" && statusData.checkIn !== "--:--" && !statusData.checkOut;
       if (!isCurrentlyPunchedIn) return;
 
+      const dateStr = typeof statusData.date === "string" ? statusData.date.split("T")[0] : dayjs(statusData.date).format("YYYY-MM-DD");
+      const punchInTimeObj = dayjs(`${dateStr} ${statusData.checkIn}`);
+      const punchInTs = punchInTimeObj.isValid() ? punchInTimeObj.valueOf() : Date.now();
+      
+      // Clamp last activity time to punch-in time
+      if (lastActivityTimeRef.current < punchInTs) {
+        lastActivityTimeRef.current = punchInTs;
+        localStorage.setItem("last_activity_timestamp", punchInTs.toString());
+      }
+
       // 2. Check for active scheduled meeting overlap
       const todayStr = dayjs().format("YYYY-MM-DD");
       const schedRes = await fetch(`${API_URL}/schedules?employeeId=${user.id || user.employeeId}&date=${todayStr}`);
@@ -222,13 +232,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const checkPendingRecovery = useCallback(async () => {
     if (!user || isAuthPage) return;
     const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
-    if (!isHrOrAdmin) return;
 
     // 1. Check localStorage for already flagged states
     const pendingStr = localStorage.getItem("inactivity_punch_out_recovery_pending");
     const goingMeetingStr = localStorage.getItem("going_for_meeting_pending");
 
-    if (pendingStr) {
+    if (pendingStr && isHrOrAdmin) {
       const parsed = JSON.parse(pendingStr);
       setRecoveryRange(parsed);
       setRecoveryForm({
@@ -261,8 +270,39 @@ export function AppLayout({ children }: { children: ReactNode }) {
       return;
     }
 
-    // 2. Fetch last active time from local backend/tracker
+    if (!isHrOrAdmin) return;
+
+    // Fetch employee's current attendance status to check punch-in time
+    let isCurrentlyPunchedIn = false;
+    let punchInTs = Date.now();
+    try {
+      const statusRes = await fetch(`${API_URL}/attendance/status/${user.id || user.employeeId}`);
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        isCurrentlyPunchedIn = statusData && statusData.checkIn && statusData.checkIn !== "--" && statusData.checkIn !== "--:--" && !statusData.checkOut;
+        if (isCurrentlyPunchedIn) {
+          const dateStr = typeof statusData.date === "string" ? statusData.date.split("T")[0] : dayjs(statusData.date).format("YYYY-MM-DD");
+          const punchInTimeObj = dayjs(`${dateStr} ${statusData.checkIn}`);
+          if (punchInTimeObj.isValid()) {
+            punchInTs = punchInTimeObj.valueOf();
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching status during recovery check:", err);
+    }
+
     let resolvedLastActivityTs = Number(localStorage.getItem("last_activity_timestamp") || Date.now());
+
+    // If currently punched in, the last activity time cannot be before the punch-in time
+    if (isCurrentlyPunchedIn && resolvedLastActivityTs < punchInTs) {
+      resolvedLastActivityTs = punchInTs;
+      localStorage.setItem("last_activity_timestamp", punchInTs.toString());
+      lastActivityTimeRef.current = punchInTs;
+      resetInactivityTimerRef.current();
+    }
+
+    // 2. Fetch last active time from local backend/tracker
     try {
       const activeRes = await fetch(`${API_URL}/activity/last-active`);
       if (activeRes.ok) {
@@ -285,62 +325,58 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
     // 3. Check if user went inactive while away/sleep
     if (Date.now() - resolvedLastActivityTs > INACTIVITY_TIMEOUT_MS) {
-      try {
-        const statusRes = await fetch(`${API_URL}/attendance/status/${user.id || user.employeeId}`);
-        if (statusRes.ok) {
-          const statusData = await statusRes.json();
-          const isCurrentlyPunchedIn = statusData && statusData.checkIn && statusData.checkIn !== "--" && statusData.checkIn !== "--:--" && !statusData.checkOut;
-          if (isCurrentlyPunchedIn) {
-            // Check scheduled meeting overlap
-            const todayStr = dayjs().format("YYYY-MM-DD");
-            const schedRes = await fetch(`${API_URL}/schedules?employeeId=${user.id || user.employeeId}&date=${todayStr}`);
-            let hasActiveMeeting = false;
-            if (schedRes.ok) {
-              const schedules = await schedRes.json();
-              const now = dayjs();
-              hasActiveMeeting = schedules.some((s: any) => {
-                if (s.type !== 'meeting') return false;
-                const start = dayjs(`${todayStr} ${s.startTime}`);
-                const end = dayjs(`${todayStr} ${s.endTime}`);
-                return now.isAfter(start) && now.isBefore(end);
-              });
-            }
-
-            if (hasActiveMeeting) {
-              localStorage.setItem("last_activity_timestamp", Date.now().toString());
-              lastActivityTimeRef.current = Date.now();
-              resetInactivityTimerRef.current();
-              return;
-            }
-
-            // Retroactive punch out
-            const punchOutTimeStr = dayjs(resolvedLastActivityTs).format("HH:mm:ss");
-            await fetch(`${API_URL}/attendance/punch-out/${user.id || user.employeeId}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ punch_out_time: punchOutTimeStr })
+      if (isCurrentlyPunchedIn) {
+        try {
+          // Check scheduled meeting overlap
+          const todayStr = dayjs().format("YYYY-MM-DD");
+          const schedRes = await fetch(`${API_URL}/schedules?employeeId=${user.id || user.employeeId}&date=${todayStr}`);
+          let hasActiveMeeting = false;
+          if (schedRes.ok) {
+            const schedules = await schedRes.json();
+            const now = dayjs();
+            hasActiveMeeting = schedules.some((s: any) => {
+              if (s.type !== 'meeting') return false;
+              const start = dayjs(`${todayStr} ${s.startTime}`);
+              const end = dayjs(`${todayStr} ${s.endTime}`);
+              return now.isAfter(start) && now.isBefore(end);
             });
-
-            const recData = {
-              inactiveFrom: punchOutTimeStr,
-              inactiveFromTimestamp: resolvedLastActivityTs,
-              inactiveUntil: dayjs().format("HH:mm:ss"),
-              inactiveUntilTimestamp: Date.now()
-            };
-            localStorage.setItem("inactivity_punch_out_recovery_pending", JSON.stringify(recData));
-            setRecoveryRange(recData);
-            setRecoveryForm({
-              type: "meeting",
-              startTime: dayjs(resolvedLastActivityTs).format("HH:mm"),
-              endTime: dayjs().format("HH:mm"),
-              reason: ""
-            });
-            setShowRecoveryModal(true);
-            window.dispatchEvent(new Event("attendance-update"));
           }
+
+          if (hasActiveMeeting) {
+            localStorage.setItem("last_activity_timestamp", Date.now().toString());
+            lastActivityTimeRef.current = Date.now();
+            resetInactivityTimerRef.current();
+            return;
+          }
+
+          // Retroactive punch out (cannot be earlier than punch-in)
+          const punchOutTs = Math.max(resolvedLastActivityTs, punchInTs);
+          const punchOutTimeStr = dayjs(punchOutTs).format("HH:mm:ss");
+          await fetch(`${API_URL}/attendance/punch-out/${user.id || user.employeeId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ punch_out_time: punchOutTimeStr })
+          });
+
+          const recData = {
+            inactiveFrom: punchOutTimeStr,
+            inactiveFromTimestamp: punchOutTs,
+            inactiveUntil: dayjs().format("HH:mm:ss"),
+            inactiveUntilTimestamp: Date.now()
+          };
+          localStorage.setItem("inactivity_punch_out_recovery_pending", JSON.stringify(recData));
+          setRecoveryRange(recData);
+          setRecoveryForm({
+            type: "meeting",
+            startTime: dayjs(punchOutTs).format("HH:mm"),
+            endTime: dayjs().format("HH:mm"),
+            reason: ""
+          });
+          setShowRecoveryModal(true);
+          window.dispatchEvent(new Event("attendance-update"));
+        } catch (err) {
+          console.error("Focus sync error:", err);
         }
-      } catch (err) {
-        console.error("Focus sync error:", err);
       }
     }
   }, [user, isAuthPage]);
@@ -416,14 +452,29 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
   };
 
-  // Setup inactivity tracking
+  // Setup inactivity tracking & pending recovery check
   useEffect(() => {
     if (!user || isAuthPage) return;
     const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
-    if (!isHrOrAdmin) return;
 
+    // 1. All users listen to window focus and attendance updates to check pending recovery
+    window.addEventListener("focus", checkPendingRecovery);
+
+    const handleAttendanceUpdate = () => {
+      if (isHrOrAdmin) {
+        localStorage.setItem("last_activity_timestamp", Date.now().toString());
+        lastActivityTimeRef.current = Date.now();
+        resetInactivityTimer();
+      }
+      checkPendingRecovery();
+    };
+    window.addEventListener("attendance-update", handleAttendanceUpdate);
+
+    // Initial check on mount
+    checkPendingRecovery();
+
+    // 2. Only HR and Admin track OS/browser activity and set inactivity timeouts
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
-
     const handleActivity = () => {
       if (showRecoveryModal) return;
       localStorage.setItem("last_activity_timestamp", Date.now().toString());
@@ -431,17 +482,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
       resetInactivityTimer();
     };
 
-    events.forEach((e) => window.addEventListener(e, handleActivity, { passive: true }));
-    window.addEventListener("focus", checkPendingRecovery);
-
-    // Initial check and start timer
-    checkPendingRecovery();
-    resetInactivityTimer();
+    if (isHrOrAdmin) {
+      events.forEach((e) => window.addEventListener(e, handleActivity, { passive: true }));
+      resetInactivityTimer();
+    }
 
     return () => {
-      events.forEach((e) => window.removeEventListener(e, handleActivity));
       window.removeEventListener("focus", checkPendingRecovery);
-      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      window.removeEventListener("attendance-update", handleAttendanceUpdate);
+      if (isHrOrAdmin) {
+        events.forEach((e) => window.removeEventListener(e, handleActivity));
+        if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      }
     };
   }, [user, isAuthPage, resetInactivityTimer, checkPendingRecovery, showRecoveryModal]);
 
