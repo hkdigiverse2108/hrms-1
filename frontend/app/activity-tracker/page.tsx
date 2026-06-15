@@ -226,12 +226,10 @@ export default function ActivityTrackerPage() {
 
     const sortedApps = Object.entries(apps)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
       .map(([name, val]) => ({ name, duration: val }));
 
     const sortedDomains = Object.entries(domains)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
       .map(([name, val]) => ({ name, duration: val }));
 
     return { topApps: sortedApps, topDomains: sortedDomains };
@@ -523,7 +521,7 @@ export default function ActivityTrackerPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
               {topApps.length === 0 ? (
                 <div className="text-center text-muted-foreground text-xs py-10">
                   No application usage statistics tracked yet
@@ -560,7 +558,7 @@ export default function ActivityTrackerPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
               {topDomains.length === 0 ? (
                 <div className="text-center text-muted-foreground text-xs py-10">
                   No website usage statistics tracked yet

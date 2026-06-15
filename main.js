@@ -211,6 +211,9 @@ function startBackend() {
   }
 
   if (backendProcess) {
+    backendProcess.on('error', (err) => {
+      log(`ERROR spawning backend process: ${err.message}`);
+    });
     backendProcess.stdout.on('data', (data) => {
       log(`[Backend stdout]: ${data.toString().trim()}`);
     });
@@ -276,6 +279,9 @@ function startFrontend() {
   }
 
   if (frontendProcess) {
+    frontendProcess.on('error', (err) => {
+      log(`ERROR spawning frontend process: ${err.message}`);
+    });
     if (frontendProcess.stdout) {
       frontendProcess.stdout.on('data', (data) => {
         log(`[Frontend stdout]: ${data.toString().trim()}`);

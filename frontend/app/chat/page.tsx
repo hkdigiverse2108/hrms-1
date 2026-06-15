@@ -194,6 +194,8 @@ export default function ChatPage() {
   const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"Personal" | "Groups" | "General" | "Saved">("Personal");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
   const [isSearchingMessages, setIsSearchingMessages] = useState(false);
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -232,6 +234,26 @@ export default function ChatPage() {
   useEffect(() => {
     selectedChatRef.current = selectedChat;
   }, [selectedChat]);
+
+  // Parse query parameters on load to auto-select chats from desktop notifications
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlChatId = params.get("chatId");
+      const urlChatType = params.get("chatType");
+      if (urlChatId) {
+        localStorage.setItem("selectedChatIdOnMount", urlChatId);
+        if (urlChatType) {
+          localStorage.setItem("selectedChatTypeOnMount", urlChatType);
+        }
+        // Clean up URL query parameters so page refresh doesn't keep triggering it
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+        // Force trigger auto-select listener event
+        window.dispatchEvent(new Event("chat-notification-click"));
+      }
+    }
+  }, []);
 
   const [showCreatePoll, setShowCreatePoll] = useState(false);
   const [pollData, setPollData] = useState({ 
@@ -305,8 +327,12 @@ export default function ChatPage() {
     const savedDnd = localStorage.getItem("globalDndEnabled");
     if (savedDnd) setGlobalDndEnabled(savedDnd === "true");
     const savedGlobalMode = localStorage.getItem("globalDefaultMode");
-    if (savedGlobalMode && savedGlobalMode !== "none") setGlobalDefaultMode(savedGlobalMode);
-    else if (savedGlobalMode === "none") { setGlobalDefaultMode("all"); localStorage.setItem("globalDefaultMode", "all"); }
+    if (savedGlobalMode && savedGlobalMode !== "none") {
+      setGlobalDefaultMode(savedGlobalMode);
+    } else {
+      setGlobalDefaultMode("all");
+      localStorage.setItem("globalDefaultMode", "all");
+    }
     const savedGlobalSound = localStorage.getItem("globalDefaultSound");
     if (savedGlobalSound) setGlobalDefaultSound(savedGlobalSound);
   }, []);
@@ -1158,6 +1184,46 @@ export default function ChatPage() {
     }
   };
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectedChat) return;
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectedChat) return;
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    if (!selectedChat) return;
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      setPendingFile(file);
+      e.dataTransfer.clearData();
+      setTimeout(() => messageInputRef.current?.focus(), 10);
+    }
+  };
+
 
 
   const handleCreateGroup = async () => {
@@ -1585,7 +1651,6 @@ export default function ChatPage() {
     if (!selectedChat && chats.length > 0) {
       if (typeof window !== "undefined") {
         const targetId = localStorage.getItem("selectedChatIdOnMount");
-        const targetType = localStorage.getItem("selectedChatTypeOnMount");
         if (targetId) {
           localStorage.removeItem("selectedChatIdOnMount");
           localStorage.removeItem("selectedChatTypeOnMount");
@@ -1593,22 +1658,22 @@ export default function ChatPage() {
           const foundChat = chats.find(c => String(c.id) === String(targetId));
           if (foundChat) {
             handleSelectChat(foundChat);
+            setActiveTab("Personal");
             return;
           }
-          if (targetType === 'general') {
-            const chan = chatChannels.find(c => String(c.id) === String(targetId));
-            if (chan) {
-              handleSelectChat({ ...chan, type: 'general' });
-              setActiveTab("General");
-              return;
-            }
-          } else if (targetType === 'group') {
-            const grp = chatGroups.find(g => String(g.id) === String(targetId));
-            if (grp) {
-              handleSelectChat({ ...grp, type: 'group' });
-              setActiveTab("Groups");
-              return;
-            }
+          
+          const chan = chatChannels.find(c => String(c.id) === String(targetId));
+          if (chan) {
+            handleSelectChat({ ...chan, type: 'general' });
+            setActiveTab("General");
+            return;
+          }
+          
+          const grp = chatGroups.find(g => String(g.id) === String(targetId));
+          if (grp) {
+            handleSelectChat({ ...grp, type: 'group' });
+            setActiveTab("Groups");
+            return;
           }
         }
       }
@@ -1625,7 +1690,6 @@ export default function ChatPage() {
   useEffect(() => {
     const handleNotificationClick = () => {
       const targetId = localStorage.getItem("selectedChatIdOnMount");
-      const targetType = localStorage.getItem("selectedChatTypeOnMount");
       if (targetId) {
         localStorage.removeItem("selectedChatIdOnMount");
         localStorage.removeItem("selectedChatTypeOnMount");
@@ -1633,6 +1697,7 @@ export default function ChatPage() {
         const foundChat = chats.find(c => String(c.id) === String(targetId));
         if (foundChat) {
           handleSelectChat(foundChat);
+          setActiveTab("Personal");
           return;
         }
         
@@ -2250,10 +2315,29 @@ export default function ChatPage() {
       </div>
 
       {/* Main Chat Area */}
-      <div className={cn(
-        "flex-1 flex flex-col bg-white",
-        !selectedChat && "hidden md:flex"
-      )}>
+      <div 
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={cn(
+          "flex-1 flex flex-col bg-white relative",
+          !selectedChat && "hidden md:flex"
+        )}
+      >
+        {isDragging && selectedChat && (
+          <div className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200">
+            <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 border border-brand-teal/20 scale-100 transition-all">
+              <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center animate-bounce">
+                <Paperclip className="w-8 h-8 text-brand-teal" />
+              </div>
+              <div className="text-center">
+                <h3 className="font-extrabold text-slate-800 text-lg">Drop file here</h3>
+                <p className="text-xs text-muted-foreground mt-1">Attach file to this conversation</p>
+              </div>
+            </div>
+          </div>
+        )}
         {selectedChat ? (
           !showRightSidebar ? (
           <>
