@@ -215,6 +215,24 @@ def _run_permission_monitor():
 
 def get_last_global_activity_time() -> float:
     global _last_global_activity_time
+    if PLATFORM == "Windows":
+        try:
+            class LASTINPUTINFO(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", ctypes.c_uint),
+                    ("dwTime", ctypes.c_uint)
+                ]
+            lii = LASTINPUTINFO()
+            lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
+            if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
+                tick_count = ctypes.windll.kernel32.GetTickCount()
+                idle_ms = (tick_count - lii.dwTime) & 0xFFFFFFFF
+                win_last_active = time.time() - (idle_ms / 1000.0)
+                with _state_lock:
+                    if win_last_active > _last_global_activity_time:
+                        _last_global_activity_time = win_last_active
+        except Exception as e:
+            pass
     with _state_lock:
         return _last_global_activity_time
 

@@ -98,6 +98,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Trigger retroactive punch-out due to inactivity
   const handleInactivityPunchOut = useCallback(async () => {
     if (!user || showRecoveryModal) return;
+    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
+    if (!isHrOrAdmin) return;
 
     // Double check if there was global PC activity (clicks/keypress/mouse movement)
     try {
@@ -161,6 +163,25 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
       if (res.ok) {
         toast.warning("You were punched out due to inactivity. Move your mouse or click to recover this time.");
+        
+        // Show OS desktop notification
+        if ((window as any).electronAPI && typeof (window as any).electronAPI.showNotification === 'function') {
+          (window as any).electronAPI.showNotification("Inactivity Alert", {
+            body: "You were punched out due to inactivity. Move your mouse or click to recover this time.",
+            icon: "/favicon.ico",
+            clickUrl: "/attendance/recovery-requests"
+          });
+        } else if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          const n = new Notification("Inactivity Alert", {
+            body: "You were punched out due to inactivity. Move your mouse or click to recover this time.",
+            icon: "/favicon.ico"
+          });
+          n.onclick = () => {
+            window.focus();
+            router.push("/attendance/recovery-requests");
+          };
+        }
+
         const inactiveUntilStr = dayjs().format("HH:mm:ss");
         
         const recData = {
@@ -186,11 +207,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [user, showRecoveryModal]);
 
   const resetInactivityTimer = useCallback(() => {
-    if (showRecoveryModal) return;
+    if (!user || showRecoveryModal) return;
+    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
+    if (!isHrOrAdmin) return;
     
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     inactivityTimerRef.current = setTimeout(handleInactivityPunchOut, INACTIVITY_TIMEOUT_MS);
-  }, [handleInactivityPunchOut, showRecoveryModal]);
+  }, [user, handleInactivityPunchOut, showRecoveryModal]);
 
   // Sync ref with the actual callback
   resetInactivityTimerRef.current = resetInactivityTimer;
@@ -198,6 +221,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Check pending recovery status on mount and window focus
   const checkPendingRecovery = useCallback(async () => {
     if (!user || isAuthPage) return;
+    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
+    if (!isHrOrAdmin) return;
 
     // 1. Check localStorage for already flagged states
     const pendingStr = localStorage.getItem("inactivity_punch_out_recovery_pending");
@@ -394,6 +419,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Setup inactivity tracking
   useEffect(() => {
     if (!user || isAuthPage) return;
+    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
+    if (!isHrOrAdmin) return;
 
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
 

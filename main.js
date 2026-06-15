@@ -366,7 +366,7 @@ function createWindow() {
     }
   });
 
-  const { ipcMain } = require('electron');
+  const { ipcMain, Notification } = require('electron');
   ipcMain.on('focus-window', () => {
     log('Received focus-window IPC event. Bringing window to foreground.');
     if (mainWindow) {
@@ -383,6 +383,44 @@ function createWindow() {
           mainWindow.setAlwaysOnTop(false);
         }
       }, 300);
+    }
+  });
+
+  ipcMain.on('show-notification', (event, title, options) => {
+    log(`Received show-notification event: ${title} - ${options?.body}`);
+    try {
+      const isPackaged = app.isPackaged;
+      let iconPath = undefined;
+      if (options && options.icon) {
+        iconPath = isPackaged
+          ? path.join(process.resourcesPath, 'app', 'frontend', 'public', options.icon.replace(/^\//, ''))
+          : path.join(__dirname, 'frontend', 'public', options.icon.replace(/^\//, ''));
+      }
+      
+      const notif = new Notification({
+        title: title,
+        body: options?.body || '',
+        icon: iconPath
+      });
+      notif.show();
+      
+      notif.on('click', () => {
+        log('Notification clicked, focusing window.');
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+          }
+          mainWindow.show();
+          mainWindow.focus();
+          
+          if (options && options.clickUrl) {
+            log(`Navigating to URL: ${options.clickUrl}`);
+            mainWindow.webContents.send('navigate-to-url', options.clickUrl);
+          }
+        }
+      });
+    } catch (err) {
+      log(`Error displaying notification: ${err.message}`);
     }
   });
 

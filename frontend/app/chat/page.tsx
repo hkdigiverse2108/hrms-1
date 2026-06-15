@@ -737,10 +737,27 @@ export default function ChatPage() {
                     }
                   }
 
-                  new Notification(title, {
-                    body: notificationBody,
-                    icon: avatarUrl
-                  });
+                  if ((window as any).electronAPI && typeof (window as any).electronAPI.showNotification === 'function') {
+                    (window as any).electronAPI.showNotification(title, {
+                      body: notificationBody,
+                      icon: "/favicon.ico",
+                      clickUrl: `/chat?chatId=${selectedChat.id || selectedChat.employeeId}&chatType=${selectedChat.type || 'personal'}`
+                    });
+                  } else if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                    const notif = new Notification(title, {
+                      body: notificationBody,
+                      icon: avatarUrl
+                    });
+                    notif.onclick = () => {
+                      if (typeof window !== "undefined") {
+                        if ((window as any).electronAPI && (window as any).electronAPI.focusWindow) {
+                          (window as any).electronAPI.focusWindow();
+                        } else {
+                          window.focus();
+                        }
+                      }
+                    };
+                  }
                 }
               }
             }
