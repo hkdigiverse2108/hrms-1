@@ -24,6 +24,7 @@ _clicks = 0
 _keystrokes = 0
 _app_durations = {}
 _domain_durations = {}
+_last_global_activity_time = time.time()
 _state_lock = threading.Lock()
 
 _active_employee_id = None
@@ -212,19 +213,36 @@ def _run_permission_monitor():
 # Input listeners (cross-platform — pynput handles this)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def get_last_global_activity_time() -> float:
+    global _last_global_activity_time
+    with _state_lock:
+        return _last_global_activity_time
+
+_last_move_register_time = 0.0
+
+def on_move(x, y):
+    global _last_move_register_time, _last_global_activity_time
+    now = time.time()
+    if now - _last_move_register_time > 2.0:
+        _last_move_register_time = now
+        with _state_lock:
+            _last_global_activity_time = now
+
 def on_click(x, y, button, pressed):
-    global _clicks
+    global _clicks, _last_global_activity_time
     if pressed:
         with _state_lock:
             _clicks += 1
+            _last_global_activity_time = time.time()
 
 def on_press(key):
-    global _keystrokes
+    global _keystrokes, _last_global_activity_time
     with _state_lock:
         _keystrokes += 1
+        _last_global_activity_time = time.time()
 
 def _run_listener():
-    mouse_listener = mouse.Listener(on_click=on_click)
+    mouse_listener = mouse.Listener(on_move=on_move, on_click=on_click)
     mouse_listener.start()
 
     keyboard_listener = keyboard.Listener(on_press=on_press)
@@ -646,7 +664,9 @@ def _run_active_app_monitor():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _run_db_sync():
-    global _clicks, _keystrokes, _app_durations, _domain_durations, _active_employee_id, _db, _main_loop
+    global _clicks, _keystrokes, _app_durations, _domain_durations, _active_employee_id, _db, _main_loop, _last_global_activity_time
+
+    last_synced_activity_time = 0.0
 
     while not _stop_event.is_set():
         time.sleep(30)
@@ -657,12 +677,22 @@ def _run_db_sync():
             employee_id = _active_employee_id
             apps_to_flush = dict(_app_durations)
             domains_to_flush = dict(_domain_durations)
+            global_activity_time = _last_global_activity_time
 
-            if employee_id and (current_clicks > 0 or current_keys > 0 or apps_to_flush or domains_to_flush):
+            has_new_activity = (
+                current_clicks > 0 or
+                current_keys > 0 or
+                apps_to_flush or
+                domains_to_flush or
+                global_activity_time > last_synced_activity_time
+            )
+
+            if employee_id and has_new_activity:
                 _clicks = 0
                 _keystrokes = 0
                 _app_durations.clear()
                 _domain_durations.clear()
+                last_synced_activity_time = global_activity_time
             else:
                 continue
 

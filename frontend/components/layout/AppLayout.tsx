@@ -93,10 +93,31 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const lastActivityTimeRef = useRef<number>(Date.now());
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resetInactivityTimerRef = useRef<() => void>(() => {});
 
   // Trigger retroactive punch-out due to inactivity
   const handleInactivityPunchOut = useCallback(async () => {
     if (!user || showRecoveryModal) return;
+
+    // Double check if there was global PC activity (clicks/keypress/mouse movement)
+    try {
+      const activeRes = await fetch(`${API_URL}/activity/last-active`);
+      if (activeRes.ok) {
+        const activeData = await activeRes.json();
+        if (activeData && typeof activeData.last_active === 'number') {
+          const globalLastActiveMs = activeData.last_active * 1000;
+          if (Date.now() - globalLastActiveMs < INACTIVITY_TIMEOUT_MS) {
+            // User was active globally, skip punch out and reset timer
+            localStorage.setItem("last_activity_timestamp", globalLastActiveMs.toString());
+            lastActivityTimeRef.current = globalLastActiveMs;
+            resetInactivityTimerRef.current();
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not check global last active time:", e);
+    }
 
     try {
       // 1. Fetch current status to check if punched in
@@ -126,7 +147,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         // Reset activity tracking and timer
         localStorage.setItem("last_activity_timestamp", Date.now().toString());
         lastActivityTimeRef.current = Date.now();
-        resetInactivityTimer();
+        resetInactivityTimerRef.current();
         return;
       }
 
@@ -171,6 +192,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     inactivityTimerRef.current = setTimeout(handleInactivityPunchOut, INACTIVITY_TIMEOUT_MS);
   }, [handleInactivityPunchOut, showRecoveryModal]);
 
+  // Sync ref with the actual callback
+  resetInactivityTimerRef.current = resetInactivityTimer;
+
   // Check pending recovery status on mount and window focus
   const checkPendingRecovery = useCallback(async () => {
     if (!user || isAuthPage) return;
@@ -212,9 +236,30 @@ export function AppLayout({ children }: { children: ReactNode }) {
       return;
     }
 
-    // 2. Check if user went inactive while away/sleep
-    const lastActivityTs = Number(localStorage.getItem("last_activity_timestamp") || Date.now());
-    if (Date.now() - lastActivityTs > INACTIVITY_TIMEOUT_MS) {
+    // 2. Fetch last active time from local backend/tracker
+    let resolvedLastActivityTs = Number(localStorage.getItem("last_activity_timestamp") || Date.now());
+    try {
+      const activeRes = await fetch(`${API_URL}/activity/last-active`);
+      if (activeRes.ok) {
+        const activeData = await activeRes.json();
+        if (activeData && typeof activeData.last_active === 'number') {
+          const globalLastActiveMs = activeData.last_active * 1000;
+          
+          // If the global PC activity is newer than our local localStorage timestamp, use it!
+          if (globalLastActiveMs > resolvedLastActivityTs) {
+            resolvedLastActivityTs = globalLastActiveMs;
+            localStorage.setItem("last_activity_timestamp", globalLastActiveMs.toString());
+            lastActivityTimeRef.current = globalLastActiveMs;
+            resetInactivityTimerRef.current();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch global last active time from local tracker:", e);
+    }
+
+    // 3. Check if user went inactive while away/sleep
+    if (Date.now() - resolvedLastActivityTs > INACTIVITY_TIMEOUT_MS) {
       try {
         const statusRes = await fetch(`${API_URL}/attendance/status/${user.id || user.employeeId}`);
         if (statusRes.ok) {
@@ -239,12 +284,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
             if (hasActiveMeeting) {
               localStorage.setItem("last_activity_timestamp", Date.now().toString());
               lastActivityTimeRef.current = Date.now();
-              resetInactivityTimer();
+              resetInactivityTimerRef.current();
               return;
             }
 
             // Retroactive punch out
-            const punchOutTimeStr = dayjs(lastActivityTs).format("HH:mm:ss");
+            const punchOutTimeStr = dayjs(resolvedLastActivityTs).format("HH:mm:ss");
             await fetch(`${API_URL}/attendance/punch-out/${user.id || user.employeeId}`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -253,7 +298,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             const recData = {
               inactiveFrom: punchOutTimeStr,
-              inactiveFromTimestamp: lastActivityTs,
+              inactiveFromTimestamp: resolvedLastActivityTs,
               inactiveUntil: dayjs().format("HH:mm:ss"),
               inactiveUntilTimestamp: Date.now()
             };
@@ -261,7 +306,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             setRecoveryRange(recData);
             setRecoveryForm({
               type: "meeting",
-              startTime: dayjs(lastActivityTs).format("HH:mm"),
+              startTime: dayjs(resolvedLastActivityTs).format("HH:mm"),
               endTime: dayjs().format("HH:mm"),
               reason: ""
             });
@@ -273,7 +318,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         console.error("Focus sync error:", err);
       }
     }
-  }, [user, isAuthPage, resetInactivityTimer]);
+  }, [user, isAuthPage]);
 
   const handleRecoverySubmit = async () => {
     if (!recoveryForm.reason.trim()) {
