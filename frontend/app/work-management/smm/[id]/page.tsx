@@ -83,7 +83,7 @@ export default function ClientDetailsPage() {
   const handleUpdateClient = async (formData: ClientFormData) => {
     setIsSubmitting(true);
     try {
-      const payload = { ...formData, department: "Graphics" };
+      const payload = { ...formData, department: "Creative" };
       const res = await fetch(`${API_URL}/clients/${client.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -169,7 +169,7 @@ export default function ClientDetailsPage() {
                   <span className="font-bold text-slate-900">{client.companyName}</span>
                 </td>
                 <td className="px-4 py-4 text-center">
-                  <Badge variant="secondary" className="bg-slate-100 text-slate-500 hover:bg-slate-100 border-none font-medium">{client.department || "Graphics"}</Badge>
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-500 hover:bg-slate-100 border-none font-medium">{client.department || "Creative"}</Badge>
                 </td>
                 <td className="px-4 py-4">
                   <span className="text-slate-700 text-sm">{client.contactPerson || client.name || "N/A"}</span>

@@ -1109,10 +1109,24 @@ async def create_department(db, department: schemas.DepartmentCreate):
 
 async def update_department(db, department_id: str, department_update: schemas.DepartmentUpdate):
     update_data = department_update.dict(exclude_unset=True)
+    
+    # We need the old department name to cascade changes
+    old_doc = await db.departments.find_one({"_id": ObjectId(department_id)})
+    
     await db.departments.update_one(
         {"_id": ObjectId(department_id)},
         {"$set": update_data}
     )
+    
+    if old_doc and "name" in update_data and old_doc.get("name") != update_data["name"]:
+        old_name = old_doc.get("name")
+        new_name = update_data["name"]
+        # cascade update to employees, clients, tasks, projects
+        await db.employees.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.clients.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.tasks.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.projects.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        
     updated_doc = await db.departments.find_one({"_id": ObjectId(department_id)})
     return fix_id(updated_doc)
 

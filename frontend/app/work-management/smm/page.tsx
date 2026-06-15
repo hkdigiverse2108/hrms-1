@@ -145,8 +145,8 @@ export default function CreativeClientsPage() {
       const res = await fetch(`${API_URL}/clients`);
       if (res.ok) {
         const data = await res.json();
-        // Filter for Graphics department only
-        setClients(data.filter((c: any) => c.department === "Graphics"));
+        // Filter for Creative department only
+        setClients(data.filter((c: any) => c.department === "Creative"));
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -166,7 +166,7 @@ export default function CreativeClientsPage() {
 
       const payload = {
         ...formData,
-        department: "Graphics", // Ensure department is set
+        department: "Creative", // Ensure department is set
         performedBy: user?.id,
         userName: user?.name || `${user?.firstName} ${user?.lastName}`,
       };
@@ -294,7 +294,7 @@ export default function CreativeClientsPage() {
                 <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <div className="flex gap-2">
                     <Badge variant="outline" className="bg-slate-50 text-slate-500 font-medium border-slate-200">
-                      {client.department || "Graphics"}
+                      {client.department || "Creative"}
                     </Badge>
                     {client.festivalPost === "Yes" && (
                       <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200">

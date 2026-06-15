@@ -253,7 +253,7 @@ export default function ProjectsPage() {
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
               <SelectItem value="Development">Development</SelectItem>
-              <SelectItem value="Graphics">Graphics</SelectItem>
+              <SelectItem value="Creative">Creative</SelectItem>
               <SelectItem value="Marketing">Marketing</SelectItem>
             </SelectContent>
           </Select>

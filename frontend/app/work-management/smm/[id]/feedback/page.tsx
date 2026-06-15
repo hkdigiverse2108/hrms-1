@@ -19,8 +19,10 @@ export default function ClientFeedbackPage() {
   const [responses, setResponses] = useState<any[]>([]);
   const [forms, setForms] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [origin, setOrigin] = useState("");
 
   useEffect(() => {
+    setOrigin(typeof window !== "undefined" ? window.location.origin : "");
     if (clientId) {
       fetchData();
     }
@@ -103,9 +105,9 @@ export default function ClientFeedbackPage() {
           </div>
         ) : (
           <Tabs defaultValue="responses" className="w-full">
-            <TabsList className="grid w-full max-w-md grid-cols-2 mb-8 mx-auto">
-              <TabsTrigger value="forms">Generated Forms</TabsTrigger>
-              <TabsTrigger value="responses">Client Responses</TabsTrigger>
+            <TabsList className="grid w-full max-w-md grid-cols-2 mb-8 mx-auto bg-slate-200/60 p-1 rounded-lg">
+              <TabsTrigger value="forms" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm rounded-md transition-all font-medium">Generated Forms</TabsTrigger>
+              <TabsTrigger value="responses" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm rounded-md transition-all font-medium">Client Responses</TabsTrigger>
             </TabsList>
 
             <TabsContent value="forms">
@@ -116,7 +118,7 @@ export default function ClientFeedbackPage() {
               ) : (
                 <div className="space-y-4">
                   {forms.map((form, i) => {
-                    const publicLink = `${window.location.origin}/feedback/${form.id}`;
+                    const publicLink = `${origin}/feedback/${form.id}`;
                     return (
                       <Card key={i} className="shadow-sm border-l-4 border-l-brand-teal">
                         <CardContent className="pt-6">

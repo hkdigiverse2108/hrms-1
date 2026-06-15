@@ -111,7 +111,7 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
 
   const baseDepts = propDepartments && propDepartments.length > 0 
     ? propDepartments.map(d => d.trim()) 
-    : ["Development", "Sales", "Graphics", "Marketing"];
+    : ["Development", "Sales", "Creative", "Marketing"];
   
   const departments = Array.from(new Set([...baseDepts, "SMM"]));
 
@@ -120,7 +120,7 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
   };
 
   const isMarketing = formData.department?.includes("Marketing");
-  const isGraphics = formData.department?.includes("Graphics");
+  const isGraphics = formData.department?.includes("Creative");
   const isDevelopment = formData.department?.includes("Development");
   const isSales = formData.department?.includes("Sales");
 
@@ -291,7 +291,7 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
           {isGraphics && (
             <div className="space-y-4 border-t border-slate-100 pt-6">
               <h4 className="text-xs font-bold text-brand-teal uppercase tracking-widest flex items-center gap-2">
-                <FileText className="w-4 h-4" /> Graphics Service Fields
+                <FileText className="w-4 h-4" /> Creative Service Fields
               </h4>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
