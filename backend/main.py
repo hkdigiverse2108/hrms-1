@@ -950,12 +950,28 @@ async def create_task_log(log: schemas.TaskLogBase, db=Depends(get_db)):
         dailyReportId=log.dailyReportId,
         monthlyReportId=log.monthlyReportId
     )
-    # Fetch the latest log we just created
     doc = await db.task_logs.find_one({"clientId": log.clientId, "action": log.action}, sort=[("_id", -1)])
     if doc:
-        from bson import ObjectId
         doc["id"] = str(doc["_id"])
     return doc
+
+class TaskLogUpdate(BaseModel):
+    details: str
+
+@app.put("/task-logs/{log_id}", response_model=schemas.TaskLog)
+async def update_task_log(log_id: str, update: TaskLogUpdate, db=Depends(get_db)):
+    doc = await crud.update_task_log(db, log_id, update.details)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Log not found")
+    return doc
+
+@app.delete("/task-logs/{log_id}")
+async def delete_task_log(log_id: str, db=Depends(get_db)):
+    success = await crud.delete_task_log(db, log_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Log not found")
+    return {"message": "Log deleted successfully"}
+
 # Marketing Reports Endpoints
 @app.post("/marketing/reports/daily", response_model=schemas.MarketingDailyReport)
 async def create_marketing_daily_report(report: schemas.MarketingDailyReportCreate, db=Depends(get_db)):

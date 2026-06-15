@@ -863,6 +863,12 @@ class ClientBase(BaseModel):
     remarks: Optional[str] = None
     responsibility: Optional[str] = None
     dailyFollowup: Optional[str] = "No"
+    followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = [] # 0=Monday, 6=Sunday
+    followupDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastFollowupDate: Optional[RobustDate] = None
+    nextFollowupDate: Optional[RobustDate] = None
     interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
@@ -905,6 +911,12 @@ class ClientUpdate(BaseModel):
     interviewerName: Optional[str] = None
     interviewLink: Optional[str] = None
     interviewNotes: Optional[str] = None
+    followupType: Optional[str] = None
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = None
+    followupDatesOfMonth: Optional[List[int]] = None
+    lastFollowupDate: Optional[str] = None
+    nextFollowupDate: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 

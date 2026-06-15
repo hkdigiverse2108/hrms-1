@@ -2349,6 +2349,94 @@ async def get_client(db, client_id: str):
         return fix_id(doc)
     return None
 
+async def calculate_next_followup_date(db, start_date_str: str, config: dict) -> str:
+    if not start_date_str or not config:
+        return None
+        
+    try:
+        current_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+    except ValueError:
+        return None
+        
+    followup_type = config.get("followupType", "Interval")
+    
+    holiday_query = {
+        "$or": [
+            {"company": {"$in": [None, "", "null"]}}
+        ]
+    }
+    
+    all_holidays = await db.holidays.find(holiday_query).to_list(length=1000)
+    
+    holiday_dates = set()
+    for h in all_holidays:
+        h_date = h.get("date")
+        if h_date:
+            try:
+                h_date_str = h_date.strftime("%Y-%m-%d") if isinstance(h_date, (date, datetime)) else str(h_date)[:10]
+                holiday_dates.add(h_date_str)
+            except:
+                pass
+                
+    def is_valid_day(d: datetime) -> bool:
+        if d.weekday() == 6: # Sunday
+            return False
+        if d.strftime("%Y-%m-%d") in holiday_dates:
+            return False
+        return True
+
+    current_date += timedelta(days=1)
+    
+    if followup_type == "Interval":
+        interval_days = config.get("followupIntervalDays") or 0
+        if interval_days <= 0: return None
+        
+        current_date -= timedelta(days=1)
+        days_added = 0
+        while days_added < interval_days:
+            current_date += timedelta(days=1)
+            if not is_valid_day(current_date): continue
+            days_added += 1
+        return current_date.strftime("%Y-%m-%d")
+        
+    elif followup_type == "Weekly":
+        days_of_week = config.get("followupDaysOfWeek") or []
+        if not days_of_week: return None
+        
+        for _ in range(30):
+            if current_date.weekday() in days_of_week:
+                target_date = current_date
+                while not is_valid_day(target_date):
+                    target_date += timedelta(days=1)
+                return target_date.strftime("%Y-%m-%d")
+            current_date += timedelta(days=1)
+            
+    elif followup_type == "Monthly":
+        import calendar
+        dates_of_month = config.get("followupDatesOfMonth") or []
+        if not dates_of_month: return None
+        
+        for _ in range(60):
+            last_day_of_month = calendar.monthrange(current_date.year, current_date.month)[1]
+            
+            is_match = False
+            for target_dom in dates_of_month:
+                if current_date.day == target_dom:
+                    is_match = True
+                    break
+                elif target_dom > last_day_of_month and current_date.day == last_day_of_month:
+                    is_match = True
+                    break
+                    
+            if is_match:
+                target_date = current_date
+                while not is_valid_day(target_date):
+                    target_date += timedelta(days=1)
+                return target_date.strftime("%Y-%m-%d")
+            current_date += timedelta(days=1)
+            
+    return None
+
 async def create_client(db, client: schemas.ClientCreate):
     client_dict = client.dict()
     performedBy = client_dict.pop("performedBy", "Unknown")
@@ -2356,6 +2444,10 @@ async def create_client(db, client: schemas.ClientCreate):
     
     if not client_dict.get("createdDate"):
         client_dict["createdDate"] = get_now().strftime("%Y-%m-%d")
+        
+    if client_dict.get("followupType") and client_dict.get("lastFollowupDate"):
+        client_dict["nextFollowupDate"] = await calculate_next_followup_date(db, client_dict["lastFollowupDate"], client_dict)
+        
     result = await db.clients.insert_one(client_dict)
     clientId = str(result.inserted_id)
     
@@ -2376,6 +2468,22 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
     
     if update_data:
         old_client = await db.clients.find_one({"_id": ObjectId(client_id)})
+        
+        # Handle followup calculation
+        followup_fields = ["followupType", "followupIntervalDays", "followupDaysOfWeek", "followupDatesOfMonth", "lastFollowupDate"]
+        if any(f in update_data for f in followup_fields):
+            new_config = {
+                "followupType": update_data.get("followupType", old_client.get("followupType")),
+                "followupIntervalDays": update_data.get("followupIntervalDays", old_client.get("followupIntervalDays")),
+                "followupDaysOfWeek": update_data.get("followupDaysOfWeek", old_client.get("followupDaysOfWeek")),
+                "followupDatesOfMonth": update_data.get("followupDatesOfMonth", old_client.get("followupDatesOfMonth"))
+            }
+            new_last_date = update_data.get("lastFollowupDate", old_client.get("lastFollowupDate"))
+            if new_last_date:
+                update_data["nextFollowupDate"] = await calculate_next_followup_date(db, new_last_date, new_config)
+            else:
+                update_data["nextFollowupDate"] = None
+                
         await db.clients.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
         
         details = []
@@ -2892,6 +3000,15 @@ async def get_task_logs(db, taskId: str = None, projectId: str = None, clientId:
     cursor = db.task_logs.find(query).sort("timestamp", -1)
     rows = await cursor.to_list(length=100)
     return [fix_id(row) for row in rows]
+
+async def update_task_log(db, log_id: str, new_details: str):
+    await db.task_logs.update_one({"_id": ObjectId(log_id)}, {"$set": {"details": new_details}})
+    doc = await db.task_logs.find_one({"_id": ObjectId(log_id)})
+    return fix_id(doc) if doc else None
+
+async def delete_task_log(db, log_id: str):
+    result = await db.task_logs.delete_one({"_id": ObjectId(log_id)})
+    return result.deleted_count > 0
 
 # Update existing log_task_activity calls to use the new log_activity
 async def log_task_activity(db, taskId: str, action: str, performedBy: str, userName: str, details: str):

@@ -16,8 +16,13 @@ import {
   LayoutGrid,
   History,
   ClipboardList,
-  Filter
+  Filter,
+  AlertCircle,
+  CheckCircle2,
+  CalendarClock
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
@@ -95,6 +100,107 @@ export default function CreativeClientsPage() {
   const [activeClient, setActiveClient] = useState<any>(null);
   const [waDialogOpen, setWaDialogOpen] = useState(false);
   const [waClient, setWaClient] = useState<any>(null);
+
+  const [followupConfigOpen, setFollowupConfigOpen] = useState(false);
+  const [followupConfigClient, setFollowupConfigClient] = useState<any>(null);
+  const [followupTypeInput, setFollowupTypeInput] = useState("Interval");
+  const [followupIntervalInput, setFollowupIntervalInput] = useState("");
+  const [followupDaysOfWeekInput, setFollowupDaysOfWeekInput] = useState<number[]>([]);
+  const [followupDatesOfMonthInput, setFollowupDatesOfMonthInput] = useState<number[]>([]);
+  const [followupLastDateInput, setFollowupLastDateInput] = useState("");
+
+  const [followupRemarkOpen, setFollowupRemarkOpen] = useState(false);
+  const [followupRemarkClient, setFollowupRemarkClient] = useState<any>(null);
+  const [followupRemarkText, setFollowupRemarkText] = useState("");
+
+  const [followupHistoryLogs, setFollowupHistoryLogs] = useState<any[]>([]);
+  const [isLoadingFollowupHistory, setIsLoadingFollowupHistory] = useState(false);
+  
+  const [newRemarkText, setNewRemarkText] = useState("");
+  const [isAddingRemark, setIsAddingRemark] = useState(false);
+
+  const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null);
+  const [editingRemarkText, setEditingRemarkText] = useState("");
+
+  const fetchFollowupHistory = async (client: any) => {
+    setIsLoadingFollowupHistory(true);
+    try {
+      const res = await fetch(`${API_URL}/task-logs?clientId=${client.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFollowupHistoryLogs(data.filter((l: any) => l.action === "Follow-up Completed"));
+      }
+    } catch (err) {
+      console.error("Error fetching logs:", err);
+    } finally {
+      setIsLoadingFollowupHistory(false);
+    }
+  };
+
+  const handleAddRemark = async () => {
+    if (!followupConfigClient || !newRemarkText.trim()) return;
+    setIsAddingRemark(true);
+    try {
+      const res = await fetch(`${API_URL}/task-logs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "Follow-up Completed",
+          details: `Remark: ${newRemarkText}`,
+          clientId: followupConfigClient.id,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        })
+      });
+      if (res.ok) {
+        toast.success("Remark added");
+        setNewRemarkText("");
+        fetchFollowupHistory(followupConfigClient);
+      } else {
+        toast.error("Failed to add remark");
+      }
+    } catch (err) {
+      console.error("Error adding remark:", err);
+      toast.error("An error occurred");
+    } finally {
+      setIsAddingRemark(false);
+    }
+  };
+
+  const handleUpdateRemark = async (logId: string) => {
+    if (!editingRemarkText.trim() || !followupConfigClient) return;
+    try {
+      const res = await fetch(`${API_URL}/task-logs/${logId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ details: `Remark: ${editingRemarkText}` })
+      });
+      if (res.ok) {
+        toast.success("Remark updated");
+        setEditingRemarkId(null);
+        fetchFollowupHistory(followupConfigClient);
+      } else {
+        toast.error("Failed to update remark");
+      }
+    } catch (err) {
+      console.error("Error updating remark:", err);
+    }
+  };
+
+  const handleDeleteRemark = async (logId: string) => {
+    if (!followupConfigClient || !window.confirm("Delete this remark?")) return;
+    try {
+      const res = await fetch(`${API_URL}/task-logs/${logId}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Remark deleted");
+        fetchFollowupHistory(followupConfigClient);
+      } else {
+        toast.error("Failed to delete remark");
+      }
+    } catch (err) {
+      console.error("Error deleting remark:", err);
+    }
+  };
 
   const fetchLogs = async (client: any) => {
     setIsLoadingLogs(true);
@@ -216,6 +322,75 @@ export default function CreativeClientsPage() {
     }
   };
 
+  const handleFollowupCompleteWithRemark = async () => {
+    if (!followupRemarkClient) return;
+    try {
+      if (followupRemarkText.trim()) {
+        await fetch(`${API_URL}/task-logs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "Follow-up Completed",
+            details: `Remark: ${followupRemarkText}`,
+            clientId: followupRemarkClient.id,
+            performedBy: user?.id,
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+          })
+        });
+      }
+      
+      const today = new Date().toISOString().split('T')[0];
+      const res = await fetch(`${API_URL}/clients/${followupRemarkClient.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          lastFollowupDate: today,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Follow-up completed");
+        setFollowupRemarkOpen(false);
+        fetchClients();
+      } else {
+        toast.error("Failed to mark follow-up");
+      }
+    } catch (err) {
+      console.error("Error updating follow-up:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+  const handleSaveFollowupConfig = async () => {
+    if (!followupConfigClient) return;
+    try {
+      const res = await fetch(`${API_URL}/clients/${followupConfigClient.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          followupType: followupTypeInput,
+          followupIntervalDays: parseInt(followupIntervalInput) || null,
+          followupDaysOfWeek: followupDaysOfWeekInput,
+          followupDatesOfMonth: followupDatesOfMonthInput,
+          lastFollowupDate: followupLastDateInput || null,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Follow-up configuration saved");
+        setFollowupConfigOpen(false);
+        fetchClients();
+      } else {
+        toast.error("Failed to save follow-up configuration");
+      }
+    } catch (err) {
+      console.error("Error saving follow-up config:", err);
+      toast.error("An error occurred");
+    }
+  };
+
   const filteredClients = clients.filter(c => 
     c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -271,9 +446,33 @@ export default function CreativeClientsPage() {
                       <User className="w-4 h-4" /> {client.name || "N/A"}
                     </p>
                   </div>
-                  <Badge className={client.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}>
-                    {client.status?.toUpperCase() || "ACTIVE"}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-1.5">
+                    <Badge className={client.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}>
+                      {client.status?.toUpperCase() || "ACTIVE"}
+                    </Badge>
+                    {client.nextFollowupDate && new Date(client.nextFollowupDate) <= new Date() && (
+                      <div className="flex flex-col items-end gap-1.5 mt-1">
+                        <Badge className="bg-rose-100 text-rose-700 border-rose-200 animate-pulse flex items-center gap-1 shadow-sm">
+                          <AlertCircle className="w-3 h-3" />
+                          Follow-up Due
+                        </Badge>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-7 text-xs px-2.5 bg-white text-rose-600 border-rose-200 hover:bg-rose-50 shadow-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFollowupRemarkClient(client);
+                            setFollowupRemarkText("");
+                            setFollowupRemarkOpen(true);
+                          }}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                          Mark Done
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-3 mt-2 flex-1">
@@ -305,6 +504,25 @@ export default function CreativeClientsPage() {
                   <div className="flex items-center gap-1">
                     <Button 
                       variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 z-10 text-slate-400 hover:text-brand-teal hover:bg-brand-teal/10"
+                      title="Set Follow-up Rules"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFollowupConfigClient(client);
+                        setFollowupTypeInput(client.followupType || "Interval");
+                        setFollowupIntervalInput(client.followupIntervalDays ? String(client.followupIntervalDays) : "");
+                        setFollowupDaysOfWeekInput(client.followupDaysOfWeek || []);
+                        setFollowupDatesOfMonthInput(client.followupDatesOfMonth || []);
+                        setFollowupLastDateInput(client.lastFollowupDate || "");
+                        setFollowupConfigOpen(true);
+                        fetchFollowupHistory(client);
+                      }}
+                    >
+                      <CalendarClock className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost"  
                       size="icon" 
                       className={`h-8 w-8 z-10 ${client.whatsappGroup ? 'text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10' : 'text-slate-400 hover:text-[#25D366] hover:bg-[#25D366]/10'}`}
                       title={client.whatsappGroup ? "Manage WhatsApp Group" : "Add WhatsApp Group"}
@@ -401,6 +619,205 @@ export default function CreativeClientsPage() {
         client={waClient}
         onSaved={fetchClients}
       />
+
+      {/* Follow-up Config Dialog */}
+      <Dialog open={followupConfigOpen} onOpenChange={setFollowupConfigOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Follow-up Settings</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Schedule Type</Label>
+              <Select value={followupTypeInput} onValueChange={setFollowupTypeInput}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Interval">Fixed Interval (Days)</SelectItem>
+                  <SelectItem value="Weekly">Weekly (Specific Days)</SelectItem>
+                  <SelectItem value="Monthly">Monthly (Specific Dates)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {followupTypeInput === "Interval" && (
+              <div className="space-y-2">
+                <Label>Follow-up Interval (Days)</Label>
+                <Input 
+                  type="number" 
+                  placeholder="e.g. 7 for weekly" 
+                  value={followupIntervalInput} 
+                  onChange={(e) => setFollowupIntervalInput(e.target.value)} 
+                />
+              </div>
+            )}
+            
+            {followupTypeInput === "Weekly" && (
+              <div className="space-y-2">
+                <Label>Select Days of Week</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: "Mon", val: 0 },
+                    { label: "Tue", val: 1 },
+                    { label: "Wed", val: 2 },
+                    { label: "Thu", val: 3 },
+                    { label: "Fri", val: 4 },
+                    { label: "Sat", val: 5 }
+                  ].map(day => (
+                    <Badge 
+                      key={day.val}
+                      variant={followupDaysOfWeekInput.includes(day.val) ? "default" : "outline"}
+                      className={`cursor-pointer ${followupDaysOfWeekInput.includes(day.val) ? 'bg-brand-teal' : ''}`}
+                      onClick={() => {
+                        if (followupDaysOfWeekInput.includes(day.val)) {
+                          setFollowupDaysOfWeekInput(followupDaysOfWeekInput.filter(d => d !== day.val));
+                        } else {
+                          setFollowupDaysOfWeekInput([...followupDaysOfWeekInput, day.val]);
+                        }
+                      }}
+                    >
+                      {day.label}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {followupTypeInput === "Monthly" && (
+              <div className="space-y-2">
+                <Label>Select Dates of Month (1-31)</Label>
+                <div className="grid grid-cols-7 gap-1">
+                  {Array.from({length: 31}, (_, i) => i + 1).map(date => (
+                    <div 
+                      key={date}
+                      className={`text-xs text-center p-1 cursor-pointer rounded ${followupDatesOfMonthInput.includes(date) ? 'bg-brand-teal text-white' : 'hover:bg-slate-100'}`}
+                      onClick={() => {
+                        if (followupDatesOfMonthInput.includes(date)) {
+                          setFollowupDatesOfMonthInput(followupDatesOfMonthInput.filter(d => d !== date));
+                        } else {
+                          setFollowupDatesOfMonthInput([...followupDatesOfMonthInput, date]);
+                        }
+                      }}
+                    >
+                      {date}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-slate-500 italic">Skips Sundays & Public Holidays automatically.</p>
+            
+            <div className="space-y-2">
+              <Label>Last Follow-up Date</Label>
+              <Input 
+                type="date" 
+                value={followupLastDateInput} 
+                onChange={(e) => setFollowupLastDateInput(e.target.value)} 
+              />
+            </div>
+            <div className="pt-4 flex justify-end gap-2 border-t mt-4">
+              <Button variant="outline" onClick={() => setFollowupConfigOpen(false)}>Cancel</Button>
+              <Button className="bg-brand-teal text-white hover:bg-brand-teal-light" onClick={handleSaveFollowupConfig}>Save Configuration</Button>
+            </div>
+
+            <div className="mt-6 pt-4 border-t">
+              <Label className="text-sm font-semibold mb-3 block text-slate-700">Past Follow-up Remarks</Label>
+              
+              <div className="flex gap-2 mb-4">
+                <Input 
+                  placeholder="Add a new remark..." 
+                  value={newRemarkText}
+                  onChange={(e) => setNewRemarkText(e.target.value)}
+                  className="flex-1"
+                />
+                <Button 
+                  size="icon" 
+                  className="bg-brand-teal text-white hover:bg-brand-teal-light shrink-0"
+                  onClick={handleAddRemark}
+                  disabled={isAddingRemark || !newRemarkText.trim()}
+                >
+                  {isAddingRemark ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                </Button>
+              </div>
+
+              <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2">
+                {isLoadingFollowupHistory ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-brand-teal" /></div>
+                ) : followupHistoryLogs.length > 0 ? (
+                  followupHistoryLogs.map((log: any, idx: number) => (
+                    <div key={idx} className="bg-slate-50 p-3 rounded-lg border border-slate-100 group">
+                      <div className="flex justify-between items-start mb-1">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-slate-500">{new Date(log.timestamp).toLocaleDateString()}</span>
+                          <span className="text-[10px] text-slate-400">{log.userName}</span>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-brand-teal" onClick={() => {
+                            setEditingRemarkId(log.id);
+                            setEditingRemarkText(log.details.replace('Remark: ', ''));
+                          }}>
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-rose-600" onClick={() => handleDeleteRemark(log.id)}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      {editingRemarkId === log.id ? (
+                        <div className="flex flex-col gap-2 mt-2">
+                          <textarea 
+                            value={editingRemarkText} 
+                            onChange={e => setEditingRemarkText(e.target.value)} 
+                            className="w-full text-xs p-2 border border-brand-teal/50 rounded resize-none focus:outline-none focus:ring-1 focus:ring-brand-teal" 
+                            rows={2} 
+                            autoFocus 
+                          />
+                          <div className="flex justify-end gap-1">
+                            <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={() => setEditingRemarkId(null)}>Cancel</Button>
+                            <Button size="sm" className="h-6 text-[10px] px-2 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleUpdateRemark(log.id)}>Save</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-700 whitespace-pre-wrap">{log.details.replace('Remark: ', '')}</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-xs text-slate-400 py-4 bg-slate-50 rounded border border-slate-100">No past follow-ups found.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Follow-up Remark Dialog */}
+      <Dialog open={followupRemarkOpen} onOpenChange={setFollowupRemarkOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Complete Follow-up</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Follow-up Remark (Optional)</Label>
+              <textarea 
+                className="w-full min-h-[100px] border border-slate-200 rounded-md p-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal"
+                placeholder="Enter notes about this follow-up..."
+                value={followupRemarkText}
+                onChange={(e) => setFollowupRemarkText(e.target.value)}
+              />
+            </div>
+            <div className="pt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setFollowupRemarkOpen(false)}>Cancel</Button>
+              <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={handleFollowupCompleteWithRemark}>
+                <CheckCircle2 className="w-4 h-4 mr-2" /> Mark as Done
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
