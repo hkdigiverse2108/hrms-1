@@ -843,7 +843,10 @@ export default function LeavePage() {
             <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-2 md:pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300">
               <div className="space-y-2">
                 <Label htmlFor="leave-type">Leave Type</Label>
-                <Select value={leaveType} onValueChange={setLeaveType} disabled={isViewOnly}>
+                <Select value={leaveType} onValueChange={(val) => {
+                  setLeaveType(val);
+                  if (val === "annual") setDayType("Full Day");
+                }} disabled={isViewOnly}>
 
                   <SelectTrigger id="leave-type" className="w-full">
                     <SelectValue placeholder="Select leave type" />
@@ -896,14 +899,18 @@ export default function LeavePage() {
               <div className="grid grid-cols-1 gap-4 pt-2">
                 <div className="space-y-2">
                   <Label htmlFor="day-type">Day Type</Label>
-                  <Select value={dayType} onValueChange={setDayType} disabled={isViewOnly}>
+                  <Select value={dayType} onValueChange={setDayType} disabled={isViewOnly || leaveType === "annual"}>
                     <SelectTrigger id="day-type" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Full Day">Full Day</SelectItem>
-                      <SelectItem value="First Half">First Half</SelectItem>
-                      <SelectItem value="Second Half">Second Half</SelectItem>
+                      {leaveType !== "annual" && (
+                        <>
+                          <SelectItem value="First Half">First Half</SelectItem>
+                          <SelectItem value="Second Half">Second Half</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
