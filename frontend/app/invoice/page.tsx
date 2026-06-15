@@ -146,9 +146,17 @@ export default function AllInvoicesPage() {
   const executeMarkAsPaid = async () => {
     if (!activeInvoiceId) return;
     
+    const activeInvoice = invoices.find(inv => inv.id === activeInvoiceId);
+    if (!activeInvoice) return;
+
     const baseAmt = parseFloat(incentiveAmountBase);
     if (isNaN(baseAmt) || baseAmt < 0) {
       toast.error("Please enter a valid incentive amount");
+      return;
+    }
+
+    if (baseAmt > (activeInvoice.total || 0)) {
+      toast.error("Incentive base amount cannot exceed the invoice amount");
       return;
     }
 
@@ -633,7 +641,15 @@ export default function AllInvoicesPage() {
                 id="incentiveAmountBase"
                 type="number"
                 value={incentiveAmountBase}
-                onChange={(e) => setIncentiveAmountBase(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const inv = invoices.find(i => i.id === activeInvoiceId);
+                  if (inv && val && parseFloat(val) > (inv.total || 0)) {
+                    toast.error("Incentive base amount cannot exceed the invoice amount");
+                    return;
+                  }
+                  setIncentiveAmountBase(val);
+                }}
                 placeholder="0.00"
               />
             </div>
