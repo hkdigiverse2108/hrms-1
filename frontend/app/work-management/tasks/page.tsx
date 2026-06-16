@@ -98,7 +98,21 @@ export default function TasksPage() {
       
       if (tRes.ok) setTasks(await tRes.json());
       if (pRes.ok) setProjects(await pRes.json());
-      if (eRes.ok) setEmployees(await eRes.json());
+      if (eRes.ok) {
+        let emps = await eRes.json();
+        if (user && !emps.some((e: any) => e.id === user.id)) {
+          emps.unshift({
+            id: user.id,
+            firstName: user.firstName || user.name?.split(' ')[0] || 'Me',
+            lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+            name: user.name,
+            email: user.email,
+            designation: user.designation,
+            department: user.department
+          });
+        }
+        setEmployees(emps);
+      }
     } catch (err) {
       console.error("Error fetching tasks:", err);
     } finally {
@@ -319,7 +333,9 @@ export default function TasksPage() {
     if (!dateString || status === "completed") return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const dueDate = new Date(dateString);
+    const [y, m, d] = dateString.split('-');
+    const dueDate = new Date(Number(y), Number(m) - 1, Number(d));
+    dueDate.setHours(0, 0, 0, 0);
     return dueDate < today;
   };
 
