@@ -900,11 +900,6 @@ export default function ChatPage() {
             }, 100);
           }
 
-          // If no change in message count, keep previous state to avoid unnecessary re-render
-          if (!isInitialLoad && !hasNewMessages && prevReal.length === marked.length) {
-            return prev;
-          }
-
           return marked;
         });
         
@@ -1692,15 +1687,62 @@ export default function ChatPage() {
 
   const handleVote = async (messageId: string, optionId: string) => {
     if (!user) return;
+
+    const applyVoteOptions = (options: any[]) => {
+      setCurrentMessages((prev) =>
+        prev.map((msg: any) =>
+          msg.id === messageId && msg.poll
+            ? { ...msg, poll: { ...msg.poll, options } }
+            : msg
+        )
+      );
+    };
+
+    const previousMessage = currentMessages.find((msg: any) => msg.id === messageId);
+    if (!previousMessage?.poll) return;
+
+    const optimisticOptions = previousMessage.poll.options.map((option: any) => {
+      const votes = Array.isArray(option.votes) ? [...option.votes] : [];
+      const hasVote = votes.includes(user.id);
+
+      if (option.id === optionId) {
+        return {
+          ...option,
+          votes: hasVote ? votes.filter((id: string) => id !== user.id) : [...votes, user.id]
+        };
+      }
+
+      if (!previousMessage.poll.isMultiple) {
+        return {
+          ...option,
+          votes: votes.filter((id: string) => id !== user.id)
+        };
+      }
+
+      return { ...option, votes };
+    });
+
+    applyVoteOptions(optimisticOptions);
+
     try {
       const res = await fetch(`${API_URL}/chat/messages/${messageId}/vote?user_id=${user.id}&option_id=${optionId}`, {
         method: 'POST'
       });
       if (res.ok) {
-        fetchMessages();
+        const data = await res.json();
+        if (data?.options) {
+          applyVoteOptions(data.options);
+        } else {
+          fetchMessages();
+        }
+      } else {
+        applyVoteOptions(previousMessage.poll.options);
+        toast.error("Vote failed");
       }
     } catch (err) {
       console.error("Error voting:", err);
+      applyVoteOptions(previousMessage.poll.options);
+      toast.error("Vote failed");
     }
   };
 
