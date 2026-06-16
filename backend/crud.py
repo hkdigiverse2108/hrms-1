@@ -5971,6 +5971,14 @@ async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool]
     updated = await db.registered_pcs.find_one({"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}})
     return fix_id(updated) if updated else None
 # --- Content Calendar Operations ---
+async def get_all_content_calendar_entries(db):
+    try:
+        cursor = db.content_calendar_entries.find({})
+        entries = await cursor.to_list(length=5000)
+        return [fix_id(e) for e in entries]
+    except Exception as e:
+        raise e
+
 async def get_content_calendar_entries(db, client_id: str, month_year: str = None):
     try:
         query = {"clientId": client_id}

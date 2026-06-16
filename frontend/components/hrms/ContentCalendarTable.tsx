@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
-import { Loader2, Plus, Trash2, Save, X, Check, Maximize, Minimize, Settings2, Download, History, Calendar as CalendarIcon, ChevronDownIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, Save, X, Check, Maximize, Minimize, Settings2, Download, History, Calendar as CalendarIcon, ChevronDownIcon, Copy } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button } from "@/components/ui/button";
@@ -157,7 +157,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       if (res.ok) {
         const newEntry = await res.json();
         setEntries([...entries, newEntry]);
-        startEditing(newEntry);
+        startEditing(newEntry, true);
       }
     } catch (error) {
       toast.error("Failed to add new row");
@@ -293,14 +293,26 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     }
   };
 
-  const startEditing = (entry: any) => {
+  const [isNewRow, setIsNewRow] = useState(false);
+
+  const startEditing = (entry: any, isNew = false) => {
     setEditingId(entry.id);
     setEditForm({ ...entry });
+    setIsNewRow(isNew);
   };
 
-  const cancelEditing = () => {
+  const cancelEditing = async () => {
+    if (isNewRow && editingId) {
+      try {
+        await fetch(`${API_URL}/content-calendar/${editingId}`, { method: 'DELETE' });
+        setEntries(prev => prev.filter(e => e.id !== editingId));
+      } catch (err) {
+        console.error("Failed to delete new row on cancel", err);
+      }
+    }
     setEditingId(null);
     setEditForm({});
+    setIsNewRow(false);
   };
 
   useEffect(() => {
@@ -349,6 +361,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
         const updated = await res.json();
         setEntries(entries.map(e => e.id === editingId ? updated : e));
         setEditingId(null);
+        setIsNewRow(false);
         toast.success("Row updated");
       } else {
         toast.error("Failed to update row");
@@ -928,9 +941,23 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                               title={entry[key] || ""}
                             >
                               {entry[key] && (key.toLowerCase().includes("link") || key === "reference") && entry[key].startsWith("http") ? (
-                                <a href={entry[key]} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline" onClick={e => e.stopPropagation()}>
-                                  Link
-                                </a>
+                                <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                                  <a href={entry[key]} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs flex-1 truncate">
+                                    Link
+                                  </a>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5 hover:bg-slate-100"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigator.clipboard.writeText(entry[key]);
+                                      toast.success("Link copied!");
+                                    }}
+                                  >
+                                    <Copy className="h-3 w-3 text-slate-400 hover:text-slate-600" />
+                                  </Button>
+                                </div>
                               ) : (
                                 formatDateDisplay(entry[key]) || null
                               )}

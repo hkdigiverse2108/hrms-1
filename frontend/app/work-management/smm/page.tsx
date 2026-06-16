@@ -253,14 +253,38 @@ export default function CreativeClientsPage() {
     fetchClients();
   }, []);
 
+  const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
+
   const fetchClients = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/clients`);
+      const [res, ccRes] = await Promise.all([
+        fetch(`${API_URL}/clients`),
+        fetch(`${API_URL}/content-calendar/all`)
+      ]);
+      
       if (res.ok) {
         const data = await res.json();
         // Filter for Creative department only
         setClients(data.filter((c: any) => c.department === "Creative"));
+      }
+
+      if (ccRes.ok) {
+        const entries = await ccRes.json();
+        const counts: Record<string, number> = {};
+        entries.forEach((entry: any) => {
+          let pending = 0;
+          if (entry.scriptDate && !entry.scriptLink) pending++;
+          if (entry.shootDate && !entry.shootLink) pending++;
+          if (entry.editingStart && !entry.finalReelLink) pending++;
+          if (entry.approval && entry.isApproved !== 'Yes') pending++;
+          if (entry.postingDate && !entry.postingLinkOfIg) pending++;
+
+          if (pending > 0) {
+            counts[entry.clientId] = (counts[entry.clientId] || 0) + pending;
+          }
+        });
+        setPendingCounts(counts);
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -423,6 +447,10 @@ export default function CreativeClientsPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        <Button onClick={() => router.push('/work-management/smm/pending')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto">
+          <CalendarClock className="w-4 h-4" />
+          View Pending Work
+        </Button>
         <Button variant="outline" className="h-10 text-slate-600 gap-2 w-full md:w-auto">
           <Filter className="w-4 h-4" />
           Filters
@@ -453,11 +481,26 @@ export default function CreativeClientsPage() {
                 {filteredClients.map((client) => (
                   <tr key={client.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div 
-                        className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
-                        onClick={() => router.push(`/work-management/smm/${client.id}`)}
-                      >
-                        {client.companyName || "N/A"}
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
+                          onClick={() => router.push(`/work-management/smm/${client.id}`)}
+                        >
+                          {client.companyName || "N/A"}
+                        </div>
+                        {pendingCounts[client.id] > 0 && (
+                          <Badge 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/work-management/smm/pending?client=${client.id}`);
+                            }}
+                            variant="destructive" 
+                            className="cursor-pointer hover:bg-red-600 shadow-sm px-2 py-0.5 text-[10px] animate-in fade-in zoom-in duration-300"
+                            title="Click to view pending tasks"
+                          >
+                            {pendingCounts[client.id]} Pending
+                          </Badge>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
