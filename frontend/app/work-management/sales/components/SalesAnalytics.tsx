@@ -119,7 +119,7 @@ export function SalesAnalytics() {
       if (selectedEmployee !== 'all') {
         const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
         matchesEmp = assignedList.some(emp => {
-          const empName = typeof emp === 'string' ? emp : (emp?.name || emp?.employeeName || "");
+          const empName = typeof emp === 'string' ? emp : (emp?.name || emp?.employeeName || String(emp || ""));
           return empName.trim().toLowerCase().replace(/\s+/g, ' ') === selectedEmployee.trim().toLowerCase().replace(/\s+/g, ' ');
         });
       }
@@ -289,12 +289,15 @@ export function SalesAnalytics() {
       });
     });
 
-    const employeeData = Object.values(empStats).map(emp => {
+    let employeeData = Object.values(empStats).map(emp => {
       return {
         ...emp,
         winRate: emp.assigned > 0 ? (emp.won / emp.assigned) * 100 : 0
       };
     });
+
+    // Filter out rows that have absolutely no data
+    employeeData = employeeData.filter(emp => emp.assigned > 0 || emp.revenue > 0 || emp.target > 0);
 
     const totalTargetValue = employeeData.reduce((sum, emp) => sum + emp.target, 0);
 
@@ -433,7 +436,12 @@ export function SalesAnalytics() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Employees</SelectItem>
-              {Array.from(new Set(employees.filter(e => e.department?.toLowerCase() === 'sales').map(emp => emp.name || `${emp.firstName} ${emp.lastName}`))).map((name, idx) => (
+              {Array.from(new Set(employees.filter(e => {
+                const dept = (e.department || '').toLowerCase();
+                const role = ((e as any).role || '').toLowerCase();
+                const name = (e.name || '').toLowerCase();
+                return dept === 'sales' || role === 'admin' || dept === 'admin' || name.includes('admin');
+              }).map(emp => emp.name || `${emp.firstName} ${emp.lastName}`))).filter(Boolean).map((name, idx) => (
                 <SelectItem key={idx} value={name}>{name}</SelectItem>
               ))}
             </SelectContent>
