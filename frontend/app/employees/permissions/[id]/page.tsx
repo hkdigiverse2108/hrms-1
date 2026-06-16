@@ -90,13 +90,13 @@ const PERMISSION_GROUPS = [
       { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
       { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
       { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
+      { moduleName: 'activity-tracker', displayName: 'Activity Tracker', tabUrl: '/activity-tracker' },
     ]
   },
   {
     name: 'System',
     icon: Settings,
     modules: [
-      { moduleName: 'access-control', displayName: 'Access Control', tabUrl: '/settings' },
       { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
     ]
   },

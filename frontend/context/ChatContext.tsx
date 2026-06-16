@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import { useUser } from "@/hooks/useUser";
-import { API_URL } from "@/lib/config";
+import { API_URL, getAvatarUrl } from "@/lib/config";
 
 interface ChatEvent {
   event: string;
@@ -95,18 +95,33 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         if (!active) return;
         if (res.ok) {
           const data = await res.json();
-          const host = window.location.hostname;
-          const port = window.location.port;
-          const isLocal = host === "localhost" || 
-                          host === "127.0.0.1" || 
-                          host.startsWith("192.168.") || 
-                          host.startsWith("10.") || 
-                          host.startsWith("172.") || 
-                          host.endsWith(".local") ||
-                          (port !== "" && port !== "80" && port !== "443");
-          
-          if (isLocal && data.port) {
-            wsUrl = `${wsProtocol}//${host}:${data.port}/chat/ws/${user.id}`;
+          if (data.url) {
+            let cleanUrl = data.url;
+            if (
+              !cleanUrl.includes("localhost") &&
+              !cleanUrl.includes("127.0.0.1") &&
+              !cleanUrl.includes("/api") &&
+              !cleanUrl.includes("192.168.") &&
+              !cleanUrl.includes("10.") &&
+              !cleanUrl.includes("172.")
+            ) {
+              cleanUrl = cleanUrl.replace("/chat/ws", "/api/chat/ws");
+            }
+            wsUrl = `${cleanUrl}/${user.id}`;
+          } else {
+            const host = window.location.hostname;
+            const port = window.location.port;
+            const isLocal = host === "localhost" || 
+                            host === "127.0.0.1" || 
+                            host.startsWith("192.168.") || 
+                            host.startsWith("10.") || 
+                            host.startsWith("172.") || 
+                            host.endsWith(".local") ||
+                            (port !== "" && port !== "80" && port !== "443");
+            
+            if (isLocal && data.port) {
+              wsUrl = `${wsProtocol}//${host}:${data.port}/chat/ws/${user.id}`;
+            }
           }
         }
       } catch (err) {
@@ -148,6 +163,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         console.log("[ChatContext] WebSocket connected ✅");
         setWs(websocket);
         reconnectAttempts = 0;
+
+        // Start heartbeat ping interval to keep connection alive through proxies (Nginx/Cloudflare)
+        const pingInterval = setInterval(() => {
+          if (websocket.readyState === WebSocket.OPEN) {
+            websocket.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 30000);
+        (websocket as any).pingInterval = pingInterval;
       };
 
       websocket.onclose = (event) => {
@@ -155,15 +178,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         console.log("[ChatContext] WebSocket closed ❌ code:", event.code, "reason:", event.reason);
         setWs(null);
         wsRef.current = null;
-        if (reconnectAttempts < 10) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 3000);
-          reconnectTimeout = setTimeout(() => {
-            if (active) {
-              reconnectAttempts++;
-              connectWebSocket();
-            }
-          }, delay);
+        
+        if ((websocket as any).pingInterval) {
+          clearInterval((websocket as any).pingInterval);
         }
+
+        // Reconnect indefinitely with an exponential backoff capped at 30 seconds
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+        reconnectTimeout = setTimeout(() => {
+          if (active) {
+            reconnectAttempts++;
+            connectWebSocket();
+          }
+        }, delay);
       };
 
       websocket.onerror = (err) => {
@@ -205,7 +232,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                setUnreadCounts(prev => ({ ...prev, [messageChatId]: (prev[messageChatId] || 0) + 1 }));
 
                const isDnd = localStorage.getItem("globalDndEnabled") === "true";
-               if (!isDnd && !data.isMe) {
+               if (!isDnd && data.senderId !== user.id) {
                  const mutedChatsStr = localStorage.getItem("mutedChats");
                  const mutedChats = mutedChatsStr ? JSON.parse(mutedChatsStr) : [];
                  const isMuted = mutedChats.includes(messageChatId);
@@ -288,14 +315,54 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                          console.warn(e);
                        }
 
-                       // Desktop Notification
-                       if ("Notification" in window && Notification.permission === "granted" && (!isTabActive || !isChatPage)) {
-                         const senderName = data.sender || "Colleague";
-                         const body = data.text || "Sent an attachment";
-                         const title = data.groupId ? `💬 ${senderName} (Group Chat)` : `💬 ${senderName}`;
-                         const notif = new Notification(title, { body, icon: "/favicon.ico" });
-                         notif.onclick = () => { window.focus(); };
-                       }
+                        // Desktop Notification
+                        if (typeof window !== "undefined" && !isUserViewingThisChat) {
+                          const senderName = data.sender || "Colleague";
+                          const body = data.text || "Sent an attachment";
+                          const title = "HariKrushn DigiVerse LLP";
+                          const notificationBody = `${senderName}\n${body}`;
+                          
+                          let avatarUrl = "/favicon.ico";
+                          if (data.senderAvatar) {
+                            const resolved = getAvatarUrl(data.senderAvatar);
+                            if (resolved) {
+                              avatarUrl = resolved.startsWith("/")
+                                ? `${window.location.origin}${resolved}`
+                                : resolved;
+                            }
+                          }
+
+                          if ((window as any).electronAPI && typeof (window as any).electronAPI.showNotification === 'function') {
+                            (window as any).electronAPI.showNotification(title, { 
+                              body: notificationBody, 
+                              icon: "/favicon.ico",
+                              clickUrl: `/chat?chatId=${messageChatId}&chatType=${isGroupMsg ? 'group' : 'personal'}`
+                            });
+                          } else if ("Notification" in window && Notification.permission === "granted") {
+                            const notif = new Notification(title, { 
+                              body: notificationBody, 
+                              icon: avatarUrl 
+                            });
+                            notif.onclick = () => {
+                              if (typeof window !== "undefined") {
+                                localStorage.setItem("selectedChatIdOnMount", messageChatId);
+                                localStorage.setItem("selectedChatTypeOnMount", isGroupMsg ? 'group' : 'personal');
+                                
+                                if (window.electronAPI && window.electronAPI.focusWindow) {
+                                  window.electronAPI.focusWindow();
+                                } else {
+                                  window.focus();
+                                }
+                                
+                                if (window.location.pathname !== "/chat") {
+                                  window.location.href = "/chat";
+                                } else {
+                                  window.dispatchEvent(new Event("chat-notification-click"));
+                                }
+                              }
+                            };
+                          }
+                        }
                      }
                    }
                  }

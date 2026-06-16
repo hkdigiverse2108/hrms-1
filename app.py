@@ -11,8 +11,7 @@ from pathlib import Path
 def load_env():
     # Priority: .env.server (if on server) or .env
     is_prod_flag = "--prod" in sys.argv
-    # On macOS, default to .env for local development unless --prod is specified
-    if platform.system() == "Darwin" and not is_prod_flag:
+    if not is_prod_flag:
         env_files = [".env", ".env.server"]
     else:
         env_files = [".env.server", ".env"]
@@ -89,6 +88,7 @@ def run_app():
     # Ensure standard env vars are set
     os.environ["HOST"] = app_host
     os.environ["UVICORN_HOST"] = app_host
+    os.environ["NODE_OPTIONS"] = "--max-old-space-size=2048"
 
     print("=" * 60)
     print(f"  HRMS Application Launcher (Like Sahjanand)")

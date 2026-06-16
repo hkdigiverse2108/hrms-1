@@ -19,7 +19,123 @@ print("MAIN PATH:", __file__, flush=True)
 @asynccontextmanager
 async def lifespan(app):
     # --- Startup ---
-    pass
+    # Database migration: clean up registered_pcs duplicate hostnames and restore raw/original casing
+    try:
+        from database import db
+        print("[PC Migration] Starting registered_pcs database cleanup/migration...", flush=True)
+        cursor = db.registered_pcs.find({})
+        all_pcs = await cursor.to_list(length=10000)
+        
+        # Keep track of unique lowercased hostnames to detect duplicate casing
+        seen_pcs = {} # { hostname_lower: doc }
+        
+        for pc in all_pcs:
+            orig_hostname = pc.get("hostname", "")
+            if not orig_hostname:
+                continue
+            
+            hostname_lower = orig_hostname.lower()
+            
+            # Check if this hostname is already processed in lowercase form
+            if hostname_lower in seen_pcs:
+                # Merge current duplicate with the already seen lowercase one
+                target_pc = seen_pcs[hostname_lower]
+                
+                # Merge settings
+                merged_fields = {}
+                
+                # Take activeEmployee if target is empty and current has it
+                if not target_pc.get("activeEmployee") and pc.get("activeEmployee"):
+                    merged_fields["activeEmployee"] = pc.get("activeEmployee")
+                
+                # Boolean flags: if either is True, keep True
+                for flag in ["blockChrome", "blockYoutube"]:
+                    if pc.get(flag) is True and target_pc.get(flag) is not True:
+                        merged_fields[flag] = True
+                
+                # Lists: union lists
+                for list_field in ["blockApps", "blockUrls"]:
+                    target_list = list(target_pc.get(list_field) or [])
+                    current_list = list(pc.get(list_field) or [])
+                    combined = list(set(target_list + current_list))
+                    if len(combined) != len(target_list):
+                        merged_fields[list_field] = combined
+                
+                # Newer timestamps/info
+                if pc.get("lastSeen") and (not target_pc.get("lastSeen") or pc.get("lastSeen") > target_pc.get("lastSeen")):
+                    merged_fields["lastSeen"] = pc.get("lastSeen")
+                    if pc.get("ipAddress"):
+                        merged_fields["ipAddress"] = pc.get("ipAddress")
+                    if pc.get("os"):
+                        merged_fields["os"] = pc.get("os")
+                    if pc.get("osVersion"):
+                        merged_fields["osVersion"] = pc.get("osVersion")
+                
+                # Preserve the casing of whichever document is non-lowercase (if applicable)
+                if orig_hostname != hostname_lower and target_pc.get("hostname") == hostname_lower:
+                    merged_fields["hostname"] = orig_hostname
+                
+                # Update the target lowercase document with merged fields
+                if merged_fields:
+                    await db.registered_pcs.update_one({"_id": target_pc["_id"]}, {"$set": merged_fields})
+                    # Update our in-memory reference
+                    seen_pcs[hostname_lower].update(merged_fields)
+                
+                # Delete the duplicate document (since it has been merged)
+                await db.registered_pcs.delete_one({"_id": pc["_id"]})
+                print(f"[PC Migration] Merged and deleted duplicate registered PC: {orig_hostname}", flush=True)
+            else:
+                # If the current document is NOT lowercase, check if there is an existing lowercase document in db
+                if orig_hostname != hostname_lower:
+                    # Let's search db for existing lowercase document
+                    existing_lower = await db.registered_pcs.find_one({"hostname": hostname_lower})
+                    if existing_lower:
+                        # Found existing lowercase document! We merge this one into existing_lower.
+                        seen_pcs[hostname_lower] = existing_lower
+                        
+                        # Process merging
+                        target_pc = existing_lower
+                        merged_fields = {}
+                        
+                        # Preserve original non-lowercase casing in the merged doc!
+                        merged_fields["hostname"] = orig_hostname
+                        
+                        if not target_pc.get("activeEmployee") and pc.get("activeEmployee"):
+                            merged_fields["activeEmployee"] = pc.get("activeEmployee")
+                        for flag in ["blockChrome", "blockYoutube"]:
+                            if pc.get(flag) is True and target_pc.get(flag) is not True:
+                                merged_fields[flag] = True
+                        for list_field in ["blockApps", "blockUrls"]:
+                            target_list = list(target_pc.get(list_field) or [])
+                            current_list = list(pc.get(list_field) or [])
+                            combined = list(set(target_list + current_list))
+                            if len(combined) != len(target_list):
+                                merged_fields[list_field] = combined
+                        if pc.get("lastSeen") and (not target_pc.get("lastSeen") or pc.get("lastSeen") > target_pc.get("lastSeen")):
+                            merged_fields["lastSeen"] = pc.get("lastSeen")
+                            if pc.get("ipAddress"):
+                                merged_fields["ipAddress"] = pc.get("ipAddress")
+                            if pc.get("os"):
+                                merged_fields["os"] = pc.get("os")
+                            if pc.get("osVersion"):
+                                merged_fields["osVersion"] = pc.get("osVersion")
+                        
+                        if merged_fields:
+                            await db.registered_pcs.update_one({"_id": target_pc["_id"]}, {"$set": merged_fields})
+                            seen_pcs[hostname_lower].update(merged_fields)
+                        
+                        # Delete the duplicate document
+                        await db.registered_pcs.delete_one({"_id": pc["_id"]})
+                        print(f"[PC Migration] Merged and deleted duplicate registered PC: {orig_hostname} into existing lowercase", flush=True)
+                    else:
+                        # Lowercase document does not exist, so keep the current uppercase/raw casing as is!
+                        seen_pcs[hostname_lower] = pc
+                else:
+                    # Already lowercase, keep it as reference
+                    seen_pcs[hostname_lower] = pc
+        print("[PC Migration] Finished registered_pcs database migration.", flush=True)
+    except Exception as e:
+        print(f"[PC Migration] Error running registered_pcs migration: {e}", flush=True)
     
     # Seed the employee_id counter if it doesn't exist yet
     try:
@@ -50,8 +166,53 @@ async def lifespan(app):
     except Exception as e:
         print(f"Error seeding default document types: {e}")
     
+    # Start the global input tracker
+    try:
+        import platform
+        import os
+        from database import db
+        import input_tracker
+        run_tracker = os.environ.get("RUN_TRACKER", "true").lower() == "true"
+        if platform.system() != "Linux" and run_tracker:
+            input_tracker.start_tracker(db)
+        else:
+            print("[Tracker] Skipping input tracker start (disabled or running on Linux/Production server).")
+    except Exception as e:
+        print(f"Error starting global input tracker: {e}")
+ 
+    # Auto-register local PC device
+    try:
+        from database import db
+        import socket
+        import platform
+        hostname = socket.gethostname()
+        os_name = platform.system()
+        os_version = platform.release()
+        
+        local_ip = "127.0.0.1"
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            pass
+            
+        if os_name != "Linux":
+            await crud.register_pc_device(db, hostname, local_ip, os_name, os_version)
+            print(f"[PC Registration] Registered device: {hostname} ({local_ip})")
+        else:
+            print("[PC Registration] Skipping registration (running on Linux/Production server).")
+    except Exception as e:
+        print(f"[PC Registration] Failed to register PC: {e}")
+
     yield
-    # --- Shutdown (nothing needed for now) ---
+    # --- Shutdown ---
+    try:
+        import input_tracker
+        input_tracker.stop_tracker()
+    except Exception as e:
+        print(f"Error stopping global input tracker: {e}")
     # Reload trigger: 1
 
 app = FastAPI(title="HRMS API", lifespan=lifespan)
@@ -256,8 +417,9 @@ async def get_attendance_status(employee_id: str, db=Depends(get_db)):
     return status if status else {"status": "Logged Out"}
 
 @app.post("/attendance/punch-in/{employee_id}")
-async def punch_in(employee_id: str, db=Depends(get_db)):
-    result = await crud.punch_in(db, employee_id)
+async def punch_in(employee_id: str, payload: Optional[schemas.PunchInRequest] = None, db=Depends(get_db)):
+    punch_in_time = payload.punch_in_time if payload else None
+    result = await crud.punch_in(db, employee_id, punch_in_time=punch_in_time)
     if not result:
         raise HTTPException(status_code=400, detail="Punch in failed")
     return result
@@ -293,8 +455,9 @@ async def delete_multiple_attendance(request: dict, db=Depends(get_db)):
     return {"message": f"Deleted {len(attendance_ids)} records"}
 
 @app.post("/attendance/punch-out/{employee_id}")
-async def punch_out(employee_id: str, db=Depends(get_db)):
-    result = await crud.punch_out(db, employee_id)
+async def punch_out(employee_id: str, payload: Optional[schemas.PunchOutRequest] = None, db=Depends(get_db)):
+    punch_out_time = payload.punch_out_time if payload else None
+    result = await crud.punch_out(db, employee_id, punch_out_time=punch_out_time)
     if not result:
         raise HTTPException(status_code=400, detail="Punch out failed")
     return result
@@ -1170,7 +1333,26 @@ async def get_ws_info(request: Request):
         port_val = int(backend_port)
     except ValueError:
         port_val = 8000
-    return {"port": port_val}
+    
+    backend_url = os.environ.get("BACKEND_URL", "")
+    ws_url = None
+    if backend_url:
+        scheme = "wss" if backend_url.startswith("https") else "ws"
+        clean_url = backend_url.replace("https://", "").replace("http://", "").rstrip("/")
+        if "localhost" not in clean_url and "127.0.0.1" not in clean_url and not clean_url.endswith("/api"):
+            ws_url = f"{scheme}://{clean_url}/api/chat/ws"
+        else:
+            ws_url = f"{scheme}://{clean_url}/chat/ws"
+    else:
+        # Fallback using request host
+        scheme = "wss" if request.url.scheme == "https" else "ws"
+        clean_url = request.url.netloc.rstrip("/")
+        if "localhost" not in clean_url and "127.0.0.1" not in clean_url:
+            ws_url = f"{scheme}://{clean_url}/api/chat/ws"
+        else:
+            ws_url = f"{scheme}://{clean_url}/chat/ws"
+        
+    return {"port": port_val, "url": ws_url}
 
 @app.websocket("/chat/ws/{user_id}")
 async def chat_websocket_endpoint(websocket: WebSocket, user_id: str):
@@ -1685,6 +1867,155 @@ async def google_calendar_webhook(request: Request, db=Depends(get_db)):
     
     # Returning 200 OK to acknowledge receipt of the webhook.
     return {"status": "ok"}
+
+# --- User Activity Input Tracking API ---
+@app.post("/activity/track/{employee_id}", response_model=schemas.UserInputStats)
+async def track_activity(employee_id: str, input_data: schemas.UserInputStatsCreate, db=Depends(get_db)):
+    return await crud.track_user_activity(db, employee_id, input_data.clicks, input_data.keystrokes)
+
+@app.get("/activity/stats", response_model=List[schemas.UserInputStats])
+async def get_activity_stats(employeeId: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_user_activity_stats(db, employee_id=employeeId)
+
+
+@app.post("/activity/session-active/{employee_id}")
+async def set_active_session(employee_id: str, db=Depends(get_db)):
+    import input_tracker
+    await input_tracker.set_active_user(employee_id)
+    
+    # Update activeEmployee in registered_pcs for current hostname
+    import socket
+    import re
+    from bson import ObjectId
+    user_doc = await db.employees.find_one(
+        {"_id": ObjectId(employee_id)} if len(employee_id) == 24 else {"_id": employee_id}
+    )
+    if user_doc:
+        await db.registered_pcs.update_one(
+            {"hostname": {"$regex": f"^{re.escape(socket.gethostname())}$", "$options": "i"}},
+            {"$set": {"activeEmployee": user_doc.get("name", "Unknown")}}
+        )
+    return {"message": "Session tracking started"}
+
+@app.post("/activity/session-inactive")
+async def clear_active_session(db=Depends(get_db)):
+    import input_tracker
+    input_tracker.clear_active_user()
+    
+    # Clear activeEmployee in registered_pcs for current hostname
+    import socket
+    import re
+    await db.registered_pcs.update_one(
+        {"hostname": {"$regex": f"^{re.escape(socket.gethostname())}$", "$options": "i"}},
+        {"$set": {"activeEmployee": ""}}
+    )
+    return {"message": "Session tracking stopped"}
+
+@app.get("/activity/last-active")
+async def get_last_active():
+    import input_tracker
+    return {"last_active": input_tracker.get_last_global_activity_time()}
+
+# --- PC Device Restrictions & Broadcasts APIs ---
+import socket
+import platform
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+@app.get("/system/info")
+async def get_system_info():
+    return {
+        "hostname": socket.gethostname(),
+        "ipAddress": get_local_ip(),
+        "os": platform.system(),
+        "osVersion": platform.release()
+    }
+
+@app.get("/restrictions/pcs", response_model=List[schemas.RegisteredPC])
+async def read_registered_pcs(
+    db=Depends(get_db),
+    _token=Depends(auth.require_auth)  # Must be logged in to see PC list
+):
+    return await crud.get_registered_pcs(db)
+
+@app.put("/restrictions/pcs/{hostname}", response_model=schemas.RegisteredPC)
+async def update_pcs_restrictions(
+    hostname: str,
+    pc_update: schemas.RegisteredPCUpdate,
+    db=Depends(get_db),
+    _admin=Depends(auth.require_admin)  # Admin ONLY — employees cannot modify restrictions
+):
+    updated = await crud.update_pc_restrictions(
+        db,
+        hostname,
+        block_chrome=pc_update.blockChrome,
+        block_youtube=pc_update.blockYoutube,
+        block_apps=pc_update.blockApps,
+        block_urls=pc_update.blockUrls
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Registered PC not found")
+    return updated
+
+@app.post("/system/broadcast")
+async def system_broadcast(
+    payload: dict,
+    _admin=Depends(auth.require_admin)  # Admin ONLY — employees cannot send broadcasts
+):
+    title = payload.get("title", "System Broadcast")
+    message = payload.get("message", "")
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    await ws_manager.broadcast_all("system_alert", {"title": title, "message": message})
+    return {"message": "Announcement broadcasted successfully"}
+
+
+
+@app.get("/security/alerts")
+async def get_security_alerts(
+    resolved: bool = None,
+    db=Depends(get_db),
+    _token=Depends(auth.require_auth)  # Any logged-in user (admin sees panel)
+):
+    """Return all security tamper alerts from MongoDB, newest first."""
+    query = {}
+    if resolved is not None:
+        query["resolved"] = resolved
+    cursor = db.security_alerts.find(query).sort("timestamp", -1).limit(200)
+    alerts = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        alerts.append(doc)
+    return alerts
+
+@app.put("/security/alerts/{alert_id}/resolve")
+async def resolve_security_alert(
+    alert_id: str,
+    db=Depends(get_db),
+    _admin=Depends(auth.require_admin)  # Admin only
+):
+    """Mark a security alert as resolved."""
+    from bson import ObjectId as ObjId
+    try:
+        result = await db.security_alerts.update_one(
+            {"_id": ObjId(alert_id)},
+            {"$set": {"resolved": True, "resolvedAt": datetime.utcnow()}}
+        )
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        return {"message": "Alert marked as resolved"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
