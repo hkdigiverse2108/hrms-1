@@ -208,8 +208,12 @@ export default function DocumentGeneratorPage() {
     
     // Replace all extraFields
     Object.keys(extraFields).forEach(key => {
-      const regex = new RegExp(`\{\{${key}\}\}`, 'g')
-      htmlContent = htmlContent.replace(regex, extraFields[key] || '')
+      let value = extraFields[key] || ''
+      if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        value = dayjs(value).format('DD/MM/YYYY')
+      }
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+      htmlContent = htmlContent.replace(regex, value)
     })
     
     // Replace all currentEmployee fields
