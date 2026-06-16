@@ -18,7 +18,6 @@ const { Content } = Layout;
 
 // Inactivity timeout settings
 const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-const WARNING_COUNTDOWN_SEC = 60; // 60 second countdown before logout
 
 function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname === "/") return null; // Always allow landing on the dashboard
@@ -91,15 +90,92 @@ export function AppLayout({ children }: { children: ReactNode }) {
   });
   const [isSubmittingRecovery, setIsSubmittingRecovery] = useState(false);
 
+  // Desktop auto-update states
+  const [updateInfo, setUpdateInfo] = useState<{
+    version: string;
+    downloadUrl: string;
+    changelog: string[];
+  } | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
   const lastActivityTimeRef = useRef<number>(Date.now());
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetInactivityTimerRef = useRef<() => void>(() => {});
 
+  // Check for desktop application updates
+  useEffect(() => {
+    if (typeof window === "undefined" || !(window as any).electronAPI) return;
+    if (!user || isAuthPage) return;
+    
+    const checkForUpdates = async () => {
+      try {
+        const localVersion = await (window as any).electronAPI.getAppVersion();
+        const res = await fetch(`${API_URL}/desktop/version`);
+        if (res.ok) {
+          const data = await res.json();
+          const remoteVersion = data.version;
+          
+          const isNewerVersion = (remote: string, local: string) => {
+            const r = remote.split('.').map(Number);
+            const l = local.split('.').map(Number);
+            for (let i = 0; i < 3; i++) {
+              if ((r[i] || 0) > (l[i] || 0)) return true;
+              if ((r[i] || 0) < (l[i] || 0)) return false;
+            }
+            return false;
+          };
+          
+          if (remoteVersion && isNewerVersion(remoteVersion, localVersion)) {
+            setUpdateInfo({
+              version: remoteVersion,
+              downloadUrl: data.downloadUrl,
+              changelog: data.changelog || []
+            });
+            setShowUpdateModal(true);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to check for desktop updates:", err);
+      }
+    };
+    
+    checkForUpdates();
+  }, [user, isAuthPage]);
+
+  // Monitor download progress from Electron IPC
+  useEffect(() => {
+    if (typeof window === "undefined" || !(window as any).electronAPI || !isDownloadingUpdate) return;
+    
+    const unsubscribe = (window as any).electronAPI.onUpdateProgress((progress: number) => {
+      setDownloadProgress(progress);
+    });
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [isDownloadingUpdate]);
+
+  const handleStartUpdate = async () => {
+    if (!updateInfo) return;
+    setIsDownloadingUpdate(true);
+    setDownloadProgress(0);
+    try {
+      const result = await (window as any).electronAPI.startUpdate(updateInfo.downloadUrl);
+      if (!result || !result.success) {
+        toast.error(`Update failed: ${result?.error || 'Unknown error'}`);
+        setIsDownloadingUpdate(false);
+      }
+    } catch (err: any) {
+      toast.error(`Error launching update: ${err.message || err}`);
+      setIsDownloadingUpdate(false);
+    }
+  };
+
   // Trigger retroactive punch-out due to inactivity
   const handleInactivityPunchOut = useCallback(async () => {
     if (!user || showRecoveryModal) return;
-    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
-    if (!isHrOrAdmin) return;
 
     // Double check if there was global PC activity (clicks/keypress/mouse movement)
     try {
@@ -218,8 +294,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const resetInactivityTimer = useCallback(() => {
     if (!user || showRecoveryModal) return;
-    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
-    if (!isHrOrAdmin) return;
     
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     inactivityTimerRef.current = setTimeout(handleInactivityPunchOut, INACTIVITY_TIMEOUT_MS);
@@ -231,13 +305,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Check pending recovery status on mount and window focus
   const checkPendingRecovery = useCallback(async () => {
     if (!user || isAuthPage) return;
-    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
 
     // 1. Check localStorage for already flagged states
     const pendingStr = localStorage.getItem("inactivity_punch_out_recovery_pending");
     const goingMeetingStr = localStorage.getItem("going_for_meeting_pending");
 
-    if (pendingStr && isHrOrAdmin) {
+    if (pendingStr) {
       const parsed = JSON.parse(pendingStr);
       setRecoveryRange(parsed);
       setRecoveryForm({
@@ -269,8 +342,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
       setShowRecoveryModal(true);
       return;
     }
-
-    if (!isHrOrAdmin) return;
 
     // Fetch employee's current attendance status to check punch-in time
     let isCurrentlyPunchedIn = false;
@@ -382,6 +453,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [user, isAuthPage]);
 
   const handleRecoverySubmit = async () => {
+    if (!user) return;
     if (!recoveryForm.reason.trim()) {
       toast.error("Please enter a reason.");
       return;
@@ -455,17 +527,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Setup inactivity tracking & pending recovery check
   useEffect(() => {
     if (!user || isAuthPage) return;
-    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
 
     // 1. All users listen to window focus and attendance updates to check pending recovery
     window.addEventListener("focus", checkPendingRecovery);
 
     const handleAttendanceUpdate = () => {
-      if (isHrOrAdmin) {
-        localStorage.setItem("last_activity_timestamp", Date.now().toString());
-        lastActivityTimeRef.current = Date.now();
-        resetInactivityTimer();
-      }
+      localStorage.setItem("last_activity_timestamp", Date.now().toString());
+      lastActivityTimeRef.current = Date.now();
+      resetInactivityTimer();
       checkPendingRecovery();
     };
     window.addEventListener("attendance-update", handleAttendanceUpdate);
@@ -473,7 +542,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     // Initial check on mount
     checkPendingRecovery();
 
-    // 2. Only HR and Admin track OS/browser activity and set inactivity timeouts
+    // 2. Track OS/browser activity and set inactivity timeouts
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
     const handleActivity = () => {
       if (showRecoveryModal) return;
@@ -482,18 +551,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
       resetInactivityTimer();
     };
 
-    if (isHrOrAdmin) {
-      events.forEach((e) => window.addEventListener(e, handleActivity, { passive: true }));
-      resetInactivityTimer();
-    }
+    events.forEach((e) => window.addEventListener(e, handleActivity, { passive: true }));
+    resetInactivityTimer();
 
     return () => {
       window.removeEventListener("focus", checkPendingRecovery);
       window.removeEventListener("attendance-update", handleAttendanceUpdate);
-      if (isHrOrAdmin) {
-        events.forEach((e) => window.removeEventListener(e, handleActivity));
-        if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-      }
+      events.forEach((e) => window.removeEventListener(e, handleActivity));
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     };
   }, [user, isAuthPage, resetInactivityTimer, checkPendingRecovery, showRecoveryModal]);
 
@@ -739,6 +804,144 @@ export function AppLayout({ children }: { children: ReactNode }) {
               to { opacity: 1; transform: scale(1); }
             }
           `}</style>
+        </div>
+      )}
+
+      {/* Desktop Update Modal */}
+      {showUpdateModal && updateInfo && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 999999,
+            backgroundColor: "rgba(0,0,0,0.65)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backdropFilter: "blur(4px)"
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "24px",
+              padding: "32px",
+              maxWidth: "480px",
+              width: "90%",
+              boxShadow: "0 25px 70px rgba(0,0,0,0.35)",
+              textAlign: "center"
+            }}
+          >
+            <div
+              style={{
+                width: "64px",
+                height: "64px",
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #0f766e, #0d9488)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 20px"
+              }}
+            >
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+              </svg>
+            </div>
+
+            <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#1e293b", marginBottom: "8px" }}>
+              New Version Available!
+            </h2>
+            <p style={{ fontSize: "14px", color: "#64748b", marginBottom: "20px" }}>
+              An update (v{updateInfo.version}) is ready for download. Please update to get the latest features and security improvements.
+            </p>
+
+            {updateInfo.changelog && updateInfo.changelog.length > 0 && (
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "16px",
+                  padding: "16px",
+                  marginBottom: "24px",
+                  textAlign: "left"
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "13px", color: "#475569", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  What's New:
+                </div>
+                <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13.5px", color: "#334155", lineHeight: "1.6" }}>
+                  {updateInfo.changelog.map((item, index) => (
+                    <li key={index} style={{ marginBottom: "4px" }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {isDownloadingUpdate ? (
+              <div style={{ width: "100%", marginTop: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 700, color: "#475569", marginBottom: "8px" }}>
+                  <span>Downloading update...</span>
+                  <span>{downloadProgress}%</span>
+                </div>
+                <div style={{ width: "100%", height: "8px", background: "#e2e8f0", borderRadius: "4px", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      width: `${downloadProgress}%`,
+                      height: "100%",
+                      background: "linear-gradient(90deg, #0d9488, #0f766e)",
+                      transition: "width 0.2s ease"
+                    }}
+                  />
+                </div>
+                <p style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px", fontStyle: "italic" }}>
+                  The app will automatically close and restart when download finishes.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: "12px", marginTop: "28px" }}>
+                <button
+                  onClick={() => setShowUpdateModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: "12px 20px",
+                    borderRadius: "12px",
+                    border: "1px solid #cbd5e1",
+                    background: "#fff",
+                    color: "#475569",
+                    fontWeight: 700,
+                    fontSize: "14px",
+                    cursor: "pointer",
+                    transition: "background 0.15s"
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                >
+                  Later
+                </button>
+                <button
+                  onClick={handleStartUpdate}
+                  style={{
+                    flex: 1.5,
+                    padding: "12px 20px",
+                    borderRadius: "12px",
+                    border: "none",
+                    background: "linear-gradient(135deg, #0d9488, #0f766e)",
+                    color: "#fff",
+                    fontWeight: 700,
+                    fontSize: "14px",
+                    cursor: "pointer",
+                    boxShadow: "0 4px 12px rgba(13,148,136,0.25)",
+                    transition: "transform 0.1s"
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1px)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
+                >
+                  Update Now
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </Layout>
