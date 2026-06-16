@@ -19,7 +19,8 @@ import {
   Filter,
   AlertCircle,
   CheckCircle2,
-  CalendarClock
+  CalendarClock,
+  Star
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -37,6 +38,7 @@ import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { WhatsAppSmmDialog } from "@/components/hrms/WhatsAppSmmDialog";
 import { WhatsAppIcon } from "@/components/hrms/WhatsAppIcon";
 import { SmmMeetingDialog } from "@/components/hrms/SmmMeetingDialog";
+import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -105,37 +107,9 @@ export default function CreativeClientsPage() {
   const [greetingsLogsOpen, setGreetingsLogsOpen] = useState(false);
   const [greetingsLogsClient, setGreetingsLogsClient] = useState<any>(null);
 
-  const handleToggleGreetings = async (client: any) => {
-    const newValue = !client.greetingsMsgSent;
-    const newLog = {
-      timestamp: new Date().toISOString(),
-      sentBy: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown',
-      status: newValue
-    };
-    const updatedLogs = [...(client.greetingsLogs || []), newLog];
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [reviewClient, setReviewClient] = useState<any>(null);
 
-    try {
-      const res = await fetch(`${API_URL}/clients/${client.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          greetingsMsgSent: newValue,
-          greetingsLogs: updatedLogs,
-          performedBy: user?.id,
-          userName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown',
-        }),
-      });
-      if (res.ok) {
-        setClients(prev => prev.map(c => c.id === client.id ? { ...c, greetingsMsgSent: newValue, greetingsLogs: updatedLogs } : c));
-        toast.success(`Greetings marked as ${newValue ? 'sent' : 'unsent'}`);
-      } else {
-        toast.error("Failed to update greetings status");
-      }
-    } catch (err) {
-      console.error("Error updating greetings status:", err);
-      toast.error("Connection error");
-    }
-  };
   const [followupConfigClient, setFollowupConfigClient] = useState<any>(null);
   const [followupTypeInput, setFollowupTypeInput] = useState("Interval");
   const [followupIntervalInput, setFollowupIntervalInput] = useState("");
@@ -595,6 +569,19 @@ export default function CreativeClientsPage() {
                         >
                           <WhatsAppIcon className="w-4.5 h-4.5" />
                         </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-9 w-9 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-full"
+                          title="Manage Client Reviews"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReviewClient(client);
+                            setReviewDialogOpen(true);
+                          }}
+                        >
+                          <Star className="w-4.5 h-4.5" />
+                        </Button>
                         <SmmMeetingDialog 
                           client={client} 
                           onUpdate={fetchClients} 
@@ -881,6 +868,12 @@ export default function CreativeClientsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <ClientReviewDialog 
+        open={reviewDialogOpen} 
+        onOpenChange={setReviewDialogOpen} 
+        client={reviewClient} 
+        onSaved={fetchClients} 
+      />
     </div>
   );
 }

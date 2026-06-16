@@ -877,6 +877,7 @@ class ClientBase(BaseModel):
     meetings: Optional[List[dict]] = []
     greetingsMsgSent: Optional[bool] = False
     greetingsLogs: Optional[List[dict]] = []
+    workReviews: Optional[List[dict]] = []
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -923,6 +924,7 @@ class ClientUpdate(BaseModel):
     userName: Optional[str] = None
     greetingsMsgSent: Optional[bool] = None
     greetingsLogs: Optional[List[dict]] = None
+    workReviews: Optional[List[dict]] = None
 
 class Client(ClientBase):
     id: str
