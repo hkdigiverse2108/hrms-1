@@ -175,8 +175,11 @@ export default function DocumentGeneratorPage() {
     const todayFormatted = dayjs().format('DD/MM/YYYY')
     const empName = extraFields.name || currentEmployee.name || `${currentEmployee.firstName} ${currentEmployee.lastName}`
     const empAddress = currentEmployee.address || 'Resident Address, City'
-    const startDateFormatted = extraFields.startDate ? dayjs(extraFields.startDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
-    const endDateFormatted = extraFields.endDate ? dayjs(extraFields.endDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
+    const userStartDate = extraFields.startDate || extraFields.StartDate || extraFields.start_date || extraFields['Start Date']
+    const userEndDate = extraFields.endDate || extraFields.EndDate || extraFields.end_date || extraFields['End Date']
+    
+    const startDateFormatted = userStartDate ? dayjs(userStartDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
+    const endDateFormatted = userEndDate ? dayjs(userEndDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
     const genderValue = extraFields.gender || currentEmployee?.gender || 'Male'
     const honorific = genderValue === 'Female' ? 'Ms.' : 'Mr.'
 
