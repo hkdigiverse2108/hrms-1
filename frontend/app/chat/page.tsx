@@ -424,7 +424,7 @@ export default function ChatPage() {
   };
   
   const scrollRef = useRef<HTMLDivElement>(null);
-  const messageInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shouldScrollToBottom = useRef(true);
   const mediaRecorderRef = useRef<any>(null);
@@ -2595,7 +2595,7 @@ export default function ChatPage() {
                     ) : (
                       <div className="relative group/msg">
                         <div className={cn(
-                          "px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm",
+                          "px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm whitespace-pre-wrap break-words",
                           msg.isMe 
                             ? "bg-gradient-to-br from-emerald-500 to-teal-500 text-white rounded-tr-none border border-emerald-400/20" 
                             : "bg-white border border-slate-200 text-slate-700 rounded-tl-none"
@@ -2997,14 +2997,23 @@ export default function ChatPage() {
                 >
                   <Paperclip className="w-5 h-5" />
                 </Button>
-                <Input 
+                <Textarea 
                   ref={messageInputRef}
                   value={message}
-                  onChange={(e) => handleInputChange(e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange(e.target.value);
+                    // Auto-resize textarea
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       handleSendMessage();
+                      // Reset textarea height after sending
+                      if (messageInputRef.current) {
+                        messageInputRef.current.style.height = 'auto';
+                      }
                     }
                   }}
                   onPaste={(e) => {
@@ -3023,7 +3032,8 @@ export default function ChatPage() {
                     }
                   }}
                   placeholder={`Type your message to ${selectedChat.name}...`}
-                  className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-sm placeholder:text-muted-foreground h-11"
+                  rows={1}
+                  className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-sm placeholder:text-muted-foreground min-h-[44px] max-h-[120px] py-2.5 resize-none overflow-y-auto"
                 />
                 <div className="flex items-center gap-1">
                   {isRecording ? (
