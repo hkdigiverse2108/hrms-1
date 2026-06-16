@@ -229,7 +229,7 @@ export default function SchedulePage() {
     }
   };
 
-  const handleCreateSchedule = async () => {
+  const handleSave = async () => {
     if (!form.title || !form.employeeId || !form.startTime || !form.endTime) {
       toast.error("Please fill in all required fields");
       return;
