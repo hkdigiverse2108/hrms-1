@@ -179,12 +179,12 @@ export default function DocumentGeneratorPage() {
     let userEndDate = extraFields.endDate
     
     if (templateData?.fields) {
-      const actualStartField = templateData.fields.find((f: string) => f.toLowerCase().replace(/\\s+/g, '') === 'startdate' || f.toLowerCase() === 'start_date')
+      const actualStartField = templateData.fields.find((f: string) => f.toLowerCase().replace(/\s+/g, '') === 'startdate' || f.toLowerCase() === 'start_date')
       if (actualStartField && extraFields[actualStartField]) {
         userStartDate = extraFields[actualStartField]
       }
       
-      const actualEndField = templateData.fields.find((f: string) => f.toLowerCase().replace(/\\s+/g, '') === 'enddate' || f.toLowerCase() === 'end_date')
+      const actualEndField = templateData.fields.find((f: string) => f.toLowerCase().replace(/\s+/g, '') === 'enddate' || f.toLowerCase() === 'end_date')
       if (actualEndField && extraFields[actualEndField]) {
         userEndDate = extraFields[actualEndField]
       }
