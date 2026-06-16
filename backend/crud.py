@@ -4919,6 +4919,25 @@ async def delete_asset_category(db, category_id: str, performed_by: str = "Syste
     return True
 
 # --- Schedule Operations ---
+async def _get_creds_and_persist(db, emp):
+    """Get Google credentials for an employee and persist refreshed tokens back to DB."""
+    token_data = emp.get("googleCalendarTokens")
+    if not token_data:
+        return None
+    try:
+        creds, refreshed_token_data = google_auth.get_credentials(token_data)
+        if refreshed_token_data:
+            # Token was refreshed — save the new access token back to the DB
+            await db.employees.update_one(
+                {"_id": emp["_id"]},
+                {"$set": {"googleCalendarTokens": refreshed_token_data}}
+            )
+            print(f"[Google Sync] Persisted refreshed token for employee {emp.get('name', emp['_id'])}")
+        return creds
+    except Exception as e:
+        print(f"[Google Sync] Error getting/refreshing credentials for {emp.get('name', emp['_id'])}: {e}")
+        return None
+
 async def sync_google_events(db, employee_id: str, start_date_str: str, end_date_str: str):
     if not employee_id:
         return
@@ -4932,7 +4951,7 @@ async def sync_google_events(db, employee_id: str, start_date_str: str, end_date
         return
         
     try:
-        creds = google_auth.get_credentials(emp.get("googleCalendarTokens"))
+        creds = await _get_creds_and_persist(db, emp)
         if not creds:
             return
             
@@ -4955,53 +4974,87 @@ async def sync_google_events(db, employee_id: str, start_date_str: str, end_date
         time_max = time_max_dt.isoformat()
         
         events = await asyncio.to_thread(google_calendar.list_events, creds, time_min, time_max)
-        if not events:
-            return
-            
-        for event in events:
-            event_id = event.get('id')
-            summary = event.get('summary', 'Google Calendar Event')
-            description = event.get('description', '')
-            
-            start = event.get('start', {})
-            end = event.get('end', {})
-            
-            start_time_str = start.get('dateTime') or start.get('date')
-            end_time_str = end.get('dateTime') or end.get('date')
-            
-            if not start_time_str or not end_time_str:
-                continue
+        
+        # Collect all Google event IDs returned from Google for this date range
+        google_event_ids_from_google = set()
+        
+        if events:
+            for event in events:
+                event_id = event.get('id')
+                if not event_id:
+                    continue
+                    
+                # Skip cancelled events
+                if event.get('status') == 'cancelled':
+                    continue
+                    
+                google_event_ids_from_google.add(event_id)
+                summary = event.get('summary', 'Google Calendar Event')
+                description = event.get('description', '')
                 
-            try:
-                if 'T' in start_time_str:
-                    s_dt = datetime.fromisoformat(start_time_str).astimezone(tz)
-                    e_dt = datetime.fromisoformat(end_time_str).astimezone(tz)
-                else:
-                    s_dt = datetime.strptime(start_time_str, "%Y-%m-%d")
-                    e_dt = datetime.strptime(end_time_str, "%Y-%m-%d")
-            except Exception:
-                continue
+                start = event.get('start', {})
+                end = event.get('end', {})
                 
-            local_start = s_dt.strftime("%H:%M")
-            local_end = e_dt.strftime("%H:%M")
-            
-            schedule_date = datetime.combine(s_dt.date(), datetime.min.time())
-            
-            await db.schedules.update_one(
-                {"googleEventId": event_id},
-                {"$set": {
-                    "employeeId": employee_id,
-                    "employeeName": emp.get("name") or "Unknown",
-                    "title": summary,
-                    "description": description,
-                    "date": schedule_date,
-                    "startTime": local_start,
-                    "endTime": local_end,
-                    "googleEventId": event_id,
-                    "type": "Google Event"
-                }},
-                upsert=True
-            )
+                start_time_str = start.get('dateTime') or start.get('date')
+                end_time_str = end.get('dateTime') or end.get('date')
+                
+                if not start_time_str or not end_time_str:
+                    continue
+                    
+                try:
+                    if 'T' in start_time_str:
+                        s_dt = datetime.fromisoformat(start_time_str).astimezone(tz)
+                        e_dt = datetime.fromisoformat(end_time_str).astimezone(tz)
+                    else:
+                        s_dt = datetime.strptime(start_time_str, "%Y-%m-%d")
+                        e_dt = datetime.strptime(end_time_str, "%Y-%m-%d")
+                except Exception:
+                    continue
+                    
+                local_start = s_dt.strftime("%H:%M")
+                local_end = e_dt.strftime("%H:%M")
+                
+                schedule_date = datetime.combine(s_dt.date(), datetime.min.time())
+                
+                await db.schedules.update_one(
+                    {"googleEventId": event_id},
+                    {"$set": {
+                        "employeeId": employee_id,
+                        "employeeName": emp.get("name") or "Unknown",
+                        "title": summary,
+                        "description": description,
+                        "date": schedule_date,
+                        "startTime": local_start,
+                        "endTime": local_end,
+                        "googleEventId": event_id,
+                        "type": "Google Event"
+                    }},
+                    upsert=True
+                )
+        
+        # --- Handle deleted Google events ---
+        # Find all local schedules with a googleEventId for this employee in this date range
+        # that are NOT in the set of events returned from Google — these were deleted in Google
+        date_variants = []
+        current = start_dt
+        while current <= end_dt:
+            date_variants.append(current.strftime("%Y-%m-%d"))
+            date_variants.append(current)
+            current += timedelta(days=1)
+        
+        local_google_schedules_cursor = db.schedules.find({
+            "employeeId": employee_id,
+            "googleEventId": {"$exists": True, "$ne": None},
+            "date": {"$in": date_variants}
+        })
+        local_google_schedules = await local_google_schedules_cursor.to_list(length=1000)
+        
+        for local_sched in local_google_schedules:
+            local_gid = local_sched.get("googleEventId")
+            if local_gid and local_gid not in google_event_ids_from_google:
+                # This event was deleted or cancelled in Google Calendar — remove it locally
+                await db.schedules.delete_one({"_id": local_sched["_id"]})
+                print(f"[Google Sync] Removed locally deleted Google event: {local_sched.get('title', 'Unknown')} (gid: {local_gid})")
             
     except Exception as e:
         print(f"Error syncing Google Calendar events: {e}")
@@ -5055,7 +5108,7 @@ async def create_schedule(db, schedule_data: dict):
         emp = await db.employees.find_one(query)
         if emp and emp.get("googleCalendarTokens"):
             try:
-                creds = google_auth.get_credentials(emp.get("googleCalendarTokens"))
+                creds = await _get_creds_and_persist(db, emp)
                 if creds:
                     event_id = await asyncio.to_thread(google_calendar.create_event, creds, schedule_data)
                     if event_id:
@@ -5090,7 +5143,7 @@ async def update_schedule(db, schedule_id: str, schedule_data: dict):
             emp = await db.employees.find_one(query)
             if emp and emp.get("googleCalendarTokens"):
                 try:
-                    creds = google_auth.get_credentials(emp.get("googleCalendarTokens"))
+                    creds = await _get_creds_and_persist(db, emp)
                     if creds:
                         await asyncio.to_thread(google_calendar.update_event, creds, google_event_id, updated)
                 except Exception as e:
@@ -5117,7 +5170,7 @@ async def delete_schedule(db, schedule_id: str):
             emp = await db.employees.find_one(query)
             if emp and emp.get("googleCalendarTokens"):
                 try:
-                    creds = google_auth.get_credentials(emp.get("googleCalendarTokens"))
+                    creds = await _get_creds_and_persist(db, emp)
                     if creds:
                         await asyncio.to_thread(google_calendar.delete_event, creds, google_event_id)
                 except Exception as e:
