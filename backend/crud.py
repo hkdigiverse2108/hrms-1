@@ -5972,12 +5972,18 @@ async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool]
     return fix_id(updated) if updated else None
 # --- Content Calendar Operations ---
 async def get_content_calendar_entries(db, client_id: str, month_year: str = None):
-    query = {"clientId": client_id}
-    if month_year:
-        query["monthYear"] = month_year
-    cursor = db.content_calendar_entries.find(query)
-    entries = await cursor.to_list(length=1000)
-    return [fix_id(e) for e in entries]
+    try:
+        query = {"clientId": client_id}
+        if month_year:
+            query["monthYear"] = month_year
+        cursor = db.content_calendar_entries.find(query)
+        entries = await cursor.to_list(length=1000)
+        return [fix_id(e) for e in entries]
+    except Exception as e:
+        import traceback
+        with open("error_log.txt", "w") as f:
+            f.write(traceback.format_exc())
+        raise e
 
 async def create_content_calendar_entry(db, entry_data: dict):
     updated_by = entry_data.pop("updatedBy", "Unknown User")

@@ -143,7 +143,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     };
     
     checkForUpdates();
-  }, [user, isAuthPage]);
+  }, [user, isPublicPage]);
 
   // Monitor download progress from Electron IPC
   useEffect(() => {

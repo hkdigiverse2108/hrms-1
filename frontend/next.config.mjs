@@ -14,8 +14,8 @@ const nextConfig = {
   },
   productionBrowserSourceMaps: false,
   async rewrites() {
-    const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
-    const localBackendPort = process.env.BACKEND_PORT || '8000';
+    const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:8001').replace(/\/$/, '');
+    const localBackendPort = process.env.BACKEND_PORT || '8001';
     return {
       beforeFiles: [
         {

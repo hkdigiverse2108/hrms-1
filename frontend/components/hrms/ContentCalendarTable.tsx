@@ -804,22 +804,23 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                   return (
                     <div key={i} className="relative">
                       {/* Timeline dot */}
-                      <div className="absolute -left-[20px] top-[18px] h-[11px] w-[11px] rounded-full border-[2.5px] border-emerald-600 bg-white z-10" />
+                      <div className="absolute -left-[20px] top-[14px] h-[9px] w-[9px] rounded-full border-[2px] border-emerald-600 bg-white z-10" />
                       
                       {/* Card */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-100/60 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] ml-2">
-                        <div className="flex justify-between items-center mb-3">
-                          <h4 className="font-bold text-slate-900 text-[15px]">{log.userName || "Unknown User"}</h4>
-                          <span className="text-[11px] text-slate-400 font-medium">
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm ml-2">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-slate-900 text-[14px] leading-none">{log.userName || "Unknown User"}</h4>
+                            <div className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border ${actionColor} tracking-wider`}>
+                              {actionText}
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-medium">
                             {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
                           </span>
                         </div>
                         
-                        <div className={`inline-flex px-2.5 py-0.5 rounded-md text-[10px] font-bold border ${actionColor} mb-4 tracking-wider`}>
-                          {actionText}
-                        </div>
-                        
-                        <ul className="space-y-2 text-[13px] text-slate-600 list-disc pl-5 marker:text-slate-400">
+                        <ul className="space-y-1 text-[12px] text-slate-600 list-disc pl-4 marker:text-slate-400 mt-1">
                           {cleanedDetails.length > 0 ? (
                             cleanedDetails.map((detail: string, j: number) => (
                               <li key={j}>{detail}</li>
