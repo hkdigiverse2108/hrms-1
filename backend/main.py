@@ -11,6 +11,7 @@ from bson import ObjectId
 from database import get_db
 import holidays as pyholidays
 from websocket import manager as ws_manager
+import google_auth
 
 import asyncio
 print("MAIN PATH:", __file__, flush=True)
@@ -1644,7 +1645,10 @@ async def read_sales_targets(month: Optional[str] = None, year: Optional[int] = 
 
 @app.post("/sales-targets", response_model=schemas.SalesTarget)
 async def upsert_sales_target(target: schemas.SalesTargetCreate, db=Depends(get_db)):
-    return await crud.create_or_update_sales_target(db, target)
+    try:
+        return await crud.create_or_update_sales_target(db, target)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.put("/sales-targets/{target_id}", response_model=schemas.SalesTarget)
 async def update_sales_target(target_id: str, target_update: schemas.SalesTargetUpdate, db=Depends(get_db)):
@@ -1678,6 +1682,36 @@ async def update_incentive_slab(slab_id: str, slab_update: schemas.IncentiveSlab
 async def delete_incentive_slab(slab_id: str, db=Depends(get_db)):
     await crud.delete_incentive_slab(db, slab_id)
     return {"message": "Incentive slab deleted successfully"}
+
+@app.post("/sales-targets/recalculate-all")
+async def recalculate_all_sales_targets(db=Depends(get_db)):
+    """Manually trigger recalculation of all sales targets from all paid invoices."""
+    print("Recalculate all sales targets triggered!")
+    try:
+        targets = await db.sales_targets.find({}).to_list(length=10000)
+        recalculated = 0
+        for t in targets:
+            emp_id = str(t.get("employeeId", ""))
+            target_type = t.get("type", "Monthly")
+            month = t.get("month")
+            year = t.get("year")
+            week = t.get("week")
+            start_date = t.get("startDate")
+            end_date = t.get("endDate")
+            
+            await crud.recalculate_sales_target(
+                db, emp_id, month, year, target_type, week,
+                startDate=start_date, endDate=end_date
+            )
+            recalculated += 1
+        
+        print(f"Successfully recalculated {recalculated} targets")
+        return {"message": f"Successfully recalculated {recalculated} sales targets"}
+    except Exception as e:
+        print(f"Error in recalculate-all: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # User Permission Routes
 @app.get("/user-permissions/{employee_id}", response_model=Optional[schemas.UserPermission])
@@ -1848,6 +1882,118 @@ async def delete_schedule(schedule_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Schedule not found")
     return {"message": "Schedule deleted successfully"}
 
+# --- Google Calendar Integration API ---
+from fastapi.responses import RedirectResponse
+
+@app.get("/auth/google/url")
+async def get_google_auth_url(employeeId: str):
+    """Generates the Google OAuth URL to link a user's account."""
+    try:
+        url = google_auth.get_authorization_url(state=employeeId)
+        return RedirectResponse(url=url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/google/callback")
+@app.get("/api/google/callback")
+async def google_auth_callback(code: str, state: str, db=Depends(get_db)):
+    """Handles the OAuth callback, exchanges code for tokens, and saves them."""
+    try:
+        # State parameter carries the employeeId
+        employee_id = state
+        tokens = google_auth.fetch_tokens(code, state)
+        
+        from bson import ObjectId
+        query = {"employeeId": employee_id}
+        if ObjectId.is_valid(employee_id):
+            query = {"$or": [{"employeeId": employee_id}, {"_id": ObjectId(employee_id)}]}
+            
+        # Save tokens to the employee document
+        result = await db.employees.update_one(
+            query,
+            {"$set": {"googleCalendarTokens": tokens}}
+        )
+        
+        if result.modified_count == 0:
+            print(f"Warning: Failed to update Google Calendar Tokens for user {employee_id}. User not found.")
+            
+        # Redirect the user back to the frontend schedule page
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3535")
+        return RedirectResponse(url=f"{frontend_url}/schedule?google_linked=true")
+    except Exception as e:
+        print(f"Google OAuth Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to link Google Calendar.")
+
+@app.post("/auth/google/disconnect")
+async def disconnect_google_calendar(employeeId: str, db=Depends(get_db)):
+    try:
+        from bson import ObjectId
+        query = {"employeeId": employeeId}
+        if ObjectId.is_valid(employeeId):
+            query = {"$or": [{"employeeId": employeeId}, {"_id": ObjectId(employeeId)}]}
+            
+        result = await db.employees.update_one(
+            query,
+            {"$unset": {"googleCalendarTokens": ""}}
+        )
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Employee not found or already disconnected.")
+        return {"message": "Successfully disconnected Google Calendar."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/webhooks/google-calendar")
+async def google_calendar_webhook(request: Request, db=Depends(get_db)):
+    """
+    Receives push notifications from Google Calendar when an event changes.
+    The headers contain 'X-Goog-Resource-ID' and 'X-Goog-Channel-ID'.
+    When a notification arrives, we look up the employee whose calendar changed
+    and perform a sync for the current week to update local schedules.
+    """
+    channel_id = request.headers.get('X-Goog-Channel-ID')
+    resource_state = request.headers.get('X-Goog-Resource-State', '')
+    
+    # Google sends a 'sync' message when the watch is first created — ignore it
+    if resource_state == 'sync':
+        return {"status": "ok"}
+    
+    if not channel_id:
+        return {"status": "ok"}
+    
+    try:
+        # channel_id is expected to be the employeeId (set during watch registration)
+        employee_id = channel_id
+        
+        from datetime import datetime, timedelta
+        now = crud.get_now()
+        # Sync a 2-week window around today
+        start_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        end_date = (now + timedelta(days=7)).strftime("%Y-%m-%d")
+        
+        await crud.sync_google_events(db, employee_id, start_date, end_date)
+        print(f"[Webhook] Synced Google Calendar for employee {employee_id} (state: {resource_state})")
+    except Exception as e:
+        print(f"[Webhook] Error processing Google Calendar webhook: {e}")
+    
+    return {"status": "ok"}
+
+@app.post("/schedules/sync")
+async def manual_sync_schedules(request: dict, db=Depends(get_db)):
+    """
+    Manually trigger a Google Calendar sync for a specific employee.
+    Body: { "employeeId": "...", "dateFrom": "YYYY-MM-DD", "dateTo": "YYYY-MM-DD" }
+    """
+    employee_id = request.get("employeeId")
+    if not employee_id:
+        raise HTTPException(status_code=400, detail="employeeId is required")
+    
+    from datetime import datetime, timedelta
+    now = crud.get_now()
+    date_from = request.get("dateFrom", (now - timedelta(days=7)).strftime("%Y-%m-%d"))
+    date_to = request.get("dateTo", (now + timedelta(days=7)).strftime("%Y-%m-%d"))
+    
+    await crud.sync_google_events(db, employee_id, date_from, date_to)
+    return {"message": "Sync completed", "employeeId": employee_id, "dateFrom": date_from, "dateTo": date_to}
 
 # --- User Activity Input Tracking API ---
 @app.post("/activity/track/{employee_id}", response_model=schemas.UserInputStats)

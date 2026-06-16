@@ -15,14 +15,23 @@ import {
   Loader2,
   CheckCircle2,
   X,
-  RotateCcw
+  RotateCcw,
+  IndianRupee
 } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/common/PageHeader";
 import Link from "next/link";
@@ -55,6 +64,11 @@ export default function AllInvoicesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Incentive Modal State
+  const [showIncentiveModal, setShowIncentiveModal] = useState(false);
+  const [incentiveAmountBase, setIncentiveAmountBase] = useState("");
+  const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedType, setSelectedType] = useState("All");
   
@@ -123,17 +137,41 @@ export default function AllInvoicesPage() {
     }
   };
 
-  const handleMarkAsPaid = async (id: string) => {
+  const handleMarkAsPaidClick = (invoice: any) => {
+    setActiveInvoiceId(invoice.id);
+    setIncentiveAmountBase(invoice.incentiveAmountBase !== undefined && invoice.incentiveAmountBase !== null ? invoice.incentiveAmountBase.toString() : "");
+    setShowIncentiveModal(true);
+  };
+
+  const executeMarkAsPaid = async () => {
+    if (!activeInvoiceId) return;
+    
+    const activeInvoice = invoices.find(inv => inv.id === activeInvoiceId);
+    if (!activeInvoice) return;
+
+    const baseAmt = parseFloat(incentiveAmountBase);
+    if (isNaN(baseAmt) || baseAmt < 0) {
+      toast.error("Please enter a valid incentive amount");
+      return;
+    }
+
+    if (baseAmt > (activeInvoice.total || 0)) {
+      toast.error("Incentive base amount cannot exceed the invoice amount");
+      return;
+    }
+
+    setShowIncentiveModal(false);
+
     try {
-      const res = await fetch(`${API_URL}/invoices/${id}`, {
+      const res = await fetch(`${API_URL}/invoices/${activeInvoiceId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Paid" })
+        body: JSON.stringify({ status: "Paid", incentiveAmountBase: baseAmt })
       });
 
       if (res.ok) {
         const updated = await res.json();
-        setInvoices(invoices.map(inv => inv.id === id ? updated : inv));
+        setInvoices(invoices.map(inv => inv.id === activeInvoiceId ? updated : inv));
         toast.success(`Invoice marked as Paid!`);
       } else {
         toast.error("Failed to update status");
@@ -141,6 +179,8 @@ export default function AllInvoicesPage() {
     } catch (err) {
       console.error(err);
       toast.error("Network error updating status");
+    } finally {
+      setActiveInvoiceId(null);
     }
   };
 
@@ -516,22 +556,37 @@ export default function AllInvoicesPage() {
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
-                            onClick={() => handleMarkAsPaid(invoice.id)}
+                            onClick={() => handleMarkAsPaidClick(invoice)}
                             title="Mark as Paid"
                           >
                             <CheckCircle2 className="w-4 h-4" />
                           </Button>
                         )}
                         {invoice.status === "Paid" && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                            onClick={() => handleMarkAsUnpaid(invoice.id)}
-                            title="Mark as Unpaid"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                          </Button>
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50"
+                              onClick={() => {
+                                setActiveInvoiceId(invoice.id);
+                                setIncentiveAmountBase(invoice.incentiveAmountBase !== undefined && invoice.incentiveAmountBase !== null ? invoice.incentiveAmountBase.toString() : "");
+                                setShowIncentiveModal(true);
+                              }}
+                              title="Edit Incentive Base Amount"
+                            >
+                              <IndianRupee className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                              onClick={() => handleMarkAsUnpaid(invoice.id)}
+                              title="Mark as Unpaid"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </Button>
+                          </>
                         )}
                         {invoice.invoiceType === "Proforma Invoice" && (
                           <Button 
@@ -572,6 +627,39 @@ export default function AllInvoicesPage() {
           itemName="invoices" 
         />
       </div>
+
+      {/* Incentive Dialog */}
+      <Dialog open={showIncentiveModal} onOpenChange={setShowIncentiveModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Enter Incentive Base Amount</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="incentiveAmountBase">Amount on which incentive is given</Label>
+              <Input
+                id="incentiveAmountBase"
+                type="number"
+                value={incentiveAmountBase}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const inv = invoices.find(i => i.id === activeInvoiceId);
+                  if (inv && val && parseFloat(val) > (inv.total || 0)) {
+                    toast.error("Incentive base amount cannot exceed the invoice amount");
+                    return;
+                  }
+                  setIncentiveAmountBase(val);
+                }}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowIncentiveModal(false)}>Cancel</Button>
+            <Button onClick={executeMarkAsPaid} className="bg-[#15803D] hover:bg-[#15803D]/90 text-white font-medium">Confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

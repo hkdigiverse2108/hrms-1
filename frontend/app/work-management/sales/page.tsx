@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import dayjs from "dayjs";
+import { SalesAnalytics } from "./components/SalesAnalytics";
 import { PageHeader } from "@/components/common/PageHeader";
 import { 
   TrendingUp, 
@@ -22,7 +23,11 @@ import {
   Loader2,
   Trash2,
   Pencil,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Flame,
+  X,
+  BarChart2,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,8 +41,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { API_URL } from "@/lib/config";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { LeadForm, LeadFormData } from "@/components/hrms/LeadForm";
+import { ClientForm, ClientFormData } from "@/components/hrms/ClientForm";
 import { FollowUpDialog } from "@/components/hrms/FollowUpDialog";
 import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -56,6 +63,15 @@ import { useConfirm } from "@/context/ConfirmContext";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
+const STATUS_REASONS: Record<string, string[]> = {
+  "Lead": ["New lead created", "Reopened", "Other"],
+  "Contacted": ["Introductory call completed", "Client responded", "Other"],
+  "Proposal Sent": ["Proposal document ready", "Pricing discussed", "Other"],
+  "On Hold": ["Client request", "Budget constraint", "No contact from client", "Other"],
+  "Client Won": ["Contract signed", "Requirements finalized", "Payment received", "Other"],
+  "Client Lost": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
+};
+
 const isAssignedTo = (assignedToData: any, employeeName: string | undefined | null) => {
   if (!employeeName) return false;
   if (Array.isArray(assignedToData)) {
@@ -64,19 +80,26 @@ const isAssignedTo = (assignedToData: any, employeeName: string | undefined | nu
   return assignedToData === employeeName;
 };
 
+const extractName = (val: any): string => {
+  if (!val) return "";
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') return val.name || val.firstName || String(val);
+  return String(val);
+};
+
 const getAssignedToString = (assignedToData: any) => {
   if (Array.isArray(assignedToData)) {
-    return assignedToData.join(", ");
+    return assignedToData.map(extractName).filter(Boolean).join(", ");
   }
-  return assignedToData || "Unassigned";
+  return assignedToData ? extractName(assignedToData) : "Unassigned";
 };
 
 const getAssignedToInitials = (assignedToData: any) => {
   if (Array.isArray(assignedToData) && assignedToData.length > 0) {
-    return (assignedToData[0] || "??").substring(0, 2);
+    return (extractName(assignedToData[0]) || "??").substring(0, 2);
   }
-  if (typeof assignedToData === 'string') {
-    return (assignedToData || "??").substring(0, 2);
+  if (assignedToData) {
+    return (extractName(assignedToData) || "??").substring(0, 2);
   }
   return "??";
 };
@@ -87,10 +110,21 @@ export default function SalesPage() {
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
 
+  const currentUserName = (user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`).trim();
+
   const canViewSales = isAdmin || checkPermission('sales', 'canView');
   const canAddSales = isAdmin || checkPermission('sales', 'canAdd');
   const canEditSales = isAdmin || checkPermission('sales', 'canEdit');
   const canDeleteSales = isAdmin || checkPermission('sales', 'canDelete');
+
+  const canEditLead = (lead: any) => {
+    if (isAdmin || canEditSales) return true;
+    const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+    const isAssigned = assignedList.some((name: string) => name.toLowerCase() === currentUserName.toLowerCase());
+    const isCreator = lead.createdBy === user?.id || 
+                      (lead.createdByUserName && lead.createdByUserName.toLowerCase() === currentUserName.toLowerCase());
+    return !!currentUserName && (isAssigned || isCreator);
+  };
 
   const [searchTerm, setSearchTerm] = useState("");
   const [leads, setLeads] = useState<any[]>([]);
@@ -98,18 +132,28 @@ export default function SalesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pipelineDateFilter, setPipelineDateFilter] = useState("today");
+  const [salesEmployeeFilter, setSalesEmployeeFilter] = useState("all");
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [inlineEditing, setInlineEditing] = useState<{ id: string, field: string } | null>(null);
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [clientFormData, setClientFormData] = useState<Partial<ClientFormData> | null>(null);
+  const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
+  const [isClientSubmitting, setIsClientSubmitting] = useState(false);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [reportEmployeeFilter, setReportEmployeeFilter] = useState("all");
   const [reportDateFilter, setReportDateFilter] = useState(dayjs().format("YYYY-MM-DD"));
   const [selectedLeadForLogs, setSelectedLeadForLogs] = useState<any>(null);
   const [leadLogs, setLeadLogs] = useState<any[]>([]);
+  const clientSubmittingRef = useRef(false);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(dayjs().format("MMMM"));
-  const [selectedYear, setSelectedYear] = useState(dayjs().year());
+  const [statusChangeData, setStatusChangeData] = useState<{ leadId: string, newStatus: string, keepEditing?: boolean } | null>(null);
+  const [selectedReason, setSelectedReason] = useState("");
+  const [customReason, setCustomReason] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState<string>(dayjs().format("MMMM"));
+  const [selectedYear, setSelectedYear] = useState<string | number>(dayjs().year());
   const [targets, setTargets] = useState<any[]>([]);
   const [incentiveSlabs, setIncentiveSlabs] = useState<any[]>([]);
   const [isTargetSubmitting, setIsTargetSubmitting] = useState(false);
@@ -119,17 +163,35 @@ export default function SalesPage() {
     month: dayjs().format("MMMM"),
     year: dayjs().year(),
     week: 1,
+    startDate: dayjs().format("YYYY-MM-DD"),
+    endDate: dayjs().add(14, 'day').format("YYYY-MM-DD"),
     targetAmount: 0
   });
 
-  const [slabForm, setSlabForm] = useState({
+  const [slabForm, setSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[]; clientCategories: string[]; isRecurring: boolean }>({
     minAmount: 0,
     maxAmount: 0,
-    percentage: 0
+    percentage: 0,
+    employees: [],
+    clientCategories: [],
+    isRecurring: false
   });
   const [isSlabDialogOpen, setIsSlabDialogOpen] = useState(false);
   const [editingSlabId, setEditingSlabId] = useState<string | null>(null);
-  const [editSlabForm, setEditSlabForm] = useState({ minAmount: 0, maxAmount: 0, percentage: 0 });
+  const [isEditSlabDialogOpen, setIsEditSlabDialogOpen] = useState(false);
+  const [editSlabForm, setEditSlabForm] = useState<{ minAmount: number; maxAmount: number; percentage: number; employees: string[]; clientCategories: string[]; isRecurring: boolean }>({
+    minAmount: 0,
+    maxAmount: 0,
+    percentage: 0,
+    employees: [],
+    clientCategories: [],
+    isRecurring: false
+  });
+  const [slabTab, setSlabTab] = useState<"global" | "employee">("global");
+  const [selectedSlabEmployee, setSelectedSlabEmployee] = useState<string>("");
+
+  const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
+  const [selectedBreakdown, setSelectedBreakdown] = useState<any[]>([]);
 
   const fetchTargets = async () => {
     try {
@@ -169,19 +231,22 @@ export default function SalesPage() {
   }, []);
 
   useEffect(() => {
-    const existing = targets.find(t => 
-      t.employeeId === targetForm.employeeId && 
-      t.month === targetForm.month && 
-      t.year === targetForm.year &&
-      t.type === targetForm.type &&
-      (targetForm.type === "Monthly" || t.week === targetForm.week)
-    );
+    const existing = targets.find(t => {
+      if (t.employeeId !== targetForm.employeeId || t.type !== targetForm.type) return false;
+      if (targetForm.type === "Custom") {
+        return t.startDate === targetForm.startDate && t.endDate === targetForm.endDate;
+      } else if (targetForm.type === "Weekly") {
+        return t.month === targetForm.month && t.year === targetForm.year && t.week === targetForm.week;
+      } else {
+        return t.month === targetForm.month && t.year === targetForm.year;
+      }
+    });
     if (existing) {
       setTargetForm(prev => ({ ...prev, targetAmount: existing.targetAmount }));
     } else {
       setTargetForm(prev => ({ ...prev, targetAmount: 0 }));
     }
-  }, [targetForm.employeeId, targetForm.month, targetForm.year, targetForm.type, targetForm.week, targets]);
+  }, [targetForm.employeeId, targetForm.month, targetForm.year, targetForm.type, targetForm.week, targetForm.startDate, targetForm.endDate, targets]);
 
   const fetchLeadLogs = async (lead: any) => {
     setSelectedLeadForLogs(lead);
@@ -208,10 +273,13 @@ export default function SalesPage() {
         toast.success("Slab created successfully");
         fetchIncentiveSlabs();
         setIsSlabDialogOpen(false);
-        setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0 });
+        setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0, employees: [], clientCategories: [], isRecurring: false });
+      } else {
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to create slab");
       }
     } catch (err) {
-      toast.error("Failed to create slab");
+      toast.error("An error occurred while creating slab");
     }
   };
 
@@ -228,9 +296,12 @@ export default function SalesPage() {
       if (res.ok) {
         toast.success("Slab deleted");
         fetchIncentiveSlabs();
+      } else {
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to delete slab");
       }
     } catch (err) {
-      toast.error("Failed to delete slab");
+      toast.error("An error occurred while deleting slab");
     }
   };
 
@@ -245,8 +316,10 @@ export default function SalesPage() {
       if (res.ok) {
         toast.success("Slab updated successfully");
         fetchIncentiveSlabs();
+        setIsEditSlabDialogOpen(false);
       } else {
-        toast.error("Failed to update slab");
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to update slab");
       }
     } catch (err) {
       console.error(err);
@@ -269,7 +342,37 @@ export default function SalesPage() {
       const res = await fetch(`${API_URL}/leads`);
       if (res.ok) {
         const data = await res.json();
-        setLeads(data);
+        const today = dayjs().startOf('day');
+        let needsRefresh = false;
+        for (const lead of data) {
+          if (lead.status === "On Hold" && lead.holdResumeDate) {
+            const resumeDate = dayjs(lead.holdResumeDate).startOf('day');
+            if (today.isSame(resumeDate) || today.isAfter(resumeDate)) {
+              needsRefresh = true;
+              try {
+                await fetch(`${API_URL}/leads/${lead.id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    status: "Lead",
+                    performedBy: user?.id,
+                    userName: currentUserName
+                  }),
+                });
+              } catch (err) {
+                console.error("Auto-resume failed for lead:", lead.id, err);
+              }
+            }
+          }
+        }
+        if (needsRefresh) {
+          const freshRes = await fetch(`${API_URL}/leads`);
+          if (freshRes.ok) {
+            setLeads(await freshRes.json());
+          }
+        } else {
+          setLeads(data);
+        }
       }
     } catch (err) {
       console.error("Error fetching leads:", err);
@@ -288,7 +391,7 @@ export default function SalesPage() {
         body: JSON.stringify({
           ...formData,
           performedBy: user?.id,
-          userName: user?.name
+          userName: currentUserName
         }),
       });
 
@@ -297,7 +400,8 @@ export default function SalesPage() {
         setIsDialogOpen(false);
         fetchLeads();
       } else {
-        toast.error("Failed to add lead");
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to add lead");
       }
     } catch (err) {
       console.error("Error adding lead:", err);
@@ -317,7 +421,7 @@ export default function SalesPage() {
         body: JSON.stringify({
           ...editFormData,
           performedBy: user?.id,
-          userName: user?.name
+          userName: currentUserName
         }),
       });
 
@@ -336,7 +440,7 @@ export default function SalesPage() {
     }
   };
 
-  const handleInlineUpdate = async (leadId: string, field: string, value: any) => {
+  const handleInlineUpdate = async (leadId: string, field: string, value: any, keepEditing?: boolean) => {
     try {
       const res = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "PUT",
@@ -344,12 +448,16 @@ export default function SalesPage() {
         body: JSON.stringify({
           [field]: value,
           performedBy: user?.id,
-          userName: user?.name
+          userName: currentUserName
         }),
       });
 
       if (res.ok) {
-        toast.success("Lead updated successfully");
+        if (field === 'assignedTo') {
+          toast.success("Assigned employees updated successfully!");
+        } else {
+          toast.success("Lead updated successfully");
+        }
         fetchLeads();
       } else {
         toast.error(`Update failed: ${res.status}`);
@@ -357,30 +465,101 @@ export default function SalesPage() {
     } catch (err) {
       toast.error("Network error: Could not reach backend");
     } finally {
-      setInlineEditing(null);
+      if (!keepEditing) {
+        setInlineEditing(null);
+      }
     }
   };
 
 
-  const handleUpdateStatus = async (leadId: string, newStatus: string) => {
+  const handleClientSubmit = async (data: ClientFormData) => {
+    if (!convertingLeadId) return;
+    if (clientSubmittingRef.current) return;
+    clientSubmittingRef.current = true;
+    setIsClientSubmitting(true);
+    try {
+      const clientRes = await fetch(`${API_URL}/clients`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          performedBy: user?.id,
+          userName: currentUserName
+        })
+      });
+
+      if (!clientRes.ok) {
+        const errorData = await clientRes.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to create client");
+        setIsClientSubmitting(false);
+        return;
+      }
+
+      const leadRes = await fetch(`${API_URL}/leads/${convertingLeadId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "Client Won",
+          closedDate: dayjs().format("YYYY-MM-DD"),
+          performedBy: user?.id,
+          userName: currentUserName
+        }),
+      });
+
+      if (leadRes.ok) {
+        toast.success("Client generated and Lead marked as Won");
+        setClientDialogOpen(false);
+        fetchLeads();
+        setInlineEditing(null);
+      } else {
+        const errorData = await leadRes.json().catch(() => null);
+        toast.error(errorData?.detail || "Client created, but failed to update Lead status");
+      }
+    } catch (err) {
+      console.error("Error creating client:", err);
+      toast.error("An error occurred while creating client");
+    } finally {
+      clientSubmittingRef.current = false;
+      setIsClientSubmitting(false);
+    }
+  };
+
+  const handleStatusChangeSubmit = async () => {
+    if (!statusChangeData) return;
+    const { leadId, newStatus, keepEditing } = statusChangeData;
+    const finalReason = selectedReason === "Other" ? customReason : selectedReason;
+    if (!finalReason.trim()) {
+      toast.error("Please provide a reason for the status change.");
+      return;
+    }
+
     try {
       const res = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: newStatus,
+          reason: finalReason,
           performedBy: user?.id,
-          userName: user?.name
+          userName: currentUserName
         }),
       });
 
       if (res.ok) {
         toast.success(`Lead status updated to ${newStatus}`);
         fetchLeads();
+      } else {
+        toast.error(`Update failed: ${res.status}`);
       }
     } catch (err) {
-      console.error("Error updating lead:", err);
-      toast.error("Failed to update status");
+      toast.error("Network error: Could not reach backend");
+    } finally {
+      setStatusChangeData(null);
+      setSelectedReason("");
+      setCustomReason("");
+      if (!keepEditing) {
+        setInlineEditing(null);
+      }
     }
   };
 
@@ -400,10 +579,13 @@ export default function SalesPage() {
       if (res.ok) {
         toast.success("Lead deleted");
         fetchLeads();
+      } else {
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to delete lead");
       }
     } catch (err) {
       console.error("Error deleting lead:", err);
-      toast.error("Failed to delete lead");
+      toast.error("An error occurred while deleting lead");
     }
   };
 
@@ -411,6 +593,16 @@ export default function SalesPage() {
     if (!targetForm.employeeId || targetForm.targetAmount <= 0) {
       toast.error("Please select an employee and set a valid target amount");
       return;
+    }
+    if (targetForm.type === "Custom") {
+      if (!targetForm.startDate || !targetForm.endDate) {
+        toast.error("Please select both start date and end date");
+        return;
+      }
+      if (dayjs(targetForm.startDate).isAfter(dayjs(targetForm.endDate))) {
+        toast.error("Start date cannot be after end date");
+        return;
+      }
     }
     setIsTargetSubmitting(true);
     try {
@@ -420,7 +612,9 @@ export default function SalesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...targetForm,
-          employeeName: employee?.name || employee?.firstName
+          employeeName: employee?.name || employee?.firstName,
+          month: targetForm.type === "Custom" ? dayjs(targetForm.startDate).format("MMMM") : targetForm.month,
+          year: targetForm.type === "Custom" ? dayjs(targetForm.startDate).year() : targetForm.year,
         }),
       });
 
@@ -428,7 +622,8 @@ export default function SalesPage() {
         toast.success("Target set successfully");
         fetchTargets();
       } else {
-        toast.error("Failed to set target");
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to set target");
       }
     } catch (err) {
       console.error("Error setting target:", err);
@@ -452,7 +647,8 @@ export default function SalesPage() {
         toast.success(`Incentive of ₹${amount} awarded successfully`);
         fetchTargets();
       } else {
-        toast.error("Failed to award incentive");
+        const errorData = await res.json().catch(() => null);
+        toast.error(errorData?.detail || "Failed to award incentive");
       }
     } catch (err) {
       console.error("Error awarding incentive:", err);
@@ -464,24 +660,53 @@ export default function SalesPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "Client Won": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">Client Won</Badge>;
-      case "Client Loss": return <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">Client Loss</Badge>;
+      case "Client Lost": return <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200">Client Lost</Badge>;
       case "Proposal Sent": return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200">Proposal Sent</Badge>;
       case "Contacted": return <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-indigo-200">Contacted</Badge>;
+      case "On Hold": return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">On Hold</Badge>;
       default: return <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-100 border-slate-200">{status}</Badge>;
     }
   };
 
-  const activeLeads = leads.filter(l => {
-    const isNotWon = l.status !== "Client Won";
+  const filteredByEmployeeLeads = leads.filter((l: any) => {
+    if (salesEmployeeFilter === "all") return true;
+    const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+    return assignedList.some((name: any) => {
+      const nameStr = typeof name === 'string' ? name : String(name || "Unassigned");
+      return nameStr.toLowerCase() === salesEmployeeFilter.toLowerCase();
+    });
+  });
+
+  const visibleLeads = isAdmin 
+    ? filteredByEmployeeLeads 
+    : filteredByEmployeeLeads.filter((l: any) => {
+        const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+        const isAssigned = assignedList.some((name: any) => {
+          const nameStr = typeof name === 'string' ? name : String(name || "Unassigned");
+          return nameStr.toLowerCase() === (currentUserName || "").toLowerCase();
+        });
+        const isCreator = l.createdBy === user?.id || 
+                          (l.createdByUserName && String(l.createdByUserName).toLowerCase() === (currentUserName || "").toLowerCase());
+        return isAssigned || isCreator;
+      });
+
+  const todayStr = dayjs().format("YYYY-MM-DD");
+  const todayFollowUps = visibleLeads.filter((l: any) => {
+    if (!l.nextFollowUpDate) return false;
+    return dayjs(l.nextFollowUpDate).format("YYYY-MM-DD") === todayStr;
+  });
+
+  const activeLeads = visibleLeads.filter(l => {
+    const isActive = l.status !== "Client Won" && l.status !== "Client Lost";
     if (pipelineDateFilter === "today") {
       const today = dayjs().format('YYYY-MM-DD');
       const leadDate = dayjs(l.date).format('YYYY-MM-DD');
-      return isNotWon && leadDate === today;
+      return isActive && leadDate === today;
     }
-    return isNotWon;
+    return isActive;
   });
 
-  const convertedLeads = leads.filter(l => {
+  const convertedLeads = visibleLeads.filter(l => {
     const isWon = l.status === "Client Won";
     if (pipelineDateFilter === "today") {
       const today = dayjs().format('YYYY-MM-DD');
@@ -491,37 +716,89 @@ export default function SalesPage() {
     return isWon;
   });
 
+  const hotLeads = visibleLeads.filter(l => {
+    const isActiveHot = l.isHot === true && l.status !== "Client Won" && l.status !== "Client Lost";
+    if (pipelineDateFilter === "today") {
+      const today = dayjs().format('YYYY-MM-DD');
+      const leadDate = dayjs(l.date).format('YYYY-MM-DD');
+      return isActiveHot && leadDate === today;
+    }
+    return isActiveHot;
+  });
+
+  const overdueUpcomingLeads = visibleLeads.filter((l: any) => {
+    const isNotWon = l.status !== "Client Won";
+    if (!isNotWon) return false;
+    
+    const hasFollowUp = !!l.nextFollowUpDate;
+    const hasHoldResume = !!l.holdResumeDate && l.status === "On Hold";
+    
+    if (!hasFollowUp && !hasHoldResume) return false;
+
+    if (pipelineDateFilter === "today") {
+      const today = dayjs().startOf('day');
+      const followUpDate = l.nextFollowUpDate ? dayjs(l.nextFollowUpDate).startOf('day') : null;
+      const resumeDate = l.holdResumeDate && l.status === "On Hold" ? dayjs(l.holdResumeDate).startOf('day') : null;
+      
+      const isFollowUpDue = followUpDate && (followUpDate.isSame(today) || followUpDate.isBefore(today));
+      const isResumeDue = resumeDate && (resumeDate.isSame(today) || resumeDate.isBefore(today));
+      
+      return isFollowUpDue || isResumeDue;
+    }
+    
+    return true;
+  }).sort((a: any, b: any) => {
+    const getDueDate = (l: any) => {
+      if (l.status === "On Hold" && l.holdResumeDate) return dayjs(l.holdResumeDate).valueOf();
+      if (l.nextFollowUpDate) return dayjs(l.nextFollowUpDate).valueOf();
+      return dayjs("2099-12-31").valueOf();
+    };
+    return getDueDate(a) - getDueDate(b);
+  });
+
   const totalRevenue = convertedLeads.reduce((acc, l) => {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
     return acc + val;
   }, 0);
 
-  const monthlyTargets = targets.filter(t => t.month === selectedMonth && t.year === selectedYear);
-  const totalMonthlyTarget = monthlyTargets.reduce((acc, t) => acc + t.targetAmount, 0);
+  const monthlyTargets = targets.filter(t => (selectedMonth === "All" || t.month === selectedMonth) && (selectedYear === "All" || t.year === selectedYear));
+  const myTarget = targets.find(t => t.employeeName?.toLowerCase() === currentUserName.toLowerCase() && (selectedMonth === "All" || t.month === selectedMonth) && (selectedYear === "All" || t.year === selectedYear));
+
+  const totalMonthlyTarget = isAdmin 
+    ? monthlyTargets.reduce((acc, t) => acc + t.targetAmount, 0)
+    : (myTarget?.targetAmount || 0);
   
-  const monthlyAchievement = leads.filter(l => {
+  const myAchievement = leads.filter(l => {
     if (l.status !== "Client Won") return false;
+    const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+    const isAssignedToMe = assignedList.some((name: any) => {
+      const nameStr = typeof name === 'string' ? name : String(name || "Unassigned");
+      return nameStr.toLowerCase() === (currentUserName || "").toLowerCase();
+    });
+    const isCreator = l.createdBy === user?.id || 
+                      (l.createdByUserName && String(l.createdByUserName).toLowerCase() === (currentUserName || "").toLowerCase());
+    if (!isAssignedToMe && !isCreator) return false;
     const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-    return leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
+    return (selectedMonth === "All" || leadDate.format("MMMM") === selectedMonth) && (selectedYear === "All" || leadDate.year() === selectedYear);
   }).reduce((acc, l) => {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
     return acc + val;
   }, 0);
+
+  const monthlyAchievement = isAdmin 
+    ? leads.filter(l => {
+        if (l.status !== "Client Won") return false;
+        const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
+        return (selectedMonth === "All" || leadDate.format("MMMM") === selectedMonth) && (selectedYear === "All" || leadDate.year() === selectedYear);
+      }).reduce((acc, l) => {
+        const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
+        return acc + val;
+      }, 0)
+    : myAchievement;
 
   const achievementRate = totalMonthlyTarget > 0 ? (monthlyAchievement / totalMonthlyTarget) * 100 : 0;
 
-  const myTarget = targets.find(t => t.employeeName === user?.name && t.month === selectedMonth && t.year === selectedYear);
-  const myAchievement = leads.filter(l => {
-    if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, user?.name)) {
-      const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-      return l.status === "Client Won" && isAssignedTo(l.assignedTo, user?.name) && leadDate.format("MMMM") === selectedMonth && leadDate.year() === selectedYear;
-    }
-    return false;
-  }).reduce((acc, l) => {
-    const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
-    return acc + val;
-  }, 0);
-  
+
   const myProgress = myTarget?.targetAmount > 0 ? (myAchievement / myTarget.targetAmount) * 100 : 0;
 
   const stats = [
@@ -531,207 +808,464 @@ export default function SalesPage() {
     { title: "Target (Monthly)", value: `₹${totalMonthlyTarget.toLocaleString()}`, trend: selectedMonth, trendUp: true, icon: <TrendingUp className="w-5 h-5" />, color: "text-brand-teal" },
   ];
 
-  const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' }) => (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left border-collapse">
-        <thead>
-          <tr className="bg-slate-50/50 border-b border-slate-100">
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lead Info</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Source</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assigned To</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Expected Income</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Remarks</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Follow-ups</th>
-            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {data.filter(l => 
-            l.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            l.contact.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            l.remarks?.toLowerCase().includes(searchTerm.toLowerCase())
-          ).map((lead) => {
-            return (
-              <tr 
-                key={lead.id} 
-                className="hover:bg-slate-50/80 transition-colors group"
-              >
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex flex-col flex-1">
-                      {inlineEditing?.id === lead.id && inlineEditing?.field === 'company' ? (
+  const LeadTable = ({ data, type }: { data: any[], type: 'active' | 'converted' | 'hot' | 'overdue' }) => {
+    const statusContainerRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (inlineEditing?.field === 'status' && statusContainerRef.current) {
+          const clickedElement = document.elementFromPoint(event.clientX, event.clientY);
+          if (clickedElement && statusContainerRef.current.contains(clickedElement)) {
+            return;
+          }
+          const portal = document.querySelector('[data-radix-popper-content-wrapper]');
+          if (portal && portal.contains(event.target as Node)) {
+            return;
+          }
+          setInlineEditing(null);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, [inlineEditing]);
+
+    const getLeadCategory = (lead: any) => {
+      if (lead.status === "On Hold") {
+        const today = dayjs().startOf('day');
+        const resumeDate = lead.holdResumeDate ? dayjs(lead.holdResumeDate).startOf('day') : null;
+        if (resumeDate && (today.isSame(resumeDate) || today.isAfter(resumeDate))) {
+          return 1; // On Hold - Resumed (Very Top)
+        }
+        return 3; // On Hold - Pending (Very Bottom)
+      }
+      return 2; // Standard (Middle)
+    };
+
+    const filteredAndSorted = data
+      .filter(l => 
+        (l.company || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.contact || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.remarks || "").toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      .sort((a, b) => {
+        const catA = getLeadCategory(a);
+        const catB = getLeadCategory(b);
+        if (catA !== catB) {
+          return catA - catB;
+        }
+        if (type === 'overdue') {
+          const getDueDate = (l: any) => {
+            if (l.status === "On Hold" && l.holdResumeDate) return dayjs(l.holdResumeDate).valueOf();
+            if (l.nextFollowUpDate) return dayjs(l.nextFollowUpDate).valueOf();
+            return dayjs("2099-12-31").valueOf();
+          };
+          return getDueDate(a) - getDueDate(b);
+        }
+        return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+      });
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-slate-50/50 border-b border-slate-100">
+              <th className="w-12 px-4 py-3.5 text-center text-[11px] font-bold text-slate-500 uppercase tracking-wider">Hot</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Created By</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Source</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assigned To</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Expected Income</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Remarks</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Follow-ups</th>
+              <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredAndSorted.map((lead) => {
+              const cat = getLeadCategory(lead);
+              return (
+                <tr 
+                  key={lead.id} 
+                  className={`hover:bg-slate-50/80 transition-colors group relative ${
+                    cat === 1 ? 'border-l-4 border-l-rose-500 bg-rose-50/5' : ''
+                  }`}
+                >
+                  <td className="px-4 py-4 text-center">
+                    <input 
+                      type="checkbox"
+                      checked={!!lead.isHot}
+                      onChange={(e) => handleInlineUpdate(lead.id, "isHot", e.target.checked)}
+                      disabled={!canEditLead(lead) || lead.status === "On Hold" || lead.status === "Client Won" || lead.status === "Client Lost"}
+                      className="rounded border-slate-300 text-orange-500 focus:ring-orange-500 w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-800 text-sm">
+                            {lead.createdByUserName || 'Admin'}
+                          </span>
+                          {lead.isHot && (
+                            <span title="Hot Lead">
+                              <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500 shrink-0" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium mt-1">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          {inlineEditing?.id === lead.id && inlineEditing?.field === 'date' ? (
+                            <Input 
+                              type="date"
+                              autoFocus
+                              className="h-6 text-[10px] w-32 py-0" 
+                              defaultValue={lead.date} 
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleInlineUpdate(lead.id, 'date', e.target.value);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                handleInlineUpdate(lead.id, 'date', e.target.value);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleInlineUpdate(lead.id, 'date', e.currentTarget.value);
+                                }
+                              }}
+                            />
+                          ) : (
+                            <span
+                              onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'date' })}
+                              className="cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                            >
+                              Created: {lead.date}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col">
+                      {inlineEditing?.id === lead.id && inlineEditing?.field === 'contact' ? (
                         <Input 
                           autoFocus
-                          className="h-8 text-sm font-bold" 
-                          defaultValue={lead.company} 
-                          onBlur={(e) => handleInlineUpdate(lead.id, 'company', e.target.value)} 
-                          onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'company', e.currentTarget.value)}
+                          className="h-8 text-[13px] font-bold" 
+                          defaultValue={lead.contact} 
+                          onBlur={(e) => handleInlineUpdate(lead.id, 'contact', e.target.value)} 
+                          onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'contact', e.currentTarget.value)}
                         />
                       ) : (
                         <span 
-                          onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'company' })}
-                          className="font-bold text-slate-800 text-sm cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                          onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'contact' })}
+                          className="text-[13px] font-bold text-slate-700 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                         >
-                          {lead.company}
+                          {lead.contact}
                         </span>
                       )}
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium mt-1">
-                        <Calendar className="w-3 h-3 text-slate-400" />
-                        {inlineEditing?.id === lead.id && inlineEditing?.field === 'date' ? (
-                          <Input 
-                            autoFocus
-                            className="h-6 text-[10px] w-24 py-0" 
-                            defaultValue={lead.date} 
-                            onBlur={(e) => handleInlineUpdate(lead.id, 'date', e.target.value)} 
-                            onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'date', e.currentTarget.value)}
-                          />
-                        ) : (
-                          <span
-                            onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'date' })}
-                            className="cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                          >
-                            Created: {lead.date}
-                          </span>
-                        )}
+                      <div className="flex flex-col gap-1 mt-1">
+                        <div className="flex items-center gap-1">
+                          <Mail className="w-3 h-3 text-slate-400" />
+                          {inlineEditing?.id === lead.id && inlineEditing?.field === 'email' ? (
+                            <Input 
+                              autoFocus
+                              className="h-6 text-[10px] w-full py-0" 
+                              defaultValue={lead.email || ''} 
+                              onBlur={(e) => handleInlineUpdate(lead.id, 'email', e.target.value)} 
+                              onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'email', e.currentTarget.value)}
+                              placeholder="Email"
+                            />
+                          ) : (
+                            <span 
+                              onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'email' })}
+                              className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                            >
+                              {lead.email || 'Add email'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-slate-400" />
+                          {inlineEditing?.id === lead.id && inlineEditing?.field === 'phone' ? (
+                            <Input 
+                              autoFocus
+                              className="h-6 text-[10px] w-full py-0" 
+                              defaultValue={lead.phone || ''} 
+                              onBlur={(e) => handleInlineUpdate(lead.id, 'phone', e.target.value)} 
+                              onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'phone', e.currentTarget.value)}
+                              placeholder="Phone"
+                            />
+                          ) : (
+                            <span 
+                              onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'phone' })}
+                              className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                            >
+                              {lead.phone || 'Add phone'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-col">
-                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'contact' ? (
+                  </td>
+                  <td className="px-6 py-4">
+                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'source' ? (
                       <Input 
                         autoFocus
-                        className="h-8 text-[13px] font-bold" 
-                        defaultValue={lead.contact} 
-                        onBlur={(e) => handleInlineUpdate(lead.id, 'contact', e.target.value)} 
-                        onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'contact', e.currentTarget.value)}
+                        className="h-8 text-[12px]" 
+                        defaultValue={lead.source} 
+                        onBlur={(e) => handleInlineUpdate(lead.id, 'source', e.target.value)} 
+                        onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'source', e.currentTarget.value)}
                       />
                     ) : (
-                      <span 
-                        onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'contact' })}
-                        className="text-[13px] font-bold text-slate-700 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                      <div 
+                        onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'source' })}
+                        className="flex items-center gap-1.5 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                       >
-                        {lead.contact}
-                      </span>
+                        {lead.source ? (
+                          <>
+                            <div className="w-1.5 h-1.5 rounded-full bg-brand-teal/40" />
+                            <span className="text-[12px] font-medium text-slate-600">{lead.source}</span>
+                          </>
+                        ) : (
+                          <span className="text-[12px] text-slate-400 italic">Add source</span>
+                        )}
+                      </div>
                     )}
-                    <div className="flex flex-col gap-1 mt-1">
-                      <div className="flex items-center gap-1">
-                        <Mail className="w-3 h-3 text-slate-400" />
-                        {inlineEditing?.id === lead.id && inlineEditing?.field === 'email' ? (
-                          <Input 
-                            autoFocus
-                            className="h-6 text-[10px] w-full py-0" 
-                            defaultValue={lead.email || ''} 
-                            onBlur={(e) => handleInlineUpdate(lead.id, 'email', e.target.value)} 
-                            onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'email', e.currentTarget.value)}
-                            placeholder="Email"
-                          />
-                        ) : (
+                  </td>
+                  <td className="px-6 py-4">
+                    {inlineEditing?.id === lead.id && inlineEditing?.field === 'status' ? (
+                      <div ref={statusContainerRef}>
+                        <Select 
+                          defaultValue={lead.status} 
+                          defaultOpen={true} 
+                          onValueChange={async (val) => {
+                            if (val === lead.status) return;
+                            if (val === "Client Won") {
+                              setClientFormData({
+                                companyName: lead.company || lead.contact,
+                                name: lead.contact,
+                                phone: lead.phone || "",
+                                email: lead.email || "",
+                                remarks: lead.remarks || "",
+                                department: "Sales",
+                              });
+                              setConvertingLeadId(lead.id);
+                              setClientDialogOpen(true);
+                            } else {
+                              setStatusChangeData({
+                                leadId: lead.id,
+                                newStatus: val,
+                                keepEditing: val === "On Hold"
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Lead">Lead</SelectItem>
+                            <SelectItem value="Contacted">Contacted</SelectItem>
+                            <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
+                            <SelectItem value="On Hold">On Hold</SelectItem>
+                            <SelectItem value="Client Won">Client Won</SelectItem>
+                            <SelectItem value="Client Lost">Client Lost</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        
+                        {lead.status === "On Hold" && (
+                          <div className="flex flex-col gap-1 mt-1">
+                            <span className="text-[9px] uppercase font-bold text-slate-400">Resume Date</span>
+                            <Input 
+                              type="date"
+                              defaultValue={lead.holdResumeDate || ""}
+                              className="h-8 text-xs"
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleInlineUpdate(lead.id, 'holdResumeDate', e.currentTarget.value);
+                                }
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : inlineEditing?.id === lead.id && inlineEditing?.field === 'holdResumeDate' ? (
+                      <div className="flex flex-col gap-1 min-w-[120px]">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {getStatusBadge(lead.status)}
+                          {lead.status !== "On Hold" && lead.holdResumeDate && (
+                            <Badge className="bg-orange-50 text-orange-600 hover:bg-orange-50 border-orange-200 text-[9px] font-bold px-1.5 py-0.5 shadow-none shrink-0">
+                              Resumed from Hold
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-[9px] uppercase font-bold text-slate-400 mt-1">Resume Date</span>
+                        <Input 
+                          type="date"
+                          defaultValue={lead.holdResumeDate || ""}
+                          className="h-8 text-xs"
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            handleInlineUpdate(lead.id, 'holdResumeDate', e.target.value);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleInlineUpdate(lead.id, 'holdResumeDate', e.currentTarget.value);
+                            }
+                          }}
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <div 
+                        onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'status' })}
+                        className="cursor-pointer flex flex-col gap-1"
+                      >
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {getStatusBadge(lead.status)}
+                          {lead.status !== "On Hold" && lead.holdResumeDate && (
+                            <Badge className="bg-orange-50 text-orange-600 hover:bg-orange-50 border-orange-200 text-[9px] font-bold px-1.5 py-0.5 shadow-none shrink-0">
+                              Resumed from Hold
+                            </Badge>
+                          )}
+                        </div>
+                        {lead.status === "On Hold" && (
                           <span 
-                            onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'email' })}
-                            className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
+                            onClick={(e) => {
+                              if (canEditLead(lead)) {
+                                e.stopPropagation();
+                                setInlineEditing({ id: lead.id, field: 'holdResumeDate' });
+                              }
+                            }}
+                            className={`text-[10px] font-semibold mt-1 hover:underline cursor-pointer ${
+                              cat === 1 ? 'text-rose-600 font-bold' : 'text-slate-500'
+                            }`}
                           >
-                            {lead.email || 'Add email'}
+                            Resume: {lead.holdResumeDate ? dayjs(lead.holdResumeDate).format("DD MMM YYYY") : "Set Date"}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-slate-400" />
-                        {inlineEditing?.id === lead.id && inlineEditing?.field === 'phone' ? (
-                          <Input 
-                            autoFocus
-                            className="h-6 text-[10px] w-full py-0" 
-                            defaultValue={lead.phone || ''} 
-                            onBlur={(e) => handleInlineUpdate(lead.id, 'phone', e.target.value)} 
-                            onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'phone', e.currentTarget.value)}
-                            placeholder="Phone"
-                          />
-                        ) : (
-                          <span 
-                            onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'phone' })}
-                            className="text-[10px] text-slate-500 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                          >
-                            {lead.phone || 'Add phone'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'source' ? (
-                    <Input 
-                      autoFocus
-                      className="h-8 text-[12px]" 
-                      defaultValue={lead.source} 
-                      onBlur={(e) => handleInlineUpdate(lead.id, 'source', e.target.value)} 
-                      onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(lead.id, 'source', e.currentTarget.value)}
-                    />
-                  ) : (
-                    <div 
-                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'source' })}
-                      className="flex items-center gap-1.5 cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
-                    >
-                      <div className="w-1.5 h-1.5 rounded-full bg-brand-teal/40" />
-                      <span className="text-[12px] font-medium text-slate-600">{lead.source}</span>
-                    </div>
-                  )}
-                </td>
-                <td className="px-6 py-4">
-                  {inlineEditing?.id === lead.id && inlineEditing?.field === 'status' ? (
-                    <Select 
-                      defaultValue={lead.status} 
-                      onValueChange={(val) => handleInlineUpdate(lead.id, 'status', val)}
-                      defaultOpen={true}
-                      onOpenChange={(open) => !open && setInlineEditing(null)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Lead">Lead</SelectItem>
-                        <SelectItem value="Contacted">Contacted</SelectItem>
-                        <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
-                        <SelectItem value="Client Won">Client Won</SelectItem>
-                        <SelectItem value="Client Loss">Client Loss</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div 
-                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'status' })}
-                      className="cursor-pointer"
-                    >
-                      {getStatusBadge(lead.status)}
-                    </div>
-                  )}
-                </td>
+                    )}
+                  </td>
                 <td className="px-6 py-4">
                   {inlineEditing?.id === lead.id && inlineEditing?.field === 'assignedTo' ? (
-                    <Select 
-                      defaultValue={lead.assignedTo || ""} 
-                      onValueChange={(val) => handleInlineUpdate(lead.id, 'assignedTo', val)}
-                      defaultOpen={true}
-                      onOpenChange={(open) => !open && setInlineEditing(null)}
+                    <Popover 
+                      open={true} 
+                      onOpenChange={(open) => {
+                        if (!open) {
+                          const originalList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
+                          const hasChanged = originalList.length !== selectedAssignees.length || 
+                            !originalList.every((name: string) => selectedAssignees.includes(name)) ||
+                            !selectedAssignees.every((name: string) => originalList.includes(name));
+                          if (hasChanged) {
+                            handleInlineUpdate(lead.id, 'assignedTo', selectedAssignees);
+                          }
+                          setInlineEditing(null);
+                        }
+                      }}
                     >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
-                          <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <PopoverTrigger asChild>
+                        <div className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1">
+                          {selectedAssignees.length > 0 ? (
+                            selectedAssignees.map((name: string) => (
+                              <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
+                                {name}
+                                {canEditLead(lead) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const updated = selectedAssignees.filter((n: string) => n !== name);
+                                      setSelectedAssignees(updated);
+                                    }}
+                                    className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-slate-400 italic text-xs">Unassigned</span>
+                          )}
+                        </div>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-52 p-3 bg-white shadow-md border border-slate-100 rounded-lg z-50">
+                        <Label className="text-[10px] uppercase font-black text-slate-400 mb-2 block">Assign Employees</Label>
+                        <div className="max-h-40 overflow-y-auto space-y-1.5 bg-slate-50/50 p-2 rounded border border-slate-100">
+                          {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                            const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                            return (
+                              <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                                <input 
+                                  type="checkbox"
+                                  checked={selectedAssignees.includes(empName)}
+                                  onChange={(e) => {
+                                    const updated = e.target.checked 
+                                      ? [...selectedAssignees, empName] 
+                                      : selectedAssignees.filter((n: string) => n !== empName);
+                                    setSelectedAssignees(updated);
+                                  }}
+                                  className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                />
+                                {empName}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   ) : (
-                    <span 
-                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'assignedTo' })}
-                      className="text-[12px] font-bold text-brand-teal cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5"
+                    <div 
+                      onClick={() => {
+                        if (canEditLead(lead)) {
+                          setInlineEditing({ id: lead.id, field: 'assignedTo' });
+                          const assignedList = (Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : [])).map(extractName).filter(Boolean);
+                          setSelectedAssignees(assignedList);
+                        }
+                      }}
+                      className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-slate-50 rounded p-1"
                     >
-                      {getAssignedToString(lead.assignedTo) || "--"}
-                    </span>
+                      {Array.isArray(lead.assignedTo) && lead.assignedTo.length > 0 ? (
+                        lead.assignedTo.map((name: string) => (
+                          <Badge key={name} variant="secondary" className="bg-brand-teal/5 text-brand-teal border-brand-teal/10 text-[10px] font-bold py-0.5 pl-1.5 pr-1 hover:bg-brand-teal/5 flex items-center gap-1">
+                            {name}
+                            {canEditLead(lead) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
+                                  const updated = assignedList.filter((n: string) => n !== name);
+                                  handleInlineUpdate(lead.id, 'assignedTo', updated);
+                                }}
+                                className="text-brand-teal/60 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full p-0.5 transition-colors"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-slate-400 italic text-xs">Unassigned</span>
+                      )}
+                    </div>
                   )}
                 </td>
                 <td className="px-6 py-4">
@@ -746,10 +1280,10 @@ export default function SalesPage() {
                       />
                     ) : (
                       <span 
-                        onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'expectedIncome' })}
+                        onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'expectedIncome' })}
                         className="font-bold text-slate-900 text-sm cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                       >
-                        ₹{lead.expectedIncome}
+                        {lead.expectedIncome ? (lead.expectedIncome.startsWith('₹') ? lead.expectedIncome : `₹${lead.expectedIncome}`) : '--'}
                       </span>
                     )}
                     {type === 'converted' && (
@@ -768,7 +1302,7 @@ export default function SalesPage() {
                     />
                   ) : (
                     <p 
-                      onClick={() => canEditSales && setInlineEditing({ id: lead.id, field: 'remarks' })}
+                      onClick={() => canEditLead(lead) && setInlineEditing({ id: lead.id, field: 'remarks' })}
                       className="text-[12px] text-slate-500 italic max-w-[120px] truncate cursor-text hover:bg-slate-50 rounded px-1 py-0.5"
                       title={lead.remarks}
                     >
@@ -777,12 +1311,37 @@ export default function SalesPage() {
                   )}
                 </td>
                 <td className="px-6 py-4">
-                  <FollowUpDialog 
-                    lead={lead} 
-                    onUpdate={fetchLeads} 
-                    userId={user?.id} 
-                    userName={user?.name} 
-                  />
+                  <div className="flex items-center gap-2">
+                    <FollowUpDialog 
+                      lead={lead} 
+                      onUpdate={fetchLeads} 
+                      userId={user?.id} 
+                      userName={currentUserName} 
+                    />
+                    {lead.nextFollowUpDate && (() => {
+                      const today = dayjs().startOf('day');
+                      const nextDate = dayjs(lead.nextFollowUpDate).startOf('day');
+                      const isMissed = today.isAfter(nextDate);
+                      const isDueToday = today.isSame(nextDate);
+                      return (
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          {isMissed ? (
+                            <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                              Follow-up Missed
+                            </Badge>
+                          ) : isDueToday ? (
+                            <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200 animate-pulse text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap">
+                              Follow-up Due
+                            </Badge>
+                          ) : (
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                              Next: {dayjs(lead.nextFollowUpDate).format("DD MMM")}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex justify-end gap-2">
@@ -794,14 +1353,12 @@ export default function SalesPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-[180px]">
                         <DropdownMenuItem onClick={() => fetchLeadLogs(lead)} className="cursor-pointer font-medium">
-                          <HistoryIcon className="w-4 h-4 mr-2 text-brand-teal" />
                           View History
                         </DropdownMenuItem>
                         {canDeleteSales && (
                           <>
                             <div className="h-px bg-slate-100 my-1" />
                             <DropdownMenuItem onClick={() => handleDeleteLead(lead.id)} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
-                              <Trash2 className="w-4 h-4 mr-2" />
                               Delete Lead
                             </DropdownMenuItem>
                           </>
@@ -817,6 +1374,7 @@ export default function SalesPage() {
       </table>
     </div>
   );
+};
 
   if (permissionsLoading) {
     return (
@@ -836,46 +1394,30 @@ export default function SalesPage() {
           <div className="hidden lg:flex items-center gap-2 bg-white border border-slate-100 rounded-xl px-2 py-1 shadow-sm">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="h-8 w-[110px] border-none text-[11px] font-bold text-slate-600 focus:ring-0">
-                <SelectValue />
+                <SelectValue placeholder="Month" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="All">All Months</SelectItem>
                 {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
                   <SelectItem key={m} value={m}>{m}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <div className="w-px h-4 bg-slate-100" />
-            <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(parseInt(val))}>
+            <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(val === "All" ? "All" : parseInt(val))}>
               <SelectTrigger className="h-8 w-[80px] border-none text-[11px] font-bold text-slate-600 focus:ring-0">
-                <SelectValue />
+                <SelectValue placeholder="Year" />
               </SelectTrigger>
               <SelectContent>
-                {[2024, 2025, 2026].map(y => (
+                <SelectItem value="All">All Years</SelectItem>
+                {Array.from({ length: 21 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {myTarget && (
-            <div className="hidden sm:flex items-center gap-3 bg-white/50 backdrop-blur-sm border border-slate-200/50 rounded-xl px-4 py-2 shadow-sm">
-              <div className="flex flex-col">
-                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">My {selectedMonth} Target</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-black text-slate-800">₹{myAchievement.toLocaleString()} / ₹{myTarget.targetAmount.toLocaleString()}</span>
-                  <div className="w-12 h-1.5 bg-slate-200/50 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${myProgress >= 100 ? 'bg-emerald-500' : 'bg-brand-teal'} transition-all`} 
-                      style={{ width: `${Math.min(myProgress, 100)}%` }} 
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold ${myProgress >= 100 ? 'bg-emerald-100 text-emerald-600' : 'bg-brand-teal/10 text-brand-teal'}`}>
-                {myProgress.toFixed(0)}%
-              </div>
-            </div>
-          )}
+
 
                   {canAddSales && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -919,47 +1461,61 @@ export default function SalesPage() {
         ))}
       </div>
 
-      <Tabs defaultValue="active" className="w-full">
-        <div className="flex items-center justify-between mb-4 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
-          <TabsList className="bg-slate-100/50 p-1">
-            <TabsTrigger value="active" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
+      <Tabs defaultValue="overdue" className="w-full">
+        <div className="flex flex-row items-center justify-between gap-4 mb-4 bg-white p-2 rounded-xl border border-slate-100 shadow-sm overflow-x-auto">
+          <TabsList className="bg-slate-100/50 p-1 flex-nowrap h-auto justify-start shrink-0">
+            <TabsTrigger value="overdue" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold flex items-center gap-1.5 whitespace-nowrap">
+              <Clock className="w-4 h-4 text-rose-500" />
+              Follow-up due ({overdueUpcomingLeads.length})
+            </TabsTrigger>
+            <TabsTrigger value="active" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold whitespace-nowrap">
               Active Pipeline ({activeLeads.length})
             </TabsTrigger>
-            <TabsTrigger value="converted" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
-              Converted Successes ({convertedLeads.length})
+            <TabsTrigger value="hot" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold flex items-center gap-1.5 whitespace-nowrap">
+              <Flame className="w-4 h-4 text-orange-500 fill-orange-500" />
+              Hot Leads ({hotLeads.length})
             </TabsTrigger>
-            <TabsTrigger value="targets" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
-              Monthly Targets
+            <TabsTrigger value="converted" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold whitespace-nowrap">
+              Converted Leads ({convertedLeads.length})
             </TabsTrigger>
-            {canEditSales && (
-              <>
-                <TabsTrigger value="reports" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-6 py-2 text-sm font-bold">
-                  Performance Reports
-                </TabsTrigger>
-              </>
+            <TabsTrigger value="targets" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold whitespace-nowrap">
+              Targets
+            </TabsTrigger>
+            {isAdmin && (
+              <button 
+                onClick={() => router.push('/work-management/sales/analytics')}
+                className="ml-1 text-foreground px-4 py-2 text-sm font-bold flex items-center gap-2 rounded-sm transition-all whitespace-nowrap"
+              >
+                <TrendingUp className="w-4 h-4" />
+                Sales Analytics
+              </button>
             )}
           </TabsList>
 
-          <div className="flex items-center gap-2 mr-2">
+          <div className="flex flex-wrap items-center gap-2 self-start xl:self-auto w-full xl:w-auto justify-start xl:justify-end shrink-0">
+            {isAdmin && (
+              <Select value={salesEmployeeFilter} onValueChange={setSalesEmployeeFilter}>
+                <SelectTrigger className="w-[150px] h-9 border-slate-200">
+                  <SelectValue placeholder="Employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Employees</SelectItem>
+                  {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => (
+                    <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={pipelineDateFilter} onValueChange={setPipelineDateFilter}>
-              <SelectTrigger className="h-9 w-[130px] border-slate-200 text-slate-600 font-bold text-xs bg-slate-50/50">
-                <Calendar className="w-3.5 h-3.5 mr-2 text-brand-teal" />
-                <SelectValue placeholder="Time Period" />
+              <SelectTrigger className="w-[120px] h-9 border-slate-200">
+                <SelectValue placeholder="Date Filter" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="today">Today Only</SelectItem>
-                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="today">Today's Leads</SelectItem>
+                <SelectItem value="all">All Leads</SelectItem>
               </SelectContent>
             </Select>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input 
-                placeholder="Search..." 
-                className="pl-9 h-9 w-[180px] border-slate-200 focus-visible:ring-brand-teal"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+
           </div>
         </div>
 
@@ -970,10 +1526,26 @@ export default function SalesPage() {
           </div>
         ) : (
           <>
+            <TabsContent value="overdue">
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardContent className="p-0">
+                  <LeadTable data={overdueUpcomingLeads} type="overdue" />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="active">
               <Card className="border-none shadow-sm bg-white overflow-hidden">
                 <CardContent className="p-0">
                   <LeadTable data={activeLeads} type="active" />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="hot">
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardContent className="p-0">
+                  <LeadTable data={hotLeads} type="hot" />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -988,7 +1560,7 @@ export default function SalesPage() {
 
             <TabsContent value="targets">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {canEditSales && (
+                {isAdmin && (
                   <div className="lg:col-span-1 space-y-6">
                     <Card className="border-none shadow-sm bg-white overflow-hidden">
                       <CardHeader className="border-b border-slate-100">
@@ -1004,6 +1576,7 @@ export default function SalesPage() {
                             <SelectContent>
                               <SelectItem value="Monthly">Monthly</SelectItem>
                               <SelectItem value="Weekly">Weekly</SelectItem>
+                              <SelectItem value="Custom">Custom</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1015,57 +1588,91 @@ export default function SalesPage() {
                               <SelectValue placeholder="Select Employee" />
                             </SelectTrigger>
                             <SelectContent>
-                              {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
+                              {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => (
                                 <SelectItem key={emp.id} value={emp.id}>{emp.name || emp.firstName}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Month</label>
-                            <Select value={targetForm.month} onValueChange={(val) => setTargetForm({...targetForm, month: val})}>
-                              <SelectTrigger className="h-10 text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                                  <SelectItem key={m} value={m}>{m}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                        {targetForm.type === "Custom" ? (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Start Date</label>
+                              <Input 
+                                type="date" 
+                                className="h-10 text-sm" 
+                                value={targetForm.startDate || ""}
+                                onChange={(e) => setTargetForm({...targetForm, startDate: e.target.value})}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">End Date</label>
+                              <Input 
+                                type="date" 
+                                className="h-10 text-sm" 
+                                value={targetForm.endDate || ""}
+                                onChange={(e) => setTargetForm({...targetForm, endDate: e.target.value})}
+                              />
+                            </div>
                           </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Year</label>
-                            <Input 
-                              type="number" 
-                              className="h-10 text-sm" 
-                              value={targetForm.year} 
-                              onChange={(e) => setTargetForm({...targetForm, year: parseInt(e.target.value)})}
-                            />
-                          </div>
-                        </div>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Month</label>
+                                <Select value={targetForm.month} onValueChange={(val) => setTargetForm({...targetForm, month: val})}>
+                                  <SelectTrigger className="h-10 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Year</label>
+                                <Input 
+                                  type="number" 
+                                  className="h-10 text-sm" 
+                                  value={targetForm.year} 
+                                  onChange={(e) => setTargetForm({...targetForm, year: parseInt(e.target.value)})}
+                                />
+                              </div>
+                            </div>
 
-                        {targetForm.type === "Weekly" && (
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Week Number</label>
-                            <Select value={String(targetForm.week)} onValueChange={(val) => setTargetForm({...targetForm, week: parseInt(val)})}>
-                              <SelectTrigger className="h-10 text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {[1, 2, 3, 4, 5].map(w => (
-                                  <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
+                            {targetForm.type === "Weekly" && (
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Week Number</label>
+                                <Select value={String(targetForm.week)} onValueChange={(val) => setTargetForm({...targetForm, week: parseInt(val)})}>
+                                  <SelectTrigger className="h-10 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {[1, 2, 3, 4, 5].map(w => (
+                                      <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </>
                         )}
 
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                            Target Amount (₹) {targets.some(t => t.employeeId === targetForm.employeeId && t.month === targetForm.month && t.year === targetForm.year && t.type === targetForm.type && (targetForm.type === "Monthly" || t.week === targetForm.week)) && <span className="text-brand-teal ml-1">(Existing)</span>}
+                            Target Amount (₹) {targets.some(t => {
+                              if (t.employeeId !== targetForm.employeeId || t.type !== targetForm.type) return false;
+                              if (targetForm.type === "Custom") {
+                                return t.startDate === targetForm.startDate && t.endDate === targetForm.endDate;
+                              } else if (targetForm.type === "Weekly") {
+                                return t.month === targetForm.month && t.year === targetForm.year && t.week === targetForm.week;
+                              } else {
+                                return t.month === targetForm.month && t.year === targetForm.year;
+                              }
+                            }) && <span className="text-brand-teal ml-1">(Existing)</span>}
                           </label>
                           <Input 
                             type="number" 
@@ -1087,99 +1694,287 @@ export default function SalesPage() {
                     </Card>
 
                     <Card className="border-none shadow-sm bg-white overflow-hidden">
-                      <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
-                        <CardTitle className="text-sm font-bold text-slate-700">Incentive Slabs</CardTitle>
-                        <Dialog open={isSlabDialogOpen} onOpenChange={setIsSlabDialogOpen}>
-                          <DialogTrigger asChild>
-                            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold text-brand-teal border-brand-teal/20 hover:bg-brand-teal/5">
-                              <Plus className="w-3 h-3 mr-1" /> Add Slab
-                            </Button>
-                          </DialogTrigger>
+                      <CardHeader className="border-b border-slate-100 flex flex-col items-start space-y-3 pb-3">
+                        <div className="flex flex-row items-center justify-between w-full">
+                          <CardTitle className="text-sm font-bold text-slate-700">Incentive Slabs</CardTitle>
+                          <Dialog open={isSlabDialogOpen} onOpenChange={setIsSlabDialogOpen}>
+                            <DialogTrigger asChild>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="h-7 text-[10px] font-bold text-brand-teal border-brand-teal/20 hover:bg-brand-teal/5"
+                                onClick={(e) => {
+                                  if (slabTab === "employee" && !selectedSlabEmployee) {
+                                    e.preventDefault();
+                                    toast.error("Please select an employee first");
+                                    return;
+                                  }
+                                  setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0, employees: slabTab === "employee" ? [selectedSlabEmployee] : [], clientCategories: [], isRecurring: false });
+                                }}
+                              >
+                                <Plus className="w-3 h-3 mr-1" /> Add Slab
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-sm">
+                              <DialogHeader>
+                                <DialogTitle>{slabTab === "global" ? "Add Common Slab" : `Add Slab for ${selectedSlabEmployee}`}</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1.5">
+                                    <Label className="text-[10px] uppercase font-black text-slate-400">Min Amount (₹)</Label>
+                                    <Input type="number" value={slabForm.minAmount} onChange={e => setSlabForm({...slabForm, minAmount: parseFloat(e.target.value) || 0})} />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <Label className="text-[10px] uppercase font-black text-slate-400">Max Amount (₹)</Label>
+                                    <Input type="number" value={slabForm.maxAmount} onChange={e => setSlabForm({...slabForm, maxAmount: parseFloat(e.target.value) || 0})} />
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
+                                  <Input type="number" step="0.1" value={slabForm.percentage} onChange={e => setSlabForm({...slabForm, percentage: parseFloat(e.target.value) || 0})} />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] uppercase font-black text-slate-400">Client Categories (Leave empty for All)</Label>
+                                  <div className="flex flex-wrap gap-2 pt-1 border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto bg-slate-50/50">
+                                    {['Marketing', 'Development', 'Graphics'].map(cat => (
+                                      <label key={cat} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
+                                        <input 
+                                          type="checkbox"
+                                          checked={slabForm.clientCategories?.includes(cat)}
+                                          onChange={(e) => {
+                                            const updated = e.target.checked 
+                                              ? [...(slabForm.clientCategories || []), cat] 
+                                              : (slabForm.clientCategories || []).filter(c => c !== cat);
+                                            setSlabForm({...slabForm, clientCategories: updated});
+                                          }}
+                                          className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                        />
+                                        {cat}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5 flex flex-row items-center gap-2 pt-2">
+                                  <input 
+                                    type="checkbox" 
+                                    id="isRecurring"
+                                    checked={slabForm.isRecurring} 
+                                    onChange={e => setSlabForm({...slabForm, isRecurring: e.target.checked})}
+                                    className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-4 h-4"
+                                  />
+                                  <Label htmlFor="isRecurring" className="text-xs font-bold text-slate-600 cursor-pointer">This is a Recurring Slab</Label>
+                                </div>
+                                <Button className="w-full bg-brand-teal text-white font-bold" onClick={handleCreateSlab}>Create Slab</Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                        <Tabs value={slabTab} onValueChange={(v) => setSlabTab(v as "global" | "employee")} className="w-full">
+                          <TabsList className="w-full grid grid-cols-2 h-8">
+                            <TabsTrigger value="global" className="text-xs">Common Slabs</TabsTrigger>
+                            <TabsTrigger value="employee" className="text-xs">Employee Wise</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <Dialog open={isEditSlabDialogOpen} onOpenChange={setIsEditSlabDialogOpen}>
                           <DialogContent className="max-w-sm">
                             <DialogHeader>
-                              <DialogTitle>Add Incentive Slab</DialogTitle>
+                              <DialogTitle>Edit Incentive Slab</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 py-4">
                               <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
                                   <Label className="text-[10px] uppercase font-black text-slate-400">Min Amount (₹)</Label>
-                                  <Input type="number" value={slabForm.minAmount} onChange={e => setSlabForm({...slabForm, minAmount: parseFloat(e.target.value) || 0})} />
+                                  <Input type="number" value={editSlabForm.minAmount} onChange={e => setEditSlabForm({...editSlabForm, minAmount: parseFloat(e.target.value) || 0})} />
                                 </div>
                                 <div className="space-y-1.5">
                                   <Label className="text-[10px] uppercase font-black text-slate-400">Max Amount (₹)</Label>
-                                  <Input type="number" value={slabForm.maxAmount} onChange={e => setSlabForm({...slabForm, maxAmount: parseFloat(e.target.value) || 0})} />
+                                  <Input type="number" value={editSlabForm.maxAmount} onChange={e => setEditSlabForm({...editSlabForm, maxAmount: parseFloat(e.target.value) || 0})} />
                                 </div>
                               </div>
                               <div className="space-y-1.5">
                                 <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
-                                <Input type="number" step="0.1" value={slabForm.percentage} onChange={e => setSlabForm({...slabForm, percentage: parseFloat(e.target.value) || 0})} />
+                                <Input type="number" step="0.1" value={editSlabForm.percentage} onChange={e => setEditSlabForm({...editSlabForm, percentage: parseFloat(e.target.value) || 0})} />
                               </div>
-                              <Button className="w-full bg-brand-teal text-white font-bold" onClick={handleCreateSlab}>Create Slab</Button>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] uppercase font-black text-slate-400">Client Categories (Leave empty for All)</Label>
+                                <div className="flex flex-wrap gap-2 pt-1 border border-slate-100 rounded-lg p-2 max-h-32 overflow-y-auto bg-slate-50/50">
+                                  {['Marketing', 'Development', 'Graphics'].map(cat => (
+                                    <label key={cat} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
+                                      <input 
+                                        type="checkbox"
+                                        checked={editSlabForm.clientCategories?.includes(cat)}
+                                        onChange={(e) => {
+                                          const updated = e.target.checked 
+                                            ? [...(editSlabForm.clientCategories || []), cat] 
+                                            : (editSlabForm.clientCategories || []).filter(c => c !== cat);
+                                          setEditSlabForm({...editSlabForm, clientCategories: updated});
+                                        }}
+                                        className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                                      />
+                                      {cat}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="space-y-1.5 flex flex-row items-center gap-2 pt-2">
+                                <input 
+                                  type="checkbox" 
+                                  id="editIsRecurring"
+                                  checked={editSlabForm.isRecurring} 
+                                  onChange={e => setEditSlabForm({...editSlabForm, isRecurring: e.target.checked})}
+                                  className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-4 h-4"
+                                />
+                                <Label htmlFor="editIsRecurring" className="text-xs font-bold text-slate-600 cursor-pointer">This is a Recurring Slab</Label>
+                              </div>
+                              <Button className="w-full bg-brand-teal text-white font-bold" onClick={() => editingSlabId && handleUpdateSlab(editingSlabId)}>Save Changes</Button>
                             </div>
                           </DialogContent>
                         </Dialog>
-                      </CardHeader>
-                      <CardContent className="p-0">
+
                         <div className="divide-y divide-slate-100">
-                          {incentiveSlabs.map((slab) => (
-                            <div key={slab.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50">
-                              <div className="space-y-0.5">
-                                <div className="text-sm font-bold text-slate-700">₹{slab.minAmount.toLocaleString()} - ₹{slab.maxAmount.toLocaleString()}</div>
-                                <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Dialog>
-                                  <DialogTrigger asChild>
+                          {slabTab === "global" && (
+                            incentiveSlabs.filter(s => !s.employees || s.employees.length === 0).length === 0 ? (
+                              <div className="p-6 text-center text-xs text-slate-400 italic">No common slabs configured</div>
+                            ) : (
+                              incentiveSlabs.filter(s => !s.employees || s.employees.length === 0).map(slab => (
+                                <div key={slab.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-sm font-bold text-slate-700">₹{slab.minAmount.toLocaleString()} - ₹{slab.maxAmount.toLocaleString()}</div>
+                                      {slab.isRecurring ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 uppercase tracking-widest">Recurring</span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 uppercase tracking-widest">Standard</span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
+                                    <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                      {slab.clientCategories && slab.clientCategories.length > 0 
+                                        ? `Categories: ${slab.clientCategories.join(", ")}` 
+                                        : 'All Categories'}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1">
                                     <Button 
                                       variant="ghost" 
                                       size="icon" 
                                       className="h-8 w-8 text-slate-300 hover:text-brand-teal"
-                                      onClick={() => setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage })}
+                                      onClick={() => { setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage, employees: slab.employees || [], clientCategories: slab.clientCategories || [], isRecurring: slab.isRecurring || false }); setEditingSlabId(slab.id); setIsEditSlabDialogOpen(true); }}
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </Button>
-                                  </DialogTrigger>
-                                  <DialogContent className="max-w-sm">
-                                    <DialogHeader>
-                                      <DialogTitle>Edit Incentive Slab</DialogTitle>
-                                    </DialogHeader>
-                                    <div className="space-y-4 py-4">
-                                      <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] uppercase font-black text-slate-400">Min Amount (₹)</Label>
-                                          <Input type="number" value={editSlabForm.minAmount} onChange={e => setEditSlabForm({...editSlabForm, minAmount: parseFloat(e.target.value) || 0})} />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                          <Label className="text-[10px] uppercase font-black text-slate-400">Max Amount (₹)</Label>
-                                          <Input type="number" value={editSlabForm.maxAmount} onChange={e => setEditSlabForm({...editSlabForm, maxAmount: parseFloat(e.target.value) || 0})} />
-                                        </div>
-                                      </div>
-                                      <div className="space-y-1.5">
-                                        <Label className="text-[10px] uppercase font-black text-slate-400">Incentive (%)</Label>
-                                        <Input type="number" step="0.1" value={editSlabForm.percentage} onChange={e => setEditSlabForm({...editSlabForm, percentage: parseFloat(e.target.value) || 0})} />
-                                      </div>
-                                      <Button className="w-full bg-brand-teal text-white font-bold" onClick={() => handleUpdateSlab(slab.id)}>Save Changes</Button>
-                                    </div>
-                                  </DialogContent>
-                                </Dialog>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-rose-500" onClick={() => handleDeleteSlab(slab.id)}>
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-rose-500" onClick={() => handleDeleteSlab(slab.id)}>
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            )
+                          )}
+
+                          {slabTab === "employee" && (
+                            <div className="p-3">
+                              <div className="space-y-1.5 mb-3">
+                                <Label className="text-[10px] uppercase font-black text-slate-400">Select Salesperson</Label>
+                                <Select value={selectedSlabEmployee} onValueChange={setSelectedSlabEmployee}>
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Choose an employee..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                                      const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                                      return <SelectItem key={emp.id} value={empName}>{empName}</SelectItem>
+                                    })}
+                                  </SelectContent>
+                                </Select>
                               </div>
+                              
+                              {selectedSlabEmployee ? (
+                                <div className="border border-slate-100 rounded-lg overflow-hidden divide-y divide-slate-100">
+                                  {incentiveSlabs.filter(s => s.employees && s.employees.includes(selectedSlabEmployee)).length === 0 ? (
+                                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-50/50">No custom slabs for this employee. Common slabs will apply.</div>
+                                  ) : (
+                                    incentiveSlabs.filter(s => s.employees && s.employees.includes(selectedSlabEmployee)).map(slab => (
+                                      <div key={slab.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50 bg-white">
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className="text-sm font-bold text-slate-700">₹{slab.minAmount.toLocaleString()} - ₹{slab.maxAmount.toLocaleString()}</div>
+                                            {slab.isRecurring ? (
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 uppercase tracking-widest">Recurring</span>
+                                            ) : (
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 uppercase tracking-widest">Standard</span>
+                                            )}
+                                          </div>
+                                          <div className="text-[10px] font-black text-brand-teal uppercase tracking-widest">{slab.percentage}% Incentive</div>
+                                          <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                            {slab.clientCategories && slab.clientCategories.length > 0 
+                                              ? `Categories: ${slab.clientCategories.join(", ")}` 
+                                              : 'All Categories'}
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-8 w-8 text-slate-300 hover:text-brand-teal"
+                                            onClick={() => { setEditSlabForm({ minAmount: slab.minAmount, maxAmount: slab.maxAmount, percentage: slab.percentage, employees: slab.employees || [], clientCategories: slab.clientCategories || [], isRecurring: slab.isRecurring || false }); setEditingSlabId(slab.id); setIsEditSlabDialogOpen(true); }}
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </Button>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-rose-500" onClick={() => handleDeleteSlab(slab.id)}>
+                                            <Trash2 className="w-4 h-4" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="p-6 text-center text-xs text-slate-400 italic border border-slate-100 rounded-lg bg-slate-50/50">
+                                  Select an employee to view or add their custom slabs
+                                </div>
+                              )}
                             </div>
-                          ))}
-                          {incentiveSlabs.length === 0 && <div className="p-6 text-center text-xs text-slate-400 italic">No slabs configured</div>}
+                          )}
                         </div>
                       </CardContent>
                     </Card>
                   </div>
                 )}
 
-                <Card className={`border-none shadow-sm bg-white overflow-hidden ${canEditSales ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
-                  <CardHeader className="border-b border-slate-100">
+                <Card className={`border-none shadow-sm bg-white overflow-hidden ${isAdmin ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                  <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between py-4">
                     <CardTitle className="text-sm font-bold text-slate-700">
-                      {canEditSales ? "Sales Performance Targets" : "My Performance Targets"}
+                      {isAdmin ? "Sales Performance Targets" : "My Performance Targets"}
                     </CardTitle>
+                    {canEditSales && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const toastId = toast.loading("Recalculating all sales targets...");
+                          try {
+                            const res = await fetch(`${API_URL}/sales-targets/recalculate-all`, { method: "POST" });
+                            if (res.ok) {
+                              const data = await res.json();
+                              toast.success(data.message || "Recalculated successfully", { id: toastId });
+                              fetchTargets();
+                            } else {
+                              toast.error("Failed to recalculate targets", { id: toastId });
+                            }
+                          } catch (e) {
+                            toast.error("Error recalculating targets", { id: toastId });
+                          }
+                        }}
+                        className="h-8 gap-2 border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Recalculate All</span>
+                      </Button>
+                    )}
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
@@ -1191,47 +1986,25 @@ export default function SalesPage() {
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Period</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Target</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Achieved</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-emerald-600">Incentive Base</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-indigo-600">Earned</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-brand-teal">Progress</th>
-                            {canEditSales && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
+                            {isAdmin && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {targets.filter(t => canEditSales || t.employeeName === user?.name).length > 0 ? (
+                          {targets.filter(t => isAdmin || t.employeeName?.toLowerCase() === currentUserName.toLowerCase()).length > 0 ? (
                             targets
-                              .filter(t => canEditSales || t.employeeName === user?.name)
+                              .filter(t => isAdmin || t.employeeName?.toLowerCase() === currentUserName.toLowerCase())
                               .sort((a,b) => b.year - a.year || (a.type === "Weekly" ? 1 : -1))
                               .map((t, i) => {
-                                const achieved = leads.filter(l => {
-                                  if (l.status !== "Client Won" || !isAssignedTo(l.assignedTo, t.employeeName)) return false;
-                                  const leadDate = l.closedDate ? dayjs(l.closedDate) : dayjs(l.date);
-                                  
-                                  // Month/Year check
-                                  const monthMatch = leadDate.format("MMMM") === t.month && leadDate.year() === t.year;
-                                  if (!monthMatch) return false;
-
-                                  // Weekly check
-                                  if (t.type === "Weekly") {
-                                    const dayOfMonth = leadDate.date();
-                                    const weekNum = Math.ceil(dayOfMonth / 7);
-                                    return weekNum === t.week;
-                                  }
-                                  return true;
-                                }).reduce((acc, l) => {
-                                  const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
-                                  return acc + val;
-                                }, 0);
-                                
+                                let achieved = t.currentAchievement || 0;
+                                let calcIncentiveBase = (t.breakdown && t.breakdown.length > 0)
+                                  ? t.breakdown.reduce((sum: number, b: any) => sum + (b.incentiveBase !== undefined ? b.incentiveBase : (b.subtotal || 0)), 0)
+                                  : achieved;
+                                let incentiveBase = t.incentiveBase !== undefined ? t.incentiveBase : calcIncentiveBase;
                                 const percent = t.targetAmount > 0 ? (achieved / t.targetAmount) * 100 : 0;
-                                
-                                // Auto-calculate incentive based on slabs if incentiveAmount is 0
-                                let earnedIncentive = t.incentiveAmount || 0;
-                                if (earnedIncentive === 0 && achieved > 0) {
-                                  const applicableSlab = incentiveSlabs.find(s => achieved >= s.minAmount && achieved <= s.maxAmount);
-                                  if (applicableSlab) {
-                                    earnedIncentive = (achieved * applicableSlab.percentage) / 100;
-                                  }
-                                }
+                                const earnedIncentive = t.incentiveAmount || 0;
 
                                 return (
                                   <tr key={i} className="hover:bg-slate-50/50 transition-colors">
@@ -1244,26 +2017,54 @@ export default function SalesPage() {
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                      <Badge className={`${t.type === 'Weekly' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'} border-none text-[10px] font-bold`}>
+                                      <Badge className={`${
+                                        t.type === 'Weekly' ? 'bg-amber-100 text-amber-700' : 
+                                        t.type === 'Custom' ? 'bg-emerald-100 text-emerald-700' : 
+                                        'bg-indigo-100 text-indigo-700'
+                                      } border-none text-[10px] font-bold`}>
                                         {t.type}
                                       </Badge>
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                       <div className="flex flex-col items-center">
-                                        <span className="text-[10px] font-bold text-slate-600">{t.month} {t.year}</span>
-                                        {t.type === "Weekly" && <span className="text-[9px] font-black text-brand-teal uppercase">Week {t.week}</span>}
+                                        {t.type === "Custom" ? (
+                                          <span className="text-[10px] font-bold text-slate-600">
+                                            {dayjs(t.startDate).format("DD MMM YYYY")} - {dayjs(t.endDate).format("DD MMM YYYY")}
+                                          </span>
+                                        ) : (
+                                          <>
+                                            <span className="text-[10px] font-bold text-slate-600">{t.month} {t.year}</span>
+                                            {t.type === "Weekly" && <span className="text-[9px] font-black text-brand-teal uppercase">Week {t.week}</span>}
+                                          </>
+                                        )}
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                       <span className="font-bold text-slate-900 text-sm">₹{t.targetAmount?.toLocaleString()}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                      <span className="font-bold text-emerald-600 text-sm">₹{achieved.toLocaleString()}</span>
+                                      <span className="font-bold text-slate-900 text-sm">₹{achieved.toLocaleString()}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <span className="font-bold text-emerald-600 text-sm">₹{incentiveBase.toLocaleString()}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                       <div className="flex flex-col items-end">
                                         <span className="font-bold text-indigo-600 text-sm">₹{earnedIncentive.toLocaleString()}</span>
-                                        {t.incentiveAmount === 0 && earnedIncentive > 0 && <span className="text-[8px] font-black text-slate-400 uppercase italic">Estimated</span>}
+                                        {t.breakdown && t.breakdown.length > 0 && (
+                                          <button 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              e.preventDefault()
+                                              setSelectedBreakdown(t.breakdown || [])
+                                              setIsBreakdownOpen(true)
+                                            }}
+                                            className="flex items-center gap-1 text-[10px] text-brand-teal mt-1 hover:underline text-right w-max"
+                                          >
+                                            <BarChart2 className="w-3 h-3" />
+                                            View Breakdown
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
@@ -1279,7 +2080,7 @@ export default function SalesPage() {
                                         </div>
                                       </div>
                                     </td>
-                                    {canEditSales && (
+                                    {isAdmin && (
                                       <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-1">
                                           {canDeleteSales && (
@@ -1426,7 +2227,67 @@ export default function SalesPage() {
             </TabsContent>
           </>
         )}
+
       </Tabs>
+
+      <Dialog open={!!statusChangeData} onOpenChange={(open) => { if (!open) setStatusChangeData(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reason for Status Change</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Why did you change the status to {statusChangeData?.newStatus}?</Label>
+              <Select value={selectedReason} onValueChange={(val) => { setSelectedReason(val); if (val !== "Other") setCustomReason(""); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusChangeData?.newStatus && STATUS_REASONS[statusChangeData.newStatus]?.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedReason === "Other" && (
+              <div className="space-y-2">
+                <Label htmlFor="customReason">Specify Reason</Label>
+                <Input 
+                  id="customReason" 
+                  placeholder="Enter custom reason..." 
+                  value={customReason} 
+                  onChange={(e) => setCustomReason(e.target.value)} 
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 border-t pt-4">
+            <Button variant="outline" onClick={() => setStatusChangeData(null)}>Cancel</Button>
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal-light text-white" 
+              onClick={handleStatusChangeSubmit}
+              disabled={!selectedReason || (selectedReason === "Other" && !customReason.trim())}
+            >
+              Confirm
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="px-6 py-4 border-b border-slate-100 shrink-0">
+            <DialogTitle>Generate Client Details</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <ClientForm
+              initialData={clientFormData || undefined}
+              onSubmit={handleClientSubmit}
+              isSubmitting={isClientSubmitting}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <ActivityLogDialog 
         open={isLogsDialogOpen}
@@ -1436,6 +2297,73 @@ export default function SalesPage() {
         logs={leadLogs}
         isLoading={isLogsLoading}
       />
+
+      <Dialog open={isBreakdownOpen} onOpenChange={setIsBreakdownOpen}>
+        <DialogContent className="sm:max-w-3xl max-w-[95vw]">
+          <DialogHeader>
+            <DialogTitle>Incentive Breakdown</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {selectedBreakdown.length > 0 ? (
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Client / Invoice</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Category</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600">Type</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Invoice Value</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Incentive Base</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Slab %</th>
+                      <th className="px-4 py-3 font-semibold text-slate-600 text-right">Earned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedBreakdown.map((item, idx) => (
+                      <tr key={idx} className="border-b last:border-0 hover:bg-slate-50/50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium">{item.clientName}</p>
+                          {item.invoiceNumber && <p className="text-[10px] text-slate-400">{item.invoiceNumber}</p>}
+                        </td>
+                        <td className="px-4 py-3">{item.category}</td>
+                        <td className="px-4 py-3">
+                          {item.isRecurring ? (
+                            <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded text-[10px] font-bold">Recurring</span>
+                          ) : (
+                            <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">First-time</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.subtotal || 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-emerald-600 font-medium">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.incentiveBase !== undefined ? item.incentiveBase : (item.subtotal || 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium">{item.slabPercentage}%</td>
+                        <td className="px-4 py-3 text-right text-brand-teal font-bold">
+                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(item.earnedIncentive || 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50 border-t">
+                    <tr>
+                      <td colSpan={5} className="px-4 py-3 text-right font-bold text-slate-700">Total Incentive:</td>
+                      <td className="px-4 py-3 text-right font-bold text-brand-teal text-base">
+                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(
+                          selectedBreakdown.reduce((sum, item) => sum + (item.earnedIncentive || 0), 0)
+                        )}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 text-center py-8">No breakdown data available.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
