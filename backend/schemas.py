@@ -895,6 +895,13 @@ class ClientBase(BaseModel):
     meetings: Optional[List[dict]] = []
     greetingsMsgSent: Optional[bool] = False
     greetingsLogs: Optional[List[dict]] = []
+    paymentFrequency: Optional[str] = "One-Time" # 'One-Time', 'Half-Monthly', 'Monthly', 'Quarterly', 'Yearly', 'Custom'
+    paymentCustomDays: Optional[int] = None
+    paymentAmount: Optional[float] = 0.0
+    paymentDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastPaymentDate: Optional[RobustDate] = None
+    nextPaymentDueDate: Optional[RobustDate] = None
+    paymentRemarks: Optional[str] = None
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -941,6 +948,13 @@ class ClientUpdate(BaseModel):
     userName: Optional[str] = None
     greetingsMsgSent: Optional[bool] = None
     greetingsLogs: Optional[List[dict]] = None
+    paymentFrequency: Optional[str] = None
+    paymentCustomDays: Optional[int] = None
+    paymentAmount: Optional[float] = None
+    paymentDatesOfMonth: Optional[List[int]] = None
+    lastPaymentDate: Optional[RobustDate] = None
+    nextPaymentDueDate: Optional[RobustDate] = None
+    paymentRemarks: Optional[str] = None
 
 class Client(ClientBase):
     id: str
