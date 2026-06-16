@@ -256,6 +256,33 @@ export default function ChatPage() {
   const [isWsConnected, setIsWsConnected] = useState(false);
   const selectedChatRef = useRef<any>(null);
 
+  const isSelectedChatOnline = selectedChat?.type === 'personal' && (onlineUsers.has(selectedChat.id) || onlineUsers.has(selectedChat.employeeId));
+
+  const renderCheckmarks = (msg: any, isImageOverlay: boolean = false) => {
+    if (!msg.isMe) return null;
+    if (msg._optimistic) {
+      return <Clock className={cn("w-3 h-3", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
+    }
+    
+    const isSeenByOthers = msg.seenBy && msg.seenBy.filter((id: string) => id !== user?.id).length > 0;
+    
+    if (isSeenByOthers) {
+      return <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />;
+    }
+    
+    const isGroupMsg = !!msg.groupId || msg.receiverId === "group" || msg.type === "group";
+    if (isGroupMsg) {
+      return <CheckCheck className={cn("w-3.5 h-3.5", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
+    }
+    
+    const isRecipientOnline = onlineUsers.has(msg.receiverId);
+    if (isRecipientOnline) {
+      return <CheckCheck className={cn("w-3.5 h-3.5", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
+    } else {
+      return <Check className={cn("w-3.5 h-3.5", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
+    }
+  };
+
   useEffect(() => {
     selectedChatRef.current = selectedChat;
   }, [selectedChat]);
@@ -1714,7 +1741,7 @@ export default function ChatPage() {
         const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
         return timeB - timeA;
       });
-  }, [employees, user?.id, chatSummaries]);
+  }, [employees, user?.id, chatSummaries, onlineUsers]);
 
   // Auto-select the most recent active conversation on page load or when notification is clicked
   useEffect(() => {
@@ -1993,7 +2020,7 @@ export default function ChatPage() {
                           </AvatarFallback>
                         )}
                       </Avatar>
-                      {chat.status === "Online" && (
+                      {(onlineUsers.has(chat.id) || onlineUsers.has(chat.employeeId)) && (
                         <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white"></span>
                       )}
                     </div>
@@ -2439,7 +2466,7 @@ export default function ChatPage() {
                           </AvatarFallback>
                         )}
                       </Avatar>
-                      {selectedChat.status === "Online" && (
+                      {isSelectedChatOnline && (
                         <span className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white"></span>
                       )}
                     </div>
@@ -2473,7 +2500,7 @@ export default function ChatPage() {
                         </div>
                       ) : (
                         <p className="text-[11px] font-semibold text-emerald-600">
-                          {selectedChat.status}
+                          {isSelectedChatOnline ? "Online" : "Offline"}
                         </p>
                       )}
                     </div>
@@ -2578,7 +2605,7 @@ export default function ChatPage() {
             {/* Chat Messages */}
             <div 
               ref={scrollRef}
-              className="flex-1 overflow-y-auto p-6 space-y-4 whatsapp-chat-bg"
+              className="flex-1 overflow-y-auto p-6 space-y-4 whatsapp-chat-bg custom-scrollbar"
             >
               <div className="flex justify-center">
                 <span className="px-3 py-1 bg-white border border-border rounded-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider shadow-sm">
@@ -2712,17 +2739,7 @@ export default function ChatPage() {
                                   {!msg.text && (
                                     <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-[10px] text-white bg-black/40 px-2 py-0.5 rounded-[10px] select-none backdrop-blur-xs">
                                       <span>{dayjs(msg.timestamp).format("hh:mm A")}</span>
-                                      {msg._optimistic ? (
-                                        <Clock className="w-3 h-3 text-white/70" />
-                                      ) : (
-                                        msg.isMe && (
-                                          isSeenByOthers ? (
-                                            <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />
-                                          ) : (
-                                            <CheckCheck className="w-3.5 h-3.5 text-white/70" />
-                                          )
-                                        )
-                                      )}
+                                      {renderCheckmarks(msg, true)}
                                     </div>
                                   )}
                                 </div>
@@ -2895,17 +2912,7 @@ export default function ChatPage() {
                                 <span className="whatsapp-time-stamp">
                                   <span>{dayjs(msg.timestamp).format("hh:mm A")}</span>
                                   {msg.isEdited && <span className="text-[8px] opacity-60 italic mr-1">(edited)</span>}
-                                  {msg._optimistic ? (
-                                    <Clock className="w-3 h-3 text-[#8696a0]" />
-                                  ) : (
-                                    msg.isMe && (
-                                      isSeenByOthers ? (
-                                        <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />
-                                      ) : (
-                                        <CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" />
-                                      )
-                                    )
-                                  )}
+                                  {renderCheckmarks(msg, false)}
                                 </span>
                               )}
                             </div>
