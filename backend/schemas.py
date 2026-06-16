@@ -890,6 +890,7 @@ class ProjectBase(BaseModel):
     description: Optional[str] = None
     clientId: str
     clientName: Optional[str] = None
+    leadId: Optional[str] = None
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
@@ -908,6 +909,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    leadId: Optional[str] = None
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
