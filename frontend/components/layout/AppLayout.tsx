@@ -217,6 +217,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
       const statusRes = await fetch(`${API_URL}/attendance/status/${user.id || user.employeeId}`);
       if (!statusRes.ok) return;
       const statusData = await statusRes.json();
+      
+      const isCurrentlyOnBreak = statusData && statusData.status === "On Break";
+      if (isCurrentlyOnBreak) {
+        localStorage.setItem("last_activity_timestamp", Date.now().toString());
+        lastActivityTimeRef.current = Date.now();
+        resetInactivityTimerRef.current();
+        return;
+      }
+
       const isCurrentlyPunchedIn = statusData && statusData.checkIn && statusData.checkIn !== "--" && statusData.checkIn !== "--:--" && !statusData.checkOut;
       if (!isCurrentlyPunchedIn) return;
 
@@ -321,51 +330,24 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const checkPendingRecovery = useCallback(async () => {
     if (!user || isPublicPage) return;
 
-    // 1. Check localStorage for already flagged states
-    const pendingStr = localStorage.getItem("inactivity_punch_out_recovery_pending");
-    const goingMeetingStr = localStorage.getItem("going_for_meeting_pending");
-
-    if (pendingStr) {
-      const parsed = JSON.parse(pendingStr);
-      setRecoveryRange(parsed);
-      setRecoveryForm({
-        type: parsed.type || "meeting",
-        startTime: dayjs(parsed.inactiveFromTimestamp).format("HH:mm"),
-        endTime: dayjs(parsed.inactiveUntilTimestamp).format("HH:mm"),
-        reason: ""
-      });
-      setShowRecoveryModal(true);
-      return;
-    }
-
-    if (goingMeetingStr) {
-      const parsed = JSON.parse(goingMeetingStr);
-      const recData = {
-        inactiveFrom: parsed.startTimeStr,
-        inactiveFromTimestamp: parsed.startTime,
-        inactiveUntil: dayjs().format("HH:mm:ss"),
-        inactiveUntilTimestamp: Date.now(),
-        isMeetingOnly: true
-      };
-      setRecoveryRange(recData);
-      setRecoveryForm({
-        type: "meeting",
-        startTime: dayjs(parsed.startTime).format("HH:mm"),
-        endTime: dayjs().format("HH:mm"),
-        reason: "Urgent Meeting"
-      });
-      setShowRecoveryModal(true);
-      return;
-    }
-
-    // Fetch employee's current attendance status to check punch-in time
+    // Fetch employee's current attendance status to check punch-in and break status first
     let isCurrentlyPunchedIn = false;
+    let isCurrentlyOnBreak = false;
     let punchInTs = Date.now();
     try {
       const statusRes = await fetch(`${API_URL}/attendance/status/${user.id || user.employeeId}`);
       if (statusRes.ok) {
         const statusData = await statusRes.json();
         isCurrentlyPunchedIn = statusData && statusData.checkIn && statusData.checkIn !== "--" && statusData.checkIn !== "--:--" && !statusData.checkOut;
+        isCurrentlyOnBreak = statusData && statusData.status === "On Break";
+
+        if (isCurrentlyOnBreak) {
+          localStorage.setItem("last_activity_timestamp", Date.now().toString());
+          lastActivityTimeRef.current = Date.now();
+          resetInactivityTimerRef.current();
+          return;
+        }
+
         if (isCurrentlyPunchedIn) {
           const dateStr = typeof statusData.date === "string" ? statusData.date.split("T")[0] : dayjs(statusData.date).format("YYYY-MM-DD");
           const punchInTimeObj = dayjs(`${dateStr} ${statusData.checkIn}`);
@@ -376,6 +358,73 @@ export function AppLayout({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error("Error fetching status during recovery check:", err);
+    }
+
+    // IF NOT PUNCHED IN, DO NOT SHOW POPUPS OR CHECK INACTIVITY!
+    if (!isCurrentlyPunchedIn) {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      return;
+    }
+
+    const isToday = (ts: any) => {
+      if (!ts) return false;
+      const num = Number(ts);
+      if (isNaN(num)) return false;
+      return dayjs(num).isSame(dayjs(), 'day');
+    };
+
+    // 1. Check localStorage for already flagged states since they are active/punched in
+    const pendingStr = localStorage.getItem("inactivity_punch_out_recovery_pending");
+    const goingMeetingStr = localStorage.getItem("going_for_meeting_pending");
+
+    if (pendingStr) {
+      try {
+        const parsed = JSON.parse(pendingStr);
+        const ts = parsed.inactiveFromTimestamp || parsed.inactiveUntilTimestamp;
+        if (ts && !isToday(ts)) {
+          localStorage.removeItem("inactivity_punch_out_recovery_pending");
+        } else {
+          setRecoveryRange(parsed);
+          setRecoveryForm({
+            type: parsed.type || "meeting",
+            startTime: dayjs(parsed.inactiveFromTimestamp).format("HH:mm"),
+            endTime: dayjs(parsed.inactiveUntilTimestamp).format("HH:mm"),
+            reason: ""
+          });
+          setShowRecoveryModal(true);
+          return;
+        }
+      } catch (e) {
+        localStorage.removeItem("inactivity_punch_out_recovery_pending");
+      }
+    }
+
+    if (goingMeetingStr) {
+      try {
+        const parsed = JSON.parse(goingMeetingStr);
+        if (parsed.startTime && !isToday(parsed.startTime)) {
+          localStorage.removeItem("going_for_meeting_pending");
+        } else {
+          const recData = {
+            inactiveFrom: parsed.startTimeStr,
+            inactiveFromTimestamp: parsed.startTime,
+            inactiveUntil: dayjs().format("HH:mm:ss"),
+            inactiveUntilTimestamp: Date.now(),
+            isMeetingOnly: true
+          };
+          setRecoveryRange(recData);
+          setRecoveryForm({
+            type: "meeting",
+            startTime: dayjs(parsed.startTime).format("HH:mm"),
+            endTime: dayjs().format("HH:mm"),
+            reason: "Urgent Meeting"
+          });
+          setShowRecoveryModal(true);
+          return;
+        }
+      } catch (e) {
+        localStorage.removeItem("going_for_meeting_pending");
+      }
     }
 
     let resolvedLastActivityTs = Number(localStorage.getItem("last_activity_timestamp") || Date.now());

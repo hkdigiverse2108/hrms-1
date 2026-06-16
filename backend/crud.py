@@ -4969,16 +4969,46 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     hours, remainder = divmod(int(new_accumulated), 3600)
                     minutes, _ = divmod(remainder, 60)
                     work_hours = f"{hours}h {minutes}m"
+
+                    # Determine active punch and status
+                    has_active = False
+                    active_punch_in = None
+                    for p in merged_punches:
+                        if not p.get("punchOut"):
+                            has_active = True
+                            active_punch_in = p.get("punchIn")
+                            break
+                    
+                    has_active_break = False
+                    for b in sorted_breaks:
+                        if not b.get("endTime"):
+                            has_active_break = True
+                            break
+
+                    new_status = 'Logged'
+                    new_checkout = attn.get('checkOut')
+                    
+                    set_dict = {
+                        'punches': merged_punches,
+                        'breaks': sorted_breaks,
+                        'accumulatedWorkSeconds': new_accumulated,
+                        'workHours': work_hours,
+                    }
+
+                    if has_active:
+                        new_status = 'On Break' if has_active_break else 'Active'
+                        new_checkout = None
+                        set_dict['lastPunchIn'] = active_punch_in
+                    else:
+                        if merged_punches:
+                            new_checkout = merged_punches[-1].get("punchOut")
+
+                    set_dict['status'] = new_status
+                    set_dict['checkOut'] = new_checkout
                     
                     await db.attendance.update_one(
                         {'_id': attn['_id']},
-                        {'$set': {
-                            'punches': merged_punches,
-                            'breaks': sorted_breaks,
-                            'accumulatedWorkSeconds': new_accumulated,
-                            'workHours': work_hours,
-                            'status': 'Logged'
-                        }}
+                        {'$set': set_dict}
                     )
             else:
                 reason = doc.get('reason', '')
@@ -5003,7 +5033,14 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
     
                 # Helper to recalculate and save
                 async def apply_updates(attn_record, updated_breaks):
-                    if attn_record.get('checkIn') and attn_record.get('checkOut'):
+                    has_active = not attn_record.get('checkOut') or attn_record.get('checkOut') in [None, "--", "--:--", "", "-"]
+                    has_active_break = False
+                    for b in updated_breaks:
+                        if not b.get("endTime"):
+                            has_active_break = True
+                            break
+
+                    if not has_active and attn_record.get('checkIn') and attn_record.get('checkOut'):
                         try:
                             ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
                             co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
@@ -5013,13 +5050,17 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                             attn_record['workHours'] = f"{int(h)}h {int(m)}m"
                         except Exception: pass
                     
+                    new_status = 'On Break' if (has_active and has_active_break) else ('Active' if has_active else 'Logged')
+                    new_checkout = None if has_active else attn_record.get('checkOut')
+                    
                     await db.attendance.update_one(
                         {'_id': attn_record['_id']},
                         {'$set': {
                             'breaks': updated_breaks,
                             'checkIn': attn_record.get('checkIn'),
+                            'checkOut': new_checkout,
                             'workHours': attn_record.get('workHours'),
-                            'status': 'Logged'
+                            'status': new_status
                         }}
                     )
     
