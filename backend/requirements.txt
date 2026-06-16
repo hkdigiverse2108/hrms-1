@@ -45,4 +45,7 @@ websockets==15.0
 # MongoDB BSON
 # (removed standalone bson package as it conflicts with pymongo)
 holidays==0.44.0
+google-api-python-client==2.197.0
+google-auth-httplib2==0.4.0
+google-auth-oauthlib==1.4.0
 pynput==1.8.2

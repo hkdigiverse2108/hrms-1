@@ -513,6 +513,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
     });
   });
 
+  // Listen for attendance updates to trigger status reloads (e.g. on approved/rejected time recovery requests)
+  useAppEvent("attendance_update", () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("attendance-update"));
+    }
+  });
+
   // Request Desktop Notification Permission globally on mount
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {

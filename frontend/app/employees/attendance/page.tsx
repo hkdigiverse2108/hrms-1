@@ -1102,7 +1102,7 @@ export default function EmployeeAttendanceListPage() {
                   <div className="space-y-6 border-l-2 border-brand-light ml-2 pl-6 relative">
                     {(() => {
                       const events = [
-                        ...(selectedRecord.punches || []).flatMap((p: any, i: number) => {
+                        ...([...(selectedRecord.punches || [])].sort((a: any, b: any) => (a.punchIn || '').localeCompare(b.punchIn || ''))).flatMap((p: any, i: number) => {
                           const isMeeting = p.type === 'meeting';
                           const items = [{
                             time: p.punchIn,

@@ -126,7 +126,7 @@ def check_macos_accessibility_permission() -> bool:
 async def _log_security_alert(db, event_type: str, details: str):
     """Write a security tamper event to MongoDB for admin visibility."""
     try:
-        hostname = socket.gethostname()
+        hostname = socket.gethostname().lower()
         await db.security_alerts.insert_one({
             "hostname": hostname,
             "eventType": event_type,
@@ -171,7 +171,7 @@ def _run_permission_monitor():
 
         if not current_granted and _last_permission_state:
             # Permission was REVOKED — tamper detected!
-            hostname = socket.gethostname()
+            hostname = socket.gethostname().lower()
             msg = (f"Accessibility permission revoked on {hostname}. "
                    f"Tab blocking and keyboard tracking are now DISABLED. "
                    f"Employee may have disabled HRMS monitoring in System Settings.")
@@ -193,7 +193,7 @@ def _run_permission_monitor():
 
         elif current_granted and not _last_permission_state:
             # Permission was RE-GRANTED
-            hostname = socket.gethostname()
+            hostname = socket.gethostname().lower()
             msg = f"Accessibility permission re-granted on {hostname}."
             print(f"[Tracker Security] ✅ Permission restored: {msg}", flush=True)
 
@@ -260,17 +260,33 @@ def on_press(key):
         _last_global_activity_time = time.time()
 
 def _run_listener():
-    mouse_listener = mouse.Listener(on_move=on_move, on_click=on_click)
-    mouse_listener.start()
+    mouse_listener = None
+    try:
+        mouse_listener = mouse.Listener(on_move=on_move, on_click=on_click)
+        mouse_listener.start()
+    except Exception as e:
+        print(f"[Tracker] Error starting mouse listener: {e}", flush=True)
 
-    keyboard_listener = keyboard.Listener(on_press=on_press)
-    keyboard_listener.start()
+    keyboard_listener = None
+    try:
+        keyboard_listener = keyboard.Listener(on_press=on_press)
+        keyboard_listener.start()
+    except Exception as e:
+        print(f"[Tracker] Error starting keyboard listener: {e}", flush=True)
 
     while not _stop_event.is_set():
         time.sleep(1)
 
-    mouse_listener.stop()
-    keyboard_listener.stop()
+    if mouse_listener:
+        try:
+            mouse_listener.stop()
+        except Exception:
+            pass
+    if keyboard_listener:
+        try:
+            keyboard_listener.stop()
+        except Exception:
+            pass
 
 def get_now():
     return datetime.now(IST)
@@ -484,31 +500,135 @@ def get_friendly_proc_name(proc_name: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def extract_domain_from_title(title: str) -> str:
-    title_lower = title.lower()
-    if "github" in title_lower:
-        return "github.com"
-    elif "stack overflow" in title_lower or "stackoverflow" in title_lower:
-        return "stackoverflow.com"
-    elif "youtube" in title_lower:
-        return "youtube.com"
-    elif "gmail" in title_lower or "google mail" in title_lower:
-        return "gmail.com"
-    elif "google search" in title_lower or "google.com" in title_lower:
-        return "google.com"
-    elif "chatgpt" in title_lower or "openai" in title_lower:
-        return "chatgpt.com"
-    elif "linkedin" in title_lower:
-        return "linkedin.com"
-    elif "facebook" in title_lower:
-        return "facebook.com"
-    elif "whatsapp" in title_lower:
-        return "web.whatsapp.com"
+    if not title:
+        return "other-browsing"
 
+    title_lower = title.lower()
+
+    # 1. Hardcoded mapping of common websites/tools to domains
+    mappings = {
+        "github": "github.com",
+        "stackoverflow": "stackoverflow.com",
+        "stack overflow": "stackoverflow.com",
+        "youtube": "youtube.com",
+        "gmail": "gmail.com",
+        "google mail": "gmail.com",
+        "google search": "google.com",
+        "google.com": "google.com",
+        "chatgpt": "chatgpt.com",
+        "openai": "chatgpt.com",
+        "linkedin": "linkedin.com",
+        "facebook": "facebook.com",
+        "whatsapp": "web.whatsapp.com",
+        "bitbucket": "bitbucket.org",
+        "gitlab": "gitlab.com",
+        "trello": "trello.com",
+        "slack": "slack.com",
+        "figma": "figma.com",
+        "canva": "canva.com",
+        "notion": "notion.so",
+        "clickup": "clickup.com",
+        "asana": "asana.com",
+        "monday.com": "monday.com",
+        "zoom": "zoom.us",
+        "meet.google": "meet.google.com",
+        "google meet": "meet.google.com",
+        "drive.google": "drive.google.com",
+        "google drive": "drive.google.com",
+        "docs.google": "docs.google.com",
+        "google docs": "docs.google.com",
+        "sheets.google": "sheets.google.com",
+        "google sheets": "sheets.google.com",
+        "outlook": "outlook.office.com",
+        "hotmail": "outlook.office.com",
+        "teams.microsoft": "teams.microsoft.com",
+        "microsoft teams": "teams.microsoft.com",
+        "salesforce": "salesforce.com",
+        "hubspot": "hubspot.com",
+        "jira": "atlassian.net",
+        "atlassian": "atlassian.net",
+        "aws": "aws.amazon.com",
+        "amazon web services": "aws.amazon.com",
+        "console.cloud.google": "console.cloud.google.com",
+        "google cloud": "console.cloud.google.com",
+        "vercel": "vercel.com",
+        "netlify": "netlify.com",
+        "heroku": "heroku.com",
+        "digitalocean": "digitalocean.com",
+        "cloudflare": "cloudflare.com",
+        "localhost": "localhost",
+        "127.0.0.1": "localhost",
+        "codepen": "codepen.io",
+        "codesandbox": "codesandbox.io",
+        "leetcode": "leetcode.com",
+        "hackerrank": "hackerrank.com",
+        "w3schools": "w3schools.com",
+        "geeksforgeeks": "geeksforgeeks.org",
+        "dev.to": "dev.to",
+        "medium": "medium.com",
+        "quora": "quora.com",
+        "reddit": "reddit.com",
+        "wikipedia": "wikipedia.org",
+        "pinterest": "pinterest.com",
+        "instagram": "instagram.com",
+        "twitter": "x.com",
+        "x.com": "x.com",
+        "telegram": "telegram.org",
+        "netflix": "netflix.com",
+        "amazon": "amazon.com",
+        "flipkart": "flipkart.com",
+        "ebay": "ebay.com",
+        "paypal": "paypal.com",
+        "stripe": "stripe.com"
+    }
+
+    for key, domain in mappings.items():
+        if key in title_lower:
+            return domain
+
+    # 2. Extract using regex if a domain is directly in the title
     domain_match = re.search(r'([a-zA-Z0-9-]+\.[a-zA-Z]{2,6})', title)
     if domain_match:
         return domain_match.group(1).lower()
 
-    return "other-browsing"
+    # 3. Clean browser suffixes
+    cleaned = title
+    # Remove browser names & personal/work profiles
+    cleaned = re.sub(
+        r'\s*-\s*(google chrome|microsoft edge|mozilla firefox|brave|safari|opera|internet explorer|chrome|edge|firefox)(\s*\(incognito\))?$',
+        '', cleaned, flags=re.IGNORECASE
+    )
+    cleaned = re.sub(
+        r'\s*and \d+ more pages?\s*-\s*personal\s*-\s*microsoft edge$',
+        '', cleaned, flags=re.IGNORECASE
+    )
+    cleaned = re.sub(
+        r'\s*-\s*(personal|work|profile\s*\d+)\s*-\s*(microsoft edge|google chrome|chrome|edge)$',
+        '', cleaned, flags=re.IGNORECASE
+    )
+    cleaned = cleaned.strip()
+
+    if not cleaned:
+        return "other-browsing"
+
+    # 4. Heuristic split by common delimiters
+    parts = [p.strip() for p in re.split(r'\s*[\-|–|—|\|]\s*', cleaned) if p.strip()]
+
+    if len(parts) > 1:
+        # Filter out generic words
+        generic_words = {"home", "index", "welcome", "login", "signin", "sign in", "sign up", "signup", "dashboard", "inbox", "search", "new tab", "untitled", "loading", "error", "404"}
+        non_generic_parts = [p for p in parts if p.lower() not in generic_words]
+
+        if non_generic_parts:
+            # Pick the shortest part as it's most likely to be the site/brand name
+            best_part = min(non_generic_parts, key=len)
+            return best_part
+        else:
+            # If all are generic, pick the last one
+            return parts[-1]
+
+    # If no delimiter, return the cleaned title (clamped to a reasonable size)
+    return cleaned[:40].strip()
 
 def is_url_matched_in_title(rule_url: str, title: str) -> bool:
     rule_url = rule_url.lower().strip()
@@ -576,7 +696,7 @@ def is_app_blocked(proc_name: str, block_apps: list) -> bool:
 
 def _run_restrictions_monitor():
     global _active_employee_id, _active_user_is_admin, _db, _main_loop
-    hostname = socket.gethostname()
+    hostname = socket.gethostname().lower()
 
     last_db_check = 0
     rule = None
@@ -592,8 +712,9 @@ def _run_restrictions_monitor():
             last_db_check = now
             if _db and _main_loop:
                 try:
+                    import re
                     future = asyncio.run_coroutine_threadsafe(
-                        _db.registered_pcs.find_one({"hostname": hostname}),
+                        _db.registered_pcs.find_one({"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}}),
                         _main_loop
                     )
                     rule = future.result(timeout=5)

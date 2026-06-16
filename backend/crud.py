@@ -1,9 +1,12 @@
 from bson import ObjectId
 from datetime import datetime, timedelta, timezone, date
 from typing import List, Optional, Dict
+import asyncio
 import schemas
 import auth
 import calendar
+import google_auth
+import google_calendar
 import pytz
 from websocket import manager as ws_manager
 
@@ -4786,6 +4789,119 @@ async def get_employee_time_recoveries(db, employee_id: str):
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
 
+def recalculate_attendance_seconds(punches: list, breaks: list) -> tuple:
+    """
+    Given a list of raw punches and breaks, sort and merge them,
+    and calculate the total accumulated work seconds from the completed punches.
+    Returns: (merged_punches, sorted_breaks, accumulated_seconds)
+    """
+    def parse_time(time_str):
+        if not time_str:
+            return 0
+        parts = time_str.split(':')
+        try:
+            h = int(parts[0])
+            m = int(parts[1])
+            s = int(parts[2]) if len(parts) > 2 else 0
+            return h * 3600 + m * 60 + s
+        except Exception:
+            return 0
+
+    # Sort breaks
+    sorted_breaks = sorted(breaks, key=lambda b: parse_time(b.get("startTime") or "00:00:00"))
+    for b in sorted_breaks:
+        if b.get("startTime") and len(b["startTime"].split(':')) == 2:
+            b["startTime"] = f"{b['startTime']}:00"
+        if b.get("endTime") and len(b["endTime"].split(':')) == 2:
+            b["endTime"] = f"{b['endTime']}:00"
+
+    # 1. Sort punches by punchIn
+    sorted_punches = sorted(punches, key=lambda p: parse_time(p.get("punchIn") or "00:00:00"))
+
+    # 2. Merge overlapping/contiguous punches
+    merged_punches = []
+    for p in sorted_punches:
+        p_copy = dict(p)
+        if not p_copy.get("punchIn"):
+            continue
+        # normalize format to HH:MM:SS
+        in_parts = p_copy["punchIn"].split(':')
+        if len(in_parts) == 2:
+            p_copy["punchIn"] = f"{p_copy['punchIn']}:00"
+        
+        out_time = p_copy.get("punchOut")
+        if out_time:
+            out_parts = out_time.split(':')
+            if len(out_parts) == 2:
+                p_copy["punchOut"] = f"{out_time}:00"
+        
+        if not merged_punches:
+            merged_punches.append(p_copy)
+            continue
+        
+        last = merged_punches[-1]
+        
+        # If the last punch has no punchOut, it's active.
+        if not last.get("punchOut"):
+            merged_punches.append(p_copy)
+            continue
+            
+        last_out_sec = parse_time(last["punchOut"])
+        curr_in_sec = parse_time(p_copy["punchIn"])
+        
+        if curr_in_sec <= last_out_sec:
+            # Overlap or contiguous! Merge them.
+            if not p_copy.get("punchOut"):
+                new_out = None
+            else:
+                curr_out_sec = parse_time(p_copy["punchOut"])
+                if curr_out_sec > last_out_sec:
+                    new_out = p_copy["punchOut"]
+                else:
+                    new_out = last["punchOut"]
+            
+            last["punchOut"] = new_out
+            if last.get("type") == "meeting" or p_copy.get("type") == "meeting":
+                last["type"] = "meeting"
+            else:
+                last["type"] = p_copy.get("type") or last.get("type") or "work"
+        else:
+            merged_punches.append(p_copy)
+
+    # 3. Calculate accumulated seconds for completed punches
+    total_seconds = 0.0
+    for p in merged_punches:
+        punch_out_str = p.get("punchOut")
+        if not punch_out_str:
+            continue
+        
+        p_in_sec = parse_time(p["punchIn"])
+        p_out_sec = parse_time(punch_out_str)
+        duration = p_out_sec - p_in_sec
+        if duration < 0:
+            duration += 86400  # handle cross-midnight if any
+            
+        # Find break overlaps
+        break_overlap_sec = 0.0
+        for b in sorted_breaks:
+            b_start_str = b.get("startTime")
+            b_end_str = b.get("endTime")
+            if b_start_str and b_end_str:
+                b_in_sec = parse_time(b_start_str)
+                b_out_sec = parse_time(b_end_str)
+                if b_out_sec < b_in_sec:
+                    b_out_sec += 86400
+                
+                # Intersection of [p_in_sec, p_out_sec] and [b_in_sec, b_out_sec]
+                overlap_start = max(p_in_sec, b_in_sec)
+                overlap_end = min(p_out_sec, b_out_sec)
+                if overlap_start < overlap_end:
+                    break_overlap_sec += (overlap_end - overlap_start)
+                    
+        total_seconds += max(0.0, duration - break_overlap_sec)
+
+    return merged_punches, sorted_breaks, total_seconds
+
 async def update_time_recovery_status(db, recovery_id: str, status: str):
     await db.time_recovery.update_one(
         {'_id': ObjectId(recovery_id)},
@@ -4825,59 +4941,45 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     if duration_seconds < 0:
                         duration_seconds += 86400
                         
+                    punches = attn.get('punches') or []
+                    punches = [dict(p) for p in punches]
+                    breaks = attn.get('breaks') or []
+                    breaks = [dict(b) for b in breaks]
+                    
+                    fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
+                    fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
+
                     if recovery_type in ['meeting', 'work']:
-                        # Add a new session to punches
-                        punches = attn.get('punches') or []
-                        punches = [dict(p) for p in punches]
-                        
-                        fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
-                        fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
-                        
                         punches.append({
                             "punchIn": fmt_start,
                             "punchOut": fmt_end,
                             "type": recovery_type
                         })
-                        
-                        # Increase accumulated seconds
-                        accumulated = attn.get("accumulatedWorkSeconds") or 0
-                        new_accumulated = accumulated + duration_seconds
-                        
-                        # Recalculate workHours string
-                        hours, remainder = divmod(int(new_accumulated), 3600)
-                        minutes, _ = divmod(remainder, 60)
-                        work_hours = f"{hours}h {minutes}m"
-                        
-                        await db.attendance.update_one(
-                            {'_id': attn['_id']},
-                            {'$set': {
-                                'punches': punches,
-                                'accumulatedWorkSeconds': new_accumulated,
-                                'workHours': work_hours,
-                                'status': 'Logged'
-                            }}
-                        )
                     elif recovery_type == 'break':
-                        # Add a new break
-                        breaks = attn.get('breaks') or []
-                        breaks = [dict(b) for b in breaks]
-                        
-                        fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
-                        fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
-                        
                         breaks.append({
                             "startTime": fmt_start,
                             "endTime": fmt_end,
                             "duration": str(int(duration_seconds // 60))
                         })
-                        
-                        await db.attendance.update_one(
-                            {'_id': attn['_id']},
-                            {'$set': {
-                                'breaks': breaks,
-                                'status': 'Logged'
-                            }}
-                        )
+                    
+                    # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
+                    merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
+                    
+                    # Recalculate workHours string
+                    hours, remainder = divmod(int(new_accumulated), 3600)
+                    minutes, _ = divmod(remainder, 60)
+                    work_hours = f"{hours}h {minutes}m"
+                    
+                    await db.attendance.update_one(
+                        {'_id': attn['_id']},
+                        {'$set': {
+                            'punches': merged_punches,
+                            'breaks': sorted_breaks,
+                            'accumulatedWorkSeconds': new_accumulated,
+                            'workHours': work_hours,
+                            'status': 'Logged'
+                        }}
+                    )
             else:
                 reason = doc.get('reason', '')
                 
@@ -5002,6 +5104,29 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                         await apply_updates(latest_attn, latest_attn.get('breaks', []))
         except Exception as e:
             print(f"Correction logic error: {e}")
+
+    if doc:
+        try:
+            status_title = "Approved" if status == "approved" else "Rejected"
+            emp_notification = {
+                "employee_id": doc["employee_id"],
+                "title": f"Time Recovery {status_title}",
+                "message": f"Your time recovery request for {doc['date']} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
+                "type": "attendance",
+                "reference_id": str(doc["_id"]),
+                "is_read": False,
+                "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+            }
+            await db.notifications.insert_one(emp_notification)
+            
+            # Broadcast the notification via WebSocket to the employee
+            await ws_manager.send_personal_message(doc["employee_id"], "new_notification", fix_id(emp_notification))
+            
+            # Broadcast attendance_update via WebSocket to the employee
+            await ws_manager.send_personal_message(doc["employee_id"], "attendance_update", {})
+        except Exception as ws_err:
+            print(f"Error sending recovery status update websocket / notification: {ws_err}")
+
     return fix_id(doc)
 
 async def _trigger_sales_target_recalculation(db, invoice_doc):
@@ -5468,7 +5593,159 @@ async def delete_asset_category(db, category_id: str, performed_by: str = "Syste
     return True
 
 # --- Schedule Operations ---
+async def _get_creds_and_persist(db, emp):
+    """Get Google credentials for an employee and persist refreshed tokens back to DB."""
+    token_data = emp.get("googleCalendarTokens")
+    if not token_data:
+        return None
+    try:
+        creds, refreshed_token_data = google_auth.get_credentials(token_data)
+        if refreshed_token_data:
+            # Token was refreshed — save the new access token back to the DB
+            await db.employees.update_one(
+                {"_id": emp["_id"]},
+                {"$set": {"googleCalendarTokens": refreshed_token_data}}
+            )
+            print(f"[Google Sync] Persisted refreshed token for employee {emp.get('name', emp['_id'])}")
+        return creds
+    except Exception as e:
+        print(f"[Google Sync] Error getting/refreshing credentials for {emp.get('name', emp['_id'])}: {e}")
+        return None
+
+async def sync_google_events(db, employee_id: str, start_date_str: str, end_date_str: str):
+    if not employee_id:
+        return
+        
+    query = {"employeeId": employee_id}
+    if ObjectId.is_valid(employee_id):
+        query = {"$or": [{"employeeId": employee_id}, {"_id": ObjectId(employee_id)}]}
+    emp = await db.employees.find_one(query)
+    
+    if not emp or not emp.get("googleCalendarTokens"):
+        return
+        
+    try:
+        creds = await _get_creds_and_persist(db, emp)
+        if not creds:
+            return
+            
+        tz = pytz.timezone('Asia/Kolkata')
+        
+        try:
+            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+        except Exception:
+            return
+            
+        try:
+            end_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+        except Exception:
+            end_dt = start_dt
+            
+        time_min_dt = tz.localize(datetime.combine(start_dt, datetime.min.time()))
+        time_max_dt = tz.localize(datetime.combine(end_dt, datetime.max.time()))
+        
+        time_min = time_min_dt.isoformat()
+        time_max = time_max_dt.isoformat()
+        
+        events = await asyncio.to_thread(google_calendar.list_events, creds, time_min, time_max)
+        
+        # Collect all Google event IDs returned from Google for this date range
+        google_event_ids_from_google = set()
+        
+        if events:
+            for event in events:
+                event_id = event.get('id')
+                if not event_id:
+                    continue
+                    
+                # Skip cancelled events
+                if event.get('status') == 'cancelled':
+                    continue
+                    
+                google_event_ids_from_google.add(event_id)
+                summary = event.get('summary', 'Google Calendar Event')
+                description = event.get('description', '')
+                
+                start = event.get('start', {})
+                end = event.get('end', {})
+                
+                start_time_str = start.get('dateTime') or start.get('date')
+                end_time_str = end.get('dateTime') or end.get('date')
+                
+                if not start_time_str or not end_time_str:
+                    continue
+                    
+                try:
+                    if 'T' in start_time_str:
+                        s_dt = datetime.fromisoformat(start_time_str).astimezone(tz)
+                        e_dt = datetime.fromisoformat(end_time_str).astimezone(tz)
+                    else:
+                        s_dt = datetime.strptime(start_time_str, "%Y-%m-%d")
+                        e_dt = datetime.strptime(end_time_str, "%Y-%m-%d")
+                except Exception:
+                    continue
+                    
+                local_start = s_dt.strftime("%H:%M")
+                local_end = e_dt.strftime("%H:%M")
+                
+                schedule_date = datetime.combine(s_dt.date(), datetime.min.time())
+                
+                await db.schedules.update_one(
+                    {"googleEventId": event_id},
+                    {"$set": {
+                        "employeeId": employee_id,
+                        "employeeName": emp.get("name") or "Unknown",
+                        "title": summary,
+                        "description": description,
+                        "date": schedule_date,
+                        "startTime": local_start,
+                        "endTime": local_end,
+                        "googleEventId": event_id,
+                        "type": "Google Event"
+                    }},
+                    upsert=True
+                )
+        
+        # --- Handle deleted Google events ---
+        # Find all local schedules with a googleEventId for this employee in this date range
+        # that are NOT in the set of events returned from Google — these were deleted in Google
+        date_variants = []
+        current = start_dt
+        while current <= end_dt:
+            date_variants.append(current.strftime("%Y-%m-%d"))
+            date_variants.append(current)
+            current += timedelta(days=1)
+        
+        local_google_schedules_cursor = db.schedules.find({
+            "employeeId": employee_id,
+            "googleEventId": {"$exists": True, "$ne": None},
+            "date": {"$in": date_variants}
+        })
+        local_google_schedules = await local_google_schedules_cursor.to_list(length=1000)
+        
+        for local_sched in local_google_schedules:
+            local_gid = local_sched.get("googleEventId")
+            if local_gid and local_gid not in google_event_ids_from_google:
+                # This event was deleted or cancelled in Google Calendar — remove it locally
+                await db.schedules.delete_one({"_id": local_sched["_id"]})
+                print(f"[Google Sync] Removed locally deleted Google event: {local_sched.get('title', 'Unknown')} (gid: {local_gid})")
+            
+    except Exception as e:
+        print(f"Error syncing Google Calendar events: {e}")
+
 async def get_schedules(db, employee_id: str = None, date_str: str = None, date_from: str = None, date_to: str = None):
+    if date_str or (date_from and date_to):
+        d_from = date_from or date_str
+        d_to = date_to or date_str
+        if employee_id:
+            await sync_google_events(db, employee_id, d_from, d_to)
+        else:
+            cursor = db.employees.find({"googleCalendarTokens": {"$exists": True, "$ne": None}})
+            employees_with_tokens = await cursor.to_list(length=1000)
+            tasks = [sync_google_events(db, str(emp["_id"]), d_from, d_to) for emp in employees_with_tokens]
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+        
     query = {}
     if employee_id:
         query["employeeId"] = employee_id
@@ -5482,7 +5759,6 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None, date_
         try:
             start = datetime.strptime(date_from, "%Y-%m-%d")
             end = datetime.strptime(date_to, "%Y-%m-%d")
-            # Build list of all date variants (string + datetime) for each day in range
             date_variants = []
             current = start
             while current <= end:
@@ -5497,6 +5773,23 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None, date_
     return [fix_id(s) for s in schedules]
 
 async def create_schedule(db, schedule_data: dict):
+    # Try to push to Google Calendar
+    emp_id = schedule_data.get("employeeId")
+    if emp_id:
+        query = {"employeeId": emp_id}
+        if ObjectId.is_valid(emp_id):
+            query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+        emp = await db.employees.find_one(query)
+        if emp and emp.get("googleCalendarTokens"):
+            try:
+                creds = await _get_creds_and_persist(db, emp)
+                if creds:
+                    event_id = await asyncio.to_thread(google_calendar.create_event, creds, schedule_data)
+                    if event_id:
+                        schedule_data["googleEventId"] = event_id
+            except Exception as e:
+                print(f"Error syncing new schedule to Google Calendar: {e}")
+
     new_doc = await db.schedules.insert_one(schedule_data)
     created = await db.schedules.find_one({"_id": new_doc.inserted_id})
     return fix_id(created)
@@ -5504,17 +5797,59 @@ async def create_schedule(db, schedule_data: dict):
 async def update_schedule(db, schedule_id: str, schedule_data: dict):
     if not ObjectId.is_valid(schedule_id):
         return None
+        
+    existing = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    
     await db.schedules.update_one(
         {"_id": ObjectId(schedule_id)},
         {"$set": schedule_data}
     )
     updated = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    
+    # Sync update to Google Calendar
+    if updated and existing:
+        emp_id = updated.get("employeeId")
+        google_event_id = updated.get("googleEventId") or existing.get("googleEventId")
+        if emp_id and google_event_id:
+            query = {"employeeId": emp_id}
+            if ObjectId.is_valid(emp_id):
+                query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+            emp = await db.employees.find_one(query)
+            if emp and emp.get("googleCalendarTokens"):
+                try:
+                    creds = await _get_creds_and_persist(db, emp)
+                    if creds:
+                        await asyncio.to_thread(google_calendar.update_event, creds, google_event_id, updated)
+                except Exception as e:
+                    print(f"Error syncing updated schedule to Google Calendar: {e}")
+
     return fix_id(updated) if updated else None
 
 async def delete_schedule(db, schedule_id: str):
     if not ObjectId.is_valid(schedule_id):
         return False
+        
+    existing = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+        
     res = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
+    
+    # Sync delete to Google Calendar
+    if res.deleted_count > 0 and existing:
+        emp_id = existing.get("employeeId")
+        google_event_id = existing.get("googleEventId")
+        if emp_id and google_event_id:
+            query = {"employeeId": emp_id}
+            if ObjectId.is_valid(emp_id):
+                query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+            emp = await db.employees.find_one(query)
+            if emp and emp.get("googleCalendarTokens"):
+                try:
+                    creds = await _get_creds_and_persist(db, emp)
+                    if creds:
+                        await asyncio.to_thread(google_calendar.delete_event, creds, google_event_id)
+                except Exception as e:
+                    print(f"Error syncing deleted schedule to Google Calendar: {e}")
+                    
     return res.deleted_count > 0
 # --- User Activity Input Tracking Operations ---
 async def track_user_activity(db, employee_id: str, clicks: int, keystrokes: int, applications: Optional[dict] = None, domains: Optional[dict] = None):
@@ -5577,26 +5912,38 @@ async def get_user_activity_stats(db, employee_id: str = None):
 
 # --- Registered PC Device Operations ---
 async def register_pc_device(db, hostname: str, ip_address: str, os_name: str, os_version: str):
-    await db.registered_pcs.update_one(
-        {"hostname": hostname},
-        {
-            "$set": {
-                "ipAddress": ip_address,
-                "os": os_name,
-                "osVersion": os_version,
-                "lastSeen": get_now()
-            },
-            "$setOnInsert": {
-                "firstSeen": get_now(),
-                "blockChrome": False,
-                "blockYoutube": False,
-                "blockApps": [],
-                "blockUrls": []
-            }
-        },
-        upsert=True
+    import re
+    existing = await db.registered_pcs.find_one(
+        {"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}}
     )
-    return await db.registered_pcs.find_one({"hostname": hostname})
+    if existing:
+        await db.registered_pcs.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {
+                    "ipAddress": ip_address,
+                    "os": os_name,
+                    "osVersion": os_version,
+                    "lastSeen": get_now()
+                }
+            }
+        )
+        return await db.registered_pcs.find_one({"_id": existing["_id"]})
+    else:
+        new_pc = {
+            "hostname": hostname,
+            "ipAddress": ip_address,
+            "os": os_name,
+            "osVersion": os_version,
+            "lastSeen": get_now(),
+            "firstSeen": get_now(),
+            "blockChrome": False,
+            "blockYoutube": False,
+            "blockApps": [],
+            "blockUrls": []
+        }
+        await db.registered_pcs.insert_one(new_pc)
+        return new_pc
 
 async def get_registered_pcs(db):
     cursor = db.registered_pcs.find({})
@@ -5604,6 +5951,7 @@ async def get_registered_pcs(db):
     return [fix_id(pc) for pc in pcs]
 
 async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool] = None, block_youtube: Optional[bool] = None, block_apps: Optional[List[str]] = None, block_urls: Optional[List[str]] = None):
+    import re
     update_fields = {}
     if block_chrome is not None:
         update_fields["blockChrome"] = block_chrome
@@ -5616,11 +5964,11 @@ async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool]
         
     if update_fields:
         await db.registered_pcs.update_one(
-            {"hostname": hostname},
+            {"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}},
             {"$set": update_fields}
         )
     
-    updated = await db.registered_pcs.find_one({"hostname": hostname})
+    updated = await db.registered_pcs.find_one({"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}})
     return fix_id(updated) if updated else None
 # --- Content Calendar Operations ---
 async def get_content_calendar_entries(db, client_id: str, month_year: str = None):
