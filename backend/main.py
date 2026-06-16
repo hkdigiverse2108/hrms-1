@@ -2134,11 +2134,12 @@ async def upload_desktop_release(
             "changelog": changelog_list,
             "created_at": datetime.utcnow().isoformat()
         }
-        await db.desktop_releases.insert_one(new_release)
+        result = await db.desktop_releases.insert_one(new_release)
+        inserted_id = result.inserted_id
         
         return {
             "message": "Release uploaded successfully",
-            "release": {**new_release, "_id": str(new_release["_id"])}
+            "release": {**new_release, "_id": str(inserted_id)}
         }
     except Exception as e:
         err_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
