@@ -109,7 +109,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     if (typeof window === "undefined" || !(window as any).electronAPI) return;
     if (!user || isAuthPage) return;
     
-    const checkForUpdates = async () => {
+    const checkForUpdates = async (showNoUpdateToast = false) => {
       try {
         const localVersion = await (window as any).electronAPI.getAppVersion();
         const res = await fetch(`${API_URL}/desktop/version`);
@@ -134,14 +134,28 @@ export function AppLayout({ children }: { children: ReactNode }) {
               changelog: data.changelog || []
             });
             setShowUpdateModal(true);
+          } else if (showNoUpdateToast) {
+            toast.success(`Your desktop app is up to date! (v${localVersion})`);
           }
         }
       } catch (err) {
         console.warn("Failed to check for desktop updates:", err);
+        if (showNoUpdateToast) {
+          toast.error("Failed to check for updates. Please try again later.");
+        }
       }
     };
     
     checkForUpdates();
+
+    const handleManualCheck = () => {
+      checkForUpdates(true);
+    };
+
+    window.addEventListener("check-for-updates-manual", handleManualCheck);
+    return () => {
+      window.removeEventListener("check-for-updates-manual", handleManualCheck);
+    };
   }, [user, isAuthPage]);
 
   // Monitor download progress from Electron IPC

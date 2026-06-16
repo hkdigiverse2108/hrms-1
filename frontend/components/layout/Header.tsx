@@ -1,7 +1,7 @@
 "use client";
  
 import React, { useState, useEffect } from "react";
-import { Bell, MessageSquare, Menu, LogOut } from "lucide-react";
+import { Bell, MessageSquare, Menu, LogOut, RefreshCw } from "lucide-react";
 import { Layout } from "antd";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -30,6 +30,13 @@ const { Header: AntHeader } = Layout;
 export function Header() {
   const router = useRouter();
   const { user, isLoading } = useUser();
+  const [isElectron, setIsElectron] = useState(false);
+  
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window as any).electronAPI) {
+      setIsElectron(true);
+    }
+  }, []);
   const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const { totalUnreadCount: unreadChatCount } = useChatContext();
@@ -277,6 +284,15 @@ export function Header() {
             </div>
           </div>
         </Link>
+        {isElectron && (
+          <button 
+            onClick={() => window.dispatchEvent(new Event("check-for-updates-manual"))}
+            className="ml-2 p-1.5 text-muted-foreground hover:text-brand-teal hover:bg-teal-50 rounded-md transition-colors"
+            title="Check for updates"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        )}
         <button 
           onClick={handleLogout}
           className="ml-2 p-1.5 text-muted-foreground hover:text-brand-danger hover:bg-red-50 rounded-md transition-colors"
