@@ -1971,8 +1971,19 @@ export default function ChatPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search contacts..." 
-              className="pl-9 bg-white border-border rounded-lg h-10 shadow-sm" 
+              className="pl-9 pr-9 bg-white border-border rounded-lg h-10 shadow-sm" 
             />
+            {searchQuery && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:bg-transparent hover:text-slate-700"
+                onClick={() => setSearchQuery("")}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
 
@@ -3409,10 +3420,22 @@ export default function ChatPage() {
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
+                value={searchQuery}
                 placeholder="Search people..." 
-                className="pl-9"
+                className="pl-9 pr-9"
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              {searchQuery && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:bg-transparent hover:text-slate-700"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
             <div className="max-h-[300px] overflow-y-auto space-y-1">
               {filteredChats.map((chat: any) => (
@@ -3524,10 +3547,21 @@ export default function ChatPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder="Search colleagues..."
-                className="pl-10 rounded-xl"
+                className="pl-10 pr-9 rounded-xl"
                 value={newChatSearchQuery}
                 onChange={(e) => setNewChatSearchQuery(e.target.value)}
               />
+              {newChatSearchQuery && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:bg-transparent hover:text-slate-700"
+                  onClick={() => setNewChatSearchQuery("")}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
             <div className="max-h-[300px] overflow-y-auto space-y-1 pr-2">
               {employees.filter((emp: any) => {
