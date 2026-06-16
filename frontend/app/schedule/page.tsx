@@ -62,6 +62,24 @@ export default function SchedulePage() {
     attendees: [] as string[]
   });
 
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const resetForm = () => {
+    setEditingScheduleId(null);
+    setForm({
+      title: "",
+      description: "",
+      employeeId: user?.id || user?.employeeId || "",
+      employeeName: user?.name || "",
+      date: dayjs(getISTNow()).format("YYYY-MM-DD"),
+      startTime: defaultTimes.start,
+      endTime: defaultTimes.end,
+      type: "meeting",
+      attendees: [] as string[]
+    });
+  };
+
   const timelineRef = useRef<HTMLDivElement>(null);
 
   /* ───── week helpers ───── */
@@ -240,14 +258,23 @@ export default function SchedulePage() {
     try {
       const selectedEmp = employees.find(e => e.id === form.employeeId || e.employeeId === form.employeeId);
       const empName = selectedEmp ? selectedEmp.name : (user?.name || "Unknown");
-      const res = await fetch(`${API_URL}/schedules`, {
-        method: "POST",
+      
+      const method = editingScheduleId ? "PUT" : "POST";
+      const url = editingScheduleId ? `${API_URL}/schedules/${editingScheduleId}` : `${API_URL}/schedules`;
+      
+      const payload: any = {
+        ...form,
+        employeeName: empName
+      };
+      
+      if (!editingScheduleId) {
+        payload.createdBy = user?.id || user?.employeeId;
+      }
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          employeeName: empName,
-          createdBy: user?.id || user?.employeeId
-        })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         toast.success("Schedule added successfully");
@@ -264,7 +291,7 @@ export default function SchedulePage() {
           const end = start.add(6, "day");
           fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
         }
-        setForm(prev => ({ ...prev, title: "", description: "", attendees: [] }));
+        resetForm();
       } else {
         try {
           const errorData = await res.json();
@@ -282,10 +309,13 @@ export default function SchedulePage() {
   };
 
   const handleDeleteSchedule = async (scheduleId: string) => {
+    setIsDeleting(true);
     try {
       const res = await fetch(`${API_URL}/schedules/${scheduleId}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Schedule deleted successfully");
+        setCreateModalOpen(false);
+        resetForm();
         if (viewMode === "day") {
           fetchSchedules(currentDate.format("YYYY-MM-DD"));
         } else {
@@ -293,12 +323,28 @@ export default function SchedulePage() {
           const end = start.add(6, "day");
           fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
         }
-      } else {
-        toast.error("Failed to delete schedule");
       }
     } catch (err) {
       toast.error("Error connecting to server");
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const handleEditClick = (event: any) => {
+    setEditingScheduleId(event.id || event._id);
+    setForm({
+      title: event.title || "",
+      description: event.description || "",
+      employeeId: event.employeeId,
+      employeeName: event.employeeName || "",
+      date: dayjs(event.date).format("YYYY-MM-DD"),
+      startTime: event.startTime,
+      endTime: event.endTime,
+      type: event.type || "meeting",
+      attendees: event.attendees || []
+    });
+    setCreateModalOpen(true);
   };
 
   /* ───── helpers ───── */
@@ -464,13 +510,22 @@ export default function SchedulePage() {
     const top = Math.max(0, startMin);
     const height = Math.max(20, Math.min(1440, endMin) - top);
     const color = getEmployeeColor(event.employeeId);
-    const canDelete = String(event.createdBy) === String(user?.id || user?.employeeId);
+    
+    const userId = String(user?.id || user?.employeeId);
+    const canEditOrDelete = String(event.createdBy) === userId || String(event.employeeId) === userId || user?.role === "Admin" || user?.role === "HR";
+    
     const colWidth = 100 / totalColumns;
     const leftPercent = column * colWidth;
     const widthPercent = colWidth - (compact ? 2 : 1.5);
 
     const eventBlock = (
       <div
+        onClick={(e) => {
+          if (canEditOrDelete) {
+            e.stopPropagation();
+            handleEditClick(event);
+          }
+        }}
         className="absolute rounded-md overflow-hidden cursor-pointer transition-shadow hover:shadow-lg group"
         style={{
           top: `${top}px`,
@@ -487,11 +542,6 @@ export default function SchedulePage() {
             <div className={`${compact ? "text-[10px]" : "text-xs"} font-bold text-white truncate flex-1 leading-tight`}>
               {event.title}
             </div>
-            {canDelete && !compact && (
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-px">
-                <X className="w-3 h-3 text-white/80 hover:text-white" />
-              </div>
-            )}
           </div>
           {height > 30 && (
             <div className={`${compact ? "text-[9px]" : "text-[10px]"} text-white/80 mt-0.5 truncate`}>
@@ -532,19 +582,8 @@ export default function SchedulePage() {
       </AntTooltip>
     );
 
-    return canDelete ? (
-      <Popconfirm
-        key={event.id}
-        title="Delete Schedule"
-        description="Are you sure you want to delete this schedule?"
-        onConfirm={() => handleDeleteSchedule(event.id)}
-        okText="Yes"
-        cancelText="No"
-      >
-        {wrappedEventBlock}
-      </Popconfirm>
-    ) : (
-      <React.Fragment key={event.id}>
+    return (
+      <React.Fragment key={event.id || Math.random()}>
         {wrappedEventBlock}
       </React.Fragment>
     );
@@ -602,16 +641,19 @@ export default function SchedulePage() {
         description="View and manage employee schedules."
       >
         {canAdd && (
-          <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+          <Dialog open={createModalOpen} onOpenChange={(open) => {
+            if (!open) resetForm();
+            setCreateModalOpen(open);
+          }}>
             <DialogTrigger asChild>
-              <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm">
+              <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm" onClick={() => resetForm()}>
                 <Plus className="w-4 h-4 mr-2" />
                 Add Schedule
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[450px]">
               <DialogHeader>
-                <DialogTitle className="text-xl font-bold">New Schedule Block</DialogTitle>
+                <DialogTitle className="text-xl font-bold">{editingScheduleId ? "Edit Schedule" : "New Schedule Block"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -754,9 +796,34 @@ export default function SchedulePage() {
                   />
                 </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
-                <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleCreateSchedule}>Save Schedule</Button>
+              <DialogFooter className="flex items-center">
+                {editingScheduleId && (
+                  <Popconfirm
+                    title="Delete Schedule"
+                    description="Are you sure you want to delete this schedule?"
+                    onConfirm={() => handleDeleteSchedule(editingScheduleId)}
+                    okText="Yes"
+                    cancelText="No"
+                  >
+                    <Button 
+                      variant="outline" 
+                      className="mr-auto text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                      disabled={isSubmitting || isDeleting}
+                    >
+                      {isDeleting ? "Deleting..." : "Delete"}
+                    </Button>
+                  </Popconfirm>
+                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting || isDeleting}>Cancel</Button>
+                  <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleSave} disabled={isSubmitting || isDeleting}>
+                    {isSubmitting ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                    ) : (
+                      editingScheduleId ? "Save Changes" : "Save Schedule"
+                    )}
+                  </Button>
+                </div>
               </DialogFooter>
             </DialogContent>
           </Dialog>
