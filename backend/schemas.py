@@ -1148,6 +1148,13 @@ class Meeting(BaseModel):
     date: str
     note: str
     performedBy: Optional[str] = None
+    type: Optional[str] = None # "Monthly Review", "Strategy Pitch", "Onboarding", "Check-in", "Ad-hoc"
+    location: Optional[str] = None # "Google Meet", "Zoom", "Phone Call", "In-Person"
+    attendees: Optional[str] = None
+    status: Optional[str] = None # "Scheduled", "Completed", "Cancelled"
+    nextSteps: Optional[str] = None
+    duration: Optional[str] = None
+    link: Optional[str] = None
 
 class LeadBase(BaseModel):
     company: Optional[str] = ""
