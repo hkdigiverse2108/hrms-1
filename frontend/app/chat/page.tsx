@@ -488,7 +488,7 @@ export default function ChatPage() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch(`${API_URL}/employees`);
+      const res = await fetch(`${API_URL}/employees`, { cache: 'no-store' });
       if (res.ok) {
         setEmployees(await res.json());
       }
@@ -500,7 +500,7 @@ export default function ChatPage() {
   const fetchTypingStatus = async () => {
     if (!user || !selectedChat) return;
     try {
-      const res = await fetch(`${API_URL}/chat/typing/${selectedChat.id}?user_id=${user.id}`);
+      const res = await fetch(`${API_URL}/chat/typing/${selectedChat.id}?user_id=${user.id}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setTypingUsers(data.typingUsers);
@@ -527,7 +527,7 @@ export default function ChatPage() {
 
   const fetchChannels = async () => {
     try {
-      const res = await fetch(`${API_URL}/chat/channels`);
+      const res = await fetch(`${API_URL}/chat/channels`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setChatChannels(data.map((c: any) => ({ ...c, type: 'general' })));
@@ -597,7 +597,7 @@ export default function ChatPage() {
   const fetchChatSummaries = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await fetch(`${API_URL}/chat/summaries/${user.id}`);
+      const res = await fetch(`${API_URL}/chat/summaries/${user.id}`, { cache: 'no-store' });
       if (res.ok) {
         setChatSummaries(await res.json());
       }
@@ -609,7 +609,7 @@ export default function ChatPage() {
   const fetchSavedMessages = async () => {
     if (!user) return;
     try {
-      const res = await fetch(`${API_URL}/chat/saved-messages/${user.id}`);
+      const res = await fetch(`${API_URL}/chat/saved-messages/${user.id}`, { cache: 'no-store' });
       if (res.ok) {
         setGlobalSavedMessages(await res.json());
       }
@@ -622,7 +622,7 @@ export default function ChatPage() {
     if (!selectedChat || !user) return;
     try {
       const isGroup = selectedChat.type === 'group' || selectedChat.type === 'general';
-      const res = await fetch(`${API_URL}/chat/files/${user.id}/${selectedChat.id}?is_group=${isGroup}`);
+      const res = await fetch(`${API_URL}/chat/files/${user.id}/${selectedChat.id}?is_group=${isGroup}`, { cache: 'no-store' });
       if (res.ok) {
         const files = await res.json();
         setChatFiles(files.filter((f: any) => !f.isVoice));
@@ -687,7 +687,7 @@ export default function ChatPage() {
         ? `${API_URL}/chat/messages/${user.id}/${targetId}?group_id=${targetId}`
         : `${API_URL}/chat/messages/${user.id}/${targetId}`;
       
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         // Mark which messages are mine
@@ -829,7 +829,7 @@ export default function ChatPage() {
   const fetchGroups = useCallback(async () => {
     if (!user || !user.id) return;
     try {
-      const res = await fetch(`${API_URL}/chat/groups/${user.id}`);
+      const res = await fetch(`${API_URL}/chat/groups/${user.id}`, { cache: 'no-store' });
       if (res.ok) {
         setChatGroups(await res.json());
       }
@@ -887,6 +887,19 @@ export default function ChatPage() {
       fetchGroups();
       fetchChannels();
     } 
+    else if (eventType === "message_updated") {
+      const activeChat = selectedChatRef.current;
+      const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
+      
+      const isGroupMsg = !!data.groupId;
+      const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
+      
+      if (activeChatId === messageChatId) {
+        setCurrentMessages((prev) => 
+          prev.map(m => (m.id === data.id ? { ...data, isMe: data.senderId === user.id } : m))
+        );
+      }
+    }
     else if (eventType === "typing_status") {
       const activeChat = selectedChatRef.current;
       const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;

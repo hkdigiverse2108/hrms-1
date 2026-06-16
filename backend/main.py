@@ -1293,11 +1293,29 @@ async def toggle_complete_message(message_id: str, user_id: str, db=Depends(get_
     status = await crud.toggle_complete_message(db, message_id, user_id)
     return {"isCompleted": status}
 
+async def _broadcast_message_update(db, message_id: str):
+    msg_doc = await db.messages.find_one({"_id": ObjectId(message_id)})
+    if msg_doc:
+        from fastapi.encoders import jsonable_encoder
+        json_msg = jsonable_encoder(crud.fix_id(msg_doc))
+        try:
+            group_id = json_msg.get("groupId")
+            if group_id:
+                is_group = await db.chat_groups.find_one({"_id": ObjectId(group_id)}) if len(group_id) == 24 else None
+                member_ids = [str(m) for m in is_group.get("members", [])] if is_group else [str(emp["_id"]) for emp in await db.employees.find().to_list(1000)]
+                await ws_manager.broadcast_to_group(member_ids, "message_updated", json_msg)
+            else:
+                recipients = [json_msg.get("receiverId"), json_msg.get("senderId")]
+                await ws_manager.broadcast_to_group([r for r in recipients if r], "message_updated", json_msg)
+        except Exception:
+            pass
+
 @app.post("/chat/messages/{message_id}/reaction")
 async def toggle_reaction(message_id: str, user_id: str, emoji: str, db=Depends(get_db)):
     reactions = await crud.toggle_reaction(db, message_id, user_id, emoji)
     if reactions is None:
         raise HTTPException(status_code=404, detail="Message not found")
+    await _broadcast_message_update(db, message_id)
     return {"reactions": reactions}
 
 @app.put("/employees/{employee_id}/status")
@@ -1309,6 +1327,7 @@ async def vote_on_poll(message_id: str, user_id: str, option_id: str, db=Depends
     options = await crud.vote_poll(db, message_id, user_id, option_id)
     if options is None:
         raise HTTPException(status_code=404, detail="Poll not found")
+    await _broadcast_message_update(db, message_id)
     return {"options": options}
 
 @app.post("/chat/typing")
