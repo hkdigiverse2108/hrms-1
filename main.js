@@ -1,11 +1,28 @@
 const { app, BrowserWindow, Menu, Tray } = require('electron');
 app.setAppUserModelId("com.hrms.app");
 const path = require('path');
-const { spawn, fork } = require('child_process');
+const { spawn, fork, spawnSync } = require('child_process');
 const fs = require('fs');
 const net = require('net');
 
-function checkPort(port) {
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+app.on('second-instance', () => {
+  log('Second HRMS instance requested. Focusing existing window instead of starting another backend/frontend.');
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
+function checkPortOnHost(port, host) {
   return new Promise((resolve) => {
     const server = net.createServer();
     server.once('error', () => {
@@ -16,8 +33,19 @@ function checkPort(port) {
         resolve(true);
       });
     });
-    server.listen(port, '127.0.0.1');
+    server.listen(port, host);
   });
+}
+
+async function checkPort(port) {
+  const hostsToCheck = ['127.0.0.1', '0.0.0.0'];
+  for (const host of hostsToCheck) {
+    const isFree = await checkPortOnHost(port, host);
+    if (!isFree) {
+      return false;
+    }
+  }
+  return true;
 }
 
 async function findFreePort(startPort) {
@@ -221,6 +249,53 @@ const HOST = process.env.APP_HOST || '127.0.0.1';
 // Will be determined dynamically on app ready
 let frontendUrl = `http://127.0.0.1:${FRONTEND_PORT}`;
 const isRemoteHost = false;
+
+function escapePowerShellSingleQuoted(value) {
+  return String(value).replace(/'/g, "''");
+}
+
+function stopStalePackagedProcesses() {
+  if (!app.isPackaged || process.platform !== 'win32') {
+    return;
+  }
+
+  const backendDir = path.join(process.resourcesPath, 'backend');
+  const frontendDir = path.join(process.resourcesPath, 'app', 'frontend');
+  const backendPattern = `${escapePowerShellSingleQuoted(backendDir)}*`;
+  const frontendPattern = `*${escapePowerShellSingleQuoted(frontendDir)}*server.js*`;
+
+  const command = `
+    $backendPattern = '${backendPattern}';
+    $frontendPattern = '${frontendPattern}';
+    Get-CimInstance Win32_Process |
+      Where-Object {
+        (($_.Name -in @('backend.exe', 'watchdog.exe')) -and ($_.ExecutablePath -like $backendPattern)) -or
+        (($_.CommandLine -like $frontendPattern) -and ($_.ProcessId -ne ${process.pid}))
+      } |
+      ForEach-Object {
+        try {
+          Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop;
+          Write-Output "Stopped stale HRMS process $($_.Name) PID=$($_.ProcessId)";
+        } catch {
+          Write-Output "Failed to stop stale HRMS process PID=$($_.ProcessId): $($_.Exception.Message)";
+        }
+      }
+  `;
+
+  try {
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 10000
+    });
+    const output = `${result.stdout || ''}${result.stderr || ''}`.trim();
+    if (output) {
+      log(`[Startup cleanup] ${output}`);
+    }
+  } catch (err) {
+    log(`[Startup cleanup] Failed to clean stale processes: ${err.message}`);
+  }
+}
 
 function startBackend() {
   const autoStart = process.env.AUTO_START_BACKEND;
@@ -693,7 +768,12 @@ function killSubprocesses() {
 }
 
 app.on('ready', async () => {
+  if (!gotSingleInstanceLock) {
+    return;
+  }
+
   log(`HRMS desktop app starting. Logging to: ${logPath}`);
+  stopStalePackagedProcesses();
   
   // Resolve free ports dynamically
   try {
