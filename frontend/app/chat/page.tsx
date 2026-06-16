@@ -1264,7 +1264,7 @@ export default function ChatPage() {
               href={href} 
               target="_blank" 
               rel="noopener noreferrer"
-              className={cn("no-underline hover:!underline font-medium break-all", isMeBubble ? "!text-white" : "!text-brand-teal")}
+              className="text-[#027eb5] hover:underline break-all"
               onClick={(e) => e.stopPropagation()}
             >
               {tp}
