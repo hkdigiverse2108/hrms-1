@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -205,6 +205,19 @@ async def lifespan(app):
             print("[PC Registration] Skipping registration (running on Linux/Production server).")
     except Exception as e:
         print(f"[PC Registration] Failed to register PC: {e}")
+
+    # Ensure database indexes for chat messages are created to speed up loading
+    try:
+        from database import db
+        print("[Chat Indexing] Ensuring database indexes for chat messages...", flush=True)
+        # Index for group/general chats
+        await db.messages.create_index([("groupId", 1), ("timestamp", 1)])
+        # Indexes for personal chats
+        await db.messages.create_index([("senderId", 1), ("receiverId", 1), ("timestamp", 1)])
+        await db.messages.create_index([("receiverId", 1), ("senderId", 1), ("timestamp", 1)])
+        print("[Chat Indexing] Chat message indexes verified/created successfully.", flush=True)
+    except Exception as e:
+        print(f"[Chat Indexing] Failed to create chat indexes: {e}", flush=True)
 
     yield
     # --- Shutdown ---
@@ -2084,6 +2097,80 @@ async def resolve_security_alert(
         return {"message": "Alert marked as resolved"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Desktop Auto-Update Endpoints ---
+@app.get("/desktop/version")
+async def get_desktop_version(db=Depends(get_db)):
+    """Retrieve the latest desktop app version, download URL, and changelog."""
+    release = await db.desktop_releases.find_one(sort=[("created_at", -1)])
+    if not release:
+        return {
+            "version": "1.0.0",
+            "downloadUrl": "",
+            "changelog": []
+        }
+    return {
+        "version": release.get("version"),
+        "downloadUrl": release.get("downloadUrl"),
+        "changelog": release.get("changelog", [])
+    }
+
+@app.post("/desktop/release")
+async def upload_desktop_release(
+    version: str = Form(...),
+    changelog: str = Form(...),  # JSON string or comma-separated
+    file: UploadFile = File(...),
+    token_payload: dict = Depends(auth.require_admin),
+    db=Depends(get_db)
+):
+    """Admin-only endpoint to upload a new compiled desktop installer .exe and log its version."""
+    import shutil
+    import json
+    
+    # Create directory uploads/desktop if it doesn't exist
+    desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
+    if not os.path.exists(desktop_dir):
+        os.makedirs(desktop_dir)
+        
+    # Standardize filename to prevent path traversal issues
+    safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
+    filename = f"HRMS_Setup_{safe_version}.exe"
+    file_path = os.path.join(desktop_dir, filename)
+    
+    # Save the file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    # Generate download URL (relative path)
+    download_url = f"/uploads/desktop/{filename}"
+    
+    # Parse changelog
+    changelog_list = []
+    try:
+        changelog_list = json.loads(changelog)
+        if not isinstance(changelog_list, list):
+            changelog_list = [str(changelog_list)]
+    except Exception:
+        # Fallback to newline separation
+        changelog_list = [line.strip() for line in changelog.split("\n") if line.strip()]
+        if not changelog_list:
+            changelog_list = [line.strip() for line in changelog.split(",") if line.strip()]
+            
+    # Insert new release into DB
+    from datetime import datetime
+    new_release = {
+        "version": version,
+        "downloadUrl": download_url,
+        "changelog": changelog_list,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    await db.desktop_releases.insert_one(new_release)
+    
+    return {
+        "message": "Release uploaded successfully",
+        "release": {**new_release, "_id": str(new_release["_id"])}
+    }
 
 
 if __name__ == "__main__":

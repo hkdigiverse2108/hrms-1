@@ -9,7 +9,8 @@
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
     "pack:win": "electron-builder --dir --win",
-    "pack:mac": "electron-builder --dir --mac"
+    "pack:mac": "electron-builder --dir --mac",
+    "publish-desktop": "node scripts/publish-release.js"
   },
   "devDependencies": {
     "electron": "^31.0.0",

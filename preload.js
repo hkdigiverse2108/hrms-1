@@ -5,7 +5,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSession: (sessionData) => ipcRenderer.send('save-session', sessionData),
   clearSession: () => ipcRenderer.send('clear-session'),
   getSession: () => ipcRenderer.invoke('get-session'),
-  showNotification: (title, options) => ipcRenderer.send('show-notification', title, options)
+  showNotification: (title, options) => ipcRenderer.send('show-notification', title, options),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  startUpdate: (downloadUrl) => ipcRenderer.invoke('start-update', downloadUrl),
+  onUpdateProgress: (callback) => {
+    const subscription = (event, progress) => callback(progress);
+    ipcRenderer.on('update-progress', subscription);
+    return () => ipcRenderer.removeListener('update-progress', subscription);
+  }
 });
 
 ipcRenderer.on('navigate-to-url', (event, url) => {

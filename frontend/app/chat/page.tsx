@@ -475,6 +475,25 @@ export default function ChatPage() {
     }
   }, [selectedChat?.id, scrollToBottom]);
 
+  // Keep scroll container scrolled to bottom on resize or layout shifts
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+      if (shouldScrollToBottom.current || isNearBottom) {
+        el.scrollTop = el.scrollHeight;
+        shouldScrollToBottom.current = false;
+      }
+    });
+
+    resizeObserver.observe(el);
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [selectedChat]);
+
   const fetchEmployees = async () => {
     try {
       const res = await fetch(`${API_URL}/employees`);
@@ -488,11 +507,18 @@ export default function ChatPage() {
 
   const fetchTypingStatus = async () => {
     if (!user || !selectedChat) return;
+    const targetId = selectedChat.id || selectedChat.employeeId;
     try {
-      const res = await fetch(`${API_URL}/chat/typing/${selectedChat.id}?user_id=${user.id}`);
+      const res = await fetch(`${API_URL}/chat/typing/${targetId}?user_id=${user.id}`);
       if (res.ok) {
         const data = await res.json();
-        setTypingUsers(data.typingUsers);
+        
+        // Guard against race conditions
+        const currentActiveChat = selectedChatRef.current;
+        const currentActiveId = currentActiveChat ? (currentActiveChat.id || currentActiveChat.employeeId) : null;
+        if (currentActiveId === targetId) {
+          setTypingUsers(data.typingUsers);
+        }
       }
     } catch (err) {
       console.error("Error fetching typing status:", err);
@@ -609,12 +635,19 @@ export default function ChatPage() {
 
   const fetchChatFiles = async () => {
     if (!selectedChat || !user) return;
+    const targetId = selectedChat.id || selectedChat.employeeId;
     try {
       const isGroup = selectedChat.type === 'group' || selectedChat.type === 'general';
-      const res = await fetch(`${API_URL}/chat/files/${user.id}/${selectedChat.id}?is_group=${isGroup}`);
+      const res = await fetch(`${API_URL}/chat/files/${user.id}/${targetId}?is_group=${isGroup}`);
       if (res.ok) {
         const files = await res.json();
-        setChatFiles(files.filter((f: any) => !f.isVoice));
+        
+        // Guard against race conditions
+        const currentActiveChat = selectedChatRef.current;
+        const currentActiveId = currentActiveChat ? (currentActiveChat.id || currentActiveChat.employeeId) : null;
+        if (currentActiveId === targetId) {
+          setChatFiles(files.filter((f: any) => !f.isVoice));
+        }
       }
     } catch (err) {
       console.error("Error fetching chat files:", err);
@@ -670,8 +703,8 @@ export default function ChatPage() {
 
   const fetchMessages = React.useCallback(async () => {
     if (!selectedChat || !user || !user.id) return;
+    const targetId = selectedChat.id || selectedChat.employeeId;
     try {
-      const targetId = selectedChat.id || selectedChat.employeeId;
       const url = (selectedChat.type === 'group' || selectedChat.type === 'general')
         ? `${API_URL}/chat/messages/${user.id}/${targetId}?group_id=${targetId}`
         : `${API_URL}/chat/messages/${user.id}/${targetId}`;
@@ -679,6 +712,14 @@ export default function ChatPage() {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
+        
+        // Guard against race conditions: check if this chat is still selected
+        const currentActiveChat = selectedChatRef.current;
+        const currentActiveId = currentActiveChat ? (currentActiveChat.id || currentActiveChat.employeeId) : null;
+        if (currentActiveId !== targetId) {
+          return;
+        }
+
         // Mark which messages are mine
         const marked = data.map((m: any) => ({
           ...m,
@@ -2246,7 +2287,7 @@ export default function ChatPage() {
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="text-[14px] text-slate-700 leading-relaxed break-words">
+                                <div className="text-[14px] text-slate-700 leading-relaxed break-words whitespace-pre-wrap">
                                   {renderMessageText(msg.text)}
                                 </div>
                                 {msg.attachmentUrl && (
@@ -2604,7 +2645,7 @@ export default function ChatPage() {
                                   Forwarded
                                 </div>
                                 <div className={cn(
-                                  "border-l-2 pl-3 py-0.5 text-xs italic opacity-90",
+                                  "border-l-2 pl-3 py-0.5 text-xs italic opacity-90 whitespace-pre-wrap",
                                   msg.isMe ? "border-white/40" : "border-brand-teal/40"
                                 )}>
                                   {msg.text}
@@ -2636,6 +2677,7 @@ export default function ChatPage() {
                                       }
                                       alt={msg.attachmentName} 
                                       className="max-w-[280px] sm:max-w-[360px] max-h-[300px] w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                      onLoad={() => scrollToBottom(true)}
                                       onClick={() => setPreviewImage({
                                         url: msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl : msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`,
                                         name: msg.attachmentName || 'Image'
