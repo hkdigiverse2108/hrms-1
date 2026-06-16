@@ -769,7 +769,9 @@ export default function DocumentGeneratorPage() {
               </div>
               <CardContent className="p-6 space-y-6">
                 <div className="grid gap-4">
-                  {templateData?.fields
+                  {(selectedEmployee === 'manual' && !templateData?.fields?.includes('name')
+                    ? ['name', ...(templateData?.fields || [])]
+                    : (templateData?.fields || []))
                     .filter((field: string) => !(selectedEmployee !== 'manual' && field === 'name'))
                     .map((field: string) => (
                     <div key={field} className="space-y-2">
