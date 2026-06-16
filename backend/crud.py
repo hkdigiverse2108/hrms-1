@@ -4378,6 +4378,119 @@ async def get_employee_time_recoveries(db, employee_id: str):
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
 
+def recalculate_attendance_seconds(punches: list, breaks: list) -> tuple:
+    """
+    Given a list of raw punches and breaks, sort and merge them,
+    and calculate the total accumulated work seconds from the completed punches.
+    Returns: (merged_punches, sorted_breaks, accumulated_seconds)
+    """
+    def parse_time(time_str):
+        if not time_str:
+            return 0
+        parts = time_str.split(':')
+        try:
+            h = int(parts[0])
+            m = int(parts[1])
+            s = int(parts[2]) if len(parts) > 2 else 0
+            return h * 3600 + m * 60 + s
+        except Exception:
+            return 0
+
+    # Sort breaks
+    sorted_breaks = sorted(breaks, key=lambda b: parse_time(b.get("startTime") or "00:00:00"))
+    for b in sorted_breaks:
+        if b.get("startTime") and len(b["startTime"].split(':')) == 2:
+            b["startTime"] = f"{b['startTime']}:00"
+        if b.get("endTime") and len(b["endTime"].split(':')) == 2:
+            b["endTime"] = f"{b['endTime']}:00"
+
+    # 1. Sort punches by punchIn
+    sorted_punches = sorted(punches, key=lambda p: parse_time(p.get("punchIn") or "00:00:00"))
+
+    # 2. Merge overlapping/contiguous punches
+    merged_punches = []
+    for p in sorted_punches:
+        p_copy = dict(p)
+        if not p_copy.get("punchIn"):
+            continue
+        # normalize format to HH:MM:SS
+        in_parts = p_copy["punchIn"].split(':')
+        if len(in_parts) == 2:
+            p_copy["punchIn"] = f"{p_copy['punchIn']}:00"
+        
+        out_time = p_copy.get("punchOut")
+        if out_time:
+            out_parts = out_time.split(':')
+            if len(out_parts) == 2:
+                p_copy["punchOut"] = f"{out_time}:00"
+        
+        if not merged_punches:
+            merged_punches.append(p_copy)
+            continue
+        
+        last = merged_punches[-1]
+        
+        # If the last punch has no punchOut, it's active.
+        if not last.get("punchOut"):
+            merged_punches.append(p_copy)
+            continue
+            
+        last_out_sec = parse_time(last["punchOut"])
+        curr_in_sec = parse_time(p_copy["punchIn"])
+        
+        if curr_in_sec <= last_out_sec:
+            # Overlap or contiguous! Merge them.
+            if not p_copy.get("punchOut"):
+                new_out = None
+            else:
+                curr_out_sec = parse_time(p_copy["punchOut"])
+                if curr_out_sec > last_out_sec:
+                    new_out = p_copy["punchOut"]
+                else:
+                    new_out = last["punchOut"]
+            
+            last["punchOut"] = new_out
+            if last.get("type") == "meeting" or p_copy.get("type") == "meeting":
+                last["type"] = "meeting"
+            else:
+                last["type"] = p_copy.get("type") or last.get("type") or "work"
+        else:
+            merged_punches.append(p_copy)
+
+    # 3. Calculate accumulated seconds for completed punches
+    total_seconds = 0.0
+    for p in merged_punches:
+        punch_out_str = p.get("punchOut")
+        if not punch_out_str:
+            continue
+        
+        p_in_sec = parse_time(p["punchIn"])
+        p_out_sec = parse_time(punch_out_str)
+        duration = p_out_sec - p_in_sec
+        if duration < 0:
+            duration += 86400  # handle cross-midnight if any
+            
+        # Find break overlaps
+        break_overlap_sec = 0.0
+        for b in sorted_breaks:
+            b_start_str = b.get("startTime")
+            b_end_str = b.get("endTime")
+            if b_start_str and b_end_str:
+                b_in_sec = parse_time(b_start_str)
+                b_out_sec = parse_time(b_end_str)
+                if b_out_sec < b_in_sec:
+                    b_out_sec += 86400
+                
+                # Intersection of [p_in_sec, p_out_sec] and [b_in_sec, b_out_sec]
+                overlap_start = max(p_in_sec, b_in_sec)
+                overlap_end = min(p_out_sec, b_out_sec)
+                if overlap_start < overlap_end:
+                    break_overlap_sec += (overlap_end - overlap_start)
+                    
+        total_seconds += max(0.0, duration - break_overlap_sec)
+
+    return merged_punches, sorted_breaks, total_seconds
+
 async def update_time_recovery_status(db, recovery_id: str, status: str):
     await db.time_recovery.update_one(
         {'_id': ObjectId(recovery_id)},
@@ -4417,59 +4530,45 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     if duration_seconds < 0:
                         duration_seconds += 86400
                         
+                    punches = attn.get('punches') or []
+                    punches = [dict(p) for p in punches]
+                    breaks = attn.get('breaks') or []
+                    breaks = [dict(b) for b in breaks]
+                    
+                    fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
+                    fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
+
                     if recovery_type in ['meeting', 'work']:
-                        # Add a new session to punches
-                        punches = attn.get('punches') or []
-                        punches = [dict(p) for p in punches]
-                        
-                        fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
-                        fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
-                        
                         punches.append({
                             "punchIn": fmt_start,
                             "punchOut": fmt_end,
                             "type": recovery_type
                         })
-                        
-                        # Increase accumulated seconds
-                        accumulated = attn.get("accumulatedWorkSeconds") or 0
-                        new_accumulated = accumulated + duration_seconds
-                        
-                        # Recalculate workHours string
-                        hours, remainder = divmod(int(new_accumulated), 3600)
-                        minutes, _ = divmod(remainder, 60)
-                        work_hours = f"{hours}h {minutes}m"
-                        
-                        await db.attendance.update_one(
-                            {'_id': attn['_id']},
-                            {'$set': {
-                                'punches': punches,
-                                'accumulatedWorkSeconds': new_accumulated,
-                                'workHours': work_hours,
-                                'status': 'Logged'
-                            }}
-                        )
                     elif recovery_type == 'break':
-                        # Add a new break
-                        breaks = attn.get('breaks') or []
-                        breaks = [dict(b) for b in breaks]
-                        
-                        fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
-                        fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
-                        
                         breaks.append({
                             "startTime": fmt_start,
                             "endTime": fmt_end,
                             "duration": str(int(duration_seconds // 60))
                         })
-                        
-                        await db.attendance.update_one(
-                            {'_id': attn['_id']},
-                            {'$set': {
-                                'breaks': breaks,
-                                'status': 'Logged'
-                            }}
-                        )
+                    
+                    # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
+                    merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
+                    
+                    # Recalculate workHours string
+                    hours, remainder = divmod(int(new_accumulated), 3600)
+                    minutes, _ = divmod(remainder, 60)
+                    work_hours = f"{hours}h {minutes}m"
+                    
+                    await db.attendance.update_one(
+                        {'_id': attn['_id']},
+                        {'$set': {
+                            'punches': merged_punches,
+                            'breaks': sorted_breaks,
+                            'accumulatedWorkSeconds': new_accumulated,
+                            'workHours': work_hours,
+                            'status': 'Logged'
+                        }}
+                    )
             else:
                 reason = doc.get('reason', '')
                 
@@ -4594,6 +4693,29 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                         await apply_updates(latest_attn, latest_attn.get('breaks', []))
         except Exception as e:
             print(f"Correction logic error: {e}")
+
+    if doc:
+        try:
+            status_title = "Approved" if status == "approved" else "Rejected"
+            emp_notification = {
+                "employee_id": doc["employee_id"],
+                "title": f"Time Recovery {status_title}",
+                "message": f"Your time recovery request for {doc['date']} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
+                "type": "attendance",
+                "reference_id": str(doc["_id"]),
+                "is_read": False,
+                "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+            }
+            await db.notifications.insert_one(emp_notification)
+            
+            # Broadcast the notification via WebSocket to the employee
+            await ws_manager.send_personal_message(doc["employee_id"], "new_notification", fix_id(emp_notification))
+            
+            # Broadcast attendance_update via WebSocket to the employee
+            await ws_manager.send_personal_message(doc["employee_id"], "attendance_update", {})
+        except Exception as ws_err:
+            print(f"Error sending recovery status update websocket / notification: {ws_err}")
+
     return fix_id(doc)
 
 # Invoice CRUD
@@ -5083,26 +5205,38 @@ async def get_user_activity_stats(db, employee_id: str = None):
 
 # --- Registered PC Device Operations ---
 async def register_pc_device(db, hostname: str, ip_address: str, os_name: str, os_version: str):
-    await db.registered_pcs.update_one(
-        {"hostname": hostname},
-        {
-            "$set": {
-                "ipAddress": ip_address,
-                "os": os_name,
-                "osVersion": os_version,
-                "lastSeen": get_now()
-            },
-            "$setOnInsert": {
-                "firstSeen": get_now(),
-                "blockChrome": False,
-                "blockYoutube": False,
-                "blockApps": [],
-                "blockUrls": []
-            }
-        },
-        upsert=True
+    import re
+    existing = await db.registered_pcs.find_one(
+        {"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}}
     )
-    return await db.registered_pcs.find_one({"hostname": hostname})
+    if existing:
+        await db.registered_pcs.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {
+                    "ipAddress": ip_address,
+                    "os": os_name,
+                    "osVersion": os_version,
+                    "lastSeen": get_now()
+                }
+            }
+        )
+        return await db.registered_pcs.find_one({"_id": existing["_id"]})
+    else:
+        new_pc = {
+            "hostname": hostname,
+            "ipAddress": ip_address,
+            "os": os_name,
+            "osVersion": os_version,
+            "lastSeen": get_now(),
+            "firstSeen": get_now(),
+            "blockChrome": False,
+            "blockYoutube": False,
+            "blockApps": [],
+            "blockUrls": []
+        }
+        await db.registered_pcs.insert_one(new_pc)
+        return new_pc
 
 async def get_registered_pcs(db):
     cursor = db.registered_pcs.find({})
@@ -5110,6 +5244,7 @@ async def get_registered_pcs(db):
     return [fix_id(pc) for pc in pcs]
 
 async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool] = None, block_youtube: Optional[bool] = None, block_apps: Optional[List[str]] = None, block_urls: Optional[List[str]] = None):
+    import re
     update_fields = {}
     if block_chrome is not None:
         update_fields["blockChrome"] = block_chrome
@@ -5122,147 +5257,9 @@ async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool]
         
     if update_fields:
         await db.registered_pcs.update_one(
-            {"hostname": hostname},
+            {"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}},
             {"$set": update_fields}
         )
     
-    updated = await db.registered_pcs.find_one({"hostname": hostname})
+    updated = await db.registered_pcs.find_one({"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}})
     return fix_id(updated) if updated else None
-# --- Content Calendar Operations ---
-async def get_content_calendar_entries(db, client_id: str, month_year: str = None):
-    query = {"clientId": client_id}
-    if month_year:
-        query["monthYear"] = month_year
-    cursor = db.content_calendar_entries.find(query)
-    entries = await cursor.to_list(length=1000)
-    return [fix_id(e) for e in entries]
-
-async def create_content_calendar_entry(db, entry_data: dict):
-    updated_by = entry_data.pop("updatedBy", "Unknown User")
-    entry_data["logs"] = [{
-        "timestamp": datetime.now(IST).isoformat(),
-        "action": "Row created",
-        "details": "Initial entry created",
-        "userName": updated_by
-    }]
-    new_doc = await db.content_calendar_entries.insert_one(entry_data)
-    created = await db.content_calendar_entries.find_one({"_id": new_doc.inserted_id})
-    return fix_id(created)
-
-async def update_content_calendar_entry(db, entry_id: str, update_data: dict):
-    if not ObjectId.is_valid(entry_id):
-        return None
-        
-    existing = await db.content_calendar_entries.find_one({"_id": ObjectId(entry_id)})
-    if not existing:
-        return None
-        
-    changes = []
-    updated_by = update_data.get("updatedBy", "Unknown User")
-    for key, val in update_data.items():
-        if key not in ["logs", "clientId", "monthYear", "id", "_id", "updated_at", "created_at", "updatedAt", "createdAt", "updatedBy"]:
-            old_val = existing.get(key)
-            if old_val != val:
-                changes.append(f"'{key}' changed to '{val or ''}'")
-                
-    if changes:
-        new_log = {
-            "timestamp": datetime.now(IST).isoformat(),
-            "action": "Row updated",
-            "details": ", ".join(changes),
-            "userName": updated_by
-        }
-        logs = existing.get("logs", [])
-        logs.append(new_log)
-        update_data["logs"] = logs
-        
-    await db.content_calendar_entries.update_one(
-        {"_id": ObjectId(entry_id)},
-        {"$set": update_data}
-    )
-    updated = await db.content_calendar_entries.find_one({"_id": ObjectId(entry_id)})
-    return fix_id(updated) if updated else None
-
-async def delete_content_calendar_entry(db, entry_id: str):
-    if not ObjectId.is_valid(entry_id):
-        return False
-    res = await db.content_calendar_entries.delete_one({"_id": ObjectId(entry_id)})
-    return res.deleted_count > 0
-
-async def get_content_calendar_settings(db, client_id: str, month_year: str):
-    settings = await db.content_calendar_settings.find_one({
-        "clientId": client_id,
-        "monthYear": month_year
-    })
-    if settings:
-        return fix_id(settings)
-    return None
-
-async def upsert_content_calendar_settings(db, client_id: str, month_year: str, update_data: dict):
-    if "_id" in update_data:
-        del update_data["_id"]
-    await db.content_calendar_settings.update_one(
-        {"clientId": client_id, "monthYear": month_year},
-        {"$set": update_data},
-        upsert=True
-    )
-    return await get_content_calendar_settings(db, client_id, month_year)
-
-# Dynamic Feedback Forms
-
-async def create_feedback_form(db, form: schemas.FeedbackFormCreate, createdBy: str = "Unknown"):
-    form_dict = form.dict()
-    form_dict["createdAt"] = get_now().strftime("%Y-%m-%d %H:%M:%S")
-    form_dict["createdBy"] = createdBy
-    res = await db.feedback_forms.insert_one(form_dict)
-    doc = await db.feedback_forms.find_one({"_id": res.inserted_id})
-    return fix_id(doc)
-
-async def get_feedback_form(db, form_id: str):
-    if not ObjectId.is_valid(form_id):
-        return None
-    doc = await db.feedback_forms.find_one({"_id": ObjectId(form_id)})
-    return fix_id(doc) if doc else None
-
-async def get_client_feedback_forms(db, client_id: str):
-    cursor = db.feedback_forms.find({"clientId": client_id}).sort("createdAt", -1)
-    return [fix_id(doc) async for doc in cursor]
-
-async def create_feedback_response(db, response: schemas.FeedbackResponseCreate):
-    resp_dict = response.dict()
-    resp_dict["submittedAt"] = get_now().strftime("%Y-%m-%d %H:%M:%S")
-    res = await db.feedback_responses.insert_one(resp_dict)
-    doc = await db.feedback_responses.find_one({"_id": res.inserted_id})
-    return fix_id(doc)
-
-async def get_form_responses(db, form_id: str):
-    cursor = db.feedback_responses.find({"formId": form_id}).sort("submittedAt", -1)
-    return [fix_id(doc) async for doc in cursor]
-
-async def get_client_form_responses(db, client_id: str):
-    cursor = db.feedback_responses.find({"clientId": client_id}).sort("submittedAt", -1)
-    return [fix_id(doc) async for doc in cursor]
-
-async def update_feedback_form(db, form_id: str, form_data: schemas.FeedbackFormCreate):
-    if not ObjectId.is_valid(form_id):
-        return None
-    
-    update_data = form_data.dict()
-    res = await db.feedback_forms.update_one(
-        {"_id": ObjectId(form_id)},
-        {"$set": update_data}
-    )
-    if res.modified_count == 0 and res.matched_count == 0:
-        return None
-    return await get_feedback_form(db, form_id)
-
-async def delete_feedback_form(db, form_id: str):
-    if not ObjectId.is_valid(form_id):
-        return False
-        
-    # Cascade delete responses first
-    await db.feedback_responses.delete_many({"formId": form_id})
-    
-    # Delete the form
-    res = await db.feedback_forms.delete_one({"_id": ObjectId(form_id)})
-    return res.deleted_count > 0

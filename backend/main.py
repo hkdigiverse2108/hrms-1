@@ -18,7 +18,123 @@ print("MAIN PATH:", __file__, flush=True)
 @asynccontextmanager
 async def lifespan(app):
     # --- Startup ---
-    pass
+    # Database migration: clean up registered_pcs duplicate hostnames and restore raw/original casing
+    try:
+        from database import db
+        print("[PC Migration] Starting registered_pcs database cleanup/migration...", flush=True)
+        cursor = db.registered_pcs.find({})
+        all_pcs = await cursor.to_list(length=10000)
+        
+        # Keep track of unique lowercased hostnames to detect duplicate casing
+        seen_pcs = {} # { hostname_lower: doc }
+        
+        for pc in all_pcs:
+            orig_hostname = pc.get("hostname", "")
+            if not orig_hostname:
+                continue
+            
+            hostname_lower = orig_hostname.lower()
+            
+            # Check if this hostname is already processed in lowercase form
+            if hostname_lower in seen_pcs:
+                # Merge current duplicate with the already seen lowercase one
+                target_pc = seen_pcs[hostname_lower]
+                
+                # Merge settings
+                merged_fields = {}
+                
+                # Take activeEmployee if target is empty and current has it
+                if not target_pc.get("activeEmployee") and pc.get("activeEmployee"):
+                    merged_fields["activeEmployee"] = pc.get("activeEmployee")
+                
+                # Boolean flags: if either is True, keep True
+                for flag in ["blockChrome", "blockYoutube"]:
+                    if pc.get(flag) is True and target_pc.get(flag) is not True:
+                        merged_fields[flag] = True
+                
+                # Lists: union lists
+                for list_field in ["blockApps", "blockUrls"]:
+                    target_list = list(target_pc.get(list_field) or [])
+                    current_list = list(pc.get(list_field) or [])
+                    combined = list(set(target_list + current_list))
+                    if len(combined) != len(target_list):
+                        merged_fields[list_field] = combined
+                
+                # Newer timestamps/info
+                if pc.get("lastSeen") and (not target_pc.get("lastSeen") or pc.get("lastSeen") > target_pc.get("lastSeen")):
+                    merged_fields["lastSeen"] = pc.get("lastSeen")
+                    if pc.get("ipAddress"):
+                        merged_fields["ipAddress"] = pc.get("ipAddress")
+                    if pc.get("os"):
+                        merged_fields["os"] = pc.get("os")
+                    if pc.get("osVersion"):
+                        merged_fields["osVersion"] = pc.get("osVersion")
+                
+                # Preserve the casing of whichever document is non-lowercase (if applicable)
+                if orig_hostname != hostname_lower and target_pc.get("hostname") == hostname_lower:
+                    merged_fields["hostname"] = orig_hostname
+                
+                # Update the target lowercase document with merged fields
+                if merged_fields:
+                    await db.registered_pcs.update_one({"_id": target_pc["_id"]}, {"$set": merged_fields})
+                    # Update our in-memory reference
+                    seen_pcs[hostname_lower].update(merged_fields)
+                
+                # Delete the duplicate document (since it has been merged)
+                await db.registered_pcs.delete_one({"_id": pc["_id"]})
+                print(f"[PC Migration] Merged and deleted duplicate registered PC: {orig_hostname}", flush=True)
+            else:
+                # If the current document is NOT lowercase, check if there is an existing lowercase document in db
+                if orig_hostname != hostname_lower:
+                    # Let's search db for existing lowercase document
+                    existing_lower = await db.registered_pcs.find_one({"hostname": hostname_lower})
+                    if existing_lower:
+                        # Found existing lowercase document! We merge this one into existing_lower.
+                        seen_pcs[hostname_lower] = existing_lower
+                        
+                        # Process merging
+                        target_pc = existing_lower
+                        merged_fields = {}
+                        
+                        # Preserve original non-lowercase casing in the merged doc!
+                        merged_fields["hostname"] = orig_hostname
+                        
+                        if not target_pc.get("activeEmployee") and pc.get("activeEmployee"):
+                            merged_fields["activeEmployee"] = pc.get("activeEmployee")
+                        for flag in ["blockChrome", "blockYoutube"]:
+                            if pc.get(flag) is True and target_pc.get(flag) is not True:
+                                merged_fields[flag] = True
+                        for list_field in ["blockApps", "blockUrls"]:
+                            target_list = list(target_pc.get(list_field) or [])
+                            current_list = list(pc.get(list_field) or [])
+                            combined = list(set(target_list + current_list))
+                            if len(combined) != len(target_list):
+                                merged_fields[list_field] = combined
+                        if pc.get("lastSeen") and (not target_pc.get("lastSeen") or pc.get("lastSeen") > target_pc.get("lastSeen")):
+                            merged_fields["lastSeen"] = pc.get("lastSeen")
+                            if pc.get("ipAddress"):
+                                merged_fields["ipAddress"] = pc.get("ipAddress")
+                            if pc.get("os"):
+                                merged_fields["os"] = pc.get("os")
+                            if pc.get("osVersion"):
+                                merged_fields["osVersion"] = pc.get("osVersion")
+                        
+                        if merged_fields:
+                            await db.registered_pcs.update_one({"_id": target_pc["_id"]}, {"$set": merged_fields})
+                            seen_pcs[hostname_lower].update(merged_fields)
+                        
+                        # Delete the duplicate document
+                        await db.registered_pcs.delete_one({"_id": pc["_id"]})
+                        print(f"[PC Migration] Merged and deleted duplicate registered PC: {orig_hostname} into existing lowercase", flush=True)
+                    else:
+                        # Lowercase document does not exist, so keep the current uppercase/raw casing as is!
+                        seen_pcs[hostname_lower] = pc
+                else:
+                    # Already lowercase, keep it as reference
+                    seen_pcs[hostname_lower] = pc
+        print("[PC Migration] Finished registered_pcs database migration.", flush=True)
+    except Exception as e:
+        print(f"[PC Migration] Error running registered_pcs migration: {e}", flush=True)
     
     # Seed the employee_id counter if it doesn't exist yet
     try:
@@ -62,7 +178,7 @@ async def lifespan(app):
             print("[Tracker] Skipping input tracker start (disabled or running on Linux/Production server).")
     except Exception as e:
         print(f"Error starting global input tracker: {e}")
-
+ 
     # Auto-register local PC device
     try:
         from database import db
@@ -1750,13 +1866,14 @@ async def set_active_session(employee_id: str, db=Depends(get_db)):
     
     # Update activeEmployee in registered_pcs for current hostname
     import socket
+    import re
     from bson import ObjectId
     user_doc = await db.employees.find_one(
         {"_id": ObjectId(employee_id)} if len(employee_id) == 24 else {"_id": employee_id}
     )
     if user_doc:
         await db.registered_pcs.update_one(
-            {"hostname": socket.gethostname()},
+            {"hostname": {"$regex": f"^{re.escape(socket.gethostname())}$", "$options": "i"}},
             {"$set": {"activeEmployee": user_doc.get("name", "Unknown")}}
         )
     return {"message": "Session tracking started"}
@@ -1768,8 +1885,9 @@ async def clear_active_session(db=Depends(get_db)):
     
     # Clear activeEmployee in registered_pcs for current hostname
     import socket
+    import re
     await db.registered_pcs.update_one(
-        {"hostname": socket.gethostname()},
+        {"hostname": {"$regex": f"^{re.escape(socket.gethostname())}$", "$options": "i"}},
         {"$set": {"activeEmployee": ""}}
     )
     return {"message": "Session tracking stopped"}
