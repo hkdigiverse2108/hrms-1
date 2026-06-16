@@ -895,6 +895,13 @@ class ClientBase(BaseModel):
     meetings: Optional[List[dict]] = []
     greetingsMsgSent: Optional[bool] = False
     greetingsLogs: Optional[List[dict]] = []
+    paymentFrequency: Optional[str] = "One-Time" # 'One-Time', 'Half-Monthly', 'Monthly', 'Quarterly', 'Yearly', 'Custom'
+    paymentCustomDays: Optional[int] = None
+    paymentAmount: Optional[float] = 0.0
+    paymentDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastPaymentDate: Optional[RobustDate] = None
+    nextPaymentDueDate: Optional[RobustDate] = None
+    paymentRemarks: Optional[str] = None
     workReviews: Optional[List[dict]] = []
 
 class ClientCreate(ClientBase):
@@ -942,6 +949,13 @@ class ClientUpdate(BaseModel):
     userName: Optional[str] = None
     greetingsMsgSent: Optional[bool] = None
     greetingsLogs: Optional[List[dict]] = None
+    paymentFrequency: Optional[str] = None
+    paymentCustomDays: Optional[int] = None
+    paymentAmount: Optional[float] = None
+    paymentDatesOfMonth: Optional[List[int]] = None
+    lastPaymentDate: Optional[RobustDate] = None
+    nextPaymentDueDate: Optional[RobustDate] = None
+    paymentRemarks: Optional[str] = None
     workReviews: Optional[List[dict]] = None
 
 class Client(ClientBase):
@@ -1136,6 +1150,13 @@ class Meeting(BaseModel):
     date: str
     note: str
     performedBy: Optional[str] = None
+    type: Optional[str] = None # "Monthly Review", "Strategy Pitch", "Onboarding", "Check-in", "Ad-hoc"
+    location: Optional[str] = None # "Google Meet", "Zoom", "Phone Call", "In-Person"
+    attendees: Optional[str] = None
+    status: Optional[str] = None # "Scheduled", "Completed", "Cancelled"
+    nextSteps: Optional[str] = None
+    duration: Optional[str] = None
+    link: Optional[str] = None
 
 class LeadBase(BaseModel):
     company: Optional[str] = ""
