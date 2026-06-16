@@ -38,6 +38,40 @@ let frontendProcess = null;
 let tray = null;
 let isQuitting = false;
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function spawnDetachedWithRetry(exePath, attempts = 6) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const child = await new Promise((resolve, reject) => {
+        const spawned = spawn(exePath, [], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true
+        });
+
+        spawned.once('spawn', () => resolve(spawned));
+        spawned.once('error', reject);
+      });
+
+      child.unref();
+      return;
+    } catch (err) {
+      lastError = err;
+      const shouldRetry = process.platform === 'win32' && ['EBUSY', 'EPERM', 'EACCES'].includes(err.code);
+      if (!shouldRetry || attempt === attempts) {
+        throw err;
+      }
+      log(`[Update] Installer was busy (${err.code}). Retrying launch ${attempt}/${attempts}...`);
+      await wait(750);
+    }
+  }
+
+  throw lastError;
+}
+
 // Log file for diagnosing issues in packaged app
 const logPath = path.join(app.getPath('userData'), 'hrms-desktop.log');
 function log(message) {
@@ -519,20 +553,31 @@ function createWindow() {
         function downloadFile(url, dest) {
           const protocol = url.startsWith('https') ? https : http;
           const file = fs.createWriteStream(dest);
+          let settled = false;
+
+          const fail = (err) => {
+            if (settled) return;
+            settled = true;
+            file.destroy();
+            fs.unlink(dest, () => {});
+            reject(err);
+          };
           
           protocol.get(url, (response) => {
             if (response.statusCode === 301 || response.statusCode === 302) {
               // Follow redirect
-              file.close();
+              settled = true;
+              response.resume();
+              file.destroy();
               fs.unlink(dest, () => {});
-              downloadFile(response.headers.location, dest);
+              const redirectUrl = new URL(response.headers.location, url).toString();
+              downloadFile(redirectUrl, dest);
               return;
             }
             
             if (response.statusCode !== 200) {
-              file.close();
-              fs.unlink(dest, () => {});
-              reject(new Error(`Failed to download: Server returned ${response.statusCode}`));
+              response.resume();
+              fail(new Error(`Failed to download: Server returned ${response.statusCode}`));
               return;
             }
             
@@ -541,7 +586,6 @@ function createWindow() {
             
             response.on('data', (chunk) => {
               downloadedSize += chunk.length;
-              file.write(chunk);
               
               if (totalSize > 0) {
                 const progress = Math.round((downloadedSize / totalSize) * 100);
@@ -550,16 +594,22 @@ function createWindow() {
                 }
               }
             });
+            response.on('error', fail);
             
-            response.on('end', () => {
-              file.end();
-              resolve();
+            file.on('finish', () => {
+              if (settled) return;
+              settled = true;
+              file.close((err) => {
+                if (err) {
+                  reject(err);
+                  return;
+                }
+                resolve();
+              });
             });
-          }).on('error', (err) => {
-            file.close();
-            fs.unlink(dest, () => {});
-            reject(err);
-          });
+            file.on('error', fail);
+            response.pipe(file);
+          }).on('error', fail);
         }
         
         downloadFile(absoluteUrl, tempPath);
@@ -567,12 +617,8 @@ function createWindow() {
       
       log(`[Update] Download complete. Spawning installer: ${tempPath}`);
       
-      // Execute the installer in background
-      const child = spawn(tempPath, [], {
-        detached: true,
-        stdio: 'ignore'
-      });
-      child.unref();
+      // Execute the installer after Windows has released the downloaded file handle.
+      await spawnDetachedWithRetry(tempPath);
       
       // Close sub-processes and quit app
       killSubprocesses();
