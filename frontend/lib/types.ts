@@ -213,6 +213,8 @@ export interface Client {
   department?: string
   status: 'active' | 'inactive'
   createdDate?: string
+  greetingsMsgSent?: boolean
+  greetingsLogs?: { timestamp: string; sentBy: string; status: boolean }[]
 }
 export interface WMTask {
   id: string
