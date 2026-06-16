@@ -1,6 +1,6 @@
 {
   "name": "hrms-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "HRMS Desktop Application Container",
   "main": "main.js",
   "scripts": {
@@ -22,7 +22,12 @@
     "productName": "HRMS",
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "extraResources": [
         {
@@ -45,7 +50,13 @@
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "category": "public.app-category.business",
       "hardenedRuntime": true,
