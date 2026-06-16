@@ -465,6 +465,96 @@ function createWindow() {
     return null;
   });
 
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+  });
+
+  ipcMain.handle('start-update', async (event, downloadUrl) => {
+    log(`[Update] Requested download from: ${downloadUrl}`);
+    const http = require('http');
+    const https = require('https');
+    
+    // Resolve absolute URL if downloadUrl is relative
+    let absoluteUrl = downloadUrl;
+    if (downloadUrl.startsWith('/')) {
+      const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+      absoluteUrl = backendUrl + downloadUrl;
+    }
+    
+    const tempPath = path.join(app.getPath('temp'), `HRMS_Setup_Update_${Date.now()}.exe`);
+    
+    try {
+      await new Promise((resolve, reject) => {
+        function downloadFile(url, dest) {
+          const protocol = url.startsWith('https') ? https : http;
+          const file = fs.createWriteStream(dest);
+          
+          protocol.get(url, (response) => {
+            if (response.statusCode === 301 || response.statusCode === 302) {
+              // Follow redirect
+              file.close();
+              fs.unlink(dest, () => {});
+              downloadFile(response.headers.location, dest);
+              return;
+            }
+            
+            if (response.statusCode !== 200) {
+              file.close();
+              fs.unlink(dest, () => {});
+              reject(new Error(`Failed to download: Server returned ${response.statusCode}`));
+              return;
+            }
+            
+            const totalSize = parseInt(response.headers['content-length'], 10);
+            let downloadedSize = 0;
+            
+            response.on('data', (chunk) => {
+              downloadedSize += chunk.length;
+              file.write(chunk);
+              
+              if (totalSize > 0) {
+                const progress = Math.round((downloadedSize / totalSize) * 100);
+                if (mainWindow) {
+                  mainWindow.webContents.send('update-progress', progress);
+                }
+              }
+            });
+            
+            response.on('end', () => {
+              file.end();
+              resolve();
+            });
+          }).on('error', (err) => {
+            file.close();
+            fs.unlink(dest, () => {});
+            reject(err);
+          });
+        }
+        
+        downloadFile(absoluteUrl, tempPath);
+      });
+      
+      log(`[Update] Download complete. Spawning installer: ${tempPath}`);
+      
+      // Execute the installer in background
+      const child = spawn(tempPath, [], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      
+      // Close sub-processes and quit app
+      killSubprocesses();
+      isQuitting = true;
+      app.quit();
+      
+      return { success: true };
+    } catch (err) {
+      log(`[Update] Error during update execution: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
   // Load the resolved frontend URL
   log(`Loading URL: ${frontendUrl}`);
 
