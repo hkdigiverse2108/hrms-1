@@ -101,6 +101,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('marketing', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/marketing-reports">Marketing Reports</Link>, "/work-management/marketing-reports"));
     }
+    if (isAdmin || checkPermission('creative', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/smm">SMM</Link>, "/work-management/smm"));
+    }
 
     const employeeChildren: MenuItem[] = [];
     if (isAdmin || checkPermission('employee-list', 'canView')) {

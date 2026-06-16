@@ -314,7 +314,7 @@ export default function ClientsPage() {
               <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
               <p className="text-muted-foreground font-medium">Loading clients...</p>
             </div>
-          ) : activeTab === "graphics" || activeTab === "development" || departments.map(d=>d.toLowerCase()).includes(activeTab) ? (
+          ) : activeTab === "creative" || activeTab === "development" || departments.map(d=>d.toLowerCase()).includes(activeTab) ? (
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex flex-col flex-1">
               <style dangerouslySetInnerHTML={{ __html: noScrollbarStyle }} />
               <div className="overflow-x-auto flex-1 no-scrollbar">

@@ -814,6 +814,13 @@ async def delete_event(event_id: str, db=Depends(get_db)): return await crud.del
 async def read_clients(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_clients(db, skip=skip, limit=limit)
 
+@app.get("/clients/{client_id}", response_model=schemas.Client)
+async def read_client(client_id: str, db=Depends(get_db)):
+    client = await crud.get_client(db, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return client
+
 @app.post("/clients", response_model=schemas.Client)
 async def create_client(client: schemas.ClientCreate, db=Depends(get_db)):
     return await crud.create_client(db, client=client)
@@ -822,6 +829,18 @@ async def create_client(client: schemas.ClientCreate, db=Depends(get_db)):
 async def update_client(client_id: str, client_update: schemas.ClientUpdate, db=Depends(get_db)):
     print("DEBUG: update_client incoming payload:", client_update.dict(exclude_unset=True))
     return await crud.update_client(db, client_id, client_update)
+
+@app.post("/clients/{client_id}/meetings", response_model=schemas.Client)
+async def add_client_meeting(client_id: str, meeting: schemas.Meeting, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.add_client_meeting(db, client_id, meeting, performedBy=performedBy, userName=userName)
+
+@app.put("/clients/{client_id}/meetings/{meeting_idx}", response_model=schemas.Client)
+async def update_client_meeting(client_id: str, meeting_idx: int, meeting: schemas.Meeting, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.update_client_meeting(db, client_id, meeting_idx, meeting, performedBy=performedBy, userName=userName)
+
+@app.delete("/clients/{client_id}/meetings/{meeting_idx}", response_model=schemas.Client)
+async def delete_client_meeting(client_id: str, meeting_idx: int, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.delete_client_meeting(db, client_id, meeting_idx, performedBy=performedBy, userName=userName)
 
 @app.delete("/clients/{client_id}")
 async def delete_client(client_id: str, db=Depends(get_db)):
@@ -915,6 +934,45 @@ async def read_task_logs(
     db=Depends(get_db)
 ):
     return await crud.get_task_logs(db, taskId=taskId, projectId=projectId, clientId=clientId, dailyReportId=dailyReportId, monthlyReportId=monthlyReportId)
+
+@app.post("/task-logs", response_model=schemas.TaskLog)
+async def create_task_log(log: schemas.TaskLogBase, db=Depends(get_db)):
+    await crud.log_activity(
+        db=db,
+        action=log.action,
+        performedBy=log.performedBy,
+        userName=log.userName,
+        details=log.details,
+        taskId=log.taskId,
+        projectId=log.projectId,
+        clientId=log.clientId,
+        leadId=log.leadId,
+        dailyReportId=log.dailyReportId,
+        monthlyReportId=log.monthlyReportId
+    )
+    doc = await db.task_logs.find_one({"clientId": log.clientId, "action": log.action}, sort=[("_id", -1)])
+    if doc:
+        doc["id"] = str(doc["_id"])
+    return doc
+
+from pydantic import BaseModel
+class TaskLogUpdate(BaseModel):
+    details: str
+
+@app.put("/task-logs/{log_id}", response_model=schemas.TaskLog)
+async def update_task_log(log_id: str, update: TaskLogUpdate, db=Depends(get_db)):
+    doc = await crud.update_task_log(db, log_id, update.details)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Log not found")
+    return doc
+
+@app.delete("/task-logs/{log_id}")
+async def delete_task_log(log_id: str, db=Depends(get_db)):
+    success = await crud.delete_task_log(db, log_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Log not found")
+    return {"message": "Log deleted successfully"}
+
 # Marketing Reports Endpoints
 @app.post("/marketing/reports/daily", response_model=schemas.MarketingDailyReport)
 async def create_marketing_daily_report(report: schemas.MarketingDailyReportCreate, db=Depends(get_db)):
@@ -1855,8 +1913,96 @@ async def resolve_security_alert(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# --- Content Calendar API ---
+@app.get("/content-calendar", response_model=List[schemas.ContentCalendarEntry])
+async def get_content_calendar_entries(clientId: str, monthYear: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_content_calendar_entries(db, client_id=clientId, month_year=monthYear)
+
+@app.post("/content-calendar", response_model=schemas.ContentCalendarEntry)
+async def create_content_calendar_entry(entry: schemas.ContentCalendarEntryCreate, db=Depends(get_db)):
+    return await crud.create_content_calendar_entry(db, entry.model_dump())
+
+@app.put("/content-calendar/{entry_id}", response_model=schemas.ContentCalendarEntry)
+async def update_content_calendar_entry(entry_id: str, entry: schemas.ContentCalendarEntryUpdate, db=Depends(get_db)):
+    updated = await crud.update_content_calendar_entry(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/content-calendar/{entry_id}")
+async def delete_content_calendar_entry(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_content_calendar_entry(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
+
+@app.get("/content-calendar-settings", response_model=schemas.ContentCalendarSettingsBase)
+async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depends(get_db)):
+    settings = await crud.get_content_calendar_settings(db, clientId, monthYear)
+    if settings:
+        return settings
+    # Return defaults if not found
+    return {
+        "clientId": clientId,
+        "monthYear": monthYear,
+        "scriptDateOffset": 14,
+        "shootDateOffset": 12,
+        "editingStartOffset": 6,
+        "approvalOffset": 5
+    }
+
+@app.post("/content-calendar-settings", response_model=schemas.ContentCalendarSettings)
+async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSettingsBase, db=Depends(get_db)):
+    return await crud.upsert_content_calendar_settings(
+        db, settings.clientId, settings.monthYear, settings.model_dump()
+    )
+
+# Dynamic Feedback Forms
+
+@app.post("/forms", response_model=schemas.FeedbackForm)
+async def create_feedback_form(form: schemas.FeedbackFormCreate, createdBy: Optional[str] = None, db=Depends(get_db)):
+    return await crud.create_feedback_form(db, form, createdBy=createdBy or "Unknown")
+
+@app.get("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def get_feedback_form(form_id: str, db=Depends(get_db)):
+    form = await crud.get_feedback_form(db, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return form
+
+@app.get("/forms/client/{client_id}", response_model=List[schemas.FeedbackForm])
+async def get_client_feedback_forms(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_feedback_forms(db, client_id)
+
+@app.put("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def update_feedback_form(form_id: str, form: schemas.FeedbackFormCreate, db=Depends(get_db)):
+    updated_form = await crud.update_feedback_form(db, form_id, form)
+    if not updated_form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return updated_form
+
+@app.delete("/forms/{form_id}")
+async def delete_feedback_form(form_id: str, db=Depends(get_db)):
+    deleted = await crud.delete_feedback_form(db, form_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return {"message": "Form deleted successfully"}
+
+@app.post("/forms/{form_id}/responses", response_model=schemas.FeedbackResponse)
+async def submit_feedback_response(form_id: str, response: schemas.FeedbackResponseCreate, db=Depends(get_db)):
+    if response.formId != form_id:
+        raise HTTPException(status_code=400, detail="Form ID mismatch")
+    return await crud.create_feedback_response(db, response)
+
+@app.get("/forms/{form_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_form_responses(form_id: str, db=Depends(get_db)):
+    return await crud.get_form_responses(db, form_id)
+
+@app.get("/forms/client/{client_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_client_form_responses(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_form_responses(db, client_id)
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", 8000))
     print(f"Starting HRMS Backend on http://0.0.0.0:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
-

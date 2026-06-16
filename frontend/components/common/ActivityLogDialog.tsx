@@ -33,14 +33,17 @@ const formatTimestamp = (timestampString: string) => {
   try {
     const date = new Date(timestampString);
     if (isNaN(date.getTime())) return timestampString;
-    return date.toLocaleString("en-US", {
+    const dateStr = date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
+    });
+    const timeStr = date.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
-    }).replace(",", " •");
+    });
+    return `${dateStr} • ${timeStr}`;
   } catch (e) {
     return timestampString;
   }
@@ -54,6 +57,31 @@ export function ActivityLogDialog({
   logs,
   isLoading = false,
 }: ActivityLogDialogProps) {
+  const processedLogs = logs.map(log => {
+    if (!log.details) return { ...log, processedDetails: [] };
+    
+    const detailsList = log.details
+      .replace(/^Client '[^']+': /, '')
+      .split(', ')
+      .map(d => d.trim())
+      .filter(d => {
+        if (!d) return false;
+        if (d.toLowerCase().includes("updated_at changed")) return false;
+        if (d.includes("from 'N/A' to 'None'")) return false;
+        if (d.includes("from 'N/A' to 'No'")) return false;
+        if (d.includes("from 'N/A' to '0.0'")) return false;
+        if (d.includes("from 'N/A' to ''")) return false;
+        return true;
+      });
+
+    return { ...log, processedDetails: detailsList };
+  }).filter(log => {
+    if (log.details && log.processedDetails.length === 0 && log.action === "Updated") {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden border-none shadow-2xl rounded-[24px]">
@@ -79,14 +107,14 @@ export function ActivityLogDialog({
               <Loader2 className="w-8 h-8 animate-spin text-[#0D9488]" />
               <p className="text-[13px] font-bold text-[#6B7280] uppercase tracking-widest">Fetching history...</p>
             </div>
-          ) : logs.length > 0 ? (
+          ) : processedLogs.length > 0 ? (
             <div className="relative">
               {/* Timeline Line */}
               <div className="absolute left-[7px] top-2 bottom-2 w-[1.5px] bg-[#E5E7EB]" />
               
-              <div className="space-y-3">
-                {logs.map((log, idx) => (
-                  <div key={idx} className="relative pl-8 group">
+              <div className="space-y-6">
+                {processedLogs.map((log: any, idx) => (
+                  <div key={idx} className="relative pl-9 group">
                     {/* Timeline Dot */}
                     <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full bg-white border-[3px] border-[#0D9488] z-10 transition-transform group-hover:scale-110" />
                     
@@ -104,9 +132,17 @@ export function ActivityLogDialog({
                         </div>
                       )}
                       
-                      <p className="text-[12.5px] text-[#4B5563] leading-[1.5] font-medium">
-                        {log.details ? log.details.replace(" 00:00:00", "") : ""}
-                      </p>
+                      <div className="text-[13px] text-[#4B5563] leading-[1.6] font-medium space-y-1">
+                        {log.processedDetails && log.processedDetails.length > 0 ? (
+                          <ul className="list-disc pl-4 marker:text-[#9CA3AF]">
+                            {log.processedDetails.map((detail: string, i: number) => (
+                              <li key={i}>{detail.replace(" 00:00:00", "")}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          (!log.details && log.action) ? <span>Action logged</span> : null
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

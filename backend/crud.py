@@ -1188,10 +1188,24 @@ async def create_department(db, department: schemas.DepartmentCreate):
 
 async def update_department(db, department_id: str, department_update: schemas.DepartmentUpdate):
     update_data = department_update.dict(exclude_unset=True)
+    
+    # We need the old department name to cascade changes
+    old_doc = await db.departments.find_one({"_id": ObjectId(department_id)})
+    
     await db.departments.update_one(
         {"_id": ObjectId(department_id)},
         {"$set": update_data}
     )
+    
+    if old_doc and "name" in update_data and old_doc.get("name") != update_data["name"]:
+        old_name = old_doc.get("name")
+        new_name = update_data["name"]
+        # cascade update to employees, clients, tasks, projects
+        await db.employees.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.clients.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.tasks.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.projects.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        
     updated_doc = await db.departments.find_one({"_id": ObjectId(department_id)})
     return fix_id(updated_doc)
 
@@ -2408,6 +2422,100 @@ async def get_clients(db, skip: int = 0, limit: int = 100):
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
+async def get_client(db, client_id: str):
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    if doc:
+        return fix_id(doc)
+    return None
+
+async def calculate_next_followup_date(db, start_date_str: str, config: dict) -> str:
+    if not start_date_str or not config:
+        return None
+        
+    try:
+        current_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+    except ValueError:
+        return None
+        
+    followup_type = config.get("followupType", "Interval")
+    
+    holiday_query = {
+        "$or": [
+            {"company": {"$in": [None, "", "null"]}}
+        ]
+    }
+    
+    all_holidays = await db.holidays.find(holiday_query).to_list(length=1000)
+    
+    holiday_dates = set()
+    for h in all_holidays:
+        h_date = h.get("date")
+        if h_date:
+            try:
+                h_date_str = h_date.strftime("%Y-%m-%d") if isinstance(h_date, (date, datetime)) else str(h_date)[:10]
+                holiday_dates.add(h_date_str)
+            except:
+                pass
+                
+    def is_valid_day(d: datetime) -> bool:
+        if d.weekday() == 6: # Sunday
+            return False
+        if d.strftime("%Y-%m-%d") in holiday_dates:
+            return False
+        return True
+
+    current_date += timedelta(days=1)
+    
+    if followup_type == "Interval":
+        interval_days = config.get("followupIntervalDays") or 0
+        if interval_days <= 0: return None
+        
+        current_date -= timedelta(days=1)
+        days_added = 0
+        while days_added < interval_days:
+            current_date += timedelta(days=1)
+            if not is_valid_day(current_date): continue
+            days_added += 1
+        return current_date.strftime("%Y-%m-%d")
+        
+    elif followup_type == "Weekly":
+        days_of_week = config.get("followupDaysOfWeek") or []
+        if not days_of_week: return None
+        
+        for _ in range(30):
+            if current_date.weekday() in days_of_week:
+                target_date = current_date
+                while not is_valid_day(target_date):
+                    target_date += timedelta(days=1)
+                return target_date.strftime("%Y-%m-%d")
+            current_date += timedelta(days=1)
+            
+    elif followup_type == "Monthly":
+        import calendar
+        dates_of_month = config.get("followupDatesOfMonth") or []
+        if not dates_of_month: return None
+        
+        for _ in range(60):
+            last_day_of_month = calendar.monthrange(current_date.year, current_date.month)[1]
+            
+            is_match = False
+            for target_dom in dates_of_month:
+                if current_date.day == target_dom:
+                    is_match = True
+                    break
+                elif target_dom > last_day_of_month and current_date.day == last_day_of_month:
+                    is_match = True
+                    break
+                    
+            if is_match:
+                target_date = current_date
+                while not is_valid_day(target_date):
+                    target_date += timedelta(days=1)
+                return target_date.strftime("%Y-%m-%d")
+            current_date += timedelta(days=1)
+            
+    return None
+
 async def create_client(db, client: schemas.ClientCreate):
     client_dict = client.dict()
     performedBy = client_dict.pop("performedBy", "Unknown")
@@ -2415,6 +2523,10 @@ async def create_client(db, client: schemas.ClientCreate):
     
     if not client_dict.get("createdDate"):
         client_dict["createdDate"] = get_now().strftime("%Y-%m-%d")
+        
+    if client_dict.get("followupType") and client_dict.get("lastFollowupDate"):
+        client_dict["nextFollowupDate"] = await calculate_next_followup_date(db, client_dict["lastFollowupDate"], client_dict)
+        
     result = await db.clients.insert_one(client_dict)
     clientId = str(result.inserted_id)
     
@@ -2435,6 +2547,22 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
     
     if update_data:
         old_client = await db.clients.find_one({"_id": ObjectId(client_id)})
+        
+        # Handle followup calculation
+        followup_fields = ["followupType", "followupIntervalDays", "followupDaysOfWeek", "followupDatesOfMonth", "lastFollowupDate"]
+        if any(f in update_data for f in followup_fields):
+            new_config = {
+                "followupType": update_data.get("followupType", old_client.get("followupType")),
+                "followupIntervalDays": update_data.get("followupIntervalDays", old_client.get("followupIntervalDays")),
+                "followupDaysOfWeek": update_data.get("followupDaysOfWeek", old_client.get("followupDaysOfWeek")),
+                "followupDatesOfMonth": update_data.get("followupDatesOfMonth", old_client.get("followupDatesOfMonth"))
+            }
+            new_last_date = update_data.get("lastFollowupDate", old_client.get("lastFollowupDate"))
+            if new_last_date:
+                update_data["nextFollowupDate"] = await calculate_next_followup_date(db, new_last_date, new_config)
+            else:
+                update_data["nextFollowupDate"] = None
+                
         await db.clients.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
         
         details = []
@@ -2453,6 +2581,49 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
         except Exception:
             pass
             
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
+async def add_client_meeting(db, client_id: str, meeting: schemas.Meeting, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    meeting_dict = meeting.dict()
+    if not meeting_dict.get("date"):
+        meeting_dict["date"] = get_now().strftime("%Y-%m-%d %H:%M")
+        
+    await db.clients.update_one(
+        {"_id": ObjectId(client_id)},
+        {"$push": {"meetings": meeting_dict}}
+    )
+    
+    # Log activity
+    await log_activity(db, "Client Meeting Added", performedBy, userName, f"Added meeting: {meeting_dict.get('note', 'No notes provided')}", clientId=client_id)
+    
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
+async def update_client_meeting(db, client_id: str, meeting_idx: int, meeting: schemas.Meeting, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    meeting_dict = meeting.dict()
+    
+    await db.clients.update_one(
+        {"_id": ObjectId(client_id)},
+        {"$set": {f"meetings.{meeting_idx}": meeting_dict}}
+    )
+    
+    # Log activity
+    await log_activity(db, "Client Meeting Updated", performedBy, userName, f"Updated meeting at index {meeting_idx}: {meeting_dict.get('note', 'No notes provided')}", clientId=client_id)
+    
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
+async def delete_client_meeting(db, client_id: str, meeting_idx: int, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    client = await db.clients.find_one({"_id": ObjectId(client_id)})
+    if client and "meetings" in client and len(client["meetings"]) > meeting_idx:
+        meetings = client["meetings"]
+        deleted_meeting = meetings.pop(meeting_idx)
+        await db.clients.update_one(
+            {"_id": ObjectId(client_id)},
+            {"$set": {"meetings": meetings}}
+        )
+        await log_activity(db, "Client Meeting Deleted", performedBy, userName, f"Deleted meeting: {deleted_meeting.get('note', 'No notes provided')}", clientId=client_id)
     doc = await db.clients.find_one({"_id": ObjectId(client_id)})
     return fix_id(doc)
 
@@ -2908,6 +3079,15 @@ async def get_task_logs(db, taskId: str = None, projectId: str = None, clientId:
     cursor = db.task_logs.find(query).sort("timestamp", -1)
     rows = await cursor.to_list(length=100)
     return [fix_id(row) for row in rows]
+
+async def update_task_log(db, log_id: str, new_details: str):
+    await db.task_logs.update_one({"_id": ObjectId(log_id)}, {"$set": {"details": new_details}})
+    doc = await db.task_logs.find_one({"_id": ObjectId(log_id)})
+    return fix_id(doc) if doc else None
+
+async def delete_task_log(db, log_id: str):
+    result = await db.task_logs.delete_one({"_id": ObjectId(log_id)})
+    return result.deleted_count > 0
 
 # Update existing log_task_activity calls to use the new log_activity
 async def log_task_activity(db, taskId: str, action: str, performedBy: str, userName: str, details: str):
@@ -5442,5 +5622,141 @@ async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool]
     
     updated = await db.registered_pcs.find_one({"hostname": hostname})
     return fix_id(updated) if updated else None
+# --- Content Calendar Operations ---
+async def get_content_calendar_entries(db, client_id: str, month_year: str = None):
+    query = {"clientId": client_id}
+    if month_year:
+        query["monthYear"] = month_year
+    cursor = db.content_calendar_entries.find(query)
+    entries = await cursor.to_list(length=1000)
+    return [fix_id(e) for e in entries]
 
+async def create_content_calendar_entry(db, entry_data: dict):
+    updated_by = entry_data.pop("updatedBy", "Unknown User")
+    entry_data["logs"] = [{
+        "timestamp": datetime.now(IST).isoformat(),
+        "action": "Row created",
+        "details": "Initial entry created",
+        "userName": updated_by
+    }]
+    new_doc = await db.content_calendar_entries.insert_one(entry_data)
+    created = await db.content_calendar_entries.find_one({"_id": new_doc.inserted_id})
+    return fix_id(created)
 
+async def update_content_calendar_entry(db, entry_id: str, update_data: dict):
+    if not ObjectId.is_valid(entry_id):
+        return None
+        
+    existing = await db.content_calendar_entries.find_one({"_id": ObjectId(entry_id)})
+    if not existing:
+        return None
+        
+    changes = []
+    updated_by = update_data.get("updatedBy", "Unknown User")
+    for key, val in update_data.items():
+        if key not in ["logs", "clientId", "monthYear", "id", "_id", "updated_at", "created_at", "updatedAt", "createdAt", "updatedBy"]:
+            old_val = existing.get(key)
+            if old_val != val:
+                changes.append(f"'{key}' changed to '{val or ''}'")
+                
+    if changes:
+        new_log = {
+            "timestamp": datetime.now(IST).isoformat(),
+            "action": "Row updated",
+            "details": ", ".join(changes),
+            "userName": updated_by
+        }
+        logs = existing.get("logs", [])
+        logs.append(new_log)
+        update_data["logs"] = logs
+        
+    await db.content_calendar_entries.update_one(
+        {"_id": ObjectId(entry_id)},
+        {"$set": update_data}
+    )
+    updated = await db.content_calendar_entries.find_one({"_id": ObjectId(entry_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_content_calendar_entry(db, entry_id: str):
+    if not ObjectId.is_valid(entry_id):
+        return False
+    res = await db.content_calendar_entries.delete_one({"_id": ObjectId(entry_id)})
+    return res.deleted_count > 0
+
+async def get_content_calendar_settings(db, client_id: str, month_year: str):
+    settings = await db.content_calendar_settings.find_one({
+        "clientId": client_id,
+        "monthYear": month_year
+    })
+    if settings:
+        return fix_id(settings)
+    return None
+
+async def upsert_content_calendar_settings(db, client_id: str, month_year: str, update_data: dict):
+    if "_id" in update_data:
+        del update_data["_id"]
+    await db.content_calendar_settings.update_one(
+        {"clientId": client_id, "monthYear": month_year},
+        {"$set": update_data},
+        upsert=True
+    )
+    return await get_content_calendar_settings(db, client_id, month_year)
+
+# Dynamic Feedback Forms
+
+async def create_feedback_form(db, form: schemas.FeedbackFormCreate, createdBy: str = "Unknown"):
+    form_dict = form.dict()
+    form_dict["createdAt"] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+    form_dict["createdBy"] = createdBy
+    res = await db.feedback_forms.insert_one(form_dict)
+    doc = await db.feedback_forms.find_one({"_id": res.inserted_id})
+    return fix_id(doc)
+
+async def get_feedback_form(db, form_id: str):
+    if not ObjectId.is_valid(form_id):
+        return None
+    doc = await db.feedback_forms.find_one({"_id": ObjectId(form_id)})
+    return fix_id(doc) if doc else None
+
+async def get_client_feedback_forms(db, client_id: str):
+    cursor = db.feedback_forms.find({"clientId": client_id}).sort("createdAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def create_feedback_response(db, response: schemas.FeedbackResponseCreate):
+    resp_dict = response.dict()
+    resp_dict["submittedAt"] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+    res = await db.feedback_responses.insert_one(resp_dict)
+    doc = await db.feedback_responses.find_one({"_id": res.inserted_id})
+    return fix_id(doc)
+
+async def get_form_responses(db, form_id: str):
+    cursor = db.feedback_responses.find({"formId": form_id}).sort("submittedAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def get_client_form_responses(db, client_id: str):
+    cursor = db.feedback_responses.find({"clientId": client_id}).sort("submittedAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def update_feedback_form(db, form_id: str, form_data: schemas.FeedbackFormCreate):
+    if not ObjectId.is_valid(form_id):
+        return None
+    
+    update_data = form_data.dict()
+    res = await db.feedback_forms.update_one(
+        {"_id": ObjectId(form_id)},
+        {"$set": update_data}
+    )
+    if res.modified_count == 0 and res.matched_count == 0:
+        return None
+    return await get_feedback_form(db, form_id)
+
+async def delete_feedback_form(db, form_id: str):
+    if not ObjectId.is_valid(form_id):
+        return False
+        
+    # Cascade delete responses first
+    await db.feedback_responses.delete_many({"formId": form_id})
+    
+    # Delete the form
+    res = await db.feedback_forms.delete_one({"_id": ObjectId(form_id)})
+    return res.deleted_count > 0

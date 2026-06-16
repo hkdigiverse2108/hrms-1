@@ -762,6 +762,49 @@ class PenaltyTypeUpdate(BaseModel):
 class PenaltyType(PenaltyTypeBase):
     id: str
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    timestamp: str
+
+class ChatContext(BaseModel):
+    taskId: Optional[str] = None
+    projectId: Optional[str] = None
+    taskTitle: Optional[str] = None
+
+class ChatRequest(BaseModel):
+    message: str
+    context: Optional[ChatContext] = None
+    history: List[ChatMessage] = []
+
+# Dynamic Feedback Forms
+class FeedbackFormField(BaseModel):
+    id: str
+    type: str # text, textarea, rating, radio, checkbox
+    label: str
+    required: bool = False
+    options: Optional[List[str]] = None
+
+class FeedbackFormCreate(BaseModel):
+    clientId: str
+    title: str
+    description: Optional[str] = None
+    fields: List[FeedbackFormField] = []
+
+class FeedbackForm(FeedbackFormCreate):
+    id: str
+    createdAt: str
+    createdBy: Optional[str] = None
+
+class FeedbackResponseCreate(BaseModel):
+    formId: str
+    clientId: str
+    answers: Dict[str, Any]
+
+class FeedbackResponse(FeedbackResponseCreate):
+    id: str
+    submittedAt: str
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -822,6 +865,7 @@ class ClientBase(BaseModel):
     gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = "active"
+    whatsappGroup: Optional[str] = None
     services: Optional[str] = None
     festivalPost: Optional[str] = None
     post: Optional[int] = 0
@@ -836,11 +880,18 @@ class ClientBase(BaseModel):
     remarks: Optional[str] = None
     responsibility: Optional[str] = None
     dailyFollowup: Optional[str] = "No"
+    followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = [] # 0=Monday, 6=Sunday
+    followupDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastFollowupDate: Optional[RobustDate] = None
+    nextFollowupDate: Optional[RobustDate] = None
     interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
     interviewNotes: Optional[str] = None
     createdDate: Optional[RobustDate] = None
+    meetings: Optional[List[dict]] = []
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -856,6 +907,7 @@ class ClientUpdate(BaseModel):
     gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = None
+    whatsappGroup: Optional[str] = None
     services: Optional[str] = None
     festivalPost: Optional[str] = None
     post: Optional[int] = None
@@ -869,12 +921,19 @@ class ClientUpdate(BaseModel):
     dailyBudget: Optional[float] = None
     remarks: Optional[str] = None
     responsibility: Optional[str] = None
+    meetings: Optional[List[dict]] = []
     dailyFollowup: Optional[str] = None
     interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
     interviewLink: Optional[str] = None
     interviewNotes: Optional[str] = None
+    followupType: Optional[str] = None
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = None
+    followupDatesOfMonth: Optional[List[int]] = None
+    lastFollowupDate: Optional[str] = None
+    nextFollowupDate: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -890,6 +949,7 @@ class ProjectBase(BaseModel):
     description: Optional[str] = None
     clientId: str
     clientName: Optional[str] = None
+    meetings: Optional[List[dict]] = []
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
@@ -1064,6 +1124,11 @@ class FollowUp(BaseModel):
     note: str
     performedBy: Optional[str] = None
     nextFollowUpDate: Optional[RobustDate] = None
+
+class Meeting(BaseModel):
+    date: str
+    note: str
+    performedBy: Optional[str] = None
 
 class LeadBase(BaseModel):
     company: Optional[str] = ""
@@ -1796,5 +1861,77 @@ class RegisteredPC(RegisteredPCBase):
     id: str
 
 
+# Content Calendar Schemas
+class ContentCalendarEntryBase(BaseModel):
+    clientId: str
+    monthYear: str  # Format: "YYYY-MM"
+    postingDate: Optional[str] = None
+    postingDay: Optional[str] = None
+    postReel: Optional[str] = None
+    concept: Optional[str] = None
+    topic: Optional[str] = None
+    reference: Optional[str] = None
+    scriptDate: Optional[str] = None
+    scriptLink: Optional[str] = None
+    shootDate: Optional[str] = None
+    shootLink: Optional[str] = None
+    editingStart: Optional[str] = None
+    finalReelLink: Optional[str] = None
+    finalPostLink: Optional[str] = None
+    approval: Optional[str] = None
+    isApproved: Optional[str] = None
+    thumbnailLink: Optional[str] = None
+    postingLinkOfIg: Optional[str] = None
+    actualPostingDate: Optional[str] = None
+    logs: Optional[List[dict]] = None
 
+class ContentCalendarEntryCreate(ContentCalendarEntryBase):
+    pass
+
+class ContentCalendarEntryUpdate(BaseModel):
+    postingDate: Optional[str] = None
+    postingDay: Optional[str] = None
+    postReel: Optional[str] = None
+    concept: Optional[str] = None
+    topic: Optional[str] = None
+    reference: Optional[str] = None
+    scriptDate: Optional[str] = None
+    scriptLink: Optional[str] = None
+    shootDate: Optional[str] = None
+    shootLink: Optional[str] = None
+    editingStart: Optional[str] = None
+    finalReelLink: Optional[str] = None
+    finalPostLink: Optional[str] = None
+    approval: Optional[str] = None
+    isApproved: Optional[str] = None
+    thumbnailLink: Optional[str] = None
+    postingLinkOfIg: Optional[str] = None
+    actualPostingDate: Optional[str] = None
+
+class ContentCalendarEntry(ContentCalendarEntryBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+class ContentCalendarSettingsBase(BaseModel):
+    clientId: str
+    monthYear: str
+    scriptDateOffset: int = 14
+    shootDateOffset: int = 12
+    editingStartOffset: int = 6
+    approvalOffset: int = 5
+
+class ContentCalendarSettingsCreate(ContentCalendarSettingsBase):
+    pass
+
+class ContentCalendarSettingsUpdate(BaseModel):
+    scriptDateOffset: Optional[int] = None
+    shootDateOffset: Optional[int] = None
+    editingStartOffset: Optional[int] = None
+    approvalOffset: Optional[int] = None
+
+class ContentCalendarSettings(ContentCalendarSettingsBase):
+    id: str
+    class Config:
+        from_attributes = True
 
