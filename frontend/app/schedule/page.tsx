@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
-import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -123,6 +123,8 @@ export default function SchedulePage() {
     }
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const handleDisconnectGoogle = async () => {
     if (!user) return;
     try {
@@ -139,10 +141,52 @@ export default function SchedulePage() {
     }
   };
 
+  const handleManualSync = async () => {
+    if (!user || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const dateFrom = viewMode === "day"
+        ? currentDate.subtract(1, "day").format("YYYY-MM-DD")
+        : getWeekStart(currentDate).format("YYYY-MM-DD");
+      const dateTo = viewMode === "day"
+        ? currentDate.add(1, "day").format("YYYY-MM-DD")
+        : getWeekStart(currentDate).add(6, "day").format("YYYY-MM-DD");
+
+      const res = await fetch(`${API_URL}/schedules/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: user.id || user.employeeId,
+          dateFrom,
+          dateTo
+        })
+      });
+      if (res.ok) {
+        toast.success("Google Calendar synced successfully");
+        // Re-fetch schedules to show updated data
+        if (viewMode === "day") {
+          fetchSchedules(currentDate.format("YYYY-MM-DD"));
+        } else {
+          const start = getWeekStart(currentDate);
+          const end = start.add(6, "day");
+          fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
+        }
+      } else {
+        toast.error("Failed to sync Google Calendar");
+      }
+    } catch (err) {
+      toast.error("Error syncing with Google Calendar");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const fetchSchedules = async (dateStr: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/schedules?date=${dateStr}`);
+      const userId = user?.id || user?.employeeId || "";
+      const empParam = userId ? `&employeeId=${userId}` : "";
+      const res = await fetch(`${API_URL}/schedules?date=${dateStr}${empParam}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
     } catch (err) {
@@ -155,7 +199,9 @@ export default function SchedulePage() {
   const fetchSchedulesRange = async (from: string, to: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/schedules?date_from=${from}&date_to=${to}`);
+      const userId = user?.id || user?.employeeId || "";
+      const empParam = userId ? `&employeeId=${userId}` : "";
+      const res = await fetch(`${API_URL}/schedules?date_from=${from}&date_to=${to}${empParam}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
     } catch (err) {
@@ -833,6 +879,16 @@ export default function SchedulePage() {
                     <CalendarCheck className="h-4 w-4" />
                     Google Calendar Connected
                   </div>
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={handleManualSync}
+                    disabled={isSyncing}
+                    className="w-full text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5 hover:text-brand-teal h-8 text-xs font-medium"
+                  >
+                    <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                    {isSyncing ? 'Syncing...' : 'Sync Now'}
+                  </Button>
                   <Button 
                     type="button"
                     variant="outline"

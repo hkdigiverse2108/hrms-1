@@ -76,10 +76,12 @@ def fetch_tokens(code: str, state: str):
 
 def get_credentials(token_data: dict):
     """
-    Returns a google.oauth2.credentials.Credentials object from stored token data.
+    Returns a tuple of (google.oauth2.credentials.Credentials, updated_token_dict_or_None).
+    If the token was refreshed, the second element contains the updated token data
+    that should be persisted back to the database.
     """
     if not token_data:
-        return None
+        return None, None
         
     creds = Credentials(
         token=token_data.get('access_token'),
@@ -91,7 +93,17 @@ def get_credentials(token_data: dict):
     )
     
     # Refresh the token if it has expired
+    refreshed_token_data = None
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(google.auth.transport.requests.Request())
+        # Build updated token data to persist back to database
+        refreshed_token_data = {
+            "access_token": creds.token,
+            "refresh_token": creds.refresh_token,
+            "token_uri": creds.token_uri,
+            "client_id": creds.client_id,
+            "client_secret": creds.client_secret,
+            "scopes": list(creds.scopes) if creds.scopes else SCOPES
+        }
         
-    return creds
+    return creds, refreshed_token_data

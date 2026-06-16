@@ -1888,18 +1888,54 @@ async def disconnect_google_calendar(employeeId: str, db=Depends(get_db)):
 async def google_calendar_webhook(request: Request, db=Depends(get_db)):
     """
     Receives push notifications from Google Calendar when an event changes.
-    The headers will contain 'X-Goog-Resource-ID' and 'X-Goog-Channel-ID'.
+    The headers contain 'X-Goog-Resource-ID' and 'X-Goog-Channel-ID'.
+    When a notification arrives, we look up the employee whose calendar changed
+    and perform a sync for the current week to update local schedules.
     """
-    # Verify the request is from Google (you might want to verify headers)
     channel_id = request.headers.get('X-Goog-Channel-ID')
-    resource_id = request.headers.get('X-Goog-Resource-ID')
+    resource_state = request.headers.get('X-Goog-Resource-State', '')
     
-    # Normally, you would use these IDs to look up which user's calendar changed,
-    # then fetch the latest events using the 'syncToken' you previously stored,
-    # and update your local 'schedules' collection accordingly.
+    # Google sends a 'sync' message when the watch is first created — ignore it
+    if resource_state == 'sync':
+        return {"status": "ok"}
     
-    # Returning 200 OK to acknowledge receipt of the webhook.
+    if not channel_id:
+        return {"status": "ok"}
+    
+    try:
+        # channel_id is expected to be the employeeId (set during watch registration)
+        employee_id = channel_id
+        
+        from datetime import datetime, timedelta
+        now = crud.get_now()
+        # Sync a 2-week window around today
+        start_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        end_date = (now + timedelta(days=7)).strftime("%Y-%m-%d")
+        
+        await crud.sync_google_events(db, employee_id, start_date, end_date)
+        print(f"[Webhook] Synced Google Calendar for employee {employee_id} (state: {resource_state})")
+    except Exception as e:
+        print(f"[Webhook] Error processing Google Calendar webhook: {e}")
+    
     return {"status": "ok"}
+
+@app.post("/schedules/sync")
+async def manual_sync_schedules(request: dict, db=Depends(get_db)):
+    """
+    Manually trigger a Google Calendar sync for a specific employee.
+    Body: { "employeeId": "...", "dateFrom": "YYYY-MM-DD", "dateTo": "YYYY-MM-DD" }
+    """
+    employee_id = request.get("employeeId")
+    if not employee_id:
+        raise HTTPException(status_code=400, detail="employeeId is required")
+    
+    from datetime import datetime, timedelta
+    now = crud.get_now()
+    date_from = request.get("dateFrom", (now - timedelta(days=7)).strftime("%Y-%m-%d"))
+    date_to = request.get("dateTo", (now + timedelta(days=7)).strftime("%Y-%m-%d"))
+    
+    await crud.sync_google_events(db, employee_id, date_from, date_to)
+    return {"message": "Sync completed", "employeeId": employee_id, "dateFrom": date_from, "dateTo": date_to}
 
 # --- User Activity Input Tracking API ---
 @app.post("/activity/track/{employee_id}", response_model=schemas.UserInputStats)
