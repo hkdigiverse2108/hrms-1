@@ -1360,7 +1360,7 @@ async def get_typing_status(chat_id: str, user_id: str, db=Depends(get_db)):
 
 @app.get("/chat/ws-info")
 async def get_ws_info(request: Request):
-    backend_port = os.environ.get("BACKEND_PORT", "8000")
+    backend_port = os.environ.get("BACKEND_PORT", os.environ.get("PORT", "8000"))
     try:
         port_val = int(backend_port)
     except ValueError:
@@ -2167,7 +2167,7 @@ async def upload_desktop_release(
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("BACKEND_PORT", 8000))
+    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://0.0.0.0:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
 

@@ -719,6 +719,10 @@ def _run_restrictions_monitor():
                     )
                     rule = future.result(timeout=5)
                 except Exception:
+                    try:
+                        future.cancel()
+                    except Exception:
+                        pass
                     pass
 
         if not rule:
