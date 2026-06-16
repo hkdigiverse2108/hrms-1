@@ -3,10 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link as LinkIcon, Loader2 } from "lucide-react";
+import { Link as LinkIcon, Loader2, History } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { WhatsAppIcon } from "./WhatsAppIcon";
+import { useUser } from "@/hooks/useUser";
+import { Badge } from "@/components/ui/badge";
 
 interface WhatsAppSmmDialogProps {
   open: boolean;
@@ -19,6 +21,7 @@ export function WhatsAppSmmDialog({ open, onOpenChange, client, onSaved }: Whats
   const [link, setLink] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isEditingLink, setIsEditingLink] = useState(false);
+  const { user } = useUser();
 
   useEffect(() => {
     if (open && client) {
@@ -26,6 +29,43 @@ export function WhatsAppSmmDialog({ open, onOpenChange, client, onSaved }: Whats
       setIsEditingLink(!client.whatsappGroup);
     }
   }, [open, client]);
+
+  const handleToggleGreetings = async () => {
+    if (!client) return;
+    const newValue = !client.greetingsMsgSent;
+    const newLog = {
+      timestamp: new Date().toISOString(),
+      sentBy: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown',
+      status: newValue
+    };
+    const updatedLogs = [...(client.greetingsLogs || []), newLog];
+
+    try {
+      const res = await fetch(`${API_URL}/clients/${client.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          greetingsMsgSent: newValue,
+          greetingsLogs: updatedLogs,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown',
+        }),
+      });
+      if (res.ok) {
+        toast.success(`Greetings marked as ${newValue ? 'sent' : 'unsent'}`);
+        // Mutate the local client object optimistically so the dialog UI updates immediately
+        client.greetingsMsgSent = newValue;
+        client.greetingsLogs = updatedLogs;
+        // Trigger a refetch in the parent component
+        onSaved();
+      } else {
+        toast.error("Failed to update greetings status");
+      }
+    } catch (err) {
+      console.error("Error updating greetings status:", err);
+      toast.error("Connection error");
+    }
+  };
 
   const handleSaveLink = async (linkToSave: string = link) => {
     if (!client) return;
@@ -111,6 +151,50 @@ export function WhatsAppSmmDialog({ open, onOpenChange, client, onSaved }: Whats
                   <Button variant="destructive" onClick={handleDeleteLink}>
                     Delete
                   </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3 mt-6 pt-6 border-t border-slate-100">
+            <Label className="text-xs font-bold uppercase text-slate-500">
+              Greetings Message
+            </Label>
+            <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-md p-3 hover:border-brand-teal/50 transition-colors cursor-pointer" onClick={handleToggleGreetings}>
+              <div className="flex items-center gap-3">
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 text-brand-teal rounded border-slate-300 focus:ring-brand-teal cursor-pointer"
+                  checked={!!client?.greetingsMsgSent}
+                  onChange={handleToggleGreetings}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <span className="text-sm font-medium text-slate-700">Greetings message sent to group</span>
+              </div>
+            </div>
+
+            {client?.greetingsLogs && client.greetingsLogs.length > 0 && (
+              <div className="mt-4">
+                <Label className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-1">
+                  <History className="w-3 h-3" /> Logs
+                </Label>
+                <div className="max-h-40 overflow-y-auto pr-2 space-y-2">
+                  {[...client.greetingsLogs].reverse().map((log: any, idx: number) => (
+                    <div key={idx} className="flex flex-col gap-1 text-xs bg-slate-50 p-2.5 rounded-md border border-slate-100">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-slate-700">{log.sentBy}</span>
+                        <span className="text-slate-500">
+                          {new Date(log.timestamp).toLocaleString(undefined, { 
+                            month: 'short', day: 'numeric', 
+                            hour: '2-digit', minute: '2-digit' 
+                          })}
+                        </span>
+                      </div>
+                      <span className={log.status ? "text-emerald-600 font-medium" : "text-slate-500"}>
+                        {log.status ? "Marked as Sent" : "Marked as Unsent"}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

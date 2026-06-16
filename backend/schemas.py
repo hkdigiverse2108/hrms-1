@@ -875,6 +875,8 @@ class ClientBase(BaseModel):
     interviewNotes: Optional[str] = None
     createdDate: Optional[RobustDate] = None
     meetings: Optional[List[dict]] = []
+    greetingsMsgSent: Optional[bool] = False
+    greetingsLogs: Optional[List[dict]] = []
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -919,6 +921,8 @@ class ClientUpdate(BaseModel):
     nextFollowupDate: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    greetingsMsgSent: Optional[bool] = None
+    greetingsLogs: Optional[List[dict]] = None
 
 class Client(ClientBase):
     id: str
