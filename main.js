@@ -3,6 +3,34 @@ app.setAppUserModelId("com.hrms.app");
 const path = require('path');
 const { spawn, fork } = require('child_process');
 const fs = require('fs');
+const net = require('net');
+
+function checkPort(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => {
+      resolve(false);
+    });
+    server.once('listening', () => {
+      server.close(() => {
+        resolve(true);
+      });
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+async function findFreePort(startPort) {
+  let port = startPort;
+  for (let i = 0; i < 100; i++) {
+    const isFree = await checkPort(port);
+    if (isFree) {
+      return port;
+    }
+    port++;
+  }
+  return startPort;
+}
 
 let mainWindow = null;
 let backendProcess = null;
@@ -144,19 +172,13 @@ function patchNextjsConfig() {
   }
 }
 
-const BACKEND_PORT = process.env.BACKEND_PORT || '8000';
-const FRONTEND_PORT = process.env.PORT || '3535';
+let BACKEND_PORT = '8000';
+let FRONTEND_PORT = '3535';
 const HOST = process.env.APP_HOST || '127.0.0.1';
 
-// Perform patching of Next.js stand-alone routing configurations on startup
-patchNextjsConfig();
-
-// Determine the URL to load in the Electron window (always local host for local execution)
-const frontendUrl = `http://127.0.0.1:${FRONTEND_PORT}`;
+// Will be determined dynamically on app ready
+let frontendUrl = `http://127.0.0.1:${FRONTEND_PORT}`;
 const isRemoteHost = false;
-
-log(`Resolved ports - Frontend: ${FRONTEND_PORT}, Backend: ${BACKEND_PORT}`);
-log(`Target Desktop Application URL: ${frontendUrl}`);
 
 function startBackend() {
   const autoStart = process.env.AUTO_START_BACKEND;
@@ -183,7 +205,7 @@ function startBackend() {
     if (fs.existsSync(launchPath)) {
       backendProcess = spawn(launchPath, [], {
         cwd: app.getPath('userData'),
-        env: { ...process.env, PORT: BACKEND_PORT }
+        env: { ...process.env, PORT: BACKEND_PORT, BACKEND_PORT: BACKEND_PORT }
       });
     } else {
       log(`ERROR: Neither watchdog nor backend binary found in resources/backend/`);
@@ -193,7 +215,8 @@ function startBackend() {
       const localFallback = fs.existsSync(localWatchdog) ? localWatchdog : localBackend;
       if (fs.existsSync(localFallback)) {
         backendProcess = spawn(localFallback, [], {
-          cwd: app.getPath('userData')
+          cwd: app.getPath('userData'),
+          env: { ...process.env, PORT: BACKEND_PORT, BACKEND_PORT: BACKEND_PORT }
         });
       }
     }
@@ -206,7 +229,7 @@ function startBackend() {
     log(`Spawning dev backend using python: ${pythonExe}`);
     backendProcess = spawn(pythonExe, ['-m', 'uvicorn', 'main:app', '--host', HOST, '--port', BACKEND_PORT], {
       cwd: path.join(__dirname, 'backend'),
-      env: { ...process.env, PYTHONPATH: path.join(__dirname, 'backend') }
+      env: { ...process.env, PYTHONPATH: path.join(__dirname, 'backend'), PORT: BACKEND_PORT, BACKEND_PORT: BACKEND_PORT }
     });
   }
 
@@ -615,8 +638,37 @@ function killSubprocesses() {
   }
 }
 
-app.on('ready', () => {
+app.on('ready', async () => {
   log(`HRMS desktop app starting. Logging to: ${logPath}`);
+  
+  // Resolve free ports dynamically
+  try {
+    const startBackendPort = parseInt(process.env.BACKEND_PORT || '8000', 10);
+    const resolvedBackend = await findFreePort(startBackendPort);
+    BACKEND_PORT = resolvedBackend.toString();
+    log(`Resolved free backend port: ${BACKEND_PORT}`);
+  } catch (err) {
+    log(`Error resolving backend port: ${err.message}. Using default 8000.`);
+    BACKEND_PORT = '8000';
+  }
+  
+  try {
+    const startFrontendPort = parseInt(process.env.PORT || '3535', 10);
+    const resolvedFrontend = await findFreePort(startFrontendPort);
+    FRONTEND_PORT = resolvedFrontend.toString();
+    log(`Resolved free frontend port: ${FRONTEND_PORT}`);
+  } catch (err) {
+    log(`Error resolving frontend port: ${err.message}. Using default 3535.`);
+    FRONTEND_PORT = '3535';
+  }
+  
+  frontendUrl = `http://127.0.0.1:${FRONTEND_PORT}`;
+  log(`Resolved ports - Frontend: ${FRONTEND_PORT}, Backend: ${BACKEND_PORT}`);
+  log(`Target Desktop Application URL: ${frontendUrl}`);
+  
+  // Patch routing configurations after ports are resolved
+  patchNextjsConfig();
+  
   if (!isRemoteHost) {
     startBackend();
     startFrontend();
