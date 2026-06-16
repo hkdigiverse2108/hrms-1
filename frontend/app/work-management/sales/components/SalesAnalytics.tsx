@@ -107,12 +107,11 @@ export function SalesAnalytics() {
       let matchesDate = true;
       if (dateRange.start && dateRange.end) {
         const leadDate = dayjs(lead.date);
-        matchesDate = leadDate.isAfter(dayjs(dateRange.start).subtract(1, 'day'), 'day') && 
-                      leadDate.isBefore(dayjs(dateRange.end).add(1, 'day'), 'day');
+        matchesDate = leadDate.isBetween(dateRange.start, dateRange.end, 'day', '[]');
       } else if (dateRange.start) {
-        matchesDate = dayjs(lead.date).isAfter(dayjs(dateRange.start).subtract(1, 'day'), 'day');
+        matchesDate = !dayjs(lead.date).isBefore(dateRange.start, 'day');
       } else if (dateRange.end) {
-        matchesDate = dayjs(lead.date).isBefore(dayjs(dateRange.end).add(1, 'day'), 'day');
+        matchesDate = !dayjs(lead.date).isAfter(dateRange.end, 'day');
       }
 
       // Employee Filter
@@ -146,6 +145,81 @@ export function SalesAnalytics() {
 
     const empStats: Record<string, any> = {};
 
+    // 1. Determine months to show if there's a date range
+    const monthsInDateRange: { monthStr: string, yearStr: string, date: dayjs.Dayjs }[] = [];
+    if (dateRange.start && dateRange.end) {
+      let curr = dayjs(dateRange.start).startOf('month');
+      const end = dayjs(dateRange.end).startOf('month');
+      let count = 0;
+      while ((curr.isBefore(end) || curr.isSame(end, 'month')) && count < 60) {
+        monthsInDateRange.push({
+          monthStr: curr.format('MMMM'),
+          yearStr: curr.year().toString(),
+          date: curr
+        });
+        curr = curr.add(1, 'month');
+        count++;
+      }
+    }
+
+    // 2. Pre-populate empStats for the selected employee (or all if we want targets to be accurate, but let's stick to selected employee to avoid cluttering if 'all' is selected)
+    const employeesToPrepopulate = [];
+    if (selectedEmployee !== 'all') {
+      const emp = employees.find(e => {
+        const eName = e.name || `${e.firstName} ${e.lastName}`;
+        return eName.trim().toLowerCase().replace(/\s+/g, ' ') === selectedEmployee.trim().toLowerCase().replace(/\s+/g, ' ');
+      });
+      if (emp) {
+        employeesToPrepopulate.push({
+          name: emp.name || `${emp.firstName} ${emp.lastName}`,
+          empId: emp.employeeId || emp.id || 'N/A',
+          department: emp.department || 'Sales'
+        });
+      } else {
+        employeesToPrepopulate.push({
+          name: selectedEmployee,
+          empId: 'N/A',
+          department: 'Sales'
+        });
+      }
+    }
+
+    // 3. Pre-populate
+    employeesToPrepopulate.forEach(emp => {
+      monthsInDateRange.forEach(m => {
+        const normalizedName = emp.name.trim().toLowerCase().replace(/\s+/g, ' ');
+        const monthKeySuffix = `${m.monthStr}-${m.yearStr}`;
+        const key = `${normalizedName}_${monthKeySuffix}`;
+        
+        const empTargets = targets.filter(t => {
+          const tName = t.employeeName?.trim().toLowerCase().replace(/\s+/g, ' ');
+          return tName === normalizedName && 
+                 t.month === m.monthStr && 
+                 t.year?.toString() === m.yearStr;
+        });
+        let totalIncentive = empTargets.reduce((sum, t) => sum + parseFloat((t.incentiveAmount || 0).toString()), 0);
+        let totalTarget = empTargets.reduce((sum, t) => sum + parseFloat((t.targetAmount || 0).toString()), 0);
+
+        empStats[key] = { 
+          name: emp.name, 
+          empId: emp.empId,
+          department: emp.department,
+          monthStr: m.monthStr,
+          yearStr: m.yearStr,
+          duration: `${m.monthStr.substring(0,3)} ${m.yearStr}`,
+          monthDateValue: m.date.valueOf(),
+          assigned: 0, 
+          active: 0,
+          hot: 0,
+          lost: 0,
+          won: 0, 
+          target: totalTarget,
+          revenue: 0,
+          incentivesEarned: totalIncentive
+        };
+      });
+    });
+
     // Group leads by Employee AND Month
     filteredLeads.forEach(l => {
       const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
@@ -158,7 +232,9 @@ export function SalesAnalytics() {
       const monthKeySuffix = `${monthStr}-${yearStr}`;
 
       assignedList.forEach(empNameRaw => {
-        const nameStr = typeof empNameRaw === 'string' ? empNameRaw : String(empNameRaw || "Unassigned");
+        const nameStr = typeof empNameRaw === 'string' 
+          ? empNameRaw 
+          : (empNameRaw?.name || empNameRaw?.employeeName || String(empNameRaw || "Unassigned"));
         const empName = nameStr;
         const normalizedName = empName.trim().toLowerCase().replace(/\s+/g, ' ');
         const key = `${normalizedName}_${monthKeySuffix}`;

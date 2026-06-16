@@ -1989,6 +1989,7 @@ export default function SalesPage() {
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-emerald-600">Incentive Base</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-indigo-600">Earned</th>
                             <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right text-brand-teal">Progress</th>
+                            <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
                             {isAdmin && <th className="px-6 py-3.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>}
                           </tr>
                         </thead>
@@ -2080,6 +2081,47 @@ export default function SalesPage() {
                                         </div>
                                       </div>
                                     </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <Select
+                                        value={t.status || "Active"}
+                                        onValueChange={async (val) => {
+                                          try {
+                                            const token = localStorage.getItem('token');
+                                            const res = await fetch(`${API_URL}/sales-targets/${t.id}`, {
+                                              method: 'PUT',
+                                              headers: { 
+                                                'Content-Type': 'application/json',
+                                                'Authorization': `Bearer ${token}`
+                                              },
+                                              body: JSON.stringify({ status: val })
+                                            });
+                                            if (res.ok) {
+                                              toast.success("Status updated");
+                                              fetchTargets();
+                                            } else {
+                                              toast.error("Failed to update status");
+                                            }
+                                          } catch (e) {
+                                            toast.error("Error updating status");
+                                          }
+                                        }}
+                                      >
+                                        <SelectTrigger className={`h-7 px-3 mx-auto rounded-md text-xs font-bold border-none w-[105px] focus:ring-0 focus:ring-offset-0 ${
+                                          t.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
+                                          t.status === 'Cancelled' ? 'bg-rose-100 text-rose-700' :
+                                          t.status === 'On Hold' ? 'bg-amber-100 text-amber-700' :
+                                          'bg-blue-100 text-blue-700'
+                                        }`}>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Active">Active</SelectItem>
+                                          <SelectItem value="Completed">Completed</SelectItem>
+                                          <SelectItem value="On Hold">On Hold</SelectItem>
+                                          <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </td>
                                     {isAdmin && (
                                       <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-1">
@@ -2107,7 +2149,7 @@ export default function SalesPage() {
                               })
                           ) : (
                             <tr>
-                              <td colSpan={8} className="px-6 py-12 text-center text-slate-400 italic">
+                              <td colSpan={9} className="px-6 py-12 text-center text-slate-400 italic">
                                 No targets set yet.
                               </td>
                             </tr>
