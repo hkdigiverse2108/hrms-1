@@ -942,7 +942,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                             >
                               {entry[key] && (key.toLowerCase().includes("link") || key === "reference") && entry[key].startsWith("http") ? (
                                 <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                                  <a href={entry[key]} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs flex-1 truncate">
+                                  <a href={entry[key]} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-500 text-xs flex-1 truncate" style={{ textDecoration: 'underline' }}>
                                     Link
                                   </a>
                                   <Button

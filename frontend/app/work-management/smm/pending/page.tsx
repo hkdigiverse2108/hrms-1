@@ -225,12 +225,12 @@ export default function PendingWorkPage() {
                   onClick={() => setActiveClientId(client.id)}
                   className={`flex items-center justify-between px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
                     activeClientId === client.id 
-                      ? 'bg-brand-teal text-white shadow-sm border border-brand-teal/20' 
-                      : 'text-slate-700 hover:bg-slate-100 border border-transparent'
+                      ? 'bg-brand-teal/10 text-brand-teal shadow-sm border border-brand-teal/20' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent'
                   }`}
                 >
                   <span className="truncate pr-2 text-left">{client.name}</span>
-                  <Badge variant={activeClientId === client.id ? "secondary" : "destructive"} className={`ml-auto shrink-0 ${activeClientId === client.id ? 'bg-white/20 text-white hover:bg-white/20' : ''}`}>
+                  <Badge variant="secondary" className={`ml-auto shrink-0 border-none ${activeClientId === client.id ? 'bg-brand-teal/20 text-brand-teal hover:bg-brand-teal/20' : 'bg-slate-200 text-slate-500 hover:bg-slate-200'}`}>
                     {client.count}
                   </Badge>
                 </button>
