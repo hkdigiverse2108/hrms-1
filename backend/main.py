@@ -2094,50 +2094,56 @@ async def upload_desktop_release(
     """Admin-only endpoint to upload a new compiled desktop installer .exe and log its version."""
     import shutil
     import json
+    import traceback
     
-    # Create directory uploads/desktop if it doesn't exist
-    desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
-    if not os.path.exists(desktop_dir):
-        os.makedirs(desktop_dir)
-        
-    # Standardize filename to prevent path traversal issues
-    safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
-    filename = f"HRMS_Setup_{safe_version}.exe"
-    file_path = os.path.join(desktop_dir, filename)
-    
-    # Save the file
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    # Generate download URL (relative path)
-    download_url = f"/uploads/desktop/{filename}"
-    
-    # Parse changelog
-    changelog_list = []
     try:
-        changelog_list = json.loads(changelog)
-        if not isinstance(changelog_list, list):
-            changelog_list = [str(changelog_list)]
-    except Exception:
-        # Fallback to newline separation
-        changelog_list = [line.strip() for line in changelog.split("\n") if line.strip()]
-        if not changelog_list:
-            changelog_list = [line.strip() for line in changelog.split(",") if line.strip()]
+        # Create directory uploads/desktop if it doesn't exist
+        desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
+        if not os.path.exists(desktop_dir):
+            os.makedirs(desktop_dir)
             
-    # Insert new release into DB
-    from datetime import datetime
-    new_release = {
-        "version": version,
-        "downloadUrl": download_url,
-        "changelog": changelog_list,
-        "created_at": datetime.utcnow().isoformat()
-    }
-    await db.desktop_releases.insert_one(new_release)
-    
-    return {
-        "message": "Release uploaded successfully",
-        "release": {**new_release, "_id": str(new_release["_id"])}
-    }
+        # Standardize filename to prevent path traversal issues
+        safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
+        filename = f"HRMS_Setup_{safe_version}.exe"
+        file_path = os.path.join(desktop_dir, filename)
+        
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Generate download URL (relative path)
+        download_url = f"/uploads/desktop/{filename}"
+        
+        # Parse changelog
+        changelog_list = []
+        try:
+            changelog_list = json.loads(changelog)
+            if not isinstance(changelog_list, list):
+                changelog_list = [str(changelog_list)]
+        except Exception:
+            # Fallback to newline separation
+            changelog_list = [line.strip() for line in changelog.split("\n") if line.strip()]
+            if not changelog_list:
+                changelog_list = [line.strip() for line in changelog.split(",") if line.strip()]
+                
+        # Insert new release into DB
+        from datetime import datetime
+        new_release = {
+            "version": version,
+            "downloadUrl": download_url,
+            "changelog": changelog_list,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        await db.desktop_releases.insert_one(new_release)
+        
+        return {
+            "message": "Release uploaded successfully",
+            "release": {**new_release, "_id": str(new_release["_id"])}
+        }
+    except Exception as e:
+        err_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
+        print("[Desktop Release Error]", err_msg, flush=True)
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 if __name__ == "__main__":
