@@ -98,7 +98,21 @@ export default function TasksPage() {
       
       if (tRes.ok) setTasks(await tRes.json());
       if (pRes.ok) setProjects(await pRes.json());
-      if (eRes.ok) setEmployees(await eRes.json());
+      if (eRes.ok) {
+        let emps = await eRes.json();
+        if (user && !emps.some((e: any) => e.id === user.id)) {
+          emps.unshift({
+            id: user.id,
+            firstName: user.firstName || user.name?.split(' ')[0] || 'Me',
+            lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+            name: user.name,
+            email: user.email,
+            designation: user.designation,
+            department: user.department
+          });
+        }
+        setEmployees(emps);
+      }
     } catch (err) {
       console.error("Error fetching tasks:", err);
     } finally {
@@ -261,7 +275,7 @@ export default function TasksPage() {
 
   const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)))
     .filter((d: any) => !["sales", "admin", "hr"].includes(d.toLowerCase()));
-  const showTableView = selectedDepartment.toLowerCase() === "graphics" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "graphics");
+  const showTableView = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
 
   const filteredTasks = tasks.filter(t => {
     const assignee = employees.find(e => e.id === t.assignedToId);
@@ -319,7 +333,9 @@ export default function TasksPage() {
     if (!dateString || status === "completed") return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const dueDate = new Date(dateString);
+    const [y, m, d] = dateString.split('-');
+    const dueDate = new Date(Number(y), Number(m) - 1, Number(d));
+    dueDate.setHours(0, 0, 0, 0);
     return dueDate < today;
   };
 
@@ -484,7 +500,7 @@ export default function TasksPage() {
                         { key: 'title', type: 'text', minWidth: '200px' },
                         { key: 'projectId', labelKey: 'projectName', type: 'select', options: projects.map(p => ({ value: p.id, label: p.title })), minWidth: '150px' },
                         { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
-                        { key: 'department', type: 'select', options: ['Development', 'Graphics', 'Marketing'].map(d => ({ value: d, label: d })), minWidth: '120px' },
+                        { key: 'department', type: 'select', options: ['Development', 'Creative', 'Marketing'].map(d => ({ value: d, label: d })), minWidth: '120px' },
                         { key: 'status', type: 'select', options: STAGES.map(s => ({ value: s.id, label: s.label })), minWidth: '120px' },
                         { key: 'createdDate', type: 'readonly', minWidth: '125px' },
                         { key: 'postingDate', type: 'date' },
@@ -607,7 +623,7 @@ export default function TasksPage() {
                   ))}
                   {filteredTasks.length === 0 && (
                     <tr>
-                      <td colSpan={20} className="px-4 py-20 text-center text-slate-400 italic">No graphics tasks found.</td>
+                      <td colSpan={20} className="px-4 py-20 text-center text-slate-400 italic">No creative tasks found.</td>
                     </tr>
                   )}
                 </tbody>

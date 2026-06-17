@@ -175,8 +175,23 @@ export default function DocumentGeneratorPage() {
     const todayFormatted = dayjs().format('DD/MM/YYYY')
     const empName = extraFields.name || currentEmployee.name || `${currentEmployee.firstName} ${currentEmployee.lastName}`
     const empAddress = currentEmployee.address || 'Resident Address, City'
-    const startDateFormatted = extraFields.startDate ? dayjs(extraFields.startDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
-    const endDateFormatted = extraFields.endDate ? dayjs(extraFields.endDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
+    let userStartDate = extraFields.startDate
+    let userEndDate = extraFields.endDate
+    
+    if (templateData?.fields) {
+      const actualStartField = templateData.fields.find((f: string) => f.toLowerCase().replace(/\s+/g, '') === 'startdate' || f.toLowerCase() === 'start_date')
+      if (actualStartField && extraFields[actualStartField]) {
+        userStartDate = extraFields[actualStartField]
+      }
+      
+      const actualEndField = templateData.fields.find((f: string) => f.toLowerCase().replace(/\s+/g, '') === 'enddate' || f.toLowerCase() === 'end_date')
+      if (actualEndField && extraFields[actualEndField]) {
+        userEndDate = extraFields[actualEndField]
+      }
+    }
+    
+    const startDateFormatted = userStartDate ? dayjs(userStartDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
+    const endDateFormatted = userEndDate ? dayjs(userEndDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
     const genderValue = extraFields.gender || currentEmployee?.gender || 'Male'
     const honorific = genderValue === 'Female' ? 'Ms.' : 'Mr.'
 
@@ -193,8 +208,12 @@ export default function DocumentGeneratorPage() {
     
     // Replace all extraFields
     Object.keys(extraFields).forEach(key => {
-      const regex = new RegExp(`\{\{${key}\}\}`, 'g')
-      htmlContent = htmlContent.replace(regex, extraFields[key] || '')
+      let value = extraFields[key] || ''
+      if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        value = dayjs(value).format('DD/MM/YYYY')
+      }
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+      htmlContent = htmlContent.replace(regex, value)
     })
     
     // Replace all currentEmployee fields
@@ -769,7 +788,9 @@ export default function DocumentGeneratorPage() {
               </div>
               <CardContent className="p-6 space-y-6">
                 <div className="grid gap-4">
-                  {templateData?.fields
+                  {(selectedEmployee === 'manual' && !templateData?.fields?.includes('name')
+                    ? ['name', ...(templateData?.fields || [])]
+                    : (templateData?.fields || []))
                     .filter((field: string) => !(selectedEmployee !== 'manual' && field === 'name'))
                     .map((field: string) => (
                     <div key={field} className="space-y-2">

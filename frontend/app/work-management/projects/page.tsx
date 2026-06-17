@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProjectForm, ProjectFormData } from "@/components/hrms/ProjectForm";
@@ -17,6 +17,8 @@ import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfirm } from "@/context/ConfirmContext";
+import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
 
 export default function ProjectsPage() {
   const { confirm } = useConfirm();
@@ -48,11 +50,19 @@ export default function ProjectsPage() {
     }
   }, [router, permissionsLoading, canViewProjects]);
   
-  // Logs state
   const [logsOpen, setLogsOpen] = useState(false);
   const [projectLogs, setProjectLogs] = useState<any[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [activeProject, setActiveProject] = useState<any>(null);
+
+  // Follow-up Config State
+  const [followupConfigOpen, setFollowupConfigOpen] = useState(false);
+  const [followupConfigProject, setFollowupConfigProject] = useState<any>(null);
+  const [followupTypeInput, setFollowupTypeInput] = useState("Interval");
+  const [followupIntervalInput, setFollowupIntervalInput] = useState("");
+  const [followupDaysOfWeekInput, setFollowupDaysOfWeekInput] = useState<number[]>([]);
+  const [followupDatesOfMonthInput, setFollowupDatesOfMonthInput] = useState<number[]>([]);
+  const [followupLastDateInput, setFollowupLastDateInput] = useState("");
 
   useEffect(() => {
     fetchData();
@@ -144,6 +154,35 @@ export default function ProjectsPage() {
       }
     } catch (err) {
       console.error("Error deleting project:", err);
+    }
+  };
+
+  const handleSaveFollowupConfig = async () => {
+    if (!followupConfigProject) return;
+    try {
+      const res = await fetch(`${API_URL}/projects/${followupConfigProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          followupType: followupTypeInput,
+          followupIntervalDays: parseInt(followupIntervalInput) || null,
+          followupDaysOfWeek: followupDaysOfWeekInput,
+          followupDatesOfMonth: followupDatesOfMonthInput,
+          lastFollowupDate: followupLastDateInput || null,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Follow-up configuration saved");
+        setFollowupConfigOpen(false);
+        fetchData();
+      } else {
+        toast.error("Failed to save follow-up configuration");
+      }
+    } catch (err) {
+      console.error("Error saving follow-up config:", err);
+      toast.error("An error occurred");
     }
   };
 
@@ -245,6 +284,111 @@ export default function ProjectsPage() {
         isLoading={isLoadingLogs}
       />
       
+      {/* Follow-up Config Dialog */}
+      <Dialog open={followupConfigOpen} onOpenChange={setFollowupConfigOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Follow-up Settings</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Schedule Type</Label>
+              <Select value={followupTypeInput} onValueChange={setFollowupTypeInput}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Interval">Fixed Interval (Days)</SelectItem>
+                  <SelectItem value="Weekly">Weekly (Specific Days)</SelectItem>
+                  <SelectItem value="Monthly">Monthly (Specific Dates)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {followupTypeInput === "Interval" && (
+              <div className="space-y-2">
+                <Label>Follow-up Interval (Days)</Label>
+                <Input 
+                  type="number" 
+                  placeholder="e.g. 7 for weekly" 
+                  value={followupIntervalInput} 
+                  onChange={(e) => setFollowupIntervalInput(e.target.value)} 
+                />
+              </div>
+            )}
+            
+            {followupTypeInput === "Weekly" && (
+              <div className="space-y-2">
+                <Label>Select Days of Week</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: "Mon", val: 0 },
+                    { label: "Tue", val: 1 },
+                    { label: "Wed", val: 2 },
+                    { label: "Thu", val: 3 },
+                    { label: "Fri", val: 4 },
+                    { label: "Sat", val: 5 }
+                  ].map(day => (
+                    <Badge 
+                      key={day.val}
+                      variant={followupDaysOfWeekInput.includes(day.val) ? "default" : "outline"}
+                      className={`cursor-pointer ${followupDaysOfWeekInput.includes(day.val) ? 'bg-brand-teal' : ''}`}
+                      onClick={() => {
+                        if (followupDaysOfWeekInput.includes(day.val)) {
+                          setFollowupDaysOfWeekInput(followupDaysOfWeekInput.filter(d => d !== day.val));
+                        } else {
+                          setFollowupDaysOfWeekInput([...followupDaysOfWeekInput, day.val]);
+                        }
+                      }}
+                    >
+                      {day.label}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {followupTypeInput === "Monthly" && (
+              <div className="space-y-2">
+                <Label>Select Dates of Month (1-31)</Label>
+                <div className="grid grid-cols-7 gap-1">
+                  {Array.from({length: 31}, (_, i) => i + 1).map(date => (
+                    <div 
+                      key={date}
+                      className={`text-xs text-center p-1 cursor-pointer rounded ${followupDatesOfMonthInput.includes(date) ? 'bg-brand-teal text-white' : 'hover:bg-slate-100'}`}
+                      onClick={() => {
+                        if (followupDatesOfMonthInput.includes(date)) {
+                          setFollowupDatesOfMonthInput(followupDatesOfMonthInput.filter(d => d !== date));
+                        } else {
+                          setFollowupDatesOfMonthInput([...followupDatesOfMonthInput, date]);
+                        }
+                      }}
+                    >
+                      {date}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-slate-500 italic">Skips Sundays & Public Holidays automatically.</p>
+            
+            <div className="space-y-2">
+              <Label>Last Follow-up Date</Label>
+              <Input 
+                type="date" 
+                value={followupLastDateInput} 
+                onChange={(e) => setFollowupLastDateInput(e.target.value)} 
+              />
+            </div>
+            <div className="pt-4 flex justify-end gap-2 border-t mt-4">
+              <Button variant="outline" onClick={() => setFollowupConfigOpen(false)}>Cancel</Button>
+              <Button className="bg-brand-teal text-white hover:bg-brand-teal-light" onClick={handleSaveFollowupConfig}>Save Configuration</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
         <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -264,7 +408,7 @@ export default function ProjectsPage() {
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
               <SelectItem value="Development">Development</SelectItem>
-              <SelectItem value="Graphics">Graphics</SelectItem>
+              <SelectItem value="Creative">Creative</SelectItem>
               <SelectItem value="Marketing">Marketing</SelectItem>
             </SelectContent>
           </Select>
@@ -373,6 +517,17 @@ export default function ProjectsPage() {
                       </Button>
                       {user && (
                         <>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" onClick={() => {
+                            setFollowupConfigProject(project);
+                            setFollowupTypeInput(project.followupType || "Interval");
+                            setFollowupIntervalInput(project.followupIntervalDays ? String(project.followupIntervalDays) : "");
+                            setFollowupDaysOfWeekInput(project.followupDaysOfWeek || []);
+                            setFollowupDatesOfMonthInput(project.followupDatesOfMonth || []);
+                            setFollowupLastDateInput(project.lastFollowupDate || "");
+                            setFollowupConfigOpen(true);
+                          }} title="Follow-up Settings">
+                            <CalendarClock className="w-4 h-4 text-slate-500" />
+                          </Button>
                           {canEditProjects && (
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                               setEditingProject(project);

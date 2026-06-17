@@ -14,7 +14,95 @@ from websocket import manager as ws_manager
 import google_auth
 
 import asyncio
-print("MAIN PATH:", __file__, flush=True)
+from datetime import datetime
+import pytz
+from bson import ObjectId
+
+async def content_calendar_reminder_task():
+    from database import db
+    import crud
+    import schemas
+    
+    print("[Content Calendar Reminder] Task started.", flush=True)
+    await asyncio.sleep(10) # wait for startup
+    
+    while True:
+        try:
+            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+            today_str = now.strftime("%Y-%m-%d")
+            
+            # Check for Morning Reminder (e.g. 9:00 AM - 9:09 AM)
+            if now.hour == 9 and now.minute < 10:
+                entries = await db.content_calendar_entries.find({"postingDate": today_str}).to_list(length=1000)
+                if entries:
+                    admins = await db.employees.find({"role": {"$regex": "^Admin$", "$options": "i"}}).to_list(length=100)
+                    admin_ids = [str(a["_id"]) if "_id" in a else a.get("id") for a in admins]
+                    
+                    for entry in entries:
+                        entry_id = str(entry["_id"]) if "_id" in entry else entry.get("id")
+                        client_id = entry.get("clientId")
+                        client = None
+                        if client_id and len(client_id) == 24:
+                            client = await db.clients.find_one({"_id": ObjectId(client_id)})
+                        client_name = client.get("companyName", "Unknown Client") if client else "Unknown Client"
+                        
+                        for target_id in admin_ids:
+                            if not target_id: continue
+                            existing_notif = await db.notifications.find_one({
+                                "employee_id": target_id,
+                                "type": "content_calendar_reminder",
+                                "reference_id": entry_id,
+                                "title": "Morning Schedule Reminder"
+                            })
+                            if not existing_notif:
+                                await crud.create_notification(db, schemas.NotificationCreate(
+                                    employee_id=target_id,
+                                    title="Morning Schedule Reminder",
+                                    message=f"Content for client '{client_name}' is scheduled to be posted today.",
+                                    type="content_calendar_reminder",
+                                    reference_id=entry_id
+                                ))
+
+            # Check for EOD Reminder (e.g. 18:00 PM - 18:09 PM)
+            if now.hour == 18 and now.minute < 10:
+                entries = await db.content_calendar_entries.find({"postingDate": today_str}).to_list(length=1000)
+                if entries:
+                    admins = await db.employees.find({"role": {"$regex": "^Admin$", "$options": "i"}}).to_list(length=100)
+                    admin_ids = [str(a["_id"]) if "_id" in a else a.get("id") for a in admins]
+                    
+                    for entry in entries:
+                        ig_link = str(entry.get("postingLinkOfIg") or "").strip()
+                        final_link = str(entry.get("finalPostLink") or "").strip()
+                        
+                        if not ig_link and not final_link:
+                            entry_id = str(entry["_id"]) if "_id" in entry else entry.get("id")
+                            client_id = entry.get("clientId")
+                            client = None
+                            if client_id and len(client_id) == 24:
+                                client = await db.clients.find_one({"_id": ObjectId(client_id)})
+                            client_name = client.get("companyName", "Unknown Client") if client else "Unknown Client"
+                            
+                            for target_id in admin_ids:
+                                if not target_id: continue
+                                existing_notif = await db.notifications.find_one({
+                                    "employee_id": target_id,
+                                    "type": "content_calendar_reminder",
+                                    "reference_id": entry_id,
+                                    "title": "Post Due: Missing Link"
+                                })
+                                if not existing_notif:
+                                    await crud.create_notification(db, schemas.NotificationCreate(
+                                        employee_id=target_id,
+                                        title="Post Due: Missing Link",
+                                        message=f"Post for client '{client_name}' scheduled today is missing a post link.",
+                                        type="content_calendar_reminder",
+                                        reference_id=entry_id
+                                    ))
+
+        except Exception as e:
+            print(f"[Content Calendar Reminder] Error: {e}", flush=True)
+            
+        await asyncio.sleep(300) # Sleep for 5 minutes
 
 @asynccontextmanager
 async def lifespan(app):
@@ -219,6 +307,7 @@ async def lifespan(app):
     except Exception as e:
         print(f"[Chat Indexing] Failed to create chat indexes: {e}", flush=True)
 
+    reminder_task = asyncio.create_task(content_calendar_reminder_task())
     yield
     # --- Shutdown ---
     try:
@@ -226,6 +315,12 @@ async def lifespan(app):
         input_tracker.stop_tracker()
     except Exception as e:
         print(f"Error stopping global input tracker: {e}")
+        
+    try:
+        if not reminder_task.done():
+            reminder_task.cancel()
+    except Exception:
+        pass
     # Reload trigger: 1
 
 app = FastAPI(title="HRMS API", lifespan=lifespan)
@@ -944,6 +1039,13 @@ async def delete_event(event_id: str, db=Depends(get_db)): return await crud.del
 async def read_clients(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_clients(db, skip=skip, limit=limit)
 
+@app.get("/clients/{client_id}", response_model=schemas.Client)
+async def read_client(client_id: str, db=Depends(get_db)):
+    client = await crud.get_client(db, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return client
+
 @app.post("/clients", response_model=schemas.Client)
 async def create_client(client: schemas.ClientCreate, db=Depends(get_db)):
     return await crud.create_client(db, client=client)
@@ -952,6 +1054,18 @@ async def create_client(client: schemas.ClientCreate, db=Depends(get_db)):
 async def update_client(client_id: str, client_update: schemas.ClientUpdate, db=Depends(get_db)):
     print("DEBUG: update_client incoming payload:", client_update.dict(exclude_unset=True))
     return await crud.update_client(db, client_id, client_update)
+
+@app.post("/clients/{client_id}/meetings", response_model=schemas.Client)
+async def add_client_meeting(client_id: str, meeting: schemas.Meeting, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.add_client_meeting(db, client_id, meeting, performedBy=performedBy, userName=userName)
+
+@app.put("/clients/{client_id}/meetings/{meeting_idx}", response_model=schemas.Client)
+async def update_client_meeting(client_id: str, meeting_idx: int, meeting: schemas.Meeting, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.update_client_meeting(db, client_id, meeting_idx, meeting, performedBy=performedBy, userName=userName)
+
+@app.delete("/clients/{client_id}/meetings/{meeting_idx}", response_model=schemas.Client)
+async def delete_client_meeting(client_id: str, meeting_idx: int, performedBy: Optional[str] = None, userName: Optional[str] = None, db=Depends(get_db)):
+    return await crud.delete_client_meeting(db, client_id, meeting_idx, performedBy=performedBy, userName=userName)
 
 @app.delete("/clients/{client_id}")
 async def delete_client(client_id: str, db=Depends(get_db)):
@@ -1045,6 +1159,45 @@ async def read_task_logs(
     db=Depends(get_db)
 ):
     return await crud.get_task_logs(db, taskId=taskId, projectId=projectId, clientId=clientId, dailyReportId=dailyReportId, monthlyReportId=monthlyReportId)
+
+@app.post("/task-logs", response_model=schemas.TaskLog)
+async def create_task_log(log: schemas.TaskLogBase, db=Depends(get_db)):
+    await crud.log_activity(
+        db=db,
+        action=log.action,
+        performedBy=log.performedBy,
+        userName=log.userName,
+        details=log.details,
+        taskId=log.taskId,
+        projectId=log.projectId,
+        clientId=log.clientId,
+        leadId=log.leadId,
+        dailyReportId=log.dailyReportId,
+        monthlyReportId=log.monthlyReportId
+    )
+    doc = await db.task_logs.find_one({"clientId": log.clientId, "action": log.action}, sort=[("_id", -1)])
+    if doc:
+        doc["id"] = str(doc["_id"])
+    return doc
+
+from pydantic import BaseModel
+class TaskLogUpdate(BaseModel):
+    details: str
+
+@app.put("/task-logs/{log_id}", response_model=schemas.TaskLog)
+async def update_task_log(log_id: str, update: TaskLogUpdate, db=Depends(get_db)):
+    doc = await crud.update_task_log(db, log_id, update.details)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Log not found")
+    return doc
+
+@app.delete("/task-logs/{log_id}")
+async def delete_task_log(log_id: str, db=Depends(get_db)):
+    success = await crud.delete_task_log(db, log_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Log not found")
+    return {"message": "Log deleted successfully"}
+
 # Marketing Reports Endpoints
 @app.post("/marketing/reports/daily", response_model=schemas.MarketingDailyReport)
 async def create_marketing_daily_report(report: schemas.MarketingDailyReportCreate, db=Depends(get_db)):
@@ -1307,11 +1460,29 @@ async def toggle_complete_message(message_id: str, user_id: str, db=Depends(get_
     status = await crud.toggle_complete_message(db, message_id, user_id)
     return {"isCompleted": status}
 
+async def _broadcast_message_update(db, message_id: str):
+    msg_doc = await db.messages.find_one({"_id": ObjectId(message_id)})
+    if msg_doc:
+        from fastapi.encoders import jsonable_encoder
+        json_msg = jsonable_encoder(crud.fix_id(msg_doc))
+        try:
+            group_id = json_msg.get("groupId")
+            if group_id:
+                is_group = await db.chat_groups.find_one({"_id": ObjectId(group_id)}) if len(group_id) == 24 else None
+                member_ids = [str(m) for m in is_group.get("members", [])] if is_group else [str(emp["_id"]) for emp in await db.employees.find().to_list(1000)]
+                await ws_manager.broadcast_to_group(member_ids, "message_updated", json_msg)
+            else:
+                recipients = [json_msg.get("receiverId"), json_msg.get("senderId")]
+                await ws_manager.broadcast_to_group([r for r in recipients if r], "message_updated", json_msg)
+        except Exception:
+            pass
+
 @app.post("/chat/messages/{message_id}/reaction")
 async def toggle_reaction(message_id: str, user_id: str, emoji: str, db=Depends(get_db)):
     reactions = await crud.toggle_reaction(db, message_id, user_id, emoji)
     if reactions is None:
         raise HTTPException(status_code=404, detail="Message not found")
+    await _broadcast_message_update(db, message_id)
     return {"reactions": reactions}
 
 @app.put("/employees/{employee_id}/status")
@@ -1323,6 +1494,7 @@ async def vote_on_poll(message_id: str, user_id: str, option_id: str, db=Depends
     options = await crud.vote_poll(db, message_id, user_id, option_id)
     if options is None:
         raise HTTPException(status_code=404, detail="Poll not found")
+    await _broadcast_message_update(db, message_id)
     return {"options": options}
 
 @app.post("/chat/typing")
@@ -1341,7 +1513,7 @@ async def get_typing_status(chat_id: str, user_id: str, db=Depends(get_db)):
 
 @app.get("/chat/ws-info")
 async def get_ws_info(request: Request):
-    backend_port = os.environ.get("BACKEND_PORT", "8000")
+    backend_port = os.environ.get("BACKEND_PORT", os.environ.get("PORT", "8000"))
     try:
         port_val = int(backend_port)
     except ValueError:
@@ -2099,6 +2271,109 @@ async def resolve_security_alert(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+
+# --- Content Calendar API ---
+@app.get("/content-calendar/all")
+async def get_all_content_calendar_entries(db=Depends(get_db)):
+    try:
+        return await crud.get_all_content_calendar_entries(db)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+@app.get("/content-calendar")
+async def get_content_calendar_entries(clientId: str, monthYear: Optional[str] = None, db=Depends(get_db)):
+    try:
+        return await crud.get_content_calendar_entries(db, client_id=clientId, month_year=monthYear)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+@app.post("/content-calendar", response_model=schemas.ContentCalendarEntry)
+async def create_content_calendar_entry(entry: schemas.ContentCalendarEntryCreate, db=Depends(get_db)):
+    return await crud.create_content_calendar_entry(db, entry.model_dump())
+
+@app.put("/content-calendar/{entry_id}", response_model=schemas.ContentCalendarEntry)
+async def update_content_calendar_entry(entry_id: str, entry: schemas.ContentCalendarEntryUpdate, db=Depends(get_db)):
+    updated = await crud.update_content_calendar_entry(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/content-calendar/{entry_id}")
+async def delete_content_calendar_entry(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_content_calendar_entry(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
+
+@app.get("/content-calendar-settings", response_model=schemas.ContentCalendarSettingsBase)
+async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depends(get_db)):
+    settings = await crud.get_content_calendar_settings(db, clientId, monthYear)
+    if settings:
+        return settings
+    # Return defaults if not found
+    return {
+        "clientId": clientId,
+        "monthYear": monthYear,
+        "scriptDateOffset": 14,
+        "shootDateOffset": 12,
+        "editingStartOffset": 6,
+        "approvalOffset": 5
+    }
+
+@app.post("/content-calendar-settings", response_model=schemas.ContentCalendarSettings)
+async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSettingsBase, db=Depends(get_db)):
+    return await crud.upsert_content_calendar_settings(
+        db, settings.clientId, settings.monthYear, settings.model_dump()
+    )
+
+# Dynamic Feedback Forms
+
+@app.post("/forms", response_model=schemas.FeedbackForm)
+async def create_feedback_form(form: schemas.FeedbackFormCreate, createdBy: Optional[str] = None, db=Depends(get_db)):
+    return await crud.create_feedback_form(db, form, createdBy=createdBy or "Unknown")
+
+@app.get("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def get_feedback_form(form_id: str, db=Depends(get_db)):
+    form = await crud.get_feedback_form(db, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return form
+
+@app.get("/forms/client/{client_id}", response_model=List[schemas.FeedbackForm])
+async def get_client_feedback_forms(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_feedback_forms(db, client_id)
+
+@app.put("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def update_feedback_form(form_id: str, form: schemas.FeedbackFormCreate, db=Depends(get_db)):
+    updated_form = await crud.update_feedback_form(db, form_id, form)
+    if not updated_form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return updated_form
+
+@app.delete("/forms/{form_id}")
+async def delete_feedback_form(form_id: str, db=Depends(get_db)):
+    deleted = await crud.delete_feedback_form(db, form_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return {"message": "Form deleted successfully"}
+
+@app.post("/forms/{form_id}/responses", response_model=schemas.FeedbackResponse)
+async def submit_feedback_response(form_id: str, response: schemas.FeedbackResponseCreate, db=Depends(get_db)):
+    if response.formId != form_id:
+        raise HTTPException(status_code=400, detail="Form ID mismatch")
+    return await crud.create_feedback_response(db, response)
+
+@app.get("/forms/{form_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_form_responses(form_id: str, db=Depends(get_db)):
+    return await crud.get_form_responses(db, form_id)
+
+@app.get("/forms/client/{client_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_client_form_responses(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_form_responses(db, client_id)
 # --- Desktop Auto-Update Endpoints ---
 @app.get("/desktop/version")
 async def get_desktop_version(db=Depends(get_db)):
@@ -2127,54 +2402,59 @@ async def upload_desktop_release(
     """Admin-only endpoint to upload a new compiled desktop installer .exe and log its version."""
     import shutil
     import json
+    import traceback
     
-    # Create directory uploads/desktop if it doesn't exist
-    desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
-    if not os.path.exists(desktop_dir):
-        os.makedirs(desktop_dir)
-        
-    # Standardize filename to prevent path traversal issues
-    safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
-    filename = f"HRMS_Setup_{safe_version}.exe"
-    file_path = os.path.join(desktop_dir, filename)
-    
-    # Save the file
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    # Generate download URL (relative path)
-    download_url = f"/uploads/desktop/{filename}"
-    
-    # Parse changelog
-    changelog_list = []
     try:
-        changelog_list = json.loads(changelog)
-        if not isinstance(changelog_list, list):
-            changelog_list = [str(changelog_list)]
-    except Exception:
-        # Fallback to newline separation
-        changelog_list = [line.strip() for line in changelog.split("\n") if line.strip()]
-        if not changelog_list:
-            changelog_list = [line.strip() for line in changelog.split(",") if line.strip()]
+        # Create directory uploads/desktop if it doesn't exist
+        desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
+        if not os.path.exists(desktop_dir):
+            os.makedirs(desktop_dir)
             
-    # Insert new release into DB
-    from datetime import datetime
-    new_release = {
-        "version": version,
-        "downloadUrl": download_url,
-        "changelog": changelog_list,
-        "created_at": datetime.utcnow().isoformat()
-    }
-    await db.desktop_releases.insert_one(new_release)
-    
-    return {
-        "message": "Release uploaded successfully",
-        "release": {**new_release, "_id": str(new_release["_id"])}
-    }
-
+        # Standardize filename to prevent path traversal issues
+        safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
+        filename = f"HRMS_Setup_{safe_version}.exe"
+        file_path = os.path.join(desktop_dir, filename)
+        
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Generate download URL (relative path)
+        download_url = f"/uploads/desktop/{filename}"
+        
+        # Parse changelog
+        changelog_list = []
+        try:
+            changelog_list = json.loads(changelog)
+            if not isinstance(changelog_list, list):
+                changelog_list = [str(changelog_list)]
+        except Exception:
+            # Fallback to newline separation
+            changelog_list = [line.strip() for line in changelog.split("\n") if line.strip()]
+            if not changelog_list:
+                changelog_list = [line.strip() for line in changelog.split(",") if line.strip()]
+                
+        # Insert new release into DB
+        from datetime import datetime
+        new_release = {
+            "version": version,
+            "downloadUrl": download_url,
+            "changelog": changelog_list,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        result = await db.desktop_releases.insert_one(new_release)
+        inserted_id = result.inserted_id
+        
+        return {
+            "message": "Release uploaded successfully",
+            "release": {**new_release, "_id": str(inserted_id)}
+        }
+    except Exception as e:
+        err_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
+        print("[Desktop Release Error]", err_msg, flush=True)
+        raise HTTPException(status_code=500, detail=err_msg)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("BACKEND_PORT", 8000))
+    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8001)))
     print(f"Starting HRMS Backend on http://0.0.0.0:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
-

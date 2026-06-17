@@ -12,6 +12,15 @@ function ask(query) {
   return new Promise((resolve) => rl.question(query, resolve));
 }
 
+// Normalize API URL - always ends with /api
+function normalizeApiUrl(url) {
+  url = url.replace(/\/$/, '');
+  if (!url.endsWith('/api')) {
+    url = url + '/api';
+  }
+  return url;
+}
+
 async function main() {
   console.log("\n=== HRMS Desktop App Release Publisher ===");
   
@@ -23,13 +32,14 @@ async function main() {
       const content = fs.readFileSync(envPath, 'utf8');
       const match = content.match(/BACKEND_URL=(.+)/);
       if (match) {
-        defaultApiUrl = match[1].trim();
+        defaultApiUrl = normalizeApiUrl(match[1].trim());
       }
     }
   } catch (e) {}
 
   const apiUrlInput = await ask(`Enter backend server API URL (default: ${defaultApiUrl}): `);
-  const apiUrl = (apiUrlInput.trim() || defaultApiUrl).replace(/\/$/, '');
+  const apiUrl = normalizeApiUrl(apiUrlInput.trim() || defaultApiUrl);
+  console.log(`Using API URL: ${apiUrl}`);
 
   // 2. Read package.json version
   const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -50,16 +60,24 @@ async function main() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    if (!loginRes.ok) {
-      const errData = await loginRes.json();
-      throw new Error(errData.detail || "Authentication failed");
+    
+    const responseText = await loginRes.text();
+    let loginData;
+    try {
+      loginData = JSON.parse(responseText);
+    } catch (parseErr) {
+      throw new Error(`Server returned non-JSON response: ${responseText.substring(0, 200)}`);
     }
-    const loginData = await loginRes.json();
+    
+    if (!loginRes.ok) {
+      throw new Error(loginData.detail || `HTTP ${loginRes.status}: Authentication failed`);
+    }
+    
     if (loginData.user?.role?.toLowerCase() !== 'admin') {
       throw new Error("Only Admin users are authorized to publish desktop releases");
     }
     token = loginData.token;
-    console.log("Login successful!");
+    console.log(`Login successful! Welcome, ${loginData.user?.name || email}`);
   } catch (err) {
     console.error(`Login error: ${err.message}`);
     rl.close();
@@ -112,7 +130,7 @@ async function main() {
     const files = fs.readdirSync(distDir);
     const possibleFiles = files.filter(f => 
       f.toLowerCase().endsWith('.exe') && 
-      f.toLowerCase().includes('setup') && 
+      f.toLowerCase().includes('setup') &&
       f.includes(newVersion)
     );
     if (possibleFiles.length > 0) {
@@ -134,7 +152,7 @@ async function main() {
   console.log(`Found installer: ${exePath}`);
 
   // 8. Upload installer .exe to the server
-  console.log(`\nUploading release v${newVersion} to VPS backend (${apiUrl})...`);
+  console.log(`\nUploading release v${newVersion} to server (${apiUrl})...`);
   try {
     const formData = new FormData();
     formData.append('version', newVersion);
@@ -154,10 +172,11 @@ async function main() {
 
     if (uploadRes.ok) {
       const uploadData = await uploadRes.json();
+      const baseUrl = apiUrl.replace('/api', '');
       console.log("\n=============================================");
-      console.log("🎉 SUCCESS: Desktop app release published successfully!");
+      console.log("SUCCESS: Desktop app release published successfully!");
       console.log(`Version: ${newVersion}`);
-      console.log(`Download URL: ${apiUrl.replace('/api', '')}${uploadData.release.downloadUrl}`);
+      console.log(`Download URL: ${baseUrl}${uploadData.release.downloadUrl}`);
       console.log("All employee desktop apps will now prompt for auto-update.");
       console.log("=============================================");
     } else {

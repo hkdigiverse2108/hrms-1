@@ -1,7 +1,7 @@
 "use client";
  
 import React, { useState, useEffect } from "react";
-import { Bell, MessageSquare, Menu, LogOut } from "lucide-react";
+import { Bell, MessageSquare, Menu, LogOut, RefreshCw } from "lucide-react";
 import { Layout } from "antd";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,6 +31,17 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, isLoading } = useUser();
+  const [isElectron, setIsElectron] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>("");
+  
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window as any).electronAPI) {
+      setIsElectron(true);
+      (window as any).electronAPI.getAppVersion().then((ver: string) => {
+        setAppVersion(ver);
+      });
+    }
+  }, []);
   const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const { totalUnreadCount: unreadChatCount } = useChatContext();
@@ -325,6 +336,18 @@ export function Header() {
               </div>
             </div>
           </Link>
+          {isElectron && (
+            <div className="flex items-center gap-1.5 ml-2 border border-slate-200 bg-slate-50/50 px-2.5 py-1 rounded-md text-xs font-semibold text-slate-500 leading-none">
+              <span>v{appVersion}</span>
+              <button 
+                onClick={() => window.dispatchEvent(new Event("check-for-updates-manual"))}
+                className="p-0.5 text-muted-foreground hover:text-brand-teal rounded transition-colors flex items-center justify-center"
+                title="Check for updates"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <button 
             onClick={handleLogout}
             className="ml-2 p-1.5 text-muted-foreground hover:text-brand-danger hover:bg-red-50 rounded-md transition-colors"

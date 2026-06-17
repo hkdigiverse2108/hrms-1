@@ -146,7 +146,21 @@ export default function TaskManagementPage() {
       ]);
       
       if (tRes.ok) setTasks(await tRes.json());
-      if (eRes.ok) setEmployees(await eRes.json());
+      if (eRes.ok) {
+        let emps = await eRes.json();
+        if (user && !emps.some((e: any) => e.id === user.id)) {
+          emps.unshift({
+            id: user.id,
+            firstName: user.firstName || user.name?.split(' ')[0] || 'Me',
+            lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+            name: user.name,
+            email: user.email,
+            designation: user.designation,
+            department: user.department
+          });
+        }
+        setEmployees(emps);
+      }
     } catch (err) {
       console.error("Error fetching tasks:", err);
     } finally {
@@ -409,12 +423,13 @@ export default function TaskManagementPage() {
     
     let dateMatch = true;
     if (activeDateRange?.from && task.dueDate) {
-      const taskDate = new Date(task.dueDate);
+      const [y, m, d] = task.dueDate.split('-');
+      const taskDate = new Date(Number(y), Number(m) - 1, Number(d));
       taskDate.setHours(0,0,0,0);
-      const from = activeDateRange.from;
+      const from = new Date(activeDateRange.from);
       from.setHours(0,0,0,0);
       if (activeDateRange.to) {
-        const to = activeDateRange.to;
+        const to = new Date(activeDateRange.to);
         to.setHours(0,0,0,0);
         dateMatch = taskDate >= from && taskDate <= to;
       } else {
