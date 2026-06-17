@@ -265,19 +265,20 @@ export default function CreativeClientsPage() {
   }, []);
 
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
+  const [clientProjects, setClientProjects] = useState<Record<string, string>>({});
 
   const fetchClients = async () => {
     setIsLoading(true);
     try {
-      const [res, ccRes] = await Promise.all([
+      const [res, ccRes, pRes] = await Promise.all([
         fetch(`${API_URL}/clients`),
-        fetch(`${API_URL}/content-calendar/all`)
+        fetch(`${API_URL}/content-calendar/all`),
+        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`)
       ]);
       
+      let clientsData = [];
       if (res.ok) {
-        const data = await res.json();
-        // Filter for Creative department only
-        setClients(data.filter((c: any) => c.department === "Creative"));
+        clientsData = await res.json();
       }
 
       if (ccRes.ok) {
@@ -296,6 +297,23 @@ export default function CreativeClientsPage() {
           }
         });
         setPendingCounts(counts);
+      }
+      
+      if (pRes.ok) {
+        const projects = await pRes.json();
+        const projectMap: Record<string, string> = {};
+        projects.forEach((p: any) => {
+          if (p.clientId && p.department === 'Creative') {
+            projectMap[p.clientId] = p.title;
+          }
+        });
+        setClientProjects(projectMap);
+        
+        // Filter for Creative department AND must have a creative project
+        const validClientIds = new Set(Object.keys(projectMap));
+        setClients(clientsData.filter((c: any) => c.department === "Creative" && validClientIds.has(c.id)));
+      } else {
+        setClients(clientsData.filter((c: any) => c.department === "Creative"));
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -575,6 +593,7 @@ export default function CreativeClientsPage() {
               <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                 <tr>
                   <th className="px-6 py-4 whitespace-nowrap">Company</th>
+                  <th className="px-6 py-4 whitespace-nowrap">Project</th>
                   <th className="px-6 py-4 whitespace-nowrap">Contact Name</th>
                   <th className="px-6 py-4 whitespace-nowrap">Phone</th>
                   <th className="px-6 py-4 whitespace-nowrap">Email</th>
@@ -600,14 +619,17 @@ export default function CreativeClientsPage() {
                               e.stopPropagation();
                               router.push(`/work-management/smm/pending?client=${client.id}`);
                             }}
-                            variant="destructive" 
-                            className="cursor-pointer hover:bg-red-600 shadow-sm px-2 py-0.5 text-[10px] animate-in fade-in zoom-in duration-300"
-                            title="Click to view pending tasks"
+                            className="bg-rose-700 hover:bg-rose-800 text-[10px] px-1.5 py-0 cursor-pointer"
                           >
                             {pendingCounts[client.id]} Pending
                           </Badge>
                         )}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-slate-700 text-sm font-medium">
+                        {clientProjects[client.id] || <span className="text-slate-400 italic font-normal">No active project</span>}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-slate-700">
