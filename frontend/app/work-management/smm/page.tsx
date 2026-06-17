@@ -319,17 +319,17 @@ export default function CreativeClientsPage() {
         const projects = await pRes.json();
         const projectMap: Record<string, any> = {};
         projects.forEach((p: any) => {
-          if (p.clientId && p.department === 'Creative') {
+          if (p.clientId && (p.department === 'Creative' || p.department === 'Digital Marketing' || p.department === 'Marketing')) {
             projectMap[p.clientId] = p;
           }
         });
         setClientProjects(projectMap);
         
-        // Filter for Creative department AND must have a creative project
+        // Filter for Creative or Marketing department AND must have a corresponding project
         const validClientIds = new Set(Object.keys(projectMap));
-        setClients(clientsData.filter((c: any) => c.department === "Creative" && validClientIds.has(c.id)));
+        setClients(clientsData.filter((c: any) => (c.department?.includes("Creative") || c.department?.includes("Marketing") || c.department?.includes("Digital Marketing")) && validClientIds.has(c.id)));
       } else {
-        setClients(clientsData.filter((c: any) => c.department === "Creative"));
+        setClients(clientsData.filter((c: any) => c.department?.includes("Creative") || c.department?.includes("Marketing") || c.department?.includes("Digital Marketing")));
       }
     } catch (err) {
       console.error("Error fetching clients:", err);

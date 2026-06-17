@@ -83,7 +83,7 @@ export default function ClientDetailsPage() {
   const handleUpdateClient = async (formData: ClientFormData) => {
     setIsSubmitting(true);
     try {
-      const payload = { ...formData, department: "Creative" };
+      const payload = { ...formData };
       const res = await fetch(`${API_URL}/clients/${client.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
