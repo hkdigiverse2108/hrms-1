@@ -69,18 +69,24 @@ def get_now():
 def parse_datetime(date_val, time_str):
     if not time_str:
         return get_now()
+    time_str = str(time_str).strip()
+    if time_str in {"-", "--", "--:--"}:
+        return get_now()
     if isinstance(date_val, (date, datetime)):
         date_str = date_val.strftime("%Y-%m-%d")
     else:
         # Extract only the date part in case date_val is an ISO timestamp string or full datetime string
         date_str = str(date_val).split('T')[0].split(' ')[0]
-    try:
-        # Standard format
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        # Fallback for formats without seconds
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-    return IST.localize(dt)
+    date_formats = ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y")
+    time_formats = ("%H:%M:%S", "%H:%M", "%I:%M:%S %p", "%I:%M %p", "%I:%M:%S%p", "%I:%M%p")
+    for date_fmt in date_formats:
+        for time_fmt in time_formats:
+            try:
+                dt = datetime.strptime(f"{date_str} {time_str}", f"{date_fmt} {time_fmt}")
+                return IST.localize(dt)
+            except ValueError:
+                continue
+    raise ValueError(f"Cannot parse time: {time_str}")
 
 def fix_id(doc):
     from datetime import datetime, date
@@ -1900,6 +1906,8 @@ async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
     # Use lastPunchIn if available to calculate session duration, otherwise fallback to checkIn
     start_time_str = status.get("lastPunchIn") or status["checkIn"]
     check_in_time = parse_datetime(status['date'], start_time_str)
+    if now < check_in_time:
+        now += timedelta(days=1)
     
     # Calculate break seconds that occurred during this session (since check_in_time)
     breaks = status.get("breaks", [])
@@ -1921,6 +1929,8 @@ async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
                 else:
                     # User punched out while on active break: close the break at now
                     b_end = now
+                    if b_end < b_start:
+                        b_end += timedelta(days=1)
                     break_dur = (b_end - b_start).total_seconds()
                     b_copy["endTime"] = now.strftime("%H:%M:%S")
                     b_copy["duration"] = f"{int(break_dur // 60)}m"
@@ -4969,16 +4979,46 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     hours, remainder = divmod(int(new_accumulated), 3600)
                     minutes, _ = divmod(remainder, 60)
                     work_hours = f"{hours}h {minutes}m"
+
+                    # Determine active punch and status
+                    has_active = False
+                    active_punch_in = None
+                    for p in merged_punches:
+                        if not p.get("punchOut"):
+                            has_active = True
+                            active_punch_in = p.get("punchIn")
+                            break
+                    
+                    has_active_break = False
+                    for b in sorted_breaks:
+                        if not b.get("endTime"):
+                            has_active_break = True
+                            break
+
+                    new_status = 'Logged'
+                    new_checkout = attn.get('checkOut')
+                    
+                    set_dict = {
+                        'punches': merged_punches,
+                        'breaks': sorted_breaks,
+                        'accumulatedWorkSeconds': new_accumulated,
+                        'workHours': work_hours,
+                    }
+
+                    if has_active:
+                        new_status = 'On Break' if has_active_break else 'Active'
+                        new_checkout = None
+                        set_dict['lastPunchIn'] = active_punch_in
+                    else:
+                        if merged_punches:
+                            new_checkout = merged_punches[-1].get("punchOut")
+
+                    set_dict['status'] = new_status
+                    set_dict['checkOut'] = new_checkout
                     
                     await db.attendance.update_one(
                         {'_id': attn['_id']},
-                        {'$set': {
-                            'punches': merged_punches,
-                            'breaks': sorted_breaks,
-                            'accumulatedWorkSeconds': new_accumulated,
-                            'workHours': work_hours,
-                            'status': 'Logged'
-                        }}
+                        {'$set': set_dict}
                     )
             else:
                 reason = doc.get('reason', '')
@@ -5003,7 +5043,14 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
     
                 # Helper to recalculate and save
                 async def apply_updates(attn_record, updated_breaks):
-                    if attn_record.get('checkIn') and attn_record.get('checkOut'):
+                    has_active = not attn_record.get('checkOut') or attn_record.get('checkOut') in [None, "--", "--:--", "", "-"]
+                    has_active_break = False
+                    for b in updated_breaks:
+                        if not b.get("endTime"):
+                            has_active_break = True
+                            break
+
+                    if not has_active and attn_record.get('checkIn') and attn_record.get('checkOut'):
                         try:
                             ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
                             co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
@@ -5013,13 +5060,17 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                             attn_record['workHours'] = f"{int(h)}h {int(m)}m"
                         except Exception: pass
                     
+                    new_status = 'On Break' if (has_active and has_active_break) else ('Active' if has_active else 'Logged')
+                    new_checkout = None if has_active else attn_record.get('checkOut')
+                    
                     await db.attendance.update_one(
                         {'_id': attn_record['_id']},
                         {'$set': {
                             'breaks': updated_breaks,
                             'checkIn': attn_record.get('checkIn'),
+                            'checkOut': new_checkout,
                             'workHours': attn_record.get('workHours'),
-                            'status': 'Logged'
+                            'status': new_status
                         }}
                     )
     

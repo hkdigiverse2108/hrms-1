@@ -1,6 +1,6 @@
 {
   "name": "hrms-desktop",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "HRMS Desktop Application Container",
   "main": "main.js",
   "scripts": {
@@ -9,7 +9,8 @@
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
     "pack:win": "electron-builder --dir --win",
-    "pack:mac": "electron-builder --dir --mac"
+    "pack:mac": "electron-builder --dir --mac",
+    "publish-desktop": "node scripts/publish-release.js"
   },
   "devDependencies": {
     "electron": "^31.0.0",
@@ -21,7 +22,12 @@
     "productName": "HRMS",
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "extraResources": [
         {
@@ -44,7 +50,13 @@
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "category": "public.app-category.business",
       "hardenedRuntime": true,

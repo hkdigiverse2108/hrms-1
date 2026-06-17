@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -205,6 +205,19 @@ async def lifespan(app):
             print("[PC Registration] Skipping registration (running on Linux/Production server).")
     except Exception as e:
         print(f"[PC Registration] Failed to register PC: {e}")
+
+    # Ensure database indexes for chat messages are created to speed up loading
+    try:
+        from database import db
+        print("[Chat Indexing] Ensuring database indexes for chat messages...", flush=True)
+        # Index for group/general chats
+        await db.messages.create_index([("groupId", 1), ("timestamp", 1)])
+        # Indexes for personal chats
+        await db.messages.create_index([("senderId", 1), ("receiverId", 1), ("timestamp", 1)])
+        await db.messages.create_index([("receiverId", 1), ("senderId", 1), ("timestamp", 1)])
+        print("[Chat Indexing] Chat message indexes verified/created successfully.", flush=True)
+    except Exception as e:
+        print(f"[Chat Indexing] Failed to create chat indexes: {e}", flush=True)
 
     yield
     # --- Shutdown ---
@@ -1352,11 +1365,29 @@ async def toggle_complete_message(message_id: str, user_id: str, db=Depends(get_
     status = await crud.toggle_complete_message(db, message_id, user_id)
     return {"isCompleted": status}
 
+async def _broadcast_message_update(db, message_id: str):
+    msg_doc = await db.messages.find_one({"_id": ObjectId(message_id)})
+    if msg_doc:
+        from fastapi.encoders import jsonable_encoder
+        json_msg = jsonable_encoder(crud.fix_id(msg_doc))
+        try:
+            group_id = json_msg.get("groupId")
+            if group_id:
+                is_group = await db.chat_groups.find_one({"_id": ObjectId(group_id)}) if len(group_id) == 24 else None
+                member_ids = [str(m) for m in is_group.get("members", [])] if is_group else [str(emp["_id"]) for emp in await db.employees.find().to_list(1000)]
+                await ws_manager.broadcast_to_group(member_ids, "message_updated", json_msg)
+            else:
+                recipients = [json_msg.get("receiverId"), json_msg.get("senderId")]
+                await ws_manager.broadcast_to_group([r for r in recipients if r], "message_updated", json_msg)
+        except Exception:
+            pass
+
 @app.post("/chat/messages/{message_id}/reaction")
 async def toggle_reaction(message_id: str, user_id: str, emoji: str, db=Depends(get_db)):
     reactions = await crud.toggle_reaction(db, message_id, user_id, emoji)
     if reactions is None:
         raise HTTPException(status_code=404, detail="Message not found")
+    await _broadcast_message_update(db, message_id)
     return {"reactions": reactions}
 
 @app.put("/employees/{employee_id}/status")
@@ -1368,6 +1399,7 @@ async def vote_on_poll(message_id: str, user_id: str, option_id: str, db=Depends
     options = await crud.vote_poll(db, message_id, user_id, option_id)
     if options is None:
         raise HTTPException(status_code=404, detail="Poll not found")
+    await _broadcast_message_update(db, message_id)
     return {"options": options}
 
 @app.post("/chat/typing")
@@ -1386,7 +1418,7 @@ async def get_typing_status(chat_id: str, user_id: str, db=Depends(get_db)):
 
 @app.get("/chat/ws-info")
 async def get_ws_info(request: Request):
-    backend_port = os.environ.get("BACKEND_PORT", "8000")
+    backend_port = os.environ.get("BACKEND_PORT", os.environ.get("PORT", "8000"))
     try:
         port_val = int(backend_port)
     except ValueError:
@@ -2233,7 +2265,88 @@ async def get_form_responses(form_id: str, db=Depends(get_db)):
 async def get_client_form_responses(client_id: str, db=Depends(get_db)):
     return await crud.get_client_form_responses(db, client_id)
 
+# --- Desktop Auto-Update Endpoints ---
+@app.get("/desktop/version")
+async def get_desktop_version(db=Depends(get_db)):
+    """Retrieve the latest desktop app version, download URL, and changelog."""
+    release = await db.desktop_releases.find_one(sort=[("created_at", -1)])
+    if not release:
+        return {
+            "version": "1.0.0",
+            "downloadUrl": "",
+            "changelog": []
+        }
+    return {
+        "version": release.get("version"),
+        "downloadUrl": release.get("downloadUrl"),
+        "changelog": release.get("changelog", [])
+    }
+
+@app.post("/desktop/release")
+async def upload_desktop_release(
+    version: str = Form(...),
+    changelog: str = Form(...),  # JSON string or comma-separated
+    file: UploadFile = File(...),
+    token_payload: dict = Depends(auth.require_admin),
+    db=Depends(get_db)
+):
+    """Admin-only endpoint to upload a new compiled desktop installer .exe and log its version."""
+    import shutil
+    import json
+    import traceback
+    
+    try:
+        # Create directory uploads/desktop if it doesn't exist
+        desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
+        if not os.path.exists(desktop_dir):
+            os.makedirs(desktop_dir)
+            
+        # Standardize filename to prevent path traversal issues
+        safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
+        filename = f"HRMS_Setup_{safe_version}.exe"
+        file_path = os.path.join(desktop_dir, filename)
+        
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Generate download URL (relative path)
+        download_url = f"/uploads/desktop/{filename}"
+        
+        # Parse changelog
+        changelog_list = []
+        try:
+            changelog_list = json.loads(changelog)
+            if not isinstance(changelog_list, list):
+                changelog_list = [str(changelog_list)]
+        except Exception:
+            # Fallback to newline separation
+            changelog_list = [line.strip() for line in changelog.split("\n") if line.strip()]
+            if not changelog_list:
+                changelog_list = [line.strip() for line in changelog.split(",") if line.strip()]
+                
+        # Insert new release into DB
+        from datetime import datetime
+        new_release = {
+            "version": version,
+            "downloadUrl": download_url,
+            "changelog": changelog_list,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        result = await db.desktop_releases.insert_one(new_release)
+        inserted_id = result.inserted_id
+        
+        return {
+            "message": "Release uploaded successfully",
+            "release": {**new_release, "_id": str(inserted_id)}
+        }
+    except Exception as e:
+        err_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
+        print("[Desktop Release Error]", err_msg, flush=True)
+        raise HTTPException(status_code=500, detail=err_msg)
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("BACKEND_PORT", 8000))
+    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://0.0.0.0:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
