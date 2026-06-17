@@ -51,7 +51,7 @@ export default function PendingWorkPage() {
         const projects = await pRes.json();
         const projectMap: Record<string, string> = {};
         projects.forEach((p: any) => {
-          if (p.clientId && (p.department === 'Creative' || p.department === 'Digital Marketing' || p.department === 'Marketing')) {
+          if (p.clientId && p.department === 'Creative') {
             projectMap[p.clientId] = p.title;
           }
         });
