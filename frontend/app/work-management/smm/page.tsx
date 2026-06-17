@@ -794,18 +794,6 @@ export default function CreativeClientsPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"
-                          title="View Activity Logs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            fetchLogs(client);
-                          }}
-                        >
-                          <History className="w-4.5 h-4.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
                           className="h-9 w-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full"
                           title="View Forms & Feedback"
                           onClick={(e) => {
@@ -826,6 +814,18 @@ export default function CreativeClientsPage() {
                           }}
                         >
                           <Plus className="w-4.5 h-4.5" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-9 w-9 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"
+                          title="View Activity Logs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            fetchLogs(client);
+                          }}
+                        >
+                          <History className="w-4.5 h-4.5" />
                         </Button>
                         <Button 
                           variant="ghost" 

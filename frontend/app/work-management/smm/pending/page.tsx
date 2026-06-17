@@ -17,6 +17,7 @@ export default function PendingWorkPage() {
   
   const [entries, setEntries] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
+  const [clientProjects, setClientProjects] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [activeClientId, setActiveClientId] = useState<string | null>(null);
 
@@ -30,9 +31,13 @@ export default function PendingWorkPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [entriesRes, clientsRes] = await Promise.all([
+      const storedUser = localStorage.getItem('user');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      
+      const [entriesRes, clientsRes, pRes] = await Promise.all([
         fetch(`${API_URL}/content-calendar/all`),
-        fetch(`${API_URL}/clients`)
+        fetch(`${API_URL}/clients`),
+        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`)
       ]);
       
       if (entriesRes.ok && clientsRes.ok) {
@@ -40,6 +45,17 @@ export default function PendingWorkPage() {
         const fetchedClients = await clientsRes.json();
         setEntries(fetchedEntries);
         setClients(fetchedClients);
+      }
+      
+      if (pRes.ok) {
+        const projects = await pRes.json();
+        const projectMap: Record<string, string> = {};
+        projects.forEach((p: any) => {
+          if (p.clientId && p.department === 'Creative') {
+            projectMap[p.clientId] = p.title;
+          }
+        });
+        setClientProjects(projectMap);
       }
     } catch (error) {
       console.error('Failed to fetch dashboard data', error);
@@ -87,10 +103,12 @@ export default function PendingWorkPage() {
     entries.forEach(entry => {
       const client = clients.find(c => c.id === entry.clientId);
       const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
+      const projectName = clientProjects[entry.clientId];
+      const displayName = projectName ? `${projectName} (${clientName})` : clientName;
       const clientId = entry.clientId;
 
       if (!clientsMap[clientId]) {
-        clientsMap[clientId] = { id: clientId, name: clientName, count: 0, tasks: [] };
+        clientsMap[clientId] = { id: clientId, name: displayName, count: 0, tasks: [] };
       }
 
       const enrich = (stage: string, deadline: string, type: string) => ({
@@ -108,14 +126,14 @@ export default function PendingWorkPage() {
     });
 
     return Object.values(clientsMap)
-      .filter(c => c.tasks.length > 0)
+      .filter(c => c.tasks.length > 0 && clientProjects[c.id])
       .map(c => {
         c.count = c.tasks.length;
         c.tasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
         return c;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [entries, clients]);
+  }, [entries, clients, clientProjects]);
 
   useEffect(() => {
     if (pendingData.length > 0 && !activeClientId) {
