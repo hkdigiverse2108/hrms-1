@@ -131,12 +131,7 @@ export default function ClientDetailsPage() {
           </h1>
           <p className="text-slate-500 text-sm mt-1">{client.name}</p>
         </div>
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" className="text-slate-600 border-slate-200 hover:bg-slate-50" onClick={() => router.push(`/work-management/smm/${client.id}/feedback`)}>
-            <ClipboardList className="w-4 h-4 mr-2" />
-            View Feedback
-          </Button>
-        </div>
+
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

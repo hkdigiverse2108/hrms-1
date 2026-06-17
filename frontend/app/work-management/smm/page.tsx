@@ -597,10 +597,7 @@ export default function CreativeClientsPage() {
           <CalendarClock className="w-4 h-4" />
           View Pending Work
         </Button>
-        <Button variant="outline" className="h-10 text-slate-600 gap-2 w-full md:w-auto">
-          <Filter className="w-4 h-4" />
-          Filters
-        </Button>
+
       </div>
 
       {isLoading ? (
