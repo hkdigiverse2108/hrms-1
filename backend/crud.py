@@ -1,9 +1,12 @@
 from bson import ObjectId
 from datetime import datetime, timedelta, timezone, date
 from typing import List, Optional, Dict
+import asyncio
 import schemas
 import auth
 import calendar
+import google_auth
+import google_calendar
 import pytz
 from websocket import manager as ws_manager
 
@@ -66,18 +69,24 @@ def get_now():
 def parse_datetime(date_val, time_str):
     if not time_str:
         return get_now()
+    time_str = str(time_str).strip()
+    if time_str in {"-", "--", "--:--"}:
+        return get_now()
     if isinstance(date_val, (date, datetime)):
         date_str = date_val.strftime("%Y-%m-%d")
     else:
         # Extract only the date part in case date_val is an ISO timestamp string or full datetime string
         date_str = str(date_val).split('T')[0].split(' ')[0]
-    try:
-        # Standard format
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        # Fallback for formats without seconds
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-    return IST.localize(dt)
+    date_formats = ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y")
+    time_formats = ("%H:%M:%S", "%H:%M", "%I:%M:%S %p", "%I:%M %p", "%I:%M:%S%p", "%I:%M%p")
+    for date_fmt in date_formats:
+        for time_fmt in time_formats:
+            try:
+                dt = datetime.strptime(f"{date_str} {time_str}", f"{date_fmt} {time_fmt}")
+                return IST.localize(dt)
+            except ValueError:
+                continue
+    raise ValueError(f"Cannot parse time: {time_str}")
 
 def fix_id(doc):
     from datetime import datetime, date
@@ -1649,7 +1658,7 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
             user_fixed["permissions"] = []
             
         # Generate JWT token
-        token = auth.create_access_token(data={"sub": user_id})
+        token = auth.create_access_token(data={"sub": user_id, "role": user.get("role", "")})
         
         # The frontend expects {user: ...} right now, we'll wrap it in main.py
         # Actually main.py returns {"message": "...", "user": user}
@@ -1670,7 +1679,7 @@ async def get_attendance_status(db, employee_id: str):
     record = records[0] if records else None
     return fix_id(record)
 
-async def punch_in(db, employee_id: str):
+async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
     employee = await get_employee(db, employee_id)
     if not employee:
         return None
@@ -1679,7 +1688,12 @@ async def punch_in(db, employee_id: str):
     today_str = today.strftime("%Y-%m-%d")
     today_dt_naive = datetime.strptime(today_str, "%Y-%m-%d")
     today_dt_aware = today_dt_naive.replace(tzinfo=IST)
-    now_time_str = today.strftime("%H:%M:%S")
+    if punch_in_time:
+        now_time_str = punch_in_time
+        if len(now_time_str.split(':')) == 2:
+            now_time_str = f"{now_time_str}:00"
+    else:
+        now_time_str = today.strftime("%H:%M:%S")
 
     # Check if there is an approved half-day leave for today
     half_day_type = None
@@ -1777,7 +1791,7 @@ async def punch_in(db, employee_id: str):
                     start_time_obj = datetime.strptime(office_start.strip(), "%I:%M %p")
                     
         limit_time_obj = start_time_obj + timedelta(minutes=buffer_mins)
-        current_time_str = today.strftime("%H:%M")
+        current_time_str = now_time_str[:5]
         current_time_obj = datetime.strptime(current_time_str, "%H:%M")
         
         if current_time_obj > limit_time_obj:
@@ -1864,15 +1878,22 @@ async def punch_in(db, employee_id: str):
         attendance_data.pop("_id")
     return attendance_data
 
-async def punch_out(db, employee_id: str):
+async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
     status = await get_attendance_status(db, employee_id)
     if not status:
         return None
     
-    now = get_now()
+    if punch_out_time:
+        if len(punch_out_time.split(':')) == 2:
+            punch_out_time = f"{punch_out_time}:00"
+        now = parse_datetime(status['date'], punch_out_time)
+    else:
+        now = get_now()
     # Use lastPunchIn if available to calculate session duration, otherwise fallback to checkIn
     start_time_str = status.get("lastPunchIn") or status["checkIn"]
     check_in_time = parse_datetime(status['date'], start_time_str)
+    if now < check_in_time:
+        now += timedelta(days=1)
     
     # Calculate break seconds that occurred during this session (since check_in_time)
     breaks = status.get("breaks", [])
@@ -1894,6 +1915,8 @@ async def punch_out(db, employee_id: str):
                 else:
                     # User punched out while on active break: close the break at now
                     b_end = now
+                    if b_end < b_start:
+                        b_end += timedelta(days=1)
                     break_dur = (b_end - b_start).total_seconds()
                     b_copy["endTime"] = now.strftime("%H:%M:%S")
                     b_copy["duration"] = f"{int(break_dur // 60)}m"
@@ -3307,6 +3330,7 @@ async def create_message(db, message: schemas.ChatMessageCreate):
             emp = await db.employees.find_one({"_id": ObjectId(message_dict["senderId"])})
             if emp:
                 message_dict["sender"] = emp.get("name", "Colleague")
+                message_dict["senderAvatar"] = emp.get("profilePhoto") or ""
         except Exception:
             pass
     return message_dict
@@ -3391,7 +3415,13 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
     try:
         employees_cursor = db.employees.find()
         employees_list = await employees_cursor.to_list(length=1000)
-        employee_cache = {str(emp["_id"]): emp.get("name", "Colleague") for emp in employees_list}
+        employee_cache = {
+            str(emp["_id"]): {
+                "name": emp.get("name", "Colleague"),
+                "photo": emp.get("profilePhoto") or ""
+            }
+            for emp in employees_list
+        }
     except Exception:
         employee_cache = {}
 
@@ -3400,7 +3430,9 @@ async def get_messages(db, sender_id: str = None, receiver_id: str = None, group
         fixed = fix_id(row)
         if "senderId" in fixed and fixed["senderId"]:
             fixed["senderId"] = str(fixed["senderId"])
-            fixed["sender"] = employee_cache.get(fixed["senderId"], "Colleague")
+            emp_info = employee_cache.get(fixed["senderId"], {"name": "Colleague", "photo": ""})
+            fixed["sender"] = emp_info["name"]
+            fixed["senderAvatar"] = emp_info["photo"]
         if "receiverId" in fixed and fixed["receiverId"]:
             fixed["receiverId"] = str(fixed["receiverId"])
         if "groupId" in fixed and fixed["groupId"]:
@@ -4499,6 +4531,51 @@ async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
     doc['created_at'] = get_now().isoformat()
     result = await db.time_recovery.insert_one(doc)
     doc['_id'] = result.inserted_id
+
+    # Send notifications to Admins and HRs (except sender)
+    try:
+        sender_id = doc.get("employee_id")
+        sender = await get_employee(db, sender_id)
+        sender_role = str(sender.get("role", "")).lower() if sender else "employee"
+        
+        # If the sender is an Admin, no notifications are sent at all
+        if sender_role != "admin":
+            # Fetch all Admins and HRs
+            admins_and_hrs = await db.employees.find({
+                "role": {"$regex": "^(Admin|HR)$", "$options": "i"}
+            }).to_list(length=1000)
+            
+            for staff in admins_and_hrs:
+                staff_id = str(staff["_id"])
+                
+                # Exclude the sender themselves
+                if staff_id == sender_id:
+                    continue
+                
+                # Create the notification document
+                notification = {
+                    "employee_id": staff_id,
+                    "title": "New Time Recovery Request",
+                    "message": f"{doc.get('employee_name', 'An employee')} has submitted a time recovery request for {doc.get('date')}.",
+                    "type": "attendance",
+                    "reference_id": str(doc["_id"]),
+                    "is_read": False,
+                    "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+                }
+                
+                # Insert to db
+                await db.notifications.insert_one(notification)
+                
+                # Broadcast via WebSocket
+                try:
+                    notification_fixed = fix_id(notification)
+                    await ws_manager.send_personal_message(staff_id, "new_notification", notification_fixed)
+                except Exception as ws_err:
+                    print(f"Error broadcasting time recovery notification to {staff_id}: {ws_err}")
+                    
+    except Exception as e:
+        print(f"Error creating notifications for time recovery: {e}")
+
     return fix_id(doc)
 
 async def get_time_recoveries(db, skip: int = 0, limit: int = 100):
@@ -4511,6 +4588,119 @@ async def get_employee_time_recoveries(db, employee_id: str):
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
 
+def recalculate_attendance_seconds(punches: list, breaks: list) -> tuple:
+    """
+    Given a list of raw punches and breaks, sort and merge them,
+    and calculate the total accumulated work seconds from the completed punches.
+    Returns: (merged_punches, sorted_breaks, accumulated_seconds)
+    """
+    def parse_time(time_str):
+        if not time_str:
+            return 0
+        parts = time_str.split(':')
+        try:
+            h = int(parts[0])
+            m = int(parts[1])
+            s = int(parts[2]) if len(parts) > 2 else 0
+            return h * 3600 + m * 60 + s
+        except Exception:
+            return 0
+
+    # Sort breaks
+    sorted_breaks = sorted(breaks, key=lambda b: parse_time(b.get("startTime") or "00:00:00"))
+    for b in sorted_breaks:
+        if b.get("startTime") and len(b["startTime"].split(':')) == 2:
+            b["startTime"] = f"{b['startTime']}:00"
+        if b.get("endTime") and len(b["endTime"].split(':')) == 2:
+            b["endTime"] = f"{b['endTime']}:00"
+
+    # 1. Sort punches by punchIn
+    sorted_punches = sorted(punches, key=lambda p: parse_time(p.get("punchIn") or "00:00:00"))
+
+    # 2. Merge overlapping/contiguous punches
+    merged_punches = []
+    for p in sorted_punches:
+        p_copy = dict(p)
+        if not p_copy.get("punchIn"):
+            continue
+        # normalize format to HH:MM:SS
+        in_parts = p_copy["punchIn"].split(':')
+        if len(in_parts) == 2:
+            p_copy["punchIn"] = f"{p_copy['punchIn']}:00"
+        
+        out_time = p_copy.get("punchOut")
+        if out_time:
+            out_parts = out_time.split(':')
+            if len(out_parts) == 2:
+                p_copy["punchOut"] = f"{out_time}:00"
+        
+        if not merged_punches:
+            merged_punches.append(p_copy)
+            continue
+        
+        last = merged_punches[-1]
+        
+        # If the last punch has no punchOut, it's active.
+        if not last.get("punchOut"):
+            merged_punches.append(p_copy)
+            continue
+            
+        last_out_sec = parse_time(last["punchOut"])
+        curr_in_sec = parse_time(p_copy["punchIn"])
+        
+        if curr_in_sec <= last_out_sec:
+            # Overlap or contiguous! Merge them.
+            if not p_copy.get("punchOut"):
+                new_out = None
+            else:
+                curr_out_sec = parse_time(p_copy["punchOut"])
+                if curr_out_sec > last_out_sec:
+                    new_out = p_copy["punchOut"]
+                else:
+                    new_out = last["punchOut"]
+            
+            last["punchOut"] = new_out
+            if last.get("type") == "meeting" or p_copy.get("type") == "meeting":
+                last["type"] = "meeting"
+            else:
+                last["type"] = p_copy.get("type") or last.get("type") or "work"
+        else:
+            merged_punches.append(p_copy)
+
+    # 3. Calculate accumulated seconds for completed punches
+    total_seconds = 0.0
+    for p in merged_punches:
+        punch_out_str = p.get("punchOut")
+        if not punch_out_str:
+            continue
+        
+        p_in_sec = parse_time(p["punchIn"])
+        p_out_sec = parse_time(punch_out_str)
+        duration = p_out_sec - p_in_sec
+        if duration < 0:
+            duration += 86400  # handle cross-midnight if any
+            
+        # Find break overlaps
+        break_overlap_sec = 0.0
+        for b in sorted_breaks:
+            b_start_str = b.get("startTime")
+            b_end_str = b.get("endTime")
+            if b_start_str and b_end_str:
+                b_in_sec = parse_time(b_start_str)
+                b_out_sec = parse_time(b_end_str)
+                if b_out_sec < b_in_sec:
+                    b_out_sec += 86400
+                
+                # Intersection of [p_in_sec, p_out_sec] and [b_in_sec, b_out_sec]
+                overlap_start = max(p_in_sec, b_in_sec)
+                overlap_end = min(p_out_sec, b_out_sec)
+                if overlap_start < overlap_end:
+                    break_overlap_sec += (overlap_end - overlap_start)
+                    
+        total_seconds += max(0.0, duration - break_overlap_sec)
+
+    return merged_punches, sorted_breaks, total_seconds
+
 async def update_time_recovery_status(db, recovery_id: str, status: str):
     await db.time_recovery.update_one(
         {'_id': ObjectId(recovery_id)},
@@ -4522,130 +4712,261 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
         try:
             import re
             from datetime import datetime
-            reason = doc.get('reason', '')
             
-            # Fuzzy search for attendance (find all records for the day)
-            search_query = {
-                '$or': [
-                    {'employeeId': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
-                    {'employee_id': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
-                    {'employeeName': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}},
-                    {'employee_name': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}}
-                ],
-                'date': doc['date']
-            }
-            print(f"DEBUG: Searching all attendance records for date: {doc['date']}")
-            cursor = db.attendance.find(search_query)
-            attn_list = await cursor.to_list(length=100)
+            recovery_type = doc.get('recovery_type')
+            start_time = doc.get('start_time')
+            end_time = doc.get('end_time')
             
-            if not attn_list:
-                print(f"ERROR: No attendance found for query.")
-                return fix_id(doc)
-
-            # Helper to recalculate and save
-            async def apply_updates(attn_record, updated_breaks):
-                if attn_record.get('checkIn') and attn_record.get('checkOut'):
-                    try:
-                        ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
-                        co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
-                        diff = co - ci
-                        h, r = divmod(diff.total_seconds(), 3600)
-                        m, _ = divmod(r, 60)
-                        attn_record['workHours'] = f"{int(h)}h {int(m)}m"
-                    except Exception: pass
+            if recovery_type and start_time and end_time:
+                # Modern type-based approval logic
+                search_query = {
+                    '$or': [
+                        {'employeeId': doc['employee_id']},
+                        {'employee_id': doc['employee_id']}
+                    ],
+                    'date': doc['date']
+                }
+                print(f"DEBUG: Searching attendance records for recovery: {doc['date']}")
+                cursor = db.attendance.find(search_query)
+                attn_list = await cursor.to_list(length=100)
                 
-                await db.attendance.update_one(
-                    {'_id': attn_record['_id']},
-                    {'$set': {
-                        'breaks': updated_breaks,
-                        'checkIn': attn_record.get('checkIn'),
-                        'workHours': attn_record.get('workHours'),
-                        'status': 'Logged'
-                    }}
-                )
-
-            # Case 1: Break Timing Correction
-            break_match = re.search(r'Break-In:\s*(\d{1,2}:\d{2}(?::\d{2})?),?\s*Actual Break-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
-            if break_match:
-                break_in, break_out = break_match.group(1), break_match.group(2)
-                # Ensure 2-digit hour for consistency
-                if len(break_in.split(':')[0]) == 1: break_in = '0' + break_in
-                if len(break_out.split(':')[0]) == 1: break_out = '0' + break_out
-
-                print(f"DEBUG: Processing break correction: {break_in} to {break_out}")
-
-                for attn in attn_list:
-                    updated = False
-                    breaks = attn.get('breaks', [])
+                if attn_list:
+                    attn = attn_list[0]
                     
-                    # Find the BEST matching break (closest startTime)
-                    best_break = None
-                    min_diff = 16 # Must be within 15 mins
+                    # Compute duration
+                    ci_dt = datetime.strptime(start_time, "%H:%M:%S" if ":" in start_time else "%H:%M")
+                    co_dt = datetime.strptime(end_time, "%H:%M:%S" if ":" in end_time else "%H:%M")
+                    duration_seconds = (co_dt - ci_dt).total_seconds()
+                    if duration_seconds < 0:
+                        duration_seconds += 86400
+                        
+                    punches = attn.get('punches') or []
+                    punches = [dict(p) for p in punches]
+                    breaks = attn.get('breaks') or []
+                    breaks = [dict(b) for b in breaks]
                     
-                    for b in breaks:
-                        try:
-                            db_h, db_m = map(int, b.get('startTime', '00:00').split(':')[:2])
-                            req_h, req_m = map(int, break_in.split(':')[:2])
-                            diff = abs((db_h * 60 + db_m) - (req_h * 60 + req_m))
-                            if diff < min_diff:
-                                min_diff = diff
-                                best_break = b
-                        except Exception: continue
+                    fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
+                    fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
+
+                    if recovery_type in ['meeting', 'work']:
+                        punches.append({
+                            "punchIn": fmt_start,
+                            "punchOut": fmt_end,
+                            "type": recovery_type
+                        })
+                    elif recovery_type == 'break':
+                        breaks.append({
+                            "startTime": fmt_start,
+                            "endTime": fmt_end,
+                            "duration": str(int(duration_seconds // 60))
+                        })
                     
-                    if best_break:
-                        print(f"DEBUG: Best match found in record {attn['_id']} with {min_diff} mins diff")
-                        best_break['endTime'] = break_out
-                        fmt = '%H:%M:%S' if len(break_in.split(':')) == 3 else '%H:%M'
-                        t1, t2 = datetime.strptime(break_in, fmt), datetime.strptime(break_out, fmt)
-                        best_break['duration'] = str(int((t2 - t1).total_seconds() / 60))
-                        updated = True
+                    # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
+                    merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
+                    
+                    # Recalculate workHours string
+                    hours, remainder = divmod(int(new_accumulated), 3600)
+                    minutes, _ = divmod(remainder, 60)
+                    work_hours = f"{hours}h {minutes}m"
+
+                    # Determine active punch and status
+                    has_active = False
+                    active_punch_in = None
+                    for p in merged_punches:
+                        if not p.get("punchOut"):
+                            has_active = True
+                            active_punch_in = p.get("punchIn")
+                            break
+                    
+                    has_active_break = False
+                    for b in sorted_breaks:
+                        if not b.get("endTime"):
+                            has_active_break = True
+                            break
+
+                    new_status = 'Logged'
+                    new_checkout = attn.get('checkOut')
+                    
+                    set_dict = {
+                        'punches': merged_punches,
+                        'breaks': sorted_breaks,
+                        'accumulatedWorkSeconds': new_accumulated,
+                        'workHours': work_hours,
+                    }
+
+                    if has_active:
+                        new_status = 'On Break' if has_active_break else 'Active'
+                        new_checkout = None
+                        set_dict['lastPunchIn'] = active_punch_in
                     else:
-                        # Check if this record's time range covers the requested break
-                        try:
-                            cin_h, cin_m = map(int, attn['checkIn'].split(':')[:2])
-                            cout_h, cout_m = map(int, attn.get('checkOut', '23:59:59').split(':')[:2])
-                            req_h, req_m = map(int, break_in.split(':')[:2])
-                            if (cin_h * 60 + cin_m) <= (req_h * 60 + req_m) <= (cout_h * 60 + cout_m):
-                                print(f"DEBUG: Adding NEW break to record {attn['_id']}")
-                                fmt = '%H:%M:%S' if len(break_in.split(':')) == 3 else '%H:%M'
-                                t1, t2 = datetime.strptime(break_in, fmt), datetime.strptime(break_out, fmt)
-                                breaks.append({
-                                    "startTime": break_in if len(break_in.split(':')) == 3 else f"{break_in}:00",
-                                    "endTime": break_out if len(break_out.split(':')) == 3 else f"{break_out}:00",
-                                    "duration": str(int((t2 - t1).total_seconds() / 60))
-                                })
-                                updated = True
-                        except Exception: pass
+                        if merged_punches:
+                            new_checkout = merged_punches[-1].get("punchOut")
 
-                    if updated:
-                        await apply_updates(attn, breaks)
-
-            # Case 2: Late Arrival Correction
-            if "Late" in reason or "Punch-in" in reason:
-                time_match = re.search(r'Actual:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
-                if time_match:
-                    actual_time = time_match.group(1)
-                    if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
-                    print(f"DEBUG: Processing Late Arrival correction: {actual_time}")
-                    earliest_attn = min(attn_list, key=lambda x: x.get('checkIn', '23:59:59'))
-                    earliest_attn['checkIn'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
-                    await apply_updates(earliest_attn, earliest_attn.get('breaks', []))
-
-            # Case 3: Punch-Out Correction
-            if "Punch-Out" in reason:
-                time_match = re.search(r'Actual Punch-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
-                if time_match:
-                    actual_time = time_match.group(1)
-                    if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
-                    print(f"DEBUG: Processing Punch-Out correction: {actual_time}")
+                    set_dict['status'] = new_status
+                    set_dict['checkOut'] = new_checkout
                     
-                    # Apply to the latest record of the day
-                    latest_attn = max(attn_list, key=lambda x: x.get('checkIn', '00:00:00'))
-                    latest_attn['checkOut'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
-                    await apply_updates(latest_attn, latest_attn.get('breaks', []))
+                    await db.attendance.update_one(
+                        {'_id': attn['_id']},
+                        {'$set': set_dict}
+                    )
+            else:
+                reason = doc.get('reason', '')
+                
+                # Fuzzy search for attendance (find all records for the day)
+                search_query = {
+                    '$or': [
+                        {'employeeId': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
+                        {'employee_id': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
+                        {'employeeName': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}},
+                        {'employee_name': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}}
+                    ],
+                    'date': doc['date']
+                }
+                print(f"DEBUG: Searching all attendance records for date: {doc['date']}")
+                cursor = db.attendance.find(search_query)
+                attn_list = await cursor.to_list(length=100)
+                
+                if not attn_list:
+                    print(f"ERROR: No attendance found for query.")
+                    return fix_id(doc)
+    
+                # Helper to recalculate and save
+                async def apply_updates(attn_record, updated_breaks):
+                    has_active = not attn_record.get('checkOut') or attn_record.get('checkOut') in [None, "--", "--:--", "", "-"]
+                    has_active_break = False
+                    for b in updated_breaks:
+                        if not b.get("endTime"):
+                            has_active_break = True
+                            break
 
+                    if not has_active and attn_record.get('checkIn') and attn_record.get('checkOut'):
+                        try:
+                            ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
+                            co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
+                            diff = co - ci
+                            h, r = divmod(diff.total_seconds(), 3600)
+                            m, _ = divmod(r, 60)
+                            attn_record['workHours'] = f"{int(h)}h {int(m)}m"
+                        except Exception: pass
+                    
+                    new_status = 'On Break' if (has_active and has_active_break) else ('Active' if has_active else 'Logged')
+                    new_checkout = None if has_active else attn_record.get('checkOut')
+                    
+                    await db.attendance.update_one(
+                        {'_id': attn_record['_id']},
+                        {'$set': {
+                            'breaks': updated_breaks,
+                            'checkIn': attn_record.get('checkIn'),
+                            'checkOut': new_checkout,
+                            'workHours': attn_record.get('workHours'),
+                            'status': new_status
+                        }}
+                    )
+    
+                # Case 1: Break Timing Correction
+                break_match = re.search(r'Break-In:\s*(\d{1,2}:\d{2}(?::\d{2})?),?\s*Actual Break-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
+                if break_match:
+                    break_in, break_out = break_match.group(1), break_match.group(2)
+                    # Ensure 2-digit hour for consistency
+                    if len(break_in.split(':')[0]) == 1: break_in = '0' + break_in
+                    if len(break_out.split(':')[0]) == 1: break_out = '0' + break_out
+    
+                    print(f"DEBUG: Processing break correction: {break_in} to {break_out}")
+    
+                    for attn in attn_list:
+                        updated = False
+                        breaks = attn.get('breaks', [])
+                        
+                        # Find the BEST matching break (closest startTime)
+                        best_break = None
+                        min_diff = 16 # Must be within 15 mins
+                        
+                        for b in breaks:
+                            try:
+                                db_h, db_m = map(int, b.get('startTime', '00:00').split(':')[:2])
+                                req_h, req_m = map(int, break_in.split(':')[:2])
+                                diff = abs((db_h * 60 + db_m) - (req_h * 60 + req_m))
+                                if diff < min_diff:
+                                    min_diff = diff
+                                    best_break = b
+                            except Exception: continue
+                        
+                        if best_break:
+                            print(f"DEBUG: Best match found in record {attn['_id']} with {min_diff} mins diff")
+                            best_break['endTime'] = break_out
+                            fmt = '%H:%M:%S' if len(break_in.split(':')) == 3 else '%H:%M'
+                            t1, t2 = datetime.strptime(break_in, fmt), datetime.strptime(break_out, fmt)
+                            best_break['duration'] = str(int((t2 - t1).total_seconds() / 60))
+                            updated = True
+                        else:
+                            # Check if this record's time range covers the requested break
+                            try:
+                                cin_h, cin_m = map(int, attn['checkIn'].split(':')[:2])
+                                cout_h, cout_m = map(int, attn.get('checkOut', '23:59:59').split(':')[:2])
+                                req_h, req_m = map(int, break_in.split(':')[:2])
+                                if (cin_h * 60 + cin_m) <= (req_h * 60 + req_m) <= (cout_h * 60 + cout_m):
+                                    print(f"DEBUG: Adding NEW break to record {attn['_id']}")
+                                    fmt = '%H:%M:%S' if len(break_in.split(':')) == 3 else '%H:%M'
+                                    t1, t2 = datetime.strptime(break_in, fmt), datetime.strptime(break_out, fmt)
+                                    breaks.append({
+                                        "startTime": break_in if len(break_in.split(':')) == 3 else f"{break_in}:00",
+                                        "endTime": break_out if len(break_out.split(':')) == 3 else f"{break_out}:00",
+                                        "duration": str(int((t2 - t1).total_seconds() / 60))
+                                    })
+                                    updated = True
+                            except Exception: pass
+    
+                        if updated:
+                            await apply_updates(attn, breaks)
+    
+                # Case 2: Late Arrival Correction
+                if "Late" in reason or "Punch-in" in reason:
+                    time_match = re.search(r'Actual:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
+                    if time_match:
+                        actual_time = time_match.group(1)
+                        if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
+                        print(f"DEBUG: Processing Late Arrival correction: {actual_time}")
+                        earliest_attn = min(attn_list, key=lambda x: x.get('checkIn', '23:59:59'))
+                        earliest_attn['checkIn'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
+                        await apply_updates(earliest_attn, earliest_attn.get('breaks', []))
+    
+                # Case 3: Punch-Out Correction
+                if "Punch-Out" in reason:
+                    time_match = re.search(r'Actual Punch-Out:\s*(\d{1,2}:\d{2}(?::\d{2})?)', reason)
+                    if time_match:
+                        actual_time = time_match.group(1)
+                        if len(actual_time.split(':')[0]) == 1: actual_time = '0' + actual_time
+                        print(f"DEBUG: Processing Punch-Out correction: {actual_time}")
+                        
+                        # Apply to the latest record of the day
+                        latest_attn = max(attn_list, key=lambda x: x.get('checkIn', '00:00:00'))
+                        latest_attn['checkOut'] = actual_time if len(actual_time.split(':')) == 3 else f"{actual_time}:00"
+                        await apply_updates(latest_attn, latest_attn.get('breaks', []))
         except Exception as e:
             print(f"Correction logic error: {e}")
+
+    if doc:
+        try:
+            status_title = "Approved" if status == "approved" else "Rejected"
+            emp_notification = {
+                "employee_id": doc["employee_id"],
+                "title": f"Time Recovery {status_title}",
+                "message": f"Your time recovery request for {doc['date']} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
+                "type": "attendance",
+                "reference_id": str(doc["_id"]),
+                "is_read": False,
+                "created_at": get_now().strftime("%d-%m-%Y %H:%M")
+            }
+            await db.notifications.insert_one(emp_notification)
+            
+            # Broadcast the notification via WebSocket to the employee
+            await ws_manager.send_personal_message(doc["employee_id"], "new_notification", fix_id(emp_notification))
+            
+            # Broadcast attendance_update via WebSocket to the employee
+            await ws_manager.send_personal_message(doc["employee_id"], "attendance_update", {})
+        except Exception as ws_err:
+            print(f"Error sending recovery status update websocket / notification: {ws_err}")
+
     return fix_id(doc)
 
 async def _trigger_sales_target_recalculation(db, invoice_doc):
@@ -5105,7 +5426,159 @@ async def delete_asset_category(db, category_id: str, performed_by: str = "Syste
     return True
 
 # --- Schedule Operations ---
+async def _get_creds_and_persist(db, emp):
+    """Get Google credentials for an employee and persist refreshed tokens back to DB."""
+    token_data = emp.get("googleCalendarTokens")
+    if not token_data:
+        return None
+    try:
+        creds, refreshed_token_data = google_auth.get_credentials(token_data)
+        if refreshed_token_data:
+            # Token was refreshed — save the new access token back to the DB
+            await db.employees.update_one(
+                {"_id": emp["_id"]},
+                {"$set": {"googleCalendarTokens": refreshed_token_data}}
+            )
+            print(f"[Google Sync] Persisted refreshed token for employee {emp.get('name', emp['_id'])}")
+        return creds
+    except Exception as e:
+        print(f"[Google Sync] Error getting/refreshing credentials for {emp.get('name', emp['_id'])}: {e}")
+        return None
+
+async def sync_google_events(db, employee_id: str, start_date_str: str, end_date_str: str):
+    if not employee_id:
+        return
+        
+    query = {"employeeId": employee_id}
+    if ObjectId.is_valid(employee_id):
+        query = {"$or": [{"employeeId": employee_id}, {"_id": ObjectId(employee_id)}]}
+    emp = await db.employees.find_one(query)
+    
+    if not emp or not emp.get("googleCalendarTokens"):
+        return
+        
+    try:
+        creds = await _get_creds_and_persist(db, emp)
+        if not creds:
+            return
+            
+        tz = pytz.timezone('Asia/Kolkata')
+        
+        try:
+            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+        except Exception:
+            return
+            
+        try:
+            end_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+        except Exception:
+            end_dt = start_dt
+            
+        time_min_dt = tz.localize(datetime.combine(start_dt, datetime.min.time()))
+        time_max_dt = tz.localize(datetime.combine(end_dt, datetime.max.time()))
+        
+        time_min = time_min_dt.isoformat()
+        time_max = time_max_dt.isoformat()
+        
+        events = await asyncio.to_thread(google_calendar.list_events, creds, time_min, time_max)
+        
+        # Collect all Google event IDs returned from Google for this date range
+        google_event_ids_from_google = set()
+        
+        if events:
+            for event in events:
+                event_id = event.get('id')
+                if not event_id:
+                    continue
+                    
+                # Skip cancelled events
+                if event.get('status') == 'cancelled':
+                    continue
+                    
+                google_event_ids_from_google.add(event_id)
+                summary = event.get('summary', 'Google Calendar Event')
+                description = event.get('description', '')
+                
+                start = event.get('start', {})
+                end = event.get('end', {})
+                
+                start_time_str = start.get('dateTime') or start.get('date')
+                end_time_str = end.get('dateTime') or end.get('date')
+                
+                if not start_time_str or not end_time_str:
+                    continue
+                    
+                try:
+                    if 'T' in start_time_str:
+                        s_dt = datetime.fromisoformat(start_time_str).astimezone(tz)
+                        e_dt = datetime.fromisoformat(end_time_str).astimezone(tz)
+                    else:
+                        s_dt = datetime.strptime(start_time_str, "%Y-%m-%d")
+                        e_dt = datetime.strptime(end_time_str, "%Y-%m-%d")
+                except Exception:
+                    continue
+                    
+                local_start = s_dt.strftime("%H:%M")
+                local_end = e_dt.strftime("%H:%M")
+                
+                schedule_date = datetime.combine(s_dt.date(), datetime.min.time())
+                
+                await db.schedules.update_one(
+                    {"googleEventId": event_id},
+                    {"$set": {
+                        "employeeId": employee_id,
+                        "employeeName": emp.get("name") or "Unknown",
+                        "title": summary,
+                        "description": description,
+                        "date": schedule_date,
+                        "startTime": local_start,
+                        "endTime": local_end,
+                        "googleEventId": event_id,
+                        "type": "Google Event"
+                    }},
+                    upsert=True
+                )
+        
+        # --- Handle deleted Google events ---
+        # Find all local schedules with a googleEventId for this employee in this date range
+        # that are NOT in the set of events returned from Google — these were deleted in Google
+        date_variants = []
+        current = start_dt
+        while current <= end_dt:
+            date_variants.append(current.strftime("%Y-%m-%d"))
+            date_variants.append(current)
+            current += timedelta(days=1)
+        
+        local_google_schedules_cursor = db.schedules.find({
+            "employeeId": employee_id,
+            "googleEventId": {"$exists": True, "$ne": None},
+            "date": {"$in": date_variants}
+        })
+        local_google_schedules = await local_google_schedules_cursor.to_list(length=1000)
+        
+        for local_sched in local_google_schedules:
+            local_gid = local_sched.get("googleEventId")
+            if local_gid and local_gid not in google_event_ids_from_google:
+                # This event was deleted or cancelled in Google Calendar — remove it locally
+                await db.schedules.delete_one({"_id": local_sched["_id"]})
+                print(f"[Google Sync] Removed locally deleted Google event: {local_sched.get('title', 'Unknown')} (gid: {local_gid})")
+            
+    except Exception as e:
+        print(f"Error syncing Google Calendar events: {e}")
+
 async def get_schedules(db, employee_id: str = None, date_str: str = None, date_from: str = None, date_to: str = None):
+    if date_str or (date_from and date_to):
+        d_from = date_from or date_str
+        d_to = date_to or date_str
+        if employee_id:
+            await sync_google_events(db, employee_id, d_from, d_to)
+        else:
+            cursor = db.employees.find({"googleCalendarTokens": {"$exists": True, "$ne": None}})
+            employees_with_tokens = await cursor.to_list(length=1000)
+            tasks = [sync_google_events(db, str(emp["_id"]), d_from, d_to) for emp in employees_with_tokens]
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+        
     query = {}
     if employee_id:
         query["employeeId"] = employee_id
@@ -5119,7 +5592,6 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None, date_
         try:
             start = datetime.strptime(date_from, "%Y-%m-%d")
             end = datetime.strptime(date_to, "%Y-%m-%d")
-            # Build list of all date variants (string + datetime) for each day in range
             date_variants = []
             current = start
             while current <= end:
@@ -5134,6 +5606,23 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None, date_
     return [fix_id(s) for s in schedules]
 
 async def create_schedule(db, schedule_data: dict):
+    # Try to push to Google Calendar
+    emp_id = schedule_data.get("employeeId")
+    if emp_id:
+        query = {"employeeId": emp_id}
+        if ObjectId.is_valid(emp_id):
+            query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+        emp = await db.employees.find_one(query)
+        if emp and emp.get("googleCalendarTokens"):
+            try:
+                creds = await _get_creds_and_persist(db, emp)
+                if creds:
+                    event_id = await asyncio.to_thread(google_calendar.create_event, creds, schedule_data)
+                    if event_id:
+                        schedule_data["googleEventId"] = event_id
+            except Exception as e:
+                print(f"Error syncing new schedule to Google Calendar: {e}")
+
     new_doc = await db.schedules.insert_one(schedule_data)
     created = await db.schedules.find_one({"_id": new_doc.inserted_id})
     return fix_id(created)
@@ -5141,18 +5630,176 @@ async def create_schedule(db, schedule_data: dict):
 async def update_schedule(db, schedule_id: str, schedule_data: dict):
     if not ObjectId.is_valid(schedule_id):
         return None
+        
+    existing = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    
     await db.schedules.update_one(
         {"_id": ObjectId(schedule_id)},
         {"$set": schedule_data}
     )
     updated = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    
+    # Sync update to Google Calendar
+    if updated and existing:
+        emp_id = updated.get("employeeId")
+        google_event_id = updated.get("googleEventId") or existing.get("googleEventId")
+        if emp_id and google_event_id:
+            query = {"employeeId": emp_id}
+            if ObjectId.is_valid(emp_id):
+                query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+            emp = await db.employees.find_one(query)
+            if emp and emp.get("googleCalendarTokens"):
+                try:
+                    creds = await _get_creds_and_persist(db, emp)
+                    if creds:
+                        await asyncio.to_thread(google_calendar.update_event, creds, google_event_id, updated)
+                except Exception as e:
+                    print(f"Error syncing updated schedule to Google Calendar: {e}")
+
     return fix_id(updated) if updated else None
 
 async def delete_schedule(db, schedule_id: str):
     if not ObjectId.is_valid(schedule_id):
         return False
+        
+    existing = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+        
     res = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
+    
+    # Sync delete to Google Calendar
+    if res.deleted_count > 0 and existing:
+        emp_id = existing.get("employeeId")
+        google_event_id = existing.get("googleEventId")
+        if emp_id and google_event_id:
+            query = {"employeeId": emp_id}
+            if ObjectId.is_valid(emp_id):
+                query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+            emp = await db.employees.find_one(query)
+            if emp and emp.get("googleCalendarTokens"):
+                try:
+                    creds = await _get_creds_and_persist(db, emp)
+                    if creds:
+                        await asyncio.to_thread(google_calendar.delete_event, creds, google_event_id)
+                except Exception as e:
+                    print(f"Error syncing deleted schedule to Google Calendar: {e}")
+                    
     return res.deleted_count > 0
+# --- User Activity Input Tracking Operations ---
+async def track_user_activity(db, employee_id: str, clicks: int, keystrokes: int, applications: Optional[dict] = None, domains: Optional[dict] = None):
+    # Find the employee first to get their name
+    employee = None
+    if ObjectId.is_valid(employee_id):
+        employee = await db.employees.find_one({"_id": ObjectId(employee_id)})
+    if not employee:
+        employee = await db.employees.find_one({"_id": employee_id})
+    if not employee:
+        employee = await db.employees.find_one({"employeeId": employee_id})
+
+    employee_name = "Unknown Employee"
+    if employee:
+        employee_name = employee.get("name") or f"{employee.get('firstName', '')} {employee.get('lastName', '')}".strip() or "Unnamed"
+
+    today_str = get_now().strftime("%Y-%m-%d")
+
+    # Construct increments dynamically
+    inc_updates = {
+        "clicks": clicks,
+        "keystrokes": keystrokes
+    }
+
+    if applications:
+        for app, seconds in applications.items():
+            # Replace dots with underscores to prevent MongoDB path errors
+            safe_app = app.replace(".", "_")
+            inc_updates[f"applications.{safe_app}"] = seconds
+
+    if domains:
+        for domain, seconds in domains.items():
+            safe_domain = domain.replace(".", "_")
+            inc_updates[f"domains.{safe_domain}"] = seconds
+
+    # Upsert the daily record for this user
+    await db.user_input_stats.update_one(
+        {"employeeId": employee_id, "date": today_str},
+        {
+            "$set": {
+                "employeeName": employee_name,
+                "lastActive": get_now()
+            },
+            "$inc": inc_updates
+        },
+        upsert=True
+    )
+    
+    updated = await db.user_input_stats.find_one({"employeeId": employee_id, "date": today_str})
+    return fix_id(updated)
+
+async def get_user_activity_stats(db, employee_id: str = None):
+    query = {}
+    if employee_id:
+        query["employeeId"] = employee_id
+    cursor = db.user_input_stats.find(query)
+    stats = await cursor.to_list(length=10000)
+    return [fix_id(s) for s in stats]
 
 
+# --- Registered PC Device Operations ---
+async def register_pc_device(db, hostname: str, ip_address: str, os_name: str, os_version: str):
+    import re
+    existing = await db.registered_pcs.find_one(
+        {"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}}
+    )
+    if existing:
+        await db.registered_pcs.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {
+                    "ipAddress": ip_address,
+                    "os": os_name,
+                    "osVersion": os_version,
+                    "lastSeen": get_now()
+                }
+            }
+        )
+        return await db.registered_pcs.find_one({"_id": existing["_id"]})
+    else:
+        new_pc = {
+            "hostname": hostname,
+            "ipAddress": ip_address,
+            "os": os_name,
+            "osVersion": os_version,
+            "lastSeen": get_now(),
+            "firstSeen": get_now(),
+            "blockChrome": False,
+            "blockYoutube": False,
+            "blockApps": [],
+            "blockUrls": []
+        }
+        await db.registered_pcs.insert_one(new_pc)
+        return new_pc
 
+async def get_registered_pcs(db):
+    cursor = db.registered_pcs.find({})
+    pcs = await cursor.to_list(length=1000)
+    return [fix_id(pc) for pc in pcs]
+
+async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool] = None, block_youtube: Optional[bool] = None, block_apps: Optional[List[str]] = None, block_urls: Optional[List[str]] = None):
+    import re
+    update_fields = {}
+    if block_chrome is not None:
+        update_fields["blockChrome"] = block_chrome
+    if block_youtube is not None:
+        update_fields["blockYoutube"] = block_youtube
+    if block_apps is not None:
+        update_fields["blockApps"] = block_apps
+    if block_urls is not None:
+        update_fields["blockUrls"] = block_urls
+        
+    if update_fields:
+        await db.registered_pcs.update_one(
+            {"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}},
+            {"$set": update_fields}
+        )
+    
+    updated = await db.registered_pcs.find_one({"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}})
+    return fix_id(updated) if updated else None

@@ -4,10 +4,10 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
-import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -61,6 +61,24 @@ export default function SchedulePage() {
     type: "meeting",
     attendees: [] as string[]
   });
+
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const resetForm = () => {
+    setEditingScheduleId(null);
+    setForm({
+      title: "",
+      description: "",
+      employeeId: user?.id || user?.employeeId || "",
+      employeeName: user?.name || "",
+      date: dayjs(getISTNow()).format("YYYY-MM-DD"),
+      startTime: defaultTimes.start,
+      endTime: defaultTimes.end,
+      type: "meeting",
+      attendees: [] as string[]
+    });
+  };
 
   const timelineRef = useRef<HTMLDivElement>(null);
 
@@ -118,13 +136,75 @@ export default function SchedulePage() {
       if (res.ok) setEmployees(await res.json());
     } catch (err) {
       console.error("Error fetching employees:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleDisconnectGoogle = async () => {
+    if (!user) return;
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${API_URL}/auth/google/disconnect?employeeId=${user.id || user.employeeId}`, {
+        method: 'POST'
+      });
+      if (!res.ok) throw new Error("Failed to disconnect");
+      
+      toast.success("Google Calendar disconnected.");
+      window.location.href = "/schedule";
+    } catch (error) {
+      toast.error("Failed to disconnect Google Calendar.");
+    }
+  };
+
+  const handleManualSync = async () => {
+    if (!user || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const dateFrom = viewMode === "day"
+        ? currentDate.subtract(1, "day").format("YYYY-MM-DD")
+        : getWeekStart(currentDate).format("YYYY-MM-DD");
+      const dateTo = viewMode === "day"
+        ? currentDate.add(1, "day").format("YYYY-MM-DD")
+        : getWeekStart(currentDate).add(6, "day").format("YYYY-MM-DD");
+
+      const res = await fetch(`${API_URL}/schedules/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: user.id || user.employeeId,
+          dateFrom,
+          dateTo
+        })
+      });
+      if (res.ok) {
+        toast.success("Google Calendar synced successfully");
+        // Re-fetch schedules to show updated data
+        if (viewMode === "day") {
+          fetchSchedules(currentDate.format("YYYY-MM-DD"));
+        } else {
+          const start = getWeekStart(currentDate);
+          const end = start.add(6, "day");
+          fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
+        }
+      } else {
+        toast.error("Failed to sync Google Calendar");
+      }
+    } catch (err) {
+      toast.error("Error syncing with Google Calendar");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const fetchSchedules = async (dateStr: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/schedules?date=${dateStr}`);
+      const userId = user?.id || user?.employeeId || "";
+      const empParam = userId ? `&employeeId=${userId}` : "";
+      const res = await fetch(`${API_URL}/schedules?date=${dateStr}${empParam}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
     } catch (err) {
@@ -137,7 +217,9 @@ export default function SchedulePage() {
   const fetchSchedulesRange = async (from: string, to: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/schedules?date_from=${from}&date_to=${to}`);
+      const userId = user?.id || user?.employeeId || "";
+      const empParam = userId ? `&employeeId=${userId}` : "";
+      const res = await fetch(`${API_URL}/schedules?date_from=${from}&date_to=${to}${empParam}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
     } catch (err) {
@@ -147,7 +229,7 @@ export default function SchedulePage() {
     }
   };
 
-  const handleCreateSchedule = async () => {
+  const handleSave = async () => {
     if (!form.title || !form.employeeId || !form.startTime || !form.endTime) {
       toast.error("Please fill in all required fields");
       return;
@@ -176,14 +258,23 @@ export default function SchedulePage() {
     try {
       const selectedEmp = employees.find(e => e.id === form.employeeId || e.employeeId === form.employeeId);
       const empName = selectedEmp ? selectedEmp.name : (user?.name || "Unknown");
-      const res = await fetch(`${API_URL}/schedules`, {
-        method: "POST",
+      
+      const method = editingScheduleId ? "PUT" : "POST";
+      const url = editingScheduleId ? `${API_URL}/schedules/${editingScheduleId}` : `${API_URL}/schedules`;
+      
+      const payload: any = {
+        ...form,
+        employeeName: empName
+      };
+      
+      if (!editingScheduleId) {
+        payload.createdBy = user?.id || user?.employeeId;
+      }
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          employeeName: empName,
-          createdBy: user?.id || user?.employeeId
-        })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         toast.success("Schedule added successfully");
@@ -200,7 +291,7 @@ export default function SchedulePage() {
           const end = start.add(6, "day");
           fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
         }
-        setForm(prev => ({ ...prev, title: "", description: "", attendees: [] }));
+        resetForm();
       } else {
         try {
           const errorData = await res.json();
@@ -218,10 +309,13 @@ export default function SchedulePage() {
   };
 
   const handleDeleteSchedule = async (scheduleId: string) => {
+    setIsDeleting(true);
     try {
       const res = await fetch(`${API_URL}/schedules/${scheduleId}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Schedule deleted successfully");
+        setCreateModalOpen(false);
+        resetForm();
         if (viewMode === "day") {
           fetchSchedules(currentDate.format("YYYY-MM-DD"));
         } else {
@@ -229,21 +323,39 @@ export default function SchedulePage() {
           const end = start.add(6, "day");
           fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
         }
-      } else {
-        toast.error("Failed to delete schedule");
       }
     } catch (err) {
       toast.error("Error connecting to server");
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const handleEditClick = (event: any) => {
+    setEditingScheduleId(event.id || event._id);
+    setForm({
+      title: event.title || "",
+      description: event.description || "",
+      employeeId: event.employeeId,
+      employeeName: event.employeeName || "",
+      date: dayjs(event.date).format("YYYY-MM-DD"),
+      startTime: event.startTime,
+      endTime: event.endTime,
+      type: event.type || "meeting",
+      attendees: event.attendees || []
+    });
+    setCreateModalOpen(true);
   };
 
   /* ───── helpers ───── */
   const [bulkSelectKey, setBulkSelectKey] = useState(0);
 
-  const handleBulkAdd = (type: "department" | "designation", value: string) => {
-    if (!value) return;
+  const handleBulkAdd = (combinedValue: string) => {
+    if (!combinedValue) return;
+    const [type, ...rest] = combinedValue.split(":");
+    const value = rest.join(":");
     const matchingEmpIds = employees
-      .filter(e => e[type] === value && e.id !== form.employeeId && e.employeeId !== form.employeeId)
+      .filter(e => e[type as "department" | "designation" | "role"] === value && e.id !== form.employeeId && e.employeeId !== form.employeeId)
       .map(e => String(e.id));
     
     const newAttendees = Array.from(new Set([...form.attendees, ...matchingEmpIds]));
@@ -398,13 +510,22 @@ export default function SchedulePage() {
     const top = Math.max(0, startMin);
     const height = Math.max(20, Math.min(1440, endMin) - top);
     const color = getEmployeeColor(event.employeeId);
-    const canDelete = String(event.createdBy) === String(user?.id || user?.employeeId);
+    
+    const userId = String(user?.id || user?.employeeId);
+    const canEditOrDelete = String(event.createdBy) === userId || String(event.employeeId) === userId || user?.role === "Admin" || user?.role === "HR";
+    
     const colWidth = 100 / totalColumns;
     const leftPercent = column * colWidth;
     const widthPercent = colWidth - (compact ? 2 : 1.5);
 
     const eventBlock = (
       <div
+        onClick={(e) => {
+          if (canEditOrDelete) {
+            e.stopPropagation();
+            handleEditClick(event);
+          }
+        }}
         className="absolute rounded-md overflow-hidden cursor-pointer transition-shadow hover:shadow-lg group"
         style={{
           top: `${top}px`,
@@ -421,11 +542,6 @@ export default function SchedulePage() {
             <div className={`${compact ? "text-[10px]" : "text-xs"} font-bold text-white truncate flex-1 leading-tight`}>
               {event.title}
             </div>
-            {canDelete && !compact && (
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-px">
-                <X className="w-3 h-3 text-white/80 hover:text-white" />
-              </div>
-            )}
           </div>
           {height > 30 && (
             <div className={`${compact ? "text-[9px]" : "text-[10px]"} text-white/80 mt-0.5 truncate`}>
@@ -466,19 +582,8 @@ export default function SchedulePage() {
       </AntTooltip>
     );
 
-    return canDelete ? (
-      <Popconfirm
-        key={event.id}
-        title="Delete Schedule"
-        description="Are you sure you want to delete this schedule?"
-        onConfirm={() => handleDeleteSchedule(event.id)}
-        okText="Yes"
-        cancelText="No"
-      >
-        {wrappedEventBlock}
-      </Popconfirm>
-    ) : (
-      <React.Fragment key={event.id}>
+    return (
+      <React.Fragment key={event.id || Math.random()}>
         {wrappedEventBlock}
       </React.Fragment>
     );
@@ -536,16 +641,19 @@ export default function SchedulePage() {
         description="View and manage employee schedules."
       >
         {canAdd && (
-          <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+          <Dialog open={createModalOpen} onOpenChange={(open) => {
+            if (!open) resetForm();
+            setCreateModalOpen(open);
+          }}>
             <DialogTrigger asChild>
-              <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm">
+              <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm" onClick={() => resetForm()}>
                 <Plus className="w-4 h-4 mr-2" />
                 Add Schedule
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[450px]">
               <DialogHeader>
-                <DialogTitle className="text-xl font-bold">New Schedule Block</DialogTitle>
+                <DialogTitle className="text-xl font-bold">{editingScheduleId ? "Edit Schedule" : "New Schedule Block"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -576,6 +684,8 @@ export default function SchedulePage() {
                 <AntSelect
                   mode="multiple"
                   allowClear
+                  showSearch
+                  optionFilterProp="label"
                   className="w-full"
                   placeholder="Select colleagues"
                   value={form.attendees}
@@ -583,21 +693,34 @@ export default function SchedulePage() {
                   options={employees.filter(e => e.id !== form.employeeId && e.employeeId !== form.employeeId).map(emp => ({ label: emp.name, value: emp.id }))}
                   getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
                 />
-                <div className="flex gap-2 mt-2">
-                  <Select key={`dept-${bulkSelectKey}`} value={undefined} onValueChange={(v) => handleBulkAdd("department", v)}>
-                    <SelectTrigger className="flex-1 text-xs h-8"><SelectValue placeholder="Add by Team" /></SelectTrigger>
+                <div className="flex mt-2">
+                  <Select key={`bulk-${bulkSelectKey}`} value={undefined} onValueChange={handleBulkAdd}>
+                    <SelectTrigger className="flex-1 text-xs h-8"><SelectValue placeholder="Bulk Add (by Team, Position, Role)" /></SelectTrigger>
                     <SelectContent>
-                      {Array.from(new Set(employees.map(e => e.department).filter(Boolean))).map(dep => (
-                        <SelectItem key={String(dep)} value={String(dep)}>{String(dep)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select key={`desig-${bulkSelectKey}`} value={undefined} onValueChange={(v) => handleBulkAdd("designation", v)}>
-                    <SelectTrigger className="flex-1 text-xs h-8"><SelectValue placeholder="Add by Position" /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from(new Set(employees.map(e => e.designation).filter(Boolean))).map(des => (
-                        <SelectItem key={String(des)} value={String(des)}>{String(des)}</SelectItem>
-                      ))}
+                      {Array.from(new Set(employees.map(e => e.department).filter(Boolean))).length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Teams</SelectLabel>
+                          {Array.from(new Set(employees.map(e => e.department).filter(Boolean))).map(dep => (
+                            <SelectItem key={`dept-${dep}`} value={`department:${dep}`}>{String(dep)}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {Array.from(new Set(employees.map(e => e.designation).filter(Boolean))).length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Positions</SelectLabel>
+                          {Array.from(new Set(employees.map(e => e.designation).filter(Boolean))).map(des => (
+                            <SelectItem key={`desig-${des}`} value={`designation:${des}`}>{String(des)}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {Array.from(new Set(employees.map(e => e.role).filter(Boolean))).length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Roles</SelectLabel>
+                          {Array.from(new Set(employees.map(e => e.role).filter(Boolean))).map(role => (
+                            <SelectItem key={`role-${role}`} value={`role:${role}`}>{String(role)}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -673,9 +796,34 @@ export default function SchedulePage() {
                   />
                 </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
-                <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleCreateSchedule}>Save Schedule</Button>
+              <DialogFooter className="flex items-center">
+                {editingScheduleId && (
+                  <Popconfirm
+                    title="Delete Schedule"
+                    description="Are you sure you want to delete this schedule?"
+                    onConfirm={() => handleDeleteSchedule(editingScheduleId)}
+                    okText="Yes"
+                    cancelText="No"
+                  >
+                    <Button 
+                      variant="outline" 
+                      className="mr-auto text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                      disabled={isSubmitting || isDeleting}
+                    >
+                      {isDeleting ? "Deleting..." : "Delete"}
+                    </Button>
+                  </Popconfirm>
+                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting || isDeleting}>Cancel</Button>
+                  <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleSave} disabled={isSubmitting || isDeleting}>
+                    {isSubmitting ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                    ) : (
+                      editingScheduleId ? "Save Changes" : "Save Schedule"
+                    )}
+                  </Button>
+                </div>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -789,6 +937,55 @@ export default function SchedulePage() {
                 );
               })}
             </div>
+
+            {/* Google Calendar Integration */}
+            <div className="p-4 border-t border-border bg-gray-50/80 shrink-0">
+              {user?.googleCalendarTokens ? (
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <div className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold px-3 py-2 rounded-lg flex items-center justify-center gap-2">
+                    <CalendarCheck className="h-4 w-4" />
+                    Google Calendar Connected
+                  </div>
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={handleManualSync}
+                    disabled={isSyncing}
+                    className="w-full text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5 hover:text-brand-teal h-8 text-xs font-medium"
+                  >
+                    <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                    {isSyncing ? 'Syncing...' : 'Sync Now'}
+                  </Button>
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={handleDisconnectGoogle}
+                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8 text-xs font-medium"
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  type="button"
+                  onClick={() => {
+                    if (user) {
+                      window.location.href = `${API_URL}/auth/google/url?employeeId=${user.id || user.employeeId}`;
+                    }
+                  }}
+                  className="w-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:text-brand-teal font-semibold text-xs shadow-sm"
+                >
+                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.36,22 12.22,22C17.74,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"
+                    />
+                  </svg>
+                  Connect Google Calendar
+                </Button>
+              )}
+            </div>
+
           </div>
         </div>
 

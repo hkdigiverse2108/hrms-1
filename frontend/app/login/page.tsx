@@ -39,7 +39,7 @@ export default function LoginPage() {
       }
  
       // Use the global login function to update state and storage
-      login(data.user);
+      login({ ...data.user, token: data.token });
       
       // Redirect to dashboard
       router.push("/");

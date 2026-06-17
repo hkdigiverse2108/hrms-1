@@ -9,15 +9,22 @@ import { useChatContext } from '@/context/ChatContext';
  */
 export function useAppEvent(targetEvent: string, callback: (data: any) => void) {
   const { lastEvent } = useChatContext();
-  const savedCallback = useRef(callback);
+  const callbackRef = useRef(callback);
 
   useEffect(() => {
-    savedCallback.current = callback;
+    callbackRef.current = callback;
   }, [callback]);
+
+  // Track the last processed event sequence to prevent double triggers on re-renders
+  const processedEventSeqRef = useRef<any>(null);
 
   useEffect(() => {
     if (lastEvent && lastEvent.event === targetEvent) {
-      savedCallback.current(lastEvent.data);
+      const seq = lastEvent._seq;
+      if (seq && processedEventSeqRef.current !== seq) {
+        processedEventSeqRef.current = seq;
+        callbackRef.current(lastEvent.data);
+      }
     }
   }, [lastEvent, targetEvent]);
 }

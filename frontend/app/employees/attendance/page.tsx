@@ -1102,19 +1102,20 @@ export default function EmployeeAttendanceListPage() {
                   <div className="space-y-6 border-l-2 border-brand-light ml-2 pl-6 relative">
                     {(() => {
                       const events = [
-                        ...(selectedRecord.punches || []).flatMap((p: any, i: number) => {
+                        ...([...(selectedRecord.punches || [])].sort((a: any, b: any) => (a.punchIn || '').localeCompare(b.punchIn || ''))).flatMap((p: any, i: number) => {
+                          const isMeeting = p.type === 'meeting';
                           const items = [{
                             time: p.punchIn,
-                            label: `Punched In (Session ${i+1})`,
-                            color: 'bg-brand-teal',
-                            iconColor: 'bg-brand-teal'
+                            label: isMeeting ? 'Meeting Start' : `Punched In (Session ${i+1})`,
+                            color: isMeeting ? 'bg-indigo-500' : 'bg-brand-teal',
+                            iconColor: isMeeting ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-brand-teal'
                           }];
                           if (p.punchOut) {
                             items.push({
                               time: p.punchOut,
-                              label: `Punched Out (Session ${i+1})`,
-                              color: 'bg-gray-400',
-                              iconColor: 'bg-gray-400'
+                              label: isMeeting ? 'Meeting End' : `Punched Out (Session ${i+1})`,
+                              color: isMeeting ? 'bg-indigo-400' : 'bg-gray-400',
+                              iconColor: isMeeting ? 'bg-indigo-400' : 'bg-gray-400'
                             });
                           }
                           return items;

@@ -11,6 +11,12 @@ class ConnectionManager:
 
     async def connect(self, user_id: str, websocket: WebSocket):
         await websocket.accept()
+        # If there's an existing active connection for this user, close it first to prevent leaks
+        if user_id in self.active_connections:
+            try:
+                await self.active_connections[user_id].close()
+            except Exception:
+                pass
         self.active_connections[user_id] = websocket
         logger.info(f"User {user_id} connected via WebSocket")
         await self.broadcast_all("user_status", {"userId": user_id, "isOnline": True})
@@ -51,5 +57,7 @@ class ConnectionManager:
                 })
             except Exception as e:
                 logger.warning(f"Error sending message to user {user_id}: {e}")
+                if user_id in self.active_connections:
+                    del self.active_connections[user_id]
 
 manager = ConnectionManager()

@@ -124,6 +124,17 @@ export default function DashboardPage() {
         fetchAssets();
       }
     }
+
+    const handleUpdate = () => {
+      if (user?.id) {
+        fetchStatus();
+        fetchHistory();
+      }
+    };
+    window.addEventListener("attendance-update", handleUpdate);
+    return () => {
+      window.removeEventListener("attendance-update", handleUpdate);
+    };
   }, [user?.id]);
 
   const fetchLeaveRequests = async () => {
@@ -413,6 +424,7 @@ export default function DashboardPage() {
       if (res.ok) {
         await fetchStatus();
         await fetchHistory();
+        window.dispatchEvent(new Event("attendance-update"));
       } else {
         const errorData = await res.json().catch(() => ({}));
         toast.error(`Action failed: ${errorData.detail || 'Server error'}`);
@@ -420,6 +432,39 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Punch error:", err);
       toast.error("Failed to connect to the server. Please ensure the backend is running.");
+    } finally {
+      setIsPunching(false);
+    }
+  };
+ 
+  const handleGoingForMeeting = async () => {
+    setIsPunching(true);
+    try {
+      const startTime = Date.now();
+      const startTimeStr = dayjs(startTime).format("HH:mm:ss");
+      
+      const res = await fetch(`${API_URL}/attendance/punch-out/${user?.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ punch_out_time: startTimeStr })
+      });
+      
+      if (res.ok) {
+        localStorage.setItem("going_for_meeting_pending", JSON.stringify({
+          startTime,
+          startTimeStr
+        }));
+        
+        toast.success("Meeting started! You are punched out.");
+        await fetchStatus();
+        await fetchHistory();
+        window.dispatchEvent(new Event("attendance-update"));
+      } else {
+        toast.error("Failed to start meeting.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error starting meeting.");
     } finally {
       setIsPunching(false);
     }
@@ -465,6 +510,7 @@ export default function DashboardPage() {
           user={user} 
           attendanceStatus={attendanceStatus} 
           handlePunch={handlePunch} 
+          handleGoingForMeeting={handleGoingForMeeting}
           isPunching={isPunching}
           workTime={workTime}
           totalBreakTime={totalBreakTime}
@@ -728,6 +774,7 @@ function EmployeeView({
   user, 
   attendanceStatus, 
   handlePunch, 
+  handleGoingForMeeting,
   isPunching, 
   workTime,
   totalBreakTime,
@@ -741,6 +788,7 @@ function EmployeeView({
   user: any, 
   attendanceStatus: any, 
   handlePunch: (type: any) => void, 
+  handleGoingForMeeting: () => void,
   isPunching: boolean,
   workTime: string,
   totalBreakTime: string,
@@ -868,6 +916,17 @@ function EmployeeView({
               >
                 {isPunching ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                   <><Coffee className="w-5 h-5 mr-3" /> {isOnBreak ? 'Break Out' : 'Take Break'}</>
+                )}
+              </Button>
+
+              <Button 
+                onClick={handleGoingForMeeting} 
+                disabled={isPunching || !isPunchedIn || isOnBreak}
+                variant="outline"
+                className={`flex-1 py-7 text-base font-bold shadow-sm transition-all border-[#F3F4F6] rounded-xl bg-white hover:bg-gray-50 text-[#111827]`}
+              >
+                {isPunching ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                  <><CalendarIcon className="w-5 h-5 mr-3 text-indigo-500" /> Going for Meeting</>
                 )}
               </Button>
               

@@ -204,6 +204,7 @@ class EmployeeBase(BaseModel):
     requiredDocuments: Optional[List[str]] = []
     securityDepositExempt: Optional[bool] = False
     securityDepositDirectPayments: Optional[List[Dict[str, Any]]] = []
+    googleCalendarTokens: Optional[Dict[str, Any]] = None
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -305,6 +306,12 @@ class AttendanceUpdate(BaseModel):
  
 class PunchRequest(BaseModel):
     employeeId: str
+
+class PunchInRequest(BaseModel):
+    punch_in_time: Optional[str] = None
+
+class PunchOutRequest(BaseModel):
+    punch_out_time: Optional[str] = None
 
 class LeaveRequestBase(BaseModel):
     employee_id: str
@@ -1259,6 +1266,7 @@ class ChatMessageBase(BaseModel):
     type: str = "personal" # personal, group
     isMe: Optional[bool] = None # Helper for frontend
     sender: Optional[str] = None # Resolved sender name
+    senderAvatar: Optional[str] = None # Resolved sender avatar photo path
     timestamp: Optional[str] = None
     tempId: Optional[str] = None
     isEdited: bool = False
@@ -1527,6 +1535,9 @@ class TimeRecoveryBase(BaseModel):
     reason: str
     status: str = 'pending' # pending, approved, rejected
     created_at: Optional[RobustDatetime] = None
+    recovery_type: Optional[str] = 'break' # 'break', 'meeting', 'work', etc.
+    start_time: Optional[str] = None # HH:MM:SS format
+    end_time: Optional[str] = None # HH:MM:SS format
 
 class TimeRecoveryCreate(TimeRecoveryBase):
     pass
@@ -1712,13 +1723,14 @@ class ScheduleBase(BaseModel):
     title: str
     description: Optional[str] = None
     employeeId: str
-    employeeName: str
+    employeeName: Optional[str] = "Unknown"
     date: RobustDate
     startTime: str
     endTime: str
     type: str  # e.g., 'meeting', 'busy', 'out_of_office', 'work'
     attendees: Optional[List[str]] = []
     createdBy: Optional[str] = None
+    googleEventId: Optional[str] = None
 
 class ScheduleCreate(ScheduleBase):
     pass
@@ -1738,6 +1750,52 @@ class Schedule(ScheduleBase):
     id: str
     class Config:
         from_attributes = True
+
+
+# User Input Stats Schemas
+class UserInputStatsBase(BaseModel):
+    employeeId: str
+    employeeName: str
+    date: str  # YYYY-MM-DD
+    clicks: int
+    keystrokes: int
+    lastActive: Optional[RobustDatetime] = None
+    applications: Optional[dict] = {}
+    domains: Optional[dict] = {}
+
+class UserInputStatsCreate(BaseModel):
+    clicks: int
+    keystrokes: int
+    applications: Optional[dict] = {}
+    domains: Optional[dict] = {}
+
+class UserInputStats(UserInputStatsBase):
+    id: str
+
+
+# Registered PC & Restriction Schemas
+class RegisteredPCBase(BaseModel):
+    hostname: str
+    ipAddress: Optional[str] = None
+    os: Optional[str] = None
+    osVersion: Optional[str] = None
+    firstSeen: Optional[RobustDatetime] = None
+    lastSeen: Optional[RobustDatetime] = None
+    blockChrome: Optional[bool] = False
+    blockYoutube: Optional[bool] = False
+    blockApps: Optional[List[str]] = []
+    blockUrls: Optional[List[str]] = []
+    activeEmployee: Optional[str] = ""
+
+class RegisteredPCUpdate(BaseModel):
+    blockChrome: Optional[bool] = None
+    blockYoutube: Optional[bool] = None
+    blockApps: Optional[List[str]] = None
+    blockUrls: Optional[List[str]] = None
+
+class RegisteredPC(RegisteredPCBase):
+    id: str
+
 
 
 
