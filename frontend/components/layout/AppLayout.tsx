@@ -593,18 +593,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
     if (!user || isPublicPage) return;
 
     // 1. All users listen to window focus and attendance updates to check pending recovery
-    window.addEventListener("focus", checkPendingRecovery);
+    const handleFocus = () => { checkPendingRecovery().catch(console.error); };
+    window.addEventListener("focus", handleFocus);
 
     const handleAttendanceUpdate = () => {
       localStorage.setItem("last_activity_timestamp", Date.now().toString());
       lastActivityTimeRef.current = Date.now();
       resetInactivityTimer();
-      checkPendingRecovery();
+      checkPendingRecovery().catch(console.error);
     };
     window.addEventListener("attendance-update", handleAttendanceUpdate);
 
     // Initial check on mount
-    checkPendingRecovery();
+    checkPendingRecovery().catch(console.error);
 
     // 2. Track OS/browser activity and set inactivity timeouts
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
@@ -619,7 +620,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     resetInactivityTimer();
 
     return () => {
-      window.removeEventListener("focus", checkPendingRecovery);
+      window.removeEventListener("focus", handleFocus);
       window.removeEventListener("attendance-update", handleAttendanceUpdate);
       events.forEach((e) => window.removeEventListener(e, handleActivity));
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);

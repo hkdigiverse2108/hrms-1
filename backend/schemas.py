@@ -1951,6 +1951,9 @@ class ContentCalendarSettingsBase(BaseModel):
     shootDateOffset: int = 12
     editingStartOffset: int = 6
     approvalOffset: int = 5
+    isApproved: bool = False
+    approvalStatus: str = "Pending"
+    statusLogs: Optional[List[dict]] = []
 
 class ContentCalendarSettingsCreate(ContentCalendarSettingsBase):
     pass
@@ -1960,6 +1963,9 @@ class ContentCalendarSettingsUpdate(BaseModel):
     shootDateOffset: Optional[int] = None
     editingStartOffset: Optional[int] = None
     approvalOffset: Optional[int] = None
+    isApproved: Optional[bool] = None
+    approvalStatus: Optional[str] = None
+    statusLogs: Optional[List[dict]] = None
 
 class ContentCalendarSettings(ContentCalendarSettingsBase):
     id: str

@@ -14,6 +14,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { useUserContext } from "@/context/UserContext";
+import dayjs from "dayjs";
 
 interface ContentCalendarTableProps {
   clientId: string;
@@ -35,6 +37,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const { confirm } = useConfirm();
+  const { user } = useUserContext();
 
   const currentMonthDate = React.useMemo(() => {
     if (!monthYear) return new Date();
@@ -290,6 +293,34 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     if (addedCount > 0 || deletedCount > 0) {
       toast.success(`Added ${addedCount} row(s) and deleted ${deletedCount} row(s)`);
       fetchEntries();
+    }
+  };
+
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      const newLog = {
+        timestamp: new Date().toISOString(),
+        status: newStatus,
+        user: user?.name || "Unknown User"
+      };
+      const updatedLogs = [...(settings?.statusLogs || []), newLog];
+      const updatedSettings = { ...settings, clientId, monthYear, approvalStatus: newStatus, statusLogs: updatedLogs };
+      
+      const res = await fetch(`${API_URL}/content-calendar-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedSettings)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setSettings(data);
+        toast.success(`Calendar status updated to ${newStatus}`);
+      } else {
+        toast.error("Failed to update calendar status");
+      }
+    } catch (error) {
+      toast.error("An error occurred while updating status");
     }
   };
 
@@ -594,8 +625,57 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
           <p className="text-xs text-slate-500">Plan and track content creation and posting</p>
         </div>
         <div className="flex items-center gap-3">
-          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-            <PopoverTrigger asChild>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <Select 
+                value={settings?.approvalStatus || "Pending"} 
+                onValueChange={handleStatusChange}
+              >
+                <SelectTrigger className={`w-auto h-9 text-xs font-semibold border-none shadow-none focus:ring-0 [&>svg]:hidden px-3 transition-colors rounded-md ${
+                  settings?.approvalStatus === "Approved by Client" ? "text-emerald-600 bg-emerald-50 hover:bg-emerald-100" :
+                  settings?.approvalStatus === "Changes Requested" ? "text-indigo-600 bg-indigo-50 hover:bg-indigo-100" :
+                  settings?.approvalStatus === "Rejected" ? "text-rose-600 bg-rose-50 hover:bg-rose-100" :
+                  "text-amber-600 bg-amber-50 hover:bg-amber-100"
+                }`}>
+                  <SelectValue placeholder="Approval Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Approved by Client">Approved by Client</SelectItem>
+                  <SelectItem value="Changes Requested">Changes Requested</SelectItem>
+                  <SelectItem value="Rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+              {settings?.statusLogs && settings.statusLogs.length > 0 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
+                      <History className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-0" align="start">
+                    <div className="p-3 border-b border-slate-100 bg-slate-50/50">
+                      <h4 className="font-semibold text-sm text-slate-800">Status History</h4>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto p-2">
+                      <div className="flex flex-col gap-2">
+                        {[...settings.statusLogs].reverse().map((log: any, i: number) => (
+                          <div key={i} className="text-sm p-2 rounded bg-slate-50 border border-slate-100">
+                            <div className="flex justify-between items-start mb-1">
+                              <span className="font-medium text-slate-700">{log.status}</span>
+                              <span className="text-[10px] text-slate-400">{dayjs(log.timestamp).format('MMM D, h:mm A')}</span>
+                            </div>
+                            <div className="text-xs text-slate-500">by {log.user}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+              <PopoverTrigger asChild>
               <Button variant="outline" className="w-[180px] justify-start text-left font-normal h-9 bg-white">
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {currentMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
@@ -679,6 +759,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
               )}
             </PopoverContent>
           </Popover>
+          </div>
           <Button onClick={() => { setSettingsForm(settings); setIsSettingsOpen(true); }} size="icon" variant="outline" title="Settings">
             <Settings2 className="w-4 h-4 text-slate-600" />
           </Button>
