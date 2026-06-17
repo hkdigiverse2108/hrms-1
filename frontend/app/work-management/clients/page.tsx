@@ -79,21 +79,9 @@ export default function ClientsPage() {
     fetchClients();
   }, [user, router, permissionsLoading, canViewClients]);
 
-  // Departments are now derived from the clients data
+  // Departments are hardcoded as per user request
   useEffect(() => {
-    if (clients.length > 0) {
-      const allDepts = clients.flatMap(c => 
-        c.department ? c.department.split(',').map((d: string) => d.trim()) : []
-      ).filter(Boolean);
-      const uniqueDepts = Array.from(new Set(allDepts)) as string[];
-      // Ensure core ones exist, but don't show Sales or Graphics
-      const core = ["Development", "Creative", "Marketing"];
-      const combined = Array.from(new Set([...core, ...uniqueDepts]))
-        .filter(d => !['sales', 'graphics'].includes(d.toLowerCase()));
-      setDepartments(combined);
-    } else {
-      setDepartments(["Development", "Creative", "Marketing"]);
-    }
+    setDepartments(["Development", "Creative", "Digital Marketing"]);
   }, [clients]);
 
   const fetchClients = async () => {
@@ -332,7 +320,7 @@ export default function ClientsPage() {
                           <TableHead className="min-w-[120px] text-left font-bold text-slate-700">Phone Number</TableHead>
                           <TableHead className="text-center font-bold text-slate-700">Status</TableHead>
                         </>
-                      ) : activeTab === "marketing" ? (
+                      ) : activeTab === "digital marketing" ? (
                         <>
                           <TableHead className="min-w-[150px] text-left font-bold text-slate-700">Client Name</TableHead>
                           <TableHead className="min-w-[150px] text-left font-bold text-slate-700">Services</TableHead>
@@ -375,7 +363,7 @@ export default function ClientsPage() {
                           { key: 'email', type: 'text', align: 'left' },
                           { key: 'phone', type: 'text', align: 'left' },
                           { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
-                        ] : activeTab === "marketing" ? [
+                        ] : activeTab === "digital marketing" ? [
                           { key: 'name', type: 'text', font: 'bold', align: 'left' },
                           { key: 'services', type: 'text', align: 'left' },
                           { key: 'salesFocused', type: 'text', align: 'left' },
