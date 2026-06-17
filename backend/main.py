@@ -1766,9 +1766,15 @@ async def update_lead_follow_up(lead_id: str, follow_up_idx: int, follow_up: sch
     return await crud.update_lead_follow_up(db, lead_id, follow_up_idx, follow_up, performedBy=performedBy, userName=userName)
 
 # Sales Target Routes
-@app.get("/sales-targets", response_model=List[schemas.SalesTarget])
+@app.get("/sales-targets")
 async def read_sales_targets(month: Optional[str] = None, year: Optional[int] = None, type: Optional[str] = None, db=Depends(get_db)):
-    return await crud.get_sales_targets(db, month, year, type)
+    try:
+        targets = await crud.get_sales_targets(db, month, year, type)
+        return targets
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/sales-targets", response_model=schemas.SalesTarget)
 async def upsert_sales_target(target: schemas.SalesTargetCreate, db=Depends(get_db)):

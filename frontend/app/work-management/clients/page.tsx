@@ -77,23 +77,24 @@ export default function ClientsPage() {
     }
     
     fetchClients();
-    fetchDepartments();
   }, [user, router, permissionsLoading, canViewClients]);
 
-  const fetchDepartments = async () => {
-    try {
-      const res = await fetch(`${API_URL}/employees`);
-      if (res.ok) {
-        const data = await res.json();
-        const excludedDepts = ["sales", "admin", "hr"];
-        const depts = Array.from(new Set(data.map((e: any) => e.department).filter(Boolean)))
-          .filter((d: any) => !excludedDepts.includes(d.toLowerCase())) as string[];
-        setDepartments(depts);
-      }
-    } catch (err) {
-      console.error("Error fetching departments:", err);
+  // Departments are now derived from the clients data
+  useEffect(() => {
+    if (clients.length > 0) {
+      const allDepts = clients.flatMap(c => 
+        c.department ? c.department.split(',').map((d: string) => d.trim()) : []
+      ).filter(Boolean);
+      const uniqueDepts = Array.from(new Set(allDepts)) as string[];
+      // Ensure core ones exist, but don't show Sales or Graphics
+      const core = ["Development", "Creative", "Marketing"];
+      const combined = Array.from(new Set([...core, ...uniqueDepts]))
+        .filter(d => !['sales', 'graphics'].includes(d.toLowerCase()));
+      setDepartments(combined);
+    } else {
+      setDepartments(["Development", "Creative", "Marketing"]);
     }
-  };
+  }, [clients]);
 
   const fetchClients = async () => {
     setIsLoading(true);
@@ -190,7 +191,8 @@ export default function ClientsPage() {
     
     const matchesStatus = statusFilter === "all" || c.status === statusFilter;
     
-    const matchesDept = activeTab === "all" || c.department?.toLowerCase() === activeTab.toLowerCase();
+    const matchesDept = activeTab === "all" || 
+      (c.department && c.department.toLowerCase().split(',').map((d:string) => d.trim()).includes(activeTab.toLowerCase()));
 
     return matchesSearch && matchesStatus && matchesDept;
   });
