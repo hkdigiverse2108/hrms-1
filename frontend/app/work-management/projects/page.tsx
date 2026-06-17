@@ -535,17 +535,19 @@ export default function ProjectsPage() {
                       </Button>
                       {user && (
                         <>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" onClick={() => {
-                            setFollowupConfigProject(project);
-                            setFollowupTypeInput(project.followupType || "Interval");
-                            setFollowupIntervalInput(project.followupIntervalDays ? String(project.followupIntervalDays) : "");
-                            setFollowupDaysOfWeekInput(project.followupDaysOfWeek || []);
-                            setFollowupDatesOfMonthInput(project.followupDatesOfMonth || []);
-                            setFollowupLastDateInput(project.lastFollowupDate || "");
-                            setFollowupConfigOpen(true);
-                          }} title="Follow-up Settings">
-                            <CalendarClock className="w-4 h-4 text-slate-500" />
-                          </Button>
+                          {(!project.department || project.department.toLowerCase() !== 'development') && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" onClick={() => {
+                              setFollowupConfigProject(project);
+                              setFollowupTypeInput(project.followupType || "Interval");
+                              setFollowupIntervalInput(project.followupIntervalDays ? String(project.followupIntervalDays) : "");
+                              setFollowupDaysOfWeekInput(project.followupDaysOfWeek || []);
+                              setFollowupDatesOfMonthInput(project.followupDatesOfMonth || []);
+                              setFollowupLastDateInput(project.lastFollowupDate || "");
+                              setFollowupConfigOpen(true);
+                            }} title="Follow-up Settings">
+                              <CalendarClock className="w-4 h-4 text-slate-500" />
+                            </Button>
+                          )}
                           {canEditProjects && (
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                               setEditingProject(project);
