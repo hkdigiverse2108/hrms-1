@@ -559,7 +559,7 @@ export default function ChatPage() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch(`${API_URL}/employees`);
+      const res = await fetch(`${API_URL}/employees`, { cache: 'no-store' });
       if (res.ok) {
         setEmployees(await res.json());
       }
@@ -572,7 +572,7 @@ export default function ChatPage() {
     if (!user || !selectedChat) return;
     const targetId = selectedChat.id || selectedChat.employeeId;
     try {
-      const res = await fetch(`${API_URL}/chat/typing/${targetId}?user_id=${user.id}`);
+      const res = await fetch(`${API_URL}/chat/typing/${targetId}?user_id=${user.id}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         
@@ -605,7 +605,7 @@ export default function ChatPage() {
 
   const fetchChannels = async () => {
     try {
-      const res = await fetch(`${API_URL}/chat/channels`);
+      const res = await fetch(`${API_URL}/chat/channels`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setChatChannels(data.map((c: any) => ({ ...c, type: 'general' })));
@@ -675,7 +675,7 @@ export default function ChatPage() {
   const fetchChatSummaries = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await fetch(`${API_URL}/chat/summaries/${user.id}`);
+      const res = await fetch(`${API_URL}/chat/summaries/${user.id}`, { cache: 'no-store' });
       if (res.ok) {
         setChatSummaries(await res.json());
       }
@@ -687,7 +687,7 @@ export default function ChatPage() {
   const fetchSavedMessages = async () => {
     if (!user) return;
     try {
-      const res = await fetch(`${API_URL}/chat/saved-messages/${user.id}`);
+      const res = await fetch(`${API_URL}/chat/saved-messages/${user.id}`, { cache: 'no-store' });
       if (res.ok) {
         setGlobalSavedMessages(await res.json());
       }
@@ -701,7 +701,7 @@ export default function ChatPage() {
     const targetId = selectedChat.id || selectedChat.employeeId;
     try {
       const isGroup = selectedChat.type === 'group' || selectedChat.type === 'general';
-      const res = await fetch(`${API_URL}/chat/files/${user.id}/${targetId}?is_group=${isGroup}`);
+      const res = await fetch(`${API_URL}/chat/files/${user.id}/${selectedChat.id}?is_group=${isGroup}`, { cache: 'no-store' });
       if (res.ok) {
         const files = await res.json();
         
@@ -772,7 +772,7 @@ export default function ChatPage() {
         ? `${API_URL}/chat/messages/${user.id}/${targetId}?group_id=${targetId}`
         : `${API_URL}/chat/messages/${user.id}/${targetId}`;
       
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         
@@ -900,11 +900,6 @@ export default function ChatPage() {
             }, 100);
           }
 
-          // If no change in message count, keep previous state to avoid unnecessary re-render
-          if (!isInitialLoad && !hasNewMessages && prevReal.length === marked.length) {
-            return prev;
-          }
-
           return marked;
         });
         
@@ -922,7 +917,7 @@ export default function ChatPage() {
   const fetchGroups = useCallback(async () => {
     if (!user || !user.id) return;
     try {
-      const res = await fetch(`${API_URL}/chat/groups/${user.id}`);
+      const res = await fetch(`${API_URL}/chat/groups/${user.id}`, { cache: 'no-store' });
       if (res.ok) {
         setChatGroups(await res.json());
       }
@@ -980,6 +975,19 @@ export default function ChatPage() {
       fetchGroups();
       fetchChannels();
     } 
+    else if (eventType === "message_updated") {
+      const activeChat = selectedChatRef.current;
+      const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
+      
+      const isGroupMsg = !!data.groupId;
+      const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
+      
+      if (activeChatId === messageChatId) {
+        setCurrentMessages((prev) => 
+          prev.map(m => (m.id === data.id ? { ...data, isMe: data.senderId === user.id } : m))
+        );
+      }
+    }
     else if (eventType === "typing_status") {
       const activeChat = selectedChatRef.current;
       const activeChatId = activeChat ? (activeChat.id || activeChat.employeeId) : null;
@@ -1251,7 +1259,7 @@ export default function ChatPage() {
               href={href} 
               target="_blank" 
               rel="noopener noreferrer"
-              className={cn("no-underline hover:!underline font-medium break-all", isMeBubble ? "!text-white" : "!text-brand-teal")}
+              className="text-[#027eb5] hover:underline break-all"
               onClick={(e) => e.stopPropagation()}
             >
               {tp}
@@ -1679,15 +1687,62 @@ export default function ChatPage() {
 
   const handleVote = async (messageId: string, optionId: string) => {
     if (!user) return;
+
+    const applyVoteOptions = (options: any[]) => {
+      setCurrentMessages((prev) =>
+        prev.map((msg: any) =>
+          msg.id === messageId && msg.poll
+            ? { ...msg, poll: { ...msg.poll, options } }
+            : msg
+        )
+      );
+    };
+
+    const previousMessage = currentMessages.find((msg: any) => msg.id === messageId);
+    if (!previousMessage?.poll) return;
+
+    const optimisticOptions = previousMessage.poll.options.map((option: any) => {
+      const votes = Array.isArray(option.votes) ? [...option.votes] : [];
+      const hasVote = votes.includes(user.id);
+
+      if (option.id === optionId) {
+        return {
+          ...option,
+          votes: hasVote ? votes.filter((id: string) => id !== user.id) : [...votes, user.id]
+        };
+      }
+
+      if (!previousMessage.poll.isMultiple) {
+        return {
+          ...option,
+          votes: votes.filter((id: string) => id !== user.id)
+        };
+      }
+
+      return { ...option, votes };
+    });
+
+    applyVoteOptions(optimisticOptions);
+
     try {
       const res = await fetch(`${API_URL}/chat/messages/${messageId}/vote?user_id=${user.id}&option_id=${optionId}`, {
         method: 'POST'
       });
       if (res.ok) {
-        fetchMessages();
+        const data = await res.json();
+        if (data?.options) {
+          applyVoteOptions(data.options);
+        } else {
+          fetchMessages();
+        }
+      } else {
+        applyVoteOptions(previousMessage.poll.options);
+        toast.error("Vote failed");
       }
     } catch (err) {
       console.error("Error voting:", err);
+      applyVoteOptions(previousMessage.poll.options);
+      toast.error("Vote failed");
     }
   };
 
@@ -1958,8 +2013,19 @@ export default function ChatPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search contacts..." 
-              className="pl-9 bg-white border-border rounded-lg h-10 shadow-sm" 
+              className="pl-9 pr-9 bg-white border-border rounded-lg h-10 shadow-sm" 
             />
+            {searchQuery && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:bg-transparent hover:text-slate-700"
+                onClick={() => setSearchQuery("")}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
 
@@ -3396,10 +3462,22 @@ export default function ChatPage() {
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
+                value={searchQuery}
                 placeholder="Search people..." 
-                className="pl-9"
+                className="pl-9 pr-9"
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              {searchQuery && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:bg-transparent hover:text-slate-700"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
             <div className="max-h-[300px] overflow-y-auto space-y-1">
               {filteredChats.map((chat: any) => (
@@ -3511,10 +3589,21 @@ export default function ChatPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder="Search colleagues..."
-                className="pl-10 rounded-xl"
+                className="pl-10 pr-9 rounded-xl"
                 value={newChatSearchQuery}
                 onChange={(e) => setNewChatSearchQuery(e.target.value)}
               />
+              {newChatSearchQuery && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:bg-transparent hover:text-slate-700"
+                  onClick={() => setNewChatSearchQuery("")}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
             <div className="max-h-[300px] overflow-y-auto space-y-1 pr-2">
               {employees.filter((emp: any) => {

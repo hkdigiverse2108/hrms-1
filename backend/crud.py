@@ -69,18 +69,24 @@ def get_now():
 def parse_datetime(date_val, time_str):
     if not time_str:
         return get_now()
+    time_str = str(time_str).strip()
+    if time_str in {"-", "--", "--:--"}:
+        return get_now()
     if isinstance(date_val, (date, datetime)):
         date_str = date_val.strftime("%Y-%m-%d")
     else:
         # Extract only the date part in case date_val is an ISO timestamp string or full datetime string
         date_str = str(date_val).split('T')[0].split(' ')[0]
-    try:
-        # Standard format
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        # Fallback for formats without seconds
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-    return IST.localize(dt)
+    date_formats = ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y")
+    time_formats = ("%H:%M:%S", "%H:%M", "%I:%M:%S %p", "%I:%M %p", "%I:%M:%S%p", "%I:%M%p")
+    for date_fmt in date_formats:
+        for time_fmt in time_formats:
+            try:
+                dt = datetime.strptime(f"{date_str} {time_str}", f"{date_fmt} {time_fmt}")
+                return IST.localize(dt)
+            except ValueError:
+                continue
+    raise ValueError(f"Cannot parse time: {time_str}")
 
 def fix_id(doc):
     from datetime import datetime, date
@@ -1900,6 +1906,8 @@ async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
     # Use lastPunchIn if available to calculate session duration, otherwise fallback to checkIn
     start_time_str = status.get("lastPunchIn") or status["checkIn"]
     check_in_time = parse_datetime(status['date'], start_time_str)
+    if now < check_in_time:
+        now += timedelta(days=1)
     
     # Calculate break seconds that occurred during this session (since check_in_time)
     breaks = status.get("breaks", [])
@@ -1921,6 +1929,8 @@ async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
                 else:
                     # User punched out while on active break: close the break at now
                     b_end = now
+                    if b_end < b_start:
+                        b_end += timedelta(days=1)
                     break_dur = (b_end - b_start).total_seconds()
                     b_copy["endTime"] = now.strftime("%H:%M:%S")
                     b_copy["duration"] = f"{int(break_dur // 60)}m"

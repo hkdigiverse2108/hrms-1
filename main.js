@@ -1,14 +1,104 @@
 const { app, BrowserWindow, Menu, Tray } = require('electron');
 app.setAppUserModelId("com.hrms.app");
 const path = require('path');
-const { spawn, fork } = require('child_process');
+const { spawn, fork, spawnSync } = require('child_process');
 const fs = require('fs');
+const net = require('net');
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+app.on('second-instance', () => {
+  log('Second HRMS instance requested. Focusing existing window instead of starting another backend/frontend.');
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
+function checkPortOnHost(port, host) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => {
+      resolve(false);
+    });
+    server.once('listening', () => {
+      server.close(() => {
+        resolve(true);
+      });
+    });
+    server.listen(port, host);
+  });
+}
+
+async function checkPort(port) {
+  const hostsToCheck = ['127.0.0.1', '0.0.0.0'];
+  for (const host of hostsToCheck) {
+    const isFree = await checkPortOnHost(port, host);
+    if (!isFree) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function findFreePort(startPort) {
+  let port = startPort;
+  for (let i = 0; i < 100; i++) {
+    const isFree = await checkPort(port);
+    if (isFree) {
+      return port;
+    }
+    port++;
+  }
+  return startPort;
+}
 
 let mainWindow = null;
 let backendProcess = null;
 let frontendProcess = null;
 let tray = null;
 let isQuitting = false;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function spawnDetachedWithRetry(exePath, attempts = 6) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const child = await new Promise((resolve, reject) => {
+        const spawned = spawn(exePath, [], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true
+        });
+
+        spawned.once('spawn', () => resolve(spawned));
+        spawned.once('error', reject);
+      });
+
+      child.unref();
+      return;
+    } catch (err) {
+      lastError = err;
+      const shouldRetry = process.platform === 'win32' && ['EBUSY', 'EPERM', 'EACCES'].includes(err.code);
+      if (!shouldRetry || attempt === attempts) {
+        throw err;
+      }
+      log(`[Update] Installer was busy (${err.code}). Retrying launch ${attempt}/${attempts}...`);
+      await wait(750);
+    }
+  }
+
+  throw lastError;
+}
 
 // Log file for diagnosing issues in packaged app
 const logPath = path.join(app.getPath('userData'), 'hrms-desktop.log');
@@ -98,7 +188,11 @@ function patchNextjsConfig() {
               log(`Updating routes-manifest destination from "${rewrite.destination}" to "${backendUrl}/:path*"`);
               rewrite.destination = `${backendUrl}/:path*`;
               modified = true;
-            } else if (rewrite.source.startsWith('/api/activity/session-') || rewrite.source === '/api/system/info') {
+            } else if (
+              rewrite.source.startsWith('/api/activity/session-') ||
+              rewrite.source === '/api/system/info' ||
+              rewrite.source === '/api/chat/ws-info'
+            ) {
               const suffix = rewrite.source.replace('/api/', '');
               const localDest = `http://127.0.0.1:${BACKEND_PORT}/${suffix}`;
               log(`Updating routes-manifest local tracker/info destination from "${rewrite.destination}" to "${localDest}"`);
@@ -115,7 +209,11 @@ function patchNextjsConfig() {
               log(`Updating required-server-files original rewrite from "${rewrite.destination}" to "${backendUrl}/:path*"`);
               rewrite.destination = `${backendUrl}/:path*`;
               modified = true;
-            } else if (rewrite.source.startsWith('/api/activity/session-') || rewrite.source === '/api/system/info') {
+            } else if (
+              rewrite.source.startsWith('/api/activity/session-') ||
+              rewrite.source === '/api/system/info' ||
+              rewrite.source === '/api/chat/ws-info'
+            ) {
               const suffix = rewrite.source.replace('/api/', '');
               const localDest = `http://127.0.0.1:${BACKEND_PORT}/${suffix}`;
               log(`Updating required-server-files local tracker/info original rewrite from "${rewrite.destination}" to "${localDest}"`);
@@ -144,19 +242,60 @@ function patchNextjsConfig() {
   }
 }
 
-const BACKEND_PORT = process.env.BACKEND_PORT || '8000';
-const FRONTEND_PORT = process.env.PORT || '3535';
+let BACKEND_PORT = '8000';
+let FRONTEND_PORT = '3535';
 const HOST = process.env.APP_HOST || '127.0.0.1';
 
-// Perform patching of Next.js stand-alone routing configurations on startup
-patchNextjsConfig();
-
-// Determine the URL to load in the Electron window (always local host for local execution)
-const frontendUrl = `http://127.0.0.1:${FRONTEND_PORT}`;
+// Will be determined dynamically on app ready
+let frontendUrl = `http://127.0.0.1:${FRONTEND_PORT}`;
 const isRemoteHost = false;
 
-log(`Resolved ports - Frontend: ${FRONTEND_PORT}, Backend: ${BACKEND_PORT}`);
-log(`Target Desktop Application URL: ${frontendUrl}`);
+function escapePowerShellSingleQuoted(value) {
+  return String(value).replace(/'/g, "''");
+}
+
+function stopStalePackagedProcesses() {
+  if (!app.isPackaged || process.platform !== 'win32') {
+    return;
+  }
+
+  const backendDir = path.join(process.resourcesPath, 'backend');
+  const frontendDir = path.join(process.resourcesPath, 'app', 'frontend');
+  const backendPattern = `${escapePowerShellSingleQuoted(backendDir)}*`;
+  const frontendPattern = `*${escapePowerShellSingleQuoted(frontendDir)}*server.js*`;
+
+  const command = `
+    $backendPattern = '${backendPattern}';
+    $frontendPattern = '${frontendPattern}';
+    Get-CimInstance Win32_Process |
+      Where-Object {
+        (($_.Name -in @('backend.exe', 'watchdog.exe')) -and ($_.ExecutablePath -like $backendPattern)) -or
+        (($_.CommandLine -like $frontendPattern) -and ($_.ProcessId -ne ${process.pid}))
+      } |
+      ForEach-Object {
+        try {
+          Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop;
+          Write-Output "Stopped stale HRMS process $($_.Name) PID=$($_.ProcessId)";
+        } catch {
+          Write-Output "Failed to stop stale HRMS process PID=$($_.ProcessId): $($_.Exception.Message)";
+        }
+      }
+  `;
+
+  try {
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 10000
+    });
+    const output = `${result.stdout || ''}${result.stderr || ''}`.trim();
+    if (output) {
+      log(`[Startup cleanup] ${output}`);
+    }
+  } catch (err) {
+    log(`[Startup cleanup] Failed to clean stale processes: ${err.message}`);
+  }
+}
 
 function startBackend() {
   const autoStart = process.env.AUTO_START_BACKEND;
@@ -183,7 +322,7 @@ function startBackend() {
     if (fs.existsSync(launchPath)) {
       backendProcess = spawn(launchPath, [], {
         cwd: app.getPath('userData'),
-        env: { ...process.env, PORT: BACKEND_PORT }
+        env: { ...process.env, PORT: BACKEND_PORT, BACKEND_PORT: BACKEND_PORT }
       });
     } else {
       log(`ERROR: Neither watchdog nor backend binary found in resources/backend/`);
@@ -193,7 +332,8 @@ function startBackend() {
       const localFallback = fs.existsSync(localWatchdog) ? localWatchdog : localBackend;
       if (fs.existsSync(localFallback)) {
         backendProcess = spawn(localFallback, [], {
-          cwd: app.getPath('userData')
+          cwd: app.getPath('userData'),
+          env: { ...process.env, PORT: BACKEND_PORT, BACKEND_PORT: BACKEND_PORT }
         });
       }
     }
@@ -206,7 +346,7 @@ function startBackend() {
     log(`Spawning dev backend using python: ${pythonExe}`);
     backendProcess = spawn(pythonExe, ['-m', 'uvicorn', 'main:app', '--host', HOST, '--port', BACKEND_PORT], {
       cwd: path.join(__dirname, 'backend'),
-      env: { ...process.env, PYTHONPATH: path.join(__dirname, 'backend') }
+      env: { ...process.env, PYTHONPATH: path.join(__dirname, 'backend'), PORT: BACKEND_PORT, BACKEND_PORT: BACKEND_PORT }
     });
   }
 
@@ -488,20 +628,31 @@ function createWindow() {
         function downloadFile(url, dest) {
           const protocol = url.startsWith('https') ? https : http;
           const file = fs.createWriteStream(dest);
+          let settled = false;
+
+          const fail = (err) => {
+            if (settled) return;
+            settled = true;
+            file.destroy();
+            fs.unlink(dest, () => {});
+            reject(err);
+          };
           
           protocol.get(url, (response) => {
             if (response.statusCode === 301 || response.statusCode === 302) {
               // Follow redirect
-              file.close();
+              settled = true;
+              response.resume();
+              file.destroy();
               fs.unlink(dest, () => {});
-              downloadFile(response.headers.location, dest);
+              const redirectUrl = new URL(response.headers.location, url).toString();
+              downloadFile(redirectUrl, dest);
               return;
             }
             
             if (response.statusCode !== 200) {
-              file.close();
-              fs.unlink(dest, () => {});
-              reject(new Error(`Failed to download: Server returned ${response.statusCode}`));
+              response.resume();
+              fail(new Error(`Failed to download: Server returned ${response.statusCode}`));
               return;
             }
             
@@ -510,7 +661,6 @@ function createWindow() {
             
             response.on('data', (chunk) => {
               downloadedSize += chunk.length;
-              file.write(chunk);
               
               if (totalSize > 0) {
                 const progress = Math.round((downloadedSize / totalSize) * 100);
@@ -519,16 +669,22 @@ function createWindow() {
                 }
               }
             });
+            response.on('error', fail);
             
-            response.on('end', () => {
-              file.end();
-              resolve();
+            file.on('finish', () => {
+              if (settled) return;
+              settled = true;
+              file.close((err) => {
+                if (err) {
+                  reject(err);
+                  return;
+                }
+                resolve();
+              });
             });
-          }).on('error', (err) => {
-            file.close();
-            fs.unlink(dest, () => {});
-            reject(err);
-          });
+            file.on('error', fail);
+            response.pipe(file);
+          }).on('error', fail);
         }
         
         downloadFile(absoluteUrl, tempPath);
@@ -536,12 +692,8 @@ function createWindow() {
       
       log(`[Update] Download complete. Spawning installer: ${tempPath}`);
       
-      // Execute the installer in background
-      const child = spawn(tempPath, [], {
-        detached: true,
-        stdio: 'ignore'
-      });
-      child.unref();
+      // Execute the installer after Windows has released the downloaded file handle.
+      await spawnDetachedWithRetry(tempPath);
       
       // Close sub-processes and quit app
       killSubprocesses();
@@ -615,8 +767,42 @@ function killSubprocesses() {
   }
 }
 
-app.on('ready', () => {
+app.on('ready', async () => {
+  if (!gotSingleInstanceLock) {
+    return;
+  }
+
   log(`HRMS desktop app starting. Logging to: ${logPath}`);
+  stopStalePackagedProcesses();
+  
+  // Resolve free ports dynamically
+  try {
+    const startBackendPort = parseInt(process.env.BACKEND_PORT || '8000', 10);
+    const resolvedBackend = await findFreePort(startBackendPort);
+    BACKEND_PORT = resolvedBackend.toString();
+    log(`Resolved free backend port: ${BACKEND_PORT}`);
+  } catch (err) {
+    log(`Error resolving backend port: ${err.message}. Using default 8000.`);
+    BACKEND_PORT = '8000';
+  }
+  
+  try {
+    const startFrontendPort = parseInt(process.env.PORT || '3535', 10);
+    const resolvedFrontend = await findFreePort(startFrontendPort);
+    FRONTEND_PORT = resolvedFrontend.toString();
+    log(`Resolved free frontend port: ${FRONTEND_PORT}`);
+  } catch (err) {
+    log(`Error resolving frontend port: ${err.message}. Using default 3535.`);
+    FRONTEND_PORT = '3535';
+  }
+  
+  frontendUrl = `http://127.0.0.1:${FRONTEND_PORT}`;
+  log(`Resolved ports - Frontend: ${FRONTEND_PORT}, Backend: ${BACKEND_PORT}`);
+  log(`Target Desktop Application URL: ${frontendUrl}`);
+  
+  // Patch routing configurations after ports are resolved
+  patchNextjsConfig();
+  
   if (!isRemoteHost) {
     startBackend();
     startFrontend();
