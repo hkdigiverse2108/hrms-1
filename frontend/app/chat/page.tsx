@@ -1256,12 +1256,14 @@ export default function ChatPage() {
           );
         })();
 
-        // Two unified color palettes: Gold/Yellow for 'You', Blue/Cyan for 'Others'
+        // Two unified color palettes: Orange/Amber for 'You', Blue/Cyan for 'Others'
         let tagColorClass = "";
         if (isMeBubble) {
-          tagColorClass = isMe ? "text-[#fef08a] font-extrabold" : "text-[#ccfbf1] font-extrabold";
+          // Darker colors for sent bubbles (light green background #d9fdd3)
+          tagColorClass = isMe ? "text-[#b45309] font-extrabold" : "text-[#0369a1] font-extrabold";
         } else {
-          tagColorClass = isMe ? "text-[#d97706]" : "text-[#0ea5e9]";
+          // Standard colors for received bubbles (white background)
+          tagColorClass = isMe ? "text-[#d97706] font-extrabold" : "text-[#0ea5e9] font-extrabold";
         }
 
         return (
@@ -3296,32 +3298,11 @@ export default function ChatPage() {
 
                       {/* Right side actions: Tag + Poll + Mic */}
                       <div className="flex items-center shrink-0">
-                        {/* Tagging / Mention Popover */}
+                        {/* Tagging / Mention Popover (Hidden Trigger) */}
+                        {/* Tagging / Mention Dropdown */}
                         <div className="relative">
-                          <Popover open={showTagPicker} onOpenChange={setShowTagPicker}>
-                            <PopoverTrigger asChild>
-                              <Button 
-                                type="button" 
-                                variant="ghost" 
-                                size="icon" 
-                                className={cn("text-[#54656f] hover:bg-slate-100 rounded-full h-9 w-9 shrink-0", showTagPicker && "bg-brand-teal/10 text-brand-teal")}
-                                onClick={() => {
-                                  if (!showTagPicker) {
-                                    if (!message.endsWith("@")) {
-                                      setMessage(prev => prev + (prev.endsWith(" ") || prev === "" ? "@" : " @"));
-                                    }
-                                    setTagSearchQuery("");
-                                    setShowTagPicker(true);
-                                  } else {
-                                    setShowTagPicker(false);
-                                  }
-                                }}
-                                title="Tag Someone"
-                              >
-                                <AtSign className="w-5 h-5" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent side="top" align="end" className="p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 mb-4 max-h-64 overflow-y-auto z-[100]">
+                          {showTagPicker && (
+                            <div className="absolute bottom-full right-0 p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 mb-4 max-h-64 overflow-y-auto z-[100]">
                               <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1.5 border-b border-slate-50 mb-1">
                                 Tag Colleague
                               </div>
@@ -3336,7 +3317,10 @@ export default function ChatPage() {
                                       <button
                                         key={emp.id}
                                         type="button"
-                                        onClick={() => handleTagSelect(emp)}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault(); // Keep focus on textarea
+                                          handleTagSelect(emp);
+                                        }}
                                         className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-50 rounded-xl text-left transition-all"
                                       >
                                         <Avatar className="w-7 h-7 shrink-0">
@@ -3352,8 +3336,8 @@ export default function ChatPage() {
                                   })}
                                 </div>
                               )}
-                            </PopoverContent>
-                          </Popover>
+                            </div>
+                          )}
                         </div>
 
                         {/* Poll Button */}
