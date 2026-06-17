@@ -706,9 +706,16 @@ export default function CreativeClientsPage() {
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-2.5">
-                        <Badge className={client.status === "active" ? "bg-emerald-50 text-emerald-600 border-emerald-200/60 shadow-sm font-semibold" : "bg-red-50 text-red-600 border-red-200/60 shadow-sm font-semibold"}>
-                          {client.status?.toUpperCase() || "ACTIVE"}
-                        </Badge>
+                        {(() => {
+                          const projectStatus = clientProjects[client.id]?.status || "";
+                          const isOnHold = projectStatus.toLowerCase() === "on-hold";
+                          const displayText = isOnHold ? "ON HOLD" : "ACTIVE";
+                          return (
+                            <Badge className={!isOnHold ? "bg-emerald-50 text-emerald-600 border-emerald-200/60 shadow-sm font-semibold" : "bg-red-50 text-red-600 border-red-200/60 shadow-sm font-semibold"}>
+                              {displayText}
+                            </Badge>
+                          );
+                        })()}
                         {clientProjects[client.id]?.nextFollowupDate && new Date(clientProjects[client.id].nextFollowupDate) <= new Date() && (
                           <Badge 
                             className="bg-rose-50 text-rose-600 border-rose-200/60 animate-pulse flex items-center gap-1.5 shadow-sm cursor-pointer hover:bg-rose-100 hover:text-rose-700 transition-colors"
