@@ -31,6 +31,7 @@ export default function ProjectsPage() {
 
   const [projects, setProjects] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -61,13 +62,15 @@ export default function ProjectsPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const [pRes, tRes] = await Promise.all([
+      const [pRes, tRes, lRes] = await Promise.all([
         fetch(`${API_URL}/projects?userId=${user.id}&role=${user.role}`),
-        fetch(`${API_URL}/wm-tasks?userId=${user.id}&role=${user.role}`)
+        fetch(`${API_URL}/wm-tasks?userId=${user.id}&role=${user.role}`),
+        fetch(`${API_URL}/leads`)
       ]);
       
       if (pRes.ok) setProjects(await pRes.json());
       if (tRes.ok) setTasks(await tRes.json());
+      if (lRes.ok) setLeads(await lRes.json());
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -169,6 +172,14 @@ export default function ProjectsPage() {
     const endDate = new Date(dateString);
     return endDate < today;
   };
+
+  // Derived pending leads that need projects
+  const pendingProjects = leads.filter(l => {
+    if (l.status !== 'Client Won') return false;
+    // Check if any project already has this leadId
+    const projectExists = projects.some(p => p.leadId === l.id);
+    return !projectExists;
+  });
 
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -299,6 +310,31 @@ export default function ProjectsPage() {
           )}
         </div>
       </div>
+
+      {pendingProjects.length > 0 && !isLoading && (
+        <div 
+          onClick={() => router.push('/work-management/projects/pending')}
+          className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between cursor-pointer transition-colors group shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="bg-amber-100 p-2 rounded-full text-amber-600">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-amber-800">
+                Action Required: Pending Project Creations ({pendingProjects.length})
+              </h3>
+              <p className="text-sm text-amber-700 mt-0.5">
+                You have won leads that need to be converted into active projects. Click here to review and create them.
+              </p>
+            </div>
+          </div>
+          <div className="text-amber-700 font-bold hover:text-amber-800 flex items-center gap-1">
+            <span className="underline underline-offset-2">Review Leads</span>
+            <span>&rarr;</span>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">

@@ -79,7 +79,7 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="contact">Contact Person</Label>
+          <Label htmlFor="contact">Contact Person <span className="text-red-500">*</span></Label>
           <Input 
             id="contact" 
             placeholder="Enter contact name" 
@@ -88,7 +88,7 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
           {errors.contact && <p className="text-xs text-red-500">{errors.contact.message}</p>}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="phone">Phone Number</Label>
+          <Label htmlFor="phone">Phone Number <span className="text-red-500">*</span></Label>
           <Input 
             id="phone" 
             placeholder="+1 (555) 000-0000" 

@@ -891,6 +891,7 @@ class ProjectBase(BaseModel):
     description: Optional[str] = None
     clientId: str
     clientName: Optional[str] = None
+    leadId: Optional[str] = None
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
@@ -909,6 +910,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    leadId: Optional[str] = None
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
@@ -1465,6 +1467,7 @@ class SalesTargetBase(BaseModel):
     incentiveBase: Optional[float] = 0
     incentiveAmount: float = 0
     breakdown: Optional[List[dict]] = []
+    status: Optional[str] = "Active"
     createdAt: Optional[str] = None
 
 class SalesTargetCreate(SalesTargetBase):
@@ -1478,6 +1481,7 @@ class SalesTargetUpdate(BaseModel):
     week: Optional[int] = None
     startDate: Optional[str] = None
     endDate: Optional[str] = None
+    status: Optional[str] = None
 
 class SalesTarget(SalesTargetBase):
     id: str

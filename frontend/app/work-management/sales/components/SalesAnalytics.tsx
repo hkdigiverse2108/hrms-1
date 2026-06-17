@@ -109,16 +109,19 @@ export function SalesAnalytics() {
         const leadDate = dayjs(lead.date);
         matchesDate = leadDate.isBetween(dateRange.start, dateRange.end, 'day', '[]');
       } else if (dateRange.start) {
-        matchesDate = dayjs(lead.date).isAfter(dayjs(dateRange.start).subtract(1, 'day'));
+        matchesDate = !dayjs(lead.date).isBefore(dateRange.start, 'day');
       } else if (dateRange.end) {
-        matchesDate = dayjs(lead.date).isBefore(dayjs(dateRange.end).add(1, 'day'));
+        matchesDate = !dayjs(lead.date).isAfter(dateRange.end, 'day');
       }
 
       // Employee Filter
       let matchesEmp = true;
       if (selectedEmployee !== 'all') {
         const assignedList = Array.isArray(lead.assignedTo) ? lead.assignedTo : (lead.assignedTo ? [lead.assignedTo] : []);
-        matchesEmp = assignedList.some(name => name.toLowerCase() === selectedEmployee.toLowerCase());
+        matchesEmp = assignedList.some(emp => {
+          const empName = typeof emp === 'string' ? emp : (emp?.name || emp?.employeeName || String(emp || ""));
+          return empName.trim().toLowerCase().replace(/\s+/g, ' ') === selectedEmployee.trim().toLowerCase().replace(/\s+/g, ' ');
+        });
       }
 
       // Source Filter
@@ -142,6 +145,81 @@ export function SalesAnalytics() {
 
     const empStats: Record<string, any> = {};
 
+    // 1. Determine months to show if there's a date range
+    const monthsInDateRange: { monthStr: string, yearStr: string, date: dayjs.Dayjs }[] = [];
+    if (dateRange.start && dateRange.end) {
+      let curr = dayjs(dateRange.start).startOf('month');
+      const end = dayjs(dateRange.end).startOf('month');
+      let count = 0;
+      while ((curr.isBefore(end) || curr.isSame(end, 'month')) && count < 60) {
+        monthsInDateRange.push({
+          monthStr: curr.format('MMMM'),
+          yearStr: curr.year().toString(),
+          date: curr
+        });
+        curr = curr.add(1, 'month');
+        count++;
+      }
+    }
+
+    // 2. Pre-populate empStats for the selected employee (or all if we want targets to be accurate, but let's stick to selected employee to avoid cluttering if 'all' is selected)
+    const employeesToPrepopulate = [];
+    if (selectedEmployee !== 'all') {
+      const emp = employees.find(e => {
+        const eName = e.name || `${e.firstName} ${e.lastName}`;
+        return eName.trim().toLowerCase().replace(/\s+/g, ' ') === selectedEmployee.trim().toLowerCase().replace(/\s+/g, ' ');
+      });
+      if (emp) {
+        employeesToPrepopulate.push({
+          name: emp.name || `${emp.firstName} ${emp.lastName}`,
+          empId: emp.employeeId || emp.id || 'N/A',
+          department: emp.department || 'Sales'
+        });
+      } else {
+        employeesToPrepopulate.push({
+          name: selectedEmployee,
+          empId: 'N/A',
+          department: 'Sales'
+        });
+      }
+    }
+
+    // 3. Pre-populate
+    employeesToPrepopulate.forEach(emp => {
+      monthsInDateRange.forEach(m => {
+        const normalizedName = emp.name.trim().toLowerCase().replace(/\s+/g, ' ');
+        const monthKeySuffix = `${m.monthStr}-${m.yearStr}`;
+        const key = `${normalizedName}_${monthKeySuffix}`;
+        
+        const empTargets = targets.filter(t => {
+          const tName = t.employeeName?.trim().toLowerCase().replace(/\s+/g, ' ');
+          return tName === normalizedName && 
+                 t.month === m.monthStr && 
+                 t.year?.toString() === m.yearStr;
+        });
+        let totalIncentive = empTargets.reduce((sum, t) => sum + parseFloat((t.incentiveAmount || 0).toString()), 0);
+        let totalTarget = empTargets.reduce((sum, t) => sum + parseFloat((t.targetAmount || 0).toString()), 0);
+
+        empStats[key] = { 
+          name: emp.name, 
+          empId: emp.empId,
+          department: emp.department,
+          monthStr: m.monthStr,
+          yearStr: m.yearStr,
+          duration: `${m.monthStr.substring(0,3)} ${m.yearStr}`,
+          monthDateValue: m.date.valueOf(),
+          assigned: 0, 
+          active: 0,
+          hot: 0,
+          lost: 0,
+          won: 0, 
+          target: totalTarget,
+          revenue: 0,
+          incentivesEarned: totalIncentive
+        };
+      });
+    });
+
     // Group leads by Employee AND Month
     filteredLeads.forEach(l => {
       const assignedList = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
@@ -154,7 +232,9 @@ export function SalesAnalytics() {
       const monthKeySuffix = `${monthStr}-${yearStr}`;
 
       assignedList.forEach(empNameRaw => {
-        const nameStr = typeof empNameRaw === 'string' ? empNameRaw : String(empNameRaw || "Unassigned");
+        const nameStr = typeof empNameRaw === 'string' 
+          ? empNameRaw 
+          : (empNameRaw?.name || empNameRaw?.employeeName || String(empNameRaw || "Unassigned"));
         const empName = nameStr;
         const normalizedName = empName.trim().toLowerCase().replace(/\s+/g, ' ');
         const key = `${normalizedName}_${monthKeySuffix}`;
@@ -209,12 +289,15 @@ export function SalesAnalytics() {
       });
     });
 
-    const employeeData = Object.values(empStats).map(emp => {
+    let employeeData = Object.values(empStats).map(emp => {
       return {
         ...emp,
         winRate: emp.assigned > 0 ? (emp.won / emp.assigned) * 100 : 0
       };
     });
+
+    // Filter out rows that have absolutely no data
+    employeeData = employeeData.filter(emp => emp.assigned > 0 || emp.revenue > 0 || emp.target > 0);
 
     const totalTargetValue = employeeData.reduce((sum, emp) => sum + emp.target, 0);
 
@@ -229,7 +312,7 @@ export function SalesAnalytics() {
     if (maxRev === 0 && employeeData.length > 0) topPerformer = "No Revenue Yet";
 
     return { totalLeads, wonLeads: wonLeads.length, totalRevenue, winRate, employeeData, totalTargetValue, activePipeline, topPerformer };
-  }, [filteredLeads, employees, targets]);
+  }, [filteredLeads, employees, targets, dateRange, selectedEmployee]);
 
   // Apply Sort
   const displayData = useMemo(() => {
@@ -353,7 +436,12 @@ export function SalesAnalytics() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Employees</SelectItem>
-              {Array.from(new Set(employees.filter(e => e.department?.toLowerCase() === 'sales').map(emp => emp.name || `${emp.firstName} ${emp.lastName}`))).map((name, idx) => (
+              {Array.from(new Set(employees.filter(e => {
+                const dept = (e.department || '').toLowerCase();
+                const role = ((e as any).role || '').toLowerCase();
+                const name = (e.name || '').toLowerCase();
+                return dept === 'sales' || role === 'admin' || dept === 'admin' || name.includes('admin');
+              }).map(emp => emp.name || `${emp.firstName} ${emp.lastName}`))).filter(Boolean).map((name, idx) => (
                 <SelectItem key={idx} value={name}>{name}</SelectItem>
               ))}
             </SelectContent>
@@ -522,23 +610,49 @@ export function SalesAnalytics() {
                     <p className="font-bold text-slate-700">{emp.name}</p>
                   </td>
                   <td className="px-6 py-3 text-center text-xs font-medium text-slate-500">{emp.duration}</td>
-                  <td className="px-6 py-3 text-center text-slate-600">{emp.assigned}</td>
-                  <td className="px-6 py-3 text-center text-slate-600">{emp.active}</td>
+                  <td className="px-6 py-3 text-center text-slate-600">{emp.assigned || '-'}</td>
+                  <td className="px-6 py-3 text-center text-slate-600">{emp.active || '-'}</td>
                   <td className="px-6 py-3 text-center">
-                    <span className={emp.hot > 0 ? "text-orange-600 font-medium" : "text-slate-400"}>{emp.hot}</span>
+                    <span className={emp.hot > 0 ? "text-orange-600 font-medium" : "text-slate-400"}>{emp.hot || '-'}</span>
                   </td>
                   <td className="px-6 py-3 text-center">
-                    <span className="bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-md text-xs font-bold">{emp.won}</span>
+                    {emp.won > 0 ? (
+                      <span className="bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-md text-xs font-bold">{emp.won}</span>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
                   </td>
                   <td className="px-6 py-3 text-center">
-                    <span className={emp.lost > 0 ? "text-red-500 font-medium" : "text-slate-400"}>{emp.lost}</span>
+                    <span className={emp.lost > 0 ? "text-red-500 font-medium" : "text-slate-400"}>{emp.lost || '-'}</span>
                   </td>
-                  <td className="px-6 py-3 text-right text-slate-600 font-medium">{emp.winRate.toFixed(1)}%</td>
-                  <td className="px-6 py-3 text-right font-medium text-slate-700">₹{emp.target.toLocaleString()}</td>
-                  <td className="px-6 py-3 text-right font-bold text-emerald-600">₹{emp.revenue.toLocaleString()}</td>
-                  <td className="px-6 py-3 text-right font-bold text-indigo-600 bg-indigo-50/20 border-l border-slate-50">₹{emp.incentivesEarned.toLocaleString()}</td>
+                  <td className="px-6 py-3 text-right text-slate-600 font-medium">{emp.assigned > 0 ? emp.winRate.toFixed(1) + '%' : '-'}</td>
+                  <td className="px-6 py-3 text-right font-medium text-slate-700">{emp.target > 0 ? `₹${emp.target.toLocaleString()}` : '-'}</td>
+                  <td className="px-6 py-3 text-right font-bold text-emerald-600">{emp.revenue > 0 ? `₹${emp.revenue.toLocaleString()}` : '-'}</td>
+                  <td className="px-6 py-3 text-right font-bold text-indigo-600 bg-indigo-50/20 border-l border-slate-50">{emp.incentivesEarned > 0 ? `₹${emp.incentivesEarned.toLocaleString()}` : '-'}</td>
                 </tr>
               ))}
+              {displayData.length > 0 && (
+                <tr className="bg-slate-100/80 font-bold text-slate-800 border-t-2 border-slate-200 shadow-sm">
+                  <td colSpan={2} className="px-6 py-4 text-right uppercase tracking-wider text-xs">
+                    Grand Total
+                  </td>
+                  <td className="px-6 py-4 text-center text-slate-700">{displayData.reduce((sum, d) => sum + d.assigned, 0)}</td>
+                  <td className="px-6 py-4 text-center text-slate-700">{displayData.reduce((sum, d) => sum + d.active, 0)}</td>
+                  <td className="px-6 py-4 text-center text-orange-600">{displayData.reduce((sum, d) => sum + d.hot, 0)}</td>
+                  <td className="px-6 py-4 text-center text-emerald-600">{displayData.reduce((sum, d) => sum + d.won, 0)}</td>
+                  <td className="px-6 py-4 text-center text-red-500">{displayData.reduce((sum, d) => sum + d.lost, 0)}</td>
+                  <td className="px-6 py-4 text-right text-slate-700">
+                    {(() => {
+                      const assigned = displayData.reduce((sum, d) => sum + d.assigned, 0);
+                      const won = displayData.reduce((sum, d) => sum + d.won, 0);
+                      return assigned > 0 ? (won / assigned * 100).toFixed(1) + '%' : '0.0%';
+                    })()}
+                  </td>
+                  <td className="px-6 py-4 text-right text-slate-700">₹{displayData.reduce((sum, d) => sum + d.target, 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right text-emerald-600">₹{displayData.reduce((sum, d) => sum + d.revenue, 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right text-indigo-600 bg-indigo-50/30 border-l border-slate-100">₹{displayData.reduce((sum, d) => sum + d.incentivesEarned, 0).toLocaleString()}</td>
+                </tr>
+              )}
               {displayData.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-6 py-12 text-center">

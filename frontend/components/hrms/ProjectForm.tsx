@@ -12,6 +12,7 @@ export interface ProjectFormData {
   title: string;
   description: string;
   clientId: string;
+  leadId?: string;
   department: string;
   teamLeaderId: string;
   startDate: string;
@@ -241,7 +242,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
       <div className="flex justify-end gap-3 pt-4">
         <Button type="submit" className="bg-brand-teal hover:bg-brand-teal-light text-white" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {initialData ? "Update Project" : "Create Project"}
+          {initialData && 'id' in initialData ? "Update Project" : "Create Project"}
         </Button>
       </div>
     </form>
