@@ -329,7 +329,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Check pending recovery status on mount and window focus
   const checkPendingRecovery = useCallback(async () => {
     if (!user || isPublicPage) return;
-    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
+
 
     // Fetch employee's current attendance status to check punch-in and break status first
     let isCurrentlyPunchedIn = false;
@@ -592,21 +592,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Setup inactivity tracking & pending recovery check
   useEffect(() => {
     if (!user || isPublicPage) return;
-    const isHrOrAdmin = user.role === "Admin" || user.role === "HR" || user.role?.toLowerCase() === "admin" || user.role?.toLowerCase() === "hr";
+
 
     // 1. All users listen to window focus and attendance updates to check pending recovery
-    window.addEventListener("focus", checkPendingRecovery);
+    const handleFocus = () => { checkPendingRecovery().catch(console.error); };
+    window.addEventListener("focus", handleFocus);
 
     const handleAttendanceUpdate = () => {
       localStorage.setItem("last_activity_timestamp", Date.now().toString());
       lastActivityTimeRef.current = Date.now();
       resetInactivityTimer();
-      checkPendingRecovery();
+      checkPendingRecovery().catch(console.error);
     };
     window.addEventListener("attendance-update", handleAttendanceUpdate);
 
     // Initial check on mount
-    checkPendingRecovery();
+    checkPendingRecovery().catch(console.error);
 
     // 2. Track OS/browser activity and set inactivity timeouts
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
@@ -621,7 +622,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     resetInactivityTimer();
 
     return () => {
-      window.removeEventListener("focus", checkPendingRecovery);
+      window.removeEventListener("focus", handleFocus);
       window.removeEventListener("attendance-update", handleAttendanceUpdate);
       events.forEach((e) => window.removeEventListener(e, handleActivity));
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);

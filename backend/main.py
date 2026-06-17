@@ -2176,10 +2176,25 @@ async def resolve_security_alert(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+
 # --- Content Calendar API ---
-@app.get("/content-calendar", response_model=List[schemas.ContentCalendarEntry])
+@app.get("/content-calendar/all")
+async def get_all_content_calendar_entries(db=Depends(get_db)):
+    try:
+        return await crud.get_all_content_calendar_entries(db)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+@app.get("/content-calendar")
 async def get_content_calendar_entries(clientId: str, monthYear: Optional[str] = None, db=Depends(get_db)):
-    return await crud.get_content_calendar_entries(db, client_id=clientId, month_year=monthYear)
+    try:
+        return await crud.get_content_calendar_entries(db, client_id=clientId, month_year=monthYear)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
 
 @app.post("/content-calendar", response_model=schemas.ContentCalendarEntry)
 async def create_content_calendar_entry(entry: schemas.ContentCalendarEntryCreate, db=Depends(get_db)):
@@ -2264,7 +2279,6 @@ async def get_form_responses(form_id: str, db=Depends(get_db)):
 @app.get("/forms/client/{client_id}/responses", response_model=List[schemas.FeedbackResponse])
 async def get_client_form_responses(client_id: str, db=Depends(get_db)):
     return await crud.get_client_form_responses(db, client_id)
-
 # --- Desktop Auto-Update Endpoints ---
 @app.get("/desktop/version")
 async def get_desktop_version(db=Depends(get_db)):
@@ -2345,8 +2359,7 @@ async def upload_desktop_release(
         print("[Desktop Release Error]", err_msg, flush=True)
         raise HTTPException(status_code=500, detail=err_msg)
 
-
 if __name__ == "__main__":
-    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
+    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8001)))
     print(f"Starting HRMS Backend on http://0.0.0.0:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)

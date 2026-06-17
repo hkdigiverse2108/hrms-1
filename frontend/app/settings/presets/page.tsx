@@ -72,6 +72,7 @@ const PERMISSION_GROUPS = [
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
       { moduleName: 'marketing', displayName: 'Marketing Reports', tabUrl: '/work-management/marketing-reports' },
+      { moduleName: 'creative', displayName: 'SMM', tabUrl: '/work-management/smm' },
     ]
   },
   {

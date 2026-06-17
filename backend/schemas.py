@@ -902,6 +902,7 @@ class ClientBase(BaseModel):
     lastPaymentDate: Optional[RobustDate] = None
     nextPaymentDueDate: Optional[RobustDate] = None
     paymentRemarks: Optional[str] = None
+    workReviews: Optional[List[dict]] = []
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -955,6 +956,7 @@ class ClientUpdate(BaseModel):
     lastPaymentDate: Optional[RobustDate] = None
     nextPaymentDueDate: Optional[RobustDate] = None
     paymentRemarks: Optional[str] = None
+    workReviews: Optional[List[dict]] = None
 
 class Client(ClientBase):
     id: str
@@ -1910,6 +1912,7 @@ class ContentCalendarEntryBase(BaseModel):
     thumbnailLink: Optional[str] = None
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
+    updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
 
 class ContentCalendarEntryCreate(ContentCalendarEntryBase):
@@ -1934,6 +1937,7 @@ class ContentCalendarEntryUpdate(BaseModel):
     thumbnailLink: Optional[str] = None
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
+    updatedBy: Optional[str] = None
 
 class ContentCalendarEntry(ContentCalendarEntryBase):
     id: str
@@ -1947,6 +1951,9 @@ class ContentCalendarSettingsBase(BaseModel):
     shootDateOffset: int = 12
     editingStartOffset: int = 6
     approvalOffset: int = 5
+    isApproved: bool = False
+    approvalStatus: str = "Pending"
+    statusLogs: Optional[List[dict]] = []
 
 class ContentCalendarSettingsCreate(ContentCalendarSettingsBase):
     pass
@@ -1956,6 +1963,9 @@ class ContentCalendarSettingsUpdate(BaseModel):
     shootDateOffset: Optional[int] = None
     editingStartOffset: Optional[int] = None
     approvalOffset: Optional[int] = None
+    isApproved: Optional[bool] = None
+    approvalStatus: Optional[str] = None
+    statusLogs: Optional[List[dict]] = None
 
 class ContentCalendarSettings(ContentCalendarSettingsBase):
     id: str

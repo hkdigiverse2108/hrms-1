@@ -21,7 +21,8 @@ import {
   CheckCircle2,
   CalendarClock,
   Banknote,
-  CreditCard
+  CreditCard,
+  Star
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -39,6 +40,7 @@ import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { WhatsAppSmmDialog } from "@/components/hrms/WhatsAppSmmDialog";
 import { WhatsAppIcon } from "@/components/hrms/WhatsAppIcon";
 import { SmmMeetingDialog } from "@/components/hrms/SmmMeetingDialog";
+import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -107,37 +109,9 @@ export default function CreativeClientsPage() {
   const [greetingsLogsOpen, setGreetingsLogsOpen] = useState(false);
   const [greetingsLogsClient, setGreetingsLogsClient] = useState<any>(null);
 
-  const handleToggleGreetings = async (client: any) => {
-    const newValue = !client.greetingsMsgSent;
-    const newLog = {
-      timestamp: new Date().toISOString(),
-      sentBy: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown',
-      status: newValue
-    };
-    const updatedLogs = [...(client.greetingsLogs || []), newLog];
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [reviewClient, setReviewClient] = useState<any>(null);
 
-    try {
-      const res = await fetch(`${API_URL}/clients/${client.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          greetingsMsgSent: newValue,
-          greetingsLogs: updatedLogs,
-          performedBy: user?.id,
-          userName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown',
-        }),
-      });
-      if (res.ok) {
-        setClients(prev => prev.map(c => c.id === client.id ? { ...c, greetingsMsgSent: newValue, greetingsLogs: updatedLogs } : c));
-        toast.success(`Greetings marked as ${newValue ? 'sent' : 'unsent'}`);
-      } else {
-        toast.error("Failed to update greetings status");
-      }
-    } catch (err) {
-      console.error("Error updating greetings status:", err);
-      toast.error("Connection error");
-    }
-  };
   const [followupConfigClient, setFollowupConfigClient] = useState<any>(null);
   const [followupTypeInput, setFollowupTypeInput] = useState("Interval");
   const [followupIntervalInput, setFollowupIntervalInput] = useState("");
@@ -290,14 +264,56 @@ export default function CreativeClientsPage() {
     fetchClients();
   }, []);
 
+  const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
+  const [clientProjects, setClientProjects] = useState<Record<string, string>>({});
+
   const fetchClients = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/clients`);
+      const [res, ccRes, pRes] = await Promise.all([
+        fetch(`${API_URL}/clients`),
+        fetch(`${API_URL}/content-calendar/all`),
+        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`)
+      ]);
+      
+      let clientsData = [];
       if (res.ok) {
-        const data = await res.json();
-        // Filter for Creative department only
-        setClients(data.filter((c: any) => c.department === "Creative"));
+        clientsData = await res.json();
+      }
+
+      if (ccRes.ok) {
+        const entries = await ccRes.json();
+        const counts: Record<string, number> = {};
+        entries.forEach((entry: any) => {
+          let pending = 0;
+          if (entry.scriptDate && !entry.scriptLink) pending++;
+          if (entry.shootDate && !entry.shootLink) pending++;
+          if (entry.editingStart && !entry.finalReelLink) pending++;
+          if (entry.approval && entry.isApproved !== 'Yes') pending++;
+          if (entry.postingDate && !entry.postingLinkOfIg) pending++;
+
+          if (pending > 0) {
+            counts[entry.clientId] = (counts[entry.clientId] || 0) + pending;
+          }
+        });
+        setPendingCounts(counts);
+      }
+      
+      if (pRes.ok) {
+        const projects = await pRes.json();
+        const projectMap: Record<string, string> = {};
+        projects.forEach((p: any) => {
+          if (p.clientId && p.department === 'Creative') {
+            projectMap[p.clientId] = p.title;
+          }
+        });
+        setClientProjects(projectMap);
+        
+        // Filter for Creative department AND must have a creative project
+        const validClientIds = new Set(Object.keys(projectMap));
+        setClients(clientsData.filter((c: any) => c.department === "Creative" && validClientIds.has(c.id)));
+      } else {
+        setClients(clientsData.filter((c: any) => c.department === "Creative"));
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -555,6 +571,10 @@ export default function CreativeClientsPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        <Button onClick={() => router.push('/work-management/smm/pending')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto">
+          <CalendarClock className="w-4 h-4" />
+          View Pending Work
+        </Button>
         <Button variant="outline" className="h-10 text-slate-600 gap-2 w-full md:w-auto">
           <Filter className="w-4 h-4" />
           Filters
@@ -573,6 +593,7 @@ export default function CreativeClientsPage() {
               <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                 <tr>
                   <th className="px-6 py-4 whitespace-nowrap">Company</th>
+                  <th className="px-6 py-4 whitespace-nowrap">Project</th>
                   <th className="px-6 py-4 whitespace-nowrap">Contact Name</th>
                   <th className="px-6 py-4 whitespace-nowrap">Phone</th>
                   <th className="px-6 py-4 whitespace-nowrap">Email</th>
@@ -585,12 +606,30 @@ export default function CreativeClientsPage() {
                 {filteredClients.map((client) => (
                   <tr key={client.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div 
-                        className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
-                        onClick={() => router.push(`/work-management/smm/${client.id}`)}
-                      >
-                        {client.companyName || "N/A"}
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
+                          onClick={() => router.push(`/work-management/smm/${client.id}`)}
+                        >
+                          {client.companyName || "N/A"}
+                        </div>
+                        {pendingCounts[client.id] > 0 && (
+                          <Badge 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/work-management/smm/pending?client=${client.id}`);
+                            }}
+                            className="bg-rose-700 hover:bg-rose-800 text-[10px] px-1.5 py-0 cursor-pointer"
+                          >
+                            {pendingCounts[client.id]} Pending
+                          </Badge>
+                        )}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-slate-700 text-sm font-medium">
+                        {clientProjects[client.id] || <span className="text-slate-400 italic font-normal">No active project</span>}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-slate-700">
@@ -733,24 +772,25 @@ export default function CreativeClientsPage() {
                         >
                           <WhatsAppIcon className="w-4.5 h-4.5" />
                         </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-9 w-9 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-full"
+                          title="Manage Client Reviews"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReviewClient(client);
+                            setReviewDialogOpen(true);
+                          }}
+                        >
+                          <Star className="w-4.5 h-4.5" />
+                        </Button>
                         <SmmMeetingDialog 
                           client={client} 
                           onUpdate={fetchClients} 
                           userId={user?.userId} 
                           userName={user?.name} 
                         />
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"
-                          title="View Activity Logs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            fetchLogs(client);
-                          }}
-                        >
-                          <History className="w-4.5 h-4.5" />
-                        </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
@@ -774,6 +814,18 @@ export default function CreativeClientsPage() {
                           }}
                         >
                           <Plus className="w-4.5 h-4.5" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-9 w-9 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"
+                          title="View Activity Logs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            fetchLogs(client);
+                          }}
+                        >
+                          <History className="w-4.5 h-4.5" />
                         </Button>
                         <Button 
                           variant="ghost" 
@@ -1127,6 +1179,12 @@ export default function CreativeClientsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <ClientReviewDialog 
+        open={reviewDialogOpen} 
+        onOpenChange={setReviewDialogOpen} 
+        client={reviewClient} 
+        onSaved={fetchClients} 
+      />
     </div>
   );
 }
