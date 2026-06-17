@@ -195,7 +195,7 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
         <div className="space-y-2">
           <Label>Assigned To</Label>
           <div className="border border-slate-200 rounded-lg p-2 max-h-36 overflow-y-auto space-y-1.5 bg-slate-50/50">
-            {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'team leader' || emp.role?.toLowerCase() === 'admin').map(emp => {
+            {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
               const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
               const assignedList = Array.isArray(currentAssignedTo) ? currentAssignedTo : (currentAssignedTo ? [currentAssignedTo] : []);
               return (
