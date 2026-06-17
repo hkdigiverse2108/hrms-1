@@ -228,6 +228,7 @@ export default function ChatPage() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>([]);
+  const [groupMemberSearchQuery, setGroupMemberSearchQuery] = useState("");
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [laterTab, setLaterTab] = useState<"In progress" | "Archived" | "Completed">("In progress");
   const [showDeletedNotification, setShowDeletedNotification] = useState(true); // Placeholder for demo, normally would be based on actual deletion events
@@ -3532,8 +3533,28 @@ export default function ChatPage() {
             </div>
             <div className="grid gap-2">
               <Label className="text-[12px] font-bold text-slate-500 uppercase">Select Members</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  placeholder="Search members..."
+                  className="pl-9 pr-9 h-9 text-sm rounded-lg"
+                  value={groupMemberSearchQuery}
+                  onChange={(e) => setGroupMemberSearchQuery(e.target.value)}
+                />
+                {groupMemberSearchQuery && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-400 hover:bg-transparent hover:text-slate-700"
+                    onClick={() => setGroupMemberSearchQuery("")}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
               <div className="max-h-[200px] overflow-y-auto border border-border rounded-xl p-2 space-y-1">
-                {chats.map((emp: any) => (
+                {chats.filter((emp: any) => !groupMemberSearchQuery.trim() || emp.name?.toLowerCase().includes(groupMemberSearchQuery.toLowerCase())).map((emp: any) => (
                   <div 
                     key={emp.id} 
                     className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer"
