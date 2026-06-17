@@ -35,6 +35,10 @@ const nextConfig = {
           destination: `http://127.0.0.1:${localBackendPort}/system/info`,
         },
         {
+          source: '/api/chat/ws-info',
+          destination: `http://127.0.0.1:${localBackendPort}/chat/ws-info`,
+        },
+        {
           source: '/api/:path*',
           destination: `${backendUrl}/:path*`,
         },

@@ -32,7 +32,7 @@ import {
   Banknote, 
   Clock, 
   X,
-  Save 
+  Save
 } from 'lucide-react'
 import { API_URL, getAvatarUrl } from '@/lib/config'
 
