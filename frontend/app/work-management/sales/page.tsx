@@ -1064,7 +1064,6 @@ export default function SalesPage() {
                                 phone: lead.phone || "",
                                 email: lead.email || "",
                                 remarks: lead.remarks || "",
-                                department: "Sales",
                               });
                               setConvertingLeadId(lead.id);
                               setClientDialogOpen(true);
