@@ -353,34 +353,6 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     setIsNewRow(false);
   };
 
-  useEffect(() => {
-    if (!editingId) return;
-
-    const timeoutId = setTimeout(async () => {
-      setIsSaving(true);
-      const storedUser = localStorage.getItem('user');
-      const user = storedUser ? JSON.parse(storedUser) : null;
-      const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
-
-      try {
-        const res = await fetch(`${API_URL}/content-calendar/${editingId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...editForm, updatedBy: userName }),
-        });
-        if (res.ok) {
-          const updated = await res.json();
-          setEntries((prev) => prev.map(e => e.id === editingId ? updated : e));
-        }
-      } catch (error) {
-        console.error("Auto-save failed", error);
-      } finally {
-        setIsSaving(false);
-      }
-    }, 1500);
-
-    return () => clearTimeout(timeoutId);
-  }, [editForm, editingId]);
 
   const handleSaveRow = async () => {
     if (!editingId) return;
