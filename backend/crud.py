@@ -2754,6 +2754,20 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
             if employee:
                 update_data["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
                 
+        # Calculate nextFollowupDate
+        followup_keys = ["followupType", "followupIntervalDays", "followupDaysOfWeek", "followupDatesOfMonth", "lastFollowupDate"]
+        if any(k in update_data for k in followup_keys):
+            merged_config = {**old_project, **update_data}
+            
+            # RobustDate parsing might make lastFollowupDate a date object
+            base_date_obj = merged_config.get("lastFollowupDate")
+            base_date = base_date_obj.strftime("%Y-%m-%d") if isinstance(base_date_obj, (date, datetime)) else base_date_obj
+            if not base_date:
+                base_date = get_now().strftime("%Y-%m-%d")
+                
+            next_date = await calculate_next_followup_date(db, base_date, merged_config)
+            update_data["nextFollowupDate"] = next_date
+
         await db.projects.update_one({"_id": ObjectId(project_id)}, {"$set": update_data})
         
         details = []

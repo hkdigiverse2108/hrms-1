@@ -175,6 +175,22 @@ export default function CreativeClientsPage() {
         toast.success("Remark added");
         setNewRemarkText("");
         fetchFollowupHistory(followupConfigClient);
+        
+        const today = new Date().toISOString().split('T')[0];
+        const projectId = clientProjects[followupConfigClient.id]?.id;
+        
+        if (projectId) {
+          await fetch(`${API_URL}/projects/${projectId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              lastFollowupDate: today,
+              performedBy: user?.id,
+              userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+            }),
+          });
+          fetchClients();
+        }
       } else {
         toast.error("Failed to add remark");
       }
@@ -265,7 +281,7 @@ export default function CreativeClientsPage() {
   }, []);
 
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
-  const [clientProjects, setClientProjects] = useState<Record<string, string>>({});
+  const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
 
   const fetchClients = async () => {
     setIsLoading(true);
@@ -301,10 +317,10 @@ export default function CreativeClientsPage() {
       
       if (pRes.ok) {
         const projects = await pRes.json();
-        const projectMap: Record<string, string> = {};
+        const projectMap: Record<string, any> = {};
         projects.forEach((p: any) => {
           if (p.clientId && p.department === 'Creative') {
-            projectMap[p.clientId] = p.title;
+            projectMap[p.clientId] = p;
           }
         });
         setClientProjects(projectMap);
@@ -401,21 +417,27 @@ export default function CreativeClientsPage() {
       }
       
       const today = new Date().toISOString().split('T')[0];
-      const res = await fetch(`${API_URL}/clients/${followupRemarkClient.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          lastFollowupDate: today,
-          performedBy: user?.id,
-          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
-        }),
-      });
-      if (res.ok) {
-        toast.success("Follow-up completed");
-        setFollowupRemarkOpen(false);
-        fetchClients();
+      const projectId = clientProjects[followupRemarkClient.id]?.id;
+      
+      if (projectId) {
+        const res = await fetch(`${API_URL}/projects/${projectId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            lastFollowupDate: today,
+            performedBy: user?.id,
+            userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+          }),
+        });
+        if (res.ok) {
+          toast.success("Follow-up completed");
+          setFollowupRemarkOpen(false);
+          fetchClients();
+        } else {
+          toast.error("Failed to mark follow-up");
+        }
       } else {
-        toast.error("Failed to mark follow-up");
+        toast.error("No active project found for this client to mark follow-up.");
       }
     } catch (err) {
       console.error("Error updating follow-up:", err);
@@ -628,7 +650,7 @@ export default function CreativeClientsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-slate-700 text-sm font-medium">
-                        {clientProjects[client.id] || <span className="text-slate-400 italic font-normal">No active project</span>}
+                        {clientProjects[client.id]?.title || <span className="text-slate-400 italic font-normal">No active project</span>}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -690,7 +712,7 @@ export default function CreativeClientsPage() {
                         <Badge className={client.status === "active" ? "bg-emerald-50 text-emerald-600 border-emerald-200/60 shadow-sm font-semibold" : "bg-red-50 text-red-600 border-red-200/60 shadow-sm font-semibold"}>
                           {client.status?.toUpperCase() || "ACTIVE"}
                         </Badge>
-                        {client.nextFollowupDate && new Date(client.nextFollowupDate) <= new Date() && (
+                        {clientProjects[client.id]?.nextFollowupDate && new Date(clientProjects[client.id].nextFollowupDate) <= new Date() && (
                           <Badge 
                             className="bg-rose-50 text-rose-600 border-rose-200/60 animate-pulse flex items-center gap-1.5 shadow-sm cursor-pointer hover:bg-rose-100 hover:text-rose-700 transition-colors"
                             onClick={(e) => {
@@ -892,102 +914,7 @@ export default function CreativeClientsPage() {
             <DialogTitle>Follow-up Settings</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Schedule Type</Label>
-              <Select value={followupTypeInput} onValueChange={setFollowupTypeInput}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Interval">Fixed Interval (Days)</SelectItem>
-                  <SelectItem value="Weekly">Weekly (Specific Days)</SelectItem>
-                  <SelectItem value="Monthly">Monthly (Specific Dates)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {followupTypeInput === "Interval" && (
-              <div className="space-y-2">
-                <Label>Follow-up Interval (Days)</Label>
-                <Input 
-                  type="number" 
-                  placeholder="e.g. 7 for weekly" 
-                  value={followupIntervalInput} 
-                  onChange={(e) => setFollowupIntervalInput(e.target.value)} 
-                />
-              </div>
-            )}
-            
-            {followupTypeInput === "Weekly" && (
-              <div className="space-y-2">
-                <Label>Select Days of Week</Label>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { label: "Mon", val: 0 },
-                    { label: "Tue", val: 1 },
-                    { label: "Wed", val: 2 },
-                    { label: "Thu", val: 3 },
-                    { label: "Fri", val: 4 },
-                    { label: "Sat", val: 5 }
-                  ].map(day => (
-                    <Badge 
-                      key={day.val}
-                      variant={followupDaysOfWeekInput.includes(day.val) ? "default" : "outline"}
-                      className={`cursor-pointer ${followupDaysOfWeekInput.includes(day.val) ? 'bg-brand-teal' : ''}`}
-                      onClick={() => {
-                        if (followupDaysOfWeekInput.includes(day.val)) {
-                          setFollowupDaysOfWeekInput(followupDaysOfWeekInput.filter(d => d !== day.val));
-                        } else {
-                          setFollowupDaysOfWeekInput([...followupDaysOfWeekInput, day.val]);
-                        }
-                      }}
-                    >
-                      {day.label}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {followupTypeInput === "Monthly" && (
-              <div className="space-y-2">
-                <Label>Select Dates of Month (1-31)</Label>
-                <div className="grid grid-cols-7 gap-1">
-                  {Array.from({length: 31}, (_, i) => i + 1).map(date => (
-                    <div 
-                      key={date}
-                      className={`text-xs text-center p-1 cursor-pointer rounded ${followupDatesOfMonthInput.includes(date) ? 'bg-brand-teal text-white' : 'hover:bg-slate-100'}`}
-                      onClick={() => {
-                        if (followupDatesOfMonthInput.includes(date)) {
-                          setFollowupDatesOfMonthInput(followupDatesOfMonthInput.filter(d => d !== date));
-                        } else {
-                          setFollowupDatesOfMonthInput([...followupDatesOfMonthInput, date]);
-                        }
-                      }}
-                    >
-                      {date}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <p className="text-xs text-slate-500 italic">Skips Sundays & Public Holidays automatically.</p>
-            
-            <div className="space-y-2">
-              <Label>Last Follow-up Date</Label>
-              <Input 
-                type="date" 
-                value={followupLastDateInput} 
-                onChange={(e) => setFollowupLastDateInput(e.target.value)} 
-              />
-            </div>
-            <div className="pt-4 flex justify-end gap-2 border-t mt-4">
-              <Button variant="outline" onClick={() => setFollowupConfigOpen(false)}>Cancel</Button>
-              <Button className="bg-brand-teal text-white hover:bg-brand-teal-light" onClick={handleSaveFollowupConfig}>Save Configuration</Button>
-            </div>
-
-            <div className="mt-6 pt-4 border-t">
+            <div className="pt-2">
               <Label className="text-sm font-semibold mb-3 block text-slate-700">Past Follow-up Remarks</Label>
               
               <div className="flex gap-2 mb-4">

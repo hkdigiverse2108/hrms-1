@@ -979,6 +979,12 @@ class ProjectBase(BaseModel):
     status: Optional[str] = "planning"
     priority: Optional[str] = "medium"
     budget: Optional[float] = 0
+    followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = [] # 0=Monday, 6=Sunday
+    followupDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastFollowupDate: Optional[RobustDate] = None
+    nextFollowupDate: Optional[RobustDate] = None
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -997,6 +1003,12 @@ class ProjectUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     budget: Optional[float] = None
+    followupType: Optional[str] = None
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = None
+    followupDatesOfMonth: Optional[List[int]] = None
+    lastFollowupDate: Optional[RobustDate] = None
+    nextFollowupDate: Optional[RobustDate] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
