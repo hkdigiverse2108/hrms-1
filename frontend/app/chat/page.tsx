@@ -252,6 +252,7 @@ export default function ChatPage() {
   const [newStatusEmoji, setNewStatusEmoji] = useState("💬");
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [voicePreviewBlob, setVoicePreviewBlob] = useState<Blob | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const [isWsConnected, setIsWsConnected] = useState(false);
@@ -1030,9 +1031,38 @@ export default function ChatPage() {
   const handleSendMessage = async (extraData: any = null) => {
     // Prevent double-send on rapid taps
     if (isSendingRef.current) return;
-    if (!extraData && (!message.trim() && !pendingFile) || !selectedChat || !user) return;
+    if (!extraData && (!message.trim() && !pendingFile && !voicePreviewBlob) || !selectedChat || !user) return;
 
     isSendingRef.current = true;
+
+    if (voicePreviewBlob && !extraData?.isVoice) {
+      const audioFile = new File([voicePreviewBlob], "voice_message.webm", { type: 'audio/webm' });
+      const formData = new FormData();
+      formData.append('file', audioFile);
+      try {
+        const res = await fetch(`${API_URL}/chat/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const duration = recordingDuration;
+          setVoicePreviewBlob(null);
+          setRecordingDuration(0);
+          handleSendMessage({ 
+            isVoice: true, 
+            attachmentUrl: data.url, 
+            attachmentName: "Voice Message",
+            voiceDuration: duration
+          });
+        }
+      } catch (err) {
+        console.error("Error uploading voice message:", err);
+        toast.error("Failed to upload voice message");
+      }
+      isSendingRef.current = false;
+      return;
+    }
 
     const isImageFile = pendingFile && /\.(jpg|jpeg|png|gif|webp)$/i.test(pendingFile.name);
     const optimisticText = message || (pendingFile && !isImageFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : ""));
@@ -1623,30 +1653,7 @@ export default function ChatPage() {
       
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const audioFile = new File([audioBlob], "voice_message.webm", { type: 'audio/webm' });
-        
-        // Upload and send
-        const formData = new FormData();
-        formData.append('file', audioFile);
-        
-        try {
-          const res = await fetch(`${API_URL}/chat/upload`, {
-            method: 'POST',
-            body: formData
-          });
-          if (res.ok) {
-            const data = await res.json();
-            handleSendMessage({ 
-              isVoice: true, 
-              attachmentUrl: data.url, 
-              attachmentName: "Voice Message",
-              voiceDuration: recordingDuration
-            });
-          }
-        } catch (err) {
-          console.error("Error uploading voice message:", err);
-        }
-        
+        setVoicePreviewBlob(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
       
@@ -3161,7 +3168,27 @@ export default function ChatPage() {
                 className="max-w-4xl mx-auto flex items-end gap-3 bg-transparent px-2 py-1"
               >
                 <div className="flex-1 flex items-end gap-2 bg-white px-3 py-2 rounded-[24px] border border-slate-200 shadow-xs min-h-[46px]">
-                  {isRecording ? (
+                  {voicePreviewBlob ? (
+                    <div className="flex-1 flex items-center justify-between bg-emerald-50/50 px-3 py-1.5 rounded-xl border border-emerald-100/50 animate-in fade-in duration-300">
+                      <Button 
+                        type="button"
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-red-500 hover:bg-red-100 rounded-full shrink-0"
+                        onClick={() => { setVoicePreviewBlob(null); setRecordingDuration(0); }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                      <div className="flex-1 px-4 flex items-center justify-center max-w-[250px] mx-auto">
+                        <audio controls src={URL.createObjectURL(voicePreviewBlob)} className="h-8 w-full" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold text-emerald-600 tabular-nums">
+                          {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+                        </span>
+                      </div>
+                    </div>
+                  ) : isRecording ? (
                     <div className="flex-1 flex items-center justify-between bg-red-50/50 px-3 py-1.5 rounded-xl border border-red-100/50 animate-in fade-in duration-300">
                       <div className="flex items-center gap-2">
                         <span className="flex h-2 w-2 relative">
@@ -3362,10 +3389,10 @@ export default function ChatPage() {
                 {/* Green/Teal Circle Send Button */}
                 <Button 
                   type="submit"
-                  disabled={!message.trim() && !pendingFile && !isRecording}
+                  disabled={!message.trim() && !pendingFile && !voicePreviewBlob && !isRecording}
                   className={cn(
                     "bg-brand-teal hover:bg-brand-teal-light text-white rounded-full w-11 h-11 p-0 shadow-md transition-all shrink-0 flex items-center justify-center",
-                    (!message.trim() && !pendingFile && !isRecording) ? "opacity-60 cursor-not-allowed" : "opacity-100 active:scale-95"
+                    (!message.trim() && !pendingFile && !voicePreviewBlob && !isRecording) ? "opacity-60 cursor-not-allowed" : "opacity-100 active:scale-95"
                   )}
                 >
                   <Send className="w-5 h-5 fill-current ml-0.5" />
