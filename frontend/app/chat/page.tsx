@@ -1054,7 +1054,7 @@ export default function ChatPage() {
 
     if (replyingTo) {
       payload.replyToId = replyingTo.id;
-      payload.replyToText = replyingTo.text;
+      payload.replyToText = replyingTo.text || (replyingTo.attachmentUrl ? "📷 Image" : (replyingTo.isVoice ? "🎤 Voice Message" : ""));
     }
 
     // --- Optimistic UI: show message instantly before server responds ---
@@ -1066,7 +1066,7 @@ export default function ChatPage() {
       senderId: user.id,
       isMe: true,
       replyToId: replyingTo?.id,
-      replyToText: replyingTo?.text,
+      replyToText: replyingTo?.text || (replyingTo?.attachmentUrl ? "📷 Image" : (replyingTo?.isVoice ? "🎤 Voice Message" : "")),
       _optimistic: true,
       // Show image preview instantly using blob URL before upload finishes
       ...(isImageFile ? {
@@ -1505,9 +1505,11 @@ export default function ChatPage() {
       senderId: user.id,
       receiverId: chatType === "personal" ? recipientId : "group",
       groupId: chatType === "personal" ? null : recipientId,
-      text: forwardingMessage.text,
+      text: forwardingMessage.text || "",
       type: chatType === "general" ? "group" : chatType,
-      forwardedFrom: user.name
+      forwardedFrom: user.name,
+      attachmentUrl: forwardingMessage.attachmentUrl,
+      attachmentName: forwardingMessage.attachmentName
     };
 
     try {
@@ -2778,7 +2780,10 @@ export default function ChatPage() {
 
                               {/* Reply Preview */}
                               {msg.replyToText && (
-                                <div className="mb-1.5 p-2 rounded-lg border-l-4 border-brand-teal text-[11.1px] bg-black/5 text-[#111b21]/85">
+                                <div 
+                                  className="mb-1.5 p-2 rounded-lg border-l-4 border-brand-teal text-[11.1px] bg-black/5 text-[#111b21]/85 cursor-pointer hover:bg-black/10 transition-colors"
+                                  onClick={() => msg.replyToId && scrollToMessage(msg.replyToId)}
+                                >
                                   <div className="font-bold text-[10.5px] opacity-75 mb-0.5">
                                     {msg.isMe ? "Replying to" : selectedChat.name}
                                   </div>
@@ -3126,7 +3131,7 @@ export default function ChatPage() {
                 <div className="max-w-4xl mx-auto mb-2 flex items-center justify-between bg-gray-50 p-3 rounded-xl border-l-4 border-brand-teal animate-in slide-in-from-bottom-2">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold text-brand-teal uppercase">Replying to {replyingTo.isMe ? "Yourself" : selectedChat.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{replyingTo.text}</p>
+                    <p className="text-xs text-muted-foreground truncate">{replyingTo.text || (replyingTo.attachmentUrl ? "📷 Image" : (replyingTo.isVoice ? "🎤 Voice Message" : ""))}</p>
                   </div>
                   <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full" onClick={() => setReplyingTo(null)}>
                     <X className="w-3 h-3" />
