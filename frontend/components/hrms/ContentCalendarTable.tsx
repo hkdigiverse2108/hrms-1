@@ -966,8 +966,22 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                 entries.map((entry) => {
                   const isEditing = editingId === entry.id;
                   
+                  let isDue = false;
+                  if (entry.postingDate) {
+                    const postDate = new Date(entry.postingDate);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    if (postDate <= today) {
+                      const igLink = (entry.postingLinkOfIg || "").trim();
+                      const finalLink = (entry.finalPostLink || "").trim();
+                      if (!igLink && !finalLink) {
+                        isDue = true;
+                      }
+                    }
+                  }
+                  
                   return (
-                    <tr key={entry.id} className="odd:bg-white even:bg-slate-50">
+                    <tr key={entry.id} className={isDue ? "bg-red-50 border-red-200" : "odd:bg-white even:bg-slate-50"}>
                       {fieldKeys.map((key) => (
                         <td key={key} className="px-2 py-1 border border-slate-200 max-w-[200px]">
                           {isEditing ? (
@@ -1040,7 +1054,14 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                                   </Button>
                                 </div>
                               ) : (
-                                formatDateDisplay(entry[key]) || null
+                                <>
+                                  {formatDateDisplay(entry[key]) || null}
+                                  {key === "postingDate" && isDue && (
+                                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800">
+                                      Due
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </div>
                           )}
