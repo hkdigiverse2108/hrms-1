@@ -1387,6 +1387,7 @@ class ChatMessageBase(BaseModel):
     seenBy: List[str] = []
     archivedBy: List[str] = []
     completedBy: List[str] = []
+    forwardedFrom: Optional[str] = None
     reactions: Optional[dict] = {} # { emoji: [userId1, userId2] }
     poll: Optional[Poll] = None
     isVoice: bool = False

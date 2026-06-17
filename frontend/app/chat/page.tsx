@@ -1498,14 +1498,15 @@ export default function ChatPage() {
     }
   };
 
-  const handleForwardMessage = async (recipientId: string) => {
+  const handleForwardMessage = async (recipientId: string, chatType: string = "personal") => {
     if (!forwardingMessage || !user) return;
 
     const payload = {
       senderId: user.id,
-      receiverId: recipientId,
+      receiverId: chatType === "personal" ? recipientId : "group",
+      groupId: chatType === "personal" ? null : recipientId,
       text: forwardingMessage.text,
-      type: "personal",
+      type: chatType === "general" ? "group" : chatType,
       forwardedFrom: user.name
     };
 
@@ -3481,10 +3482,10 @@ export default function ChatPage() {
               )}
             </div>
             <div className="max-h-[300px] overflow-y-auto space-y-1">
-              {filteredChats.map((chat: any) => (
+              {[...filteredChats, ...chatGroups.filter((g: any) => g.name.toLowerCase().includes(searchQuery.toLowerCase())).map((g: any) => ({...g, type: 'group'})), ...chatChannels.filter((c: any) => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map((c: any) => ({...c, type: 'general'}))].map((chat: any) => (
                 <div 
                   key={chat.id}
-                  onClick={() => handleForwardMessage(chat.id)}
+                  onClick={() => handleForwardMessage(chat.id, chat.type || 'personal')}
                   className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-gray-100"
                 >
                   <Avatar className="w-10 h-10 border border-border">
