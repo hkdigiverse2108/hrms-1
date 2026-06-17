@@ -290,8 +290,15 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       }
     }
     
-    if (addedCount > 0 || deletedCount > 0) {
+    if (addedCount > 0 && deletedCount > 0) {
       toast.success(`Added ${addedCount} row(s) and deleted ${deletedCount} row(s)`);
+    } else if (addedCount > 0) {
+      toast.success(`Added ${addedCount} row(s)`);
+    } else if (deletedCount > 0) {
+      toast.success(`Deleted ${deletedCount} row(s)`);
+    }
+    
+    if (addedCount > 0 || deletedCount > 0) {
       fetchEntries();
     }
   };

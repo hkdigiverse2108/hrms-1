@@ -609,7 +609,7 @@ export default function CreativeClientsPage() {
           <p className="text-sm text-slate-500 font-medium">Fetching dashboard...</p>
         </div>
       ) : filteredClients.length > 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-md" data-slot="table-container">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-md min-h-[calc(100vh-260px)]" data-slot="table-container">
           <div className="overflow-x-auto no-scrollbar">
             <table className="w-full text-left text-sm text-slate-600">
               <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
