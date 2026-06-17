@@ -2015,6 +2015,80 @@ async def delete_schedule(schedule_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Schedule not found")
     return {"message": "Schedule deleted successfully"}
 
+@app.post("/schedules/free-slots")
+async def get_free_slots(request: dict, db=Depends(get_db)):
+    """
+    Compute common free time slots for a list of employees on a given date.
+    Body: { "employeeIds": ["id1", "id2"], "date": "YYYY-MM-DD", "durationMins": 30 }
+    Returns: { "freeSlots": [{ "start": "HH:MM", "end": "HH:MM" }, ...] }
+    """
+    employee_ids = request.get("employeeIds", [])
+    date_str = request.get("date")
+    duration_mins = request.get("durationMins", 30)
+
+    if not employee_ids or not date_str:
+        return {"freeSlots": []}
+
+    # Collect all busy intervals across all employees
+    all_busy = []
+    for emp_id in employee_ids:
+        schedules = await crud.get_schedules(db, employee_id=emp_id, date_str=date_str)
+        for s in schedules:
+            start_t = s.get("startTime", "")
+            end_t = s.get("endTime", "")
+            if start_t and end_t:
+                all_busy.append((start_t, end_t))
+
+    # Also check for SMM client meetings that mention these employees
+    # (meetings stored in client documents are text-based, so we skip those)
+
+    # Sort and merge overlapping busy intervals
+    def time_to_mins(t: str) -> int:
+        parts = t.split(":")
+        return int(parts[0]) * 60 + int(parts[1])
+
+    def mins_to_time(m: int) -> str:
+        return f"{m // 60:02d}:{m % 60:02d}"
+
+    busy_mins = sorted([(time_to_mins(s), time_to_mins(e)) for s, e in all_busy])
+
+    merged = []
+    for start, end in busy_mins:
+        if merged and start < merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+
+    # Office hours: 09:30 to 18:30
+    office_start = time_to_mins("09:30")
+    office_end = time_to_mins("18:30")
+
+    # If the requested date is today, do not allow past time slots
+    now = crud.get_now()
+    if date_str == now.strftime("%Y-%m-%d"):
+        current_mins = now.hour * 60 + now.minute
+        if current_mins > office_start:
+            office_start = min(current_mins, office_end)
+
+    # Invert merged busy intervals to get free slots within office hours
+    free_slots = []
+    cursor = office_start
+
+    for busy_start, busy_end in merged:
+        # Clamp to office hours
+        bs = max(busy_start, office_start)
+        be = min(busy_end, office_end)
+        if bs > cursor and (bs - cursor) >= duration_mins:
+            free_slots.append({"start": mins_to_time(cursor), "end": mins_to_time(bs)})
+        if be > cursor:
+            cursor = be
+
+    # Remaining time after last busy block
+    if cursor < office_end and (office_end - cursor) >= duration_mins:
+        free_slots.append({"start": mins_to_time(cursor), "end": mins_to_time(office_end)})
+
+    return {"freeSlots": free_slots}
+
 # --- Google Calendar Integration API ---
 from fastapi.responses import RedirectResponse
 

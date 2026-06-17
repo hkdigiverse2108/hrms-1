@@ -1167,6 +1167,7 @@ class Meeting(BaseModel):
     type: Optional[str] = None # "Monthly Review", "Strategy Pitch", "Onboarding", "Check-in", "Ad-hoc"
     location: Optional[str] = None # "Google Meet", "Zoom", "Phone Call", "In-Person"
     attendees: Optional[str] = None
+    attendeeIds: Optional[List[str]] = []
     status: Optional[str] = None # "Scheduled", "Completed", "Cancelled"
     nextSteps: Optional[str] = None
     duration: Optional[str] = None
