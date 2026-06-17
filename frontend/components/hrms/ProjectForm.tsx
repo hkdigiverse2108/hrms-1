@@ -51,7 +51,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
   const [isLoadingMeta, setIsLoadingMeta] = useState(true);
 
   // Static departments as requested by user earlier
-  const departments = ["Development", "Creative", "Marketing"];
+  const departments = ["Development", "Creative", "Digital Marketing"];
 
   useEffect(() => {
     fetchMetadata();
