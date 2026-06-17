@@ -203,7 +203,7 @@ export default function SchedulePage() {
     setIsLoading(true);
     try {
       const userId = user?.id || user?.employeeId || "";
-      const empParam = userId ? `&employeeId=${userId}` : "";
+      const empParam = isAdmin ? "" : (userId ? `&employeeId=${userId}` : "");
       const res = await fetch(`${API_URL}/schedules?date=${dateStr}${empParam}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
@@ -218,7 +218,7 @@ export default function SchedulePage() {
     setIsLoading(true);
     try {
       const userId = user?.id || user?.employeeId || "";
-      const empParam = userId ? `&employeeId=${userId}` : "";
+      const empParam = isAdmin ? "" : (userId ? `&employeeId=${userId}` : "");
       const res = await fetch(`${API_URL}/schedules?date_from=${from}&date_to=${to}${empParam}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
@@ -289,7 +289,11 @@ export default function SchedulePage() {
         } else {
           const start = getWeekStart(currentDate);
           const end = start.add(6, "day");
-          fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
+          if (newDate.isBefore(start) || newDate.isAfter(end)) {
+            setCurrentDate(newDate);
+          } else {
+            fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
+          }
         }
         resetForm();
       } else {
