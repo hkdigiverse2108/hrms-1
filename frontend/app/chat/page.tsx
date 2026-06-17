@@ -3563,18 +3563,15 @@ export default function ChatPage() {
                     <Checkbox 
                       id={`emp-${emp.id}`} 
                       checked={selectedGroupMembers.includes(emp.id)}
-                      onCheckedChange={() => handleToggleMember(emp.id)}
+                      className="pointer-events-none"
                     />
-                    <Avatar className="w-8 h-8">
+                    <Avatar className="w-8 h-8 pointer-events-none">
                       <AvatarImage src={getAvatarUrl(emp.avatar)} />
                       <AvatarFallback className="bg-brand-light text-brand-teal text-[10px]">{emp.name ? emp.name[0]?.toUpperCase() : "?"}</AvatarFallback>
                     </Avatar>
-                    <label
-                      htmlFor={`emp-${emp.id}`}
-                      className="text-sm font-medium leading-none cursor-pointer"
-                    >
+                    <div className="text-sm font-medium leading-none pointer-events-none">
                       {emp.name}
-                    </label>
+                    </div>
                   </div>
                 ))}
               </div>
