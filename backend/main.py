@@ -14,7 +14,95 @@ from websocket import manager as ws_manager
 import google_auth
 
 import asyncio
-print("MAIN PATH:", __file__, flush=True)
+from datetime import datetime
+import pytz
+from bson import ObjectId
+
+async def content_calendar_reminder_task():
+    from database import db
+    import crud
+    import schemas
+    
+    print("[Content Calendar Reminder] Task started.", flush=True)
+    await asyncio.sleep(10) # wait for startup
+    
+    while True:
+        try:
+            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+            today_str = now.strftime("%Y-%m-%d")
+            
+            # Check for Morning Reminder (e.g. 9:00 AM - 9:09 AM)
+            if now.hour == 9 and now.minute < 10:
+                entries = await db.content_calendar_entries.find({"postingDate": today_str}).to_list(length=1000)
+                if entries:
+                    admins = await db.employees.find({"role": {"$regex": "^Admin$", "$options": "i"}}).to_list(length=100)
+                    admin_ids = [str(a["_id"]) if "_id" in a else a.get("id") for a in admins]
+                    
+                    for entry in entries:
+                        entry_id = str(entry["_id"]) if "_id" in entry else entry.get("id")
+                        client_id = entry.get("clientId")
+                        client = None
+                        if client_id and len(client_id) == 24:
+                            client = await db.clients.find_one({"_id": ObjectId(client_id)})
+                        client_name = client.get("companyName", "Unknown Client") if client else "Unknown Client"
+                        
+                        for target_id in admin_ids:
+                            if not target_id: continue
+                            existing_notif = await db.notifications.find_one({
+                                "employee_id": target_id,
+                                "type": "content_calendar_reminder",
+                                "reference_id": entry_id,
+                                "title": "Morning Schedule Reminder"
+                            })
+                            if not existing_notif:
+                                await crud.create_notification(db, schemas.NotificationCreate(
+                                    employee_id=target_id,
+                                    title="Morning Schedule Reminder",
+                                    message=f"Content for client '{client_name}' is scheduled to be posted today.",
+                                    type="content_calendar_reminder",
+                                    reference_id=entry_id
+                                ))
+
+            # Check for EOD Reminder (e.g. 18:00 PM - 18:09 PM)
+            if now.hour == 18 and now.minute < 10:
+                entries = await db.content_calendar_entries.find({"postingDate": today_str}).to_list(length=1000)
+                if entries:
+                    admins = await db.employees.find({"role": {"$regex": "^Admin$", "$options": "i"}}).to_list(length=100)
+                    admin_ids = [str(a["_id"]) if "_id" in a else a.get("id") for a in admins]
+                    
+                    for entry in entries:
+                        ig_link = str(entry.get("postingLinkOfIg") or "").strip()
+                        final_link = str(entry.get("finalPostLink") or "").strip()
+                        
+                        if not ig_link and not final_link:
+                            entry_id = str(entry["_id"]) if "_id" in entry else entry.get("id")
+                            client_id = entry.get("clientId")
+                            client = None
+                            if client_id and len(client_id) == 24:
+                                client = await db.clients.find_one({"_id": ObjectId(client_id)})
+                            client_name = client.get("companyName", "Unknown Client") if client else "Unknown Client"
+                            
+                            for target_id in admin_ids:
+                                if not target_id: continue
+                                existing_notif = await db.notifications.find_one({
+                                    "employee_id": target_id,
+                                    "type": "content_calendar_reminder",
+                                    "reference_id": entry_id,
+                                    "title": "Post Due: Missing Link"
+                                })
+                                if not existing_notif:
+                                    await crud.create_notification(db, schemas.NotificationCreate(
+                                        employee_id=target_id,
+                                        title="Post Due: Missing Link",
+                                        message=f"Post for client '{client_name}' scheduled today is missing a post link.",
+                                        type="content_calendar_reminder",
+                                        reference_id=entry_id
+                                    ))
+
+        except Exception as e:
+            print(f"[Content Calendar Reminder] Error: {e}", flush=True)
+            
+        await asyncio.sleep(300) # Sleep for 5 minutes
 
 @asynccontextmanager
 async def lifespan(app):
@@ -219,6 +307,7 @@ async def lifespan(app):
     except Exception as e:
         print(f"[Chat Indexing] Failed to create chat indexes: {e}", flush=True)
 
+    reminder_task = asyncio.create_task(content_calendar_reminder_task())
     yield
     # --- Shutdown ---
     try:
@@ -226,6 +315,12 @@ async def lifespan(app):
         input_tracker.stop_tracker()
     except Exception as e:
         print(f"Error stopping global input tracker: {e}")
+        
+    try:
+        if not reminder_task.done():
+            reminder_task.cancel()
+    except Exception:
+        pass
     # Reload trigger: 1
 
 app = FastAPI(title="HRMS API", lifespan=lifespan)
