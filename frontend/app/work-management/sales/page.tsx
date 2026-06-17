@@ -127,6 +127,8 @@ export default function SalesPage() {
   };
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("active");
+  const [hasSetInitialTab, setHasSetInitialTab] = useState(false);
   const [leads, setLeads] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -755,6 +757,17 @@ export default function SalesPage() {
     };
     return getDueDate(a) - getDueDate(b);
   });
+
+  useEffect(() => {
+    if (!isLoading && !hasSetInitialTab) {
+      if (overdueUpcomingLeads.length > 0) {
+        setActiveTab("overdue");
+      } else {
+        setActiveTab("active");
+      }
+      setHasSetInitialTab(true);
+    }
+  }, [isLoading, hasSetInitialTab, overdueUpcomingLeads.length]);
 
   const totalRevenue = convertedLeads.reduce((acc, l) => {
     const val = parseFloat(l.expectedIncome?.replace(/[^0-9.]/g, "") || "0");
@@ -1461,7 +1474,7 @@ export default function SalesPage() {
         ))}
       </div>
 
-      <Tabs defaultValue="overdue" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="flex flex-row items-center justify-between gap-4 mb-4 bg-white p-2 rounded-xl border border-slate-100 shadow-sm overflow-x-auto">
           <TabsList className="bg-slate-100/50 p-1 flex-nowrap h-auto justify-start shrink-0">
             <TabsTrigger value="overdue" className="data-[state=active]:bg-white data-[state=active]:text-brand-teal data-[state=active]:shadow-sm px-4 py-2 text-sm font-bold flex items-center gap-1.5 whitespace-nowrap">
