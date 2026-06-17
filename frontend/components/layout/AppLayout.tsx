@@ -27,6 +27,7 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/work-management/sales")) return "sales";
   if (pathname.startsWith("/work-management/clients")) return "clients";
   if (pathname.startsWith("/work-management/marketing-reports")) return "marketing";
+  if (pathname.startsWith("/work-management/smm")) return "creative";
   
   if (pathname.startsWith("/employees/organization")) return "org-structure";
   if (pathname.startsWith("/employees/attendance")) return "employee-attendance";
@@ -70,7 +71,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, isLoading, logout } = useUserContext();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
-  const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/feedback/");
 
   // Inactivity auto-punch-out and recovery states
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
@@ -107,7 +108,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Check for desktop application updates
   useEffect(() => {
     if (typeof window === "undefined" || !(window as any).electronAPI) return;
-    if (!user || isAuthPage) return;
+    if (!user || isPublicPage) return;
     
     const checkForUpdates = async (showNoUpdateToast = false) => {
       try {
@@ -156,7 +157,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("check-for-updates-manual", handleManualCheck);
     };
-  }, [user, isAuthPage]);
+  }, [user, isPublicPage]);
 
   // Monitor download progress from Electron IPC
   useEffect(() => {
@@ -327,7 +328,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   // Check pending recovery status on mount and window focus
   const checkPendingRecovery = useCallback(async () => {
-    if (!user || isAuthPage) return;
+    if (!user || isPublicPage) return;
+
 
     // Fetch employee's current attendance status to check punch-in and break status first
     let isCurrentlyPunchedIn = false;
@@ -513,7 +515,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [user, isAuthPage]);
+  }, [user, isPublicPage]);
 
   const handleRecoverySubmit = async () => {
     if (!user) return;
@@ -589,21 +591,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   // Setup inactivity tracking & pending recovery check
   useEffect(() => {
-    if (!user || isAuthPage) return;
+    if (!user || isPublicPage) return;
+
 
     // 1. All users listen to window focus and attendance updates to check pending recovery
-    window.addEventListener("focus", checkPendingRecovery);
+    const handleFocus = () => { checkPendingRecovery().catch(console.error); };
+    window.addEventListener("focus", handleFocus);
 
     const handleAttendanceUpdate = () => {
       localStorage.setItem("last_activity_timestamp", Date.now().toString());
       lastActivityTimeRef.current = Date.now();
       resetInactivityTimer();
-      checkPendingRecovery();
+      checkPendingRecovery().catch(console.error);
     };
     window.addEventListener("attendance-update", handleAttendanceUpdate);
 
     // Initial check on mount
-    checkPendingRecovery();
+    checkPendingRecovery().catch(console.error);
 
     // 2. Track OS/browser activity and set inactivity timeouts
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
@@ -618,12 +622,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
     resetInactivityTimer();
 
     return () => {
-      window.removeEventListener("focus", checkPendingRecovery);
+      window.removeEventListener("focus", handleFocus);
       window.removeEventListener("attendance-update", handleAttendanceUpdate);
       events.forEach((e) => window.removeEventListener(e, handleActivity));
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     };
-  }, [user, isAuthPage, resetInactivityTimer, checkPendingRecovery, showRecoveryModal]);
+  }, [user, isPublicPage, resetInactivityTimer, checkPendingRecovery, showRecoveryModal]);
 
   // Listen for global WebSocket broadcast alerts
   useAppEvent("system_alert", (data) => {
@@ -658,16 +662,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   // Authentication Guard
   useEffect(() => {
-    if (!isLoading && !user && !isAuthPage) {
+    if (!isLoading && !user && !isPublicPage) {
       router.push("/login");
     }
-  }, [user, isLoading, isAuthPage, router]);
+  }, [user, isLoading, isPublicPage, router]);
  
-  if (isAuthPage) {
+  if (isPublicPage) {
     return <main className="flex-1 w-full h-screen bg-white">{children}</main>;
   }
  
-  if (isLoading || (!user && !isAuthPage) || (user && permissionsLoading)) {
+  if (isLoading || (!user && !isPublicPage) || (user && permissionsLoading)) {
     return (
       <div className="flex items-center justify-center h-screen w-full bg-white">
         <div className="w-10 h-10 border-4 border-brand-teal border-t-transparent rounded-full animate-spin"></div>

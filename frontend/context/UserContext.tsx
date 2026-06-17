@@ -26,7 +26,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // Setup global fetch interceptor to inject Authorization header
   useEffect(() => {
     const originalFetch = window.fetch;
-    window.fetch = async (...args) => {
+    window.fetch = function (...args) {
       const [resource, config] = args;
       
       if (typeof resource === 'string' && resource.startsWith(API_URL)) {
