@@ -323,6 +323,9 @@ export default function SchedulePage() {
           const end = start.add(6, "day");
           fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
         }
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.detail || errorData.message || "Failed to delete schedule");
       }
     } catch (err) {
       toast.error("Error connecting to server");
@@ -804,6 +807,7 @@ export default function SchedulePage() {
                     onConfirm={() => handleDeleteSchedule(editingScheduleId)}
                     okText="Yes"
                     cancelText="No"
+                    getPopupContainer={(triggerNode) => triggerNode.parentNode as HTMLElement}
                   >
                     <Button 
                       variant="outline" 

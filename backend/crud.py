@@ -5860,16 +5860,20 @@ async def create_schedule(db, schedule_data: dict):
     return fix_id(created)
 
 async def update_schedule(db, schedule_id: str, schedule_data: dict):
-    if not ObjectId.is_valid(schedule_id):
-        return None
-        
-    existing = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    query = {"_id": ObjectId(schedule_id)} if ObjectId.is_valid(schedule_id) else {"_id": schedule_id}
+    
+    existing = await db.schedules.find_one(query)
+    if not existing:
+        existing = await db.schedules.find_one({"$or": [{"id": schedule_id}, {"googleEventId": schedule_id}]})
+        if not existing:
+            return None
+        query = {"_id": existing["_id"]}
     
     await db.schedules.update_one(
-        {"_id": ObjectId(schedule_id)},
+        query,
         {"$set": schedule_data}
     )
-    updated = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    updated = await db.schedules.find_one(query)
     
     # Sync update to Google Calendar
     if updated and existing:
@@ -5891,12 +5895,17 @@ async def update_schedule(db, schedule_id: str, schedule_data: dict):
     return fix_id(updated) if updated else None
 
 async def delete_schedule(db, schedule_id: str):
-    if not ObjectId.is_valid(schedule_id):
-        return False
+    query = {"_id": ObjectId(schedule_id)} if ObjectId.is_valid(schedule_id) else {"_id": schedule_id}
+    
+    existing = await db.schedules.find_one(query)
+    if not existing:
+        # Fallback to checking by string 'id' or 'googleEventId' just in case
+        existing = await db.schedules.find_one({"$or": [{"id": schedule_id}, {"googleEventId": schedule_id}]})
+        if not existing:
+            return False
+        query = {"_id": existing["_id"]}
         
-    existing = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
-        
-    res = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
+    res = await db.schedules.delete_one(query)
     
     # Sync delete to Google Calendar
     if res.deleted_count > 0 and existing:
