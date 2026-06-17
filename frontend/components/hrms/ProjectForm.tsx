@@ -67,8 +67,8 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
       if (cRes.ok) setClients(await cRes.json());
       if (eRes.ok) {
         const allEmployees = await eRes.json();
-        // Only show employees who have the role of "Team Leader"
-        setEmployees(allEmployees.filter((emp: any) => emp.role === "Team Leader"));
+        // Only show employees who have the role of "Team Leader" or "Admin"
+        setEmployees(allEmployees.filter((emp: any) => emp.role === "Team Leader" || emp.role === "Admin"));
       }
     } catch (err) {
       console.error("Error fetching project metadata:", err);
@@ -149,7 +149,6 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             </SelectTrigger>
             <SelectContent>
               {employees
-                .filter(emp => !formData.department || emp.department === formData.department)
                 .map((emp) => (
                   <SelectItem key={emp.id} value={emp.id}>
                     {emp.firstName} {emp.lastName} {emp.department ? `(${emp.department})` : ""}
