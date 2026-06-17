@@ -32,6 +32,7 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -62,15 +63,17 @@ export default function ProjectsPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const [pRes, tRes, lRes] = await Promise.all([
+      const [pRes, tRes, lRes, cRes] = await Promise.all([
         fetch(`${API_URL}/projects?userId=${user.id}&role=${user.role}`),
         fetch(`${API_URL}/wm-tasks?userId=${user.id}&role=${user.role}`),
-        fetch(`${API_URL}/leads`)
+        fetch(`${API_URL}/leads`),
+        fetch(`${API_URL}/clients`)
       ]);
       
       if (pRes.ok) setProjects(await pRes.json());
       if (tRes.ok) setTasks(await tRes.json());
       if (lRes.ok) setLeads(await lRes.json());
+      if (cRes.ok) setClients(await cRes.json());
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -78,17 +81,18 @@ export default function ProjectsPage() {
     }
   };
 
-  const fetchLogs = async (project: any) => {
+  const handleOpenLogs = async (project: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveProject(project);
     setIsLoadingLogs(true);
     setLogsOpen(true);
-    setActiveProject(project);
     try {
       const res = await fetch(`${API_URL}/task-logs?projectId=${project.id}`);
       if (res.ok) {
         setProjectLogs(await res.json());
       }
     } catch (err) {
-      console.error("Error fetching project logs:", err);
+      console.error("Error fetching logs:", err);
     } finally {
       setIsLoadingLogs(false);
     }
@@ -173,12 +177,26 @@ export default function ProjectsPage() {
     return endDate < today;
   };
 
-  // Derived pending leads that need projects
-  const pendingProjects = leads.filter(l => {
-    if (l.status !== 'Client Won') return false;
-    // Check if any project already has this leadId
-    const projectExists = projects.some(p => p.leadId === l.id);
-    return !projectExists;
+  // Derived pending clients that need projects
+  const pendingProjects = clients.flatMap(client => {
+    const depts = client.department ? client.department.split(',').map((d: string) => d.trim()).filter(Boolean) : ["Development"]; // fallback
+    const missing = [];
+    for (const dept of depts) {
+      const projectExists = projects.some(p => p.clientId === client.id && p.department?.toLowerCase() === dept.toLowerCase());
+      if (!projectExists) {
+        missing.push({
+          id: `${client.id}-${dept}`,
+          clientId: client.id,
+          company: client.companyName || "",
+          department: dept,
+          contact: client.name,
+          assignedTo: client.responsibility || "-",
+          budget: client.dailyBudget ? `₹${client.dailyBudget}` : "-",
+          originalClient: client
+        });
+      }
+    }
+    return missing;
   });
 
   const filteredProjects = projects.filter(p => {
@@ -324,13 +342,13 @@ export default function ProjectsPage() {
               <h3 className="font-bold text-amber-800">
                 Action Required: Pending Project Creations ({pendingProjects.length})
               </h3>
-              <p className="text-sm text-amber-700 mt-0.5">
-                You have won leads that need to be converted into active projects. Click here to review and create them.
+              <p className="text-sm text-amber-700/80 mt-0.5">
+                You have {pendingProjects.length} client department{pendingProjects.length !== 1 ? 's' : ''} that need projects created. Click here to set them up.
               </p>
             </div>
           </div>
           <div className="text-amber-700 font-bold hover:text-amber-800 flex items-center gap-1">
-            <span className="underline underline-offset-2">Review Leads</span>
+            <span className="underline underline-offset-2">Review Pending</span>
             <span>&rarr;</span>
           </div>
         </div>

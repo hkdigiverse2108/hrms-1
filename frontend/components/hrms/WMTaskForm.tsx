@@ -144,9 +144,9 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
 
   const selectedProject = projects.find(p => p.id === formData.projectId);
   const isGraphicsProject = 
-    selectedProject?.department?.toLowerCase() === "graphics" || 
-    userDepartment?.toLowerCase() === "graphics" || 
-    formData.department?.toLowerCase() === "graphics";
+    selectedProject?.department?.toLowerCase() === "creative" || 
+    userDepartment?.toLowerCase() === "creative" || 
+    formData.department?.toLowerCase() === "creative";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,7 +184,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Development">Development</SelectItem>
-              <SelectItem value="Graphics">Graphics</SelectItem>
+              <SelectItem value="Creative">Creative</SelectItem>
               <SelectItem value="Marketing">Marketing</SelectItem>
             </SelectContent>
           </Select>

@@ -111,7 +111,7 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
 
   const baseDepts = propDepartments && propDepartments.length > 0 
     ? propDepartments.map(d => d.trim()) 
-    : ["Development", "Sales", "Graphics", "Marketing"];
+    : ["Development", "Marketing"];
   
   const departments = Array.from(new Set([...baseDepts, "Creative"]));
 

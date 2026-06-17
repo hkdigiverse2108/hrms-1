@@ -22,6 +22,7 @@ export default function PendingProjectsPage() {
 
   const [projects, setProjects] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -42,13 +43,15 @@ export default function PendingProjectsPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const [pRes, lRes] = await Promise.all([
+      const [pRes, lRes, cRes] = await Promise.all([
         fetch(`${API_URL}/projects?userId=${user.id}&role=${user.role}`),
-        fetch(`${API_URL}/leads`)
+        fetch(`${API_URL}/leads`),
+        fetch(`${API_URL}/clients`)
       ]);
       
       if (pRes.ok) setProjects(await pRes.json());
       if (lRes.ok) setLeads(await lRes.json());
+      if (cRes.ok) setClients(await cRes.json());
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -56,17 +59,32 @@ export default function PendingProjectsPage() {
     }
   };
 
-  const pendingProjects = leads.filter(l => {
-    if (l.status !== 'Client Won') return false;
-    const projectExists = projects.some(p => p.leadId === l.id);
-    return !projectExists;
+  const pendingProjects = clients.flatMap(client => {
+    const depts = client.department ? client.department.split(',').map((d: string) => d.trim()).filter(Boolean) : ["Development"]; // fallback
+    const missing = [];
+    for (const dept of depts) {
+      const projectExists = projects.some(p => p.clientId === client.id && p.department?.toLowerCase() === dept.toLowerCase());
+      if (!projectExists) {
+        missing.push({
+          id: `${client.id}-${dept}`,
+          clientId: client.id,
+          company: client.companyName || "",
+          department: dept,
+          contact: client.name,
+          assignedTo: client.responsibility || "-",
+          budget: client.dailyBudget ? `₹${client.dailyBudget}` : "-",
+          originalClient: client
+        });
+      }
+    }
+    return missing;
   });
 
-  const handleCreateFromLead = (lead: any) => {
+  const handleCreateFromClient = (pendingItem: any) => {
     setEditingProject({
-      title: `${lead.company || lead.contact || 'New Client'} - Project`,
-      leadId: lead.id,
-      budget: lead.expectedIncome || "0",
+      title: `${pendingItem.company} - ${pendingItem.department} Project`,
+      clientId: pendingItem.clientId,
+      department: pendingItem.department,
     });
     setModalOpen(true);
   };
@@ -114,7 +132,7 @@ export default function PendingProjectsPage() {
         </Button>
         <PageHeader 
           title="Pending Project Creations" 
-          description="These leads have been marked as 'Client Won' but do not have a project created for them yet."
+          description="These clients have been created but do not have a project set up for their respective departments yet."
         />
       </div>
 
@@ -129,32 +147,28 @@ export default function PendingProjectsPage() {
             <table className="w-full text-sm text-left">
               <thead className="bg-slate-50 border-b border-border text-slate-500 font-medium">
                 <tr>
-                  <th className="px-6 py-4">Lead Name</th>
-                  <th className="px-6 py-4">Expected Revenue</th>
-                  <th className="px-6 py-4">Sales Rep</th>
+                  <th className="px-6 py-4">Company Name</th>
+                  <th className="px-6 py-4">Department</th>
                   <th className="px-6 py-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {pendingProjects.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-slate-50/50 transition-colors">
+                {pendingProjects.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="font-bold text-slate-800 text-base">{lead.company || lead.contact}</div>
+                      <div className="font-bold text-slate-800 text-base">{item.company}</div>
                       <div className="text-xs font-medium text-brand-teal bg-brand-light inline-flex items-center px-2 py-0.5 rounded-md mt-1">
-                        Won Lead
+                        Client
                       </div>
                     </td>
-                    <td className="px-6 py-4 font-bold text-emerald-600">
-                      {lead.expectedIncome ? `₹${Number(lead.expectedIncome).toLocaleString()}` : "-"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 font-medium">
-                      {lead.assignedTo ? (Array.isArray(lead.assignedTo) ? lead.assignedTo.map((a:any) => typeof a === 'string' ? a : (a.name || a.employeeName)).join(', ') : lead.assignedTo) : "-"}
+                    <td className="px-6 py-4 font-bold text-slate-700">
+                      {item.department}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Button 
                         size="sm"
                         className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold"
-                        onClick={() => handleCreateFromLead(lead)}
+                        onClick={() => handleCreateFromClient(item)}
                         disabled={!canAddProjects}
                       >
                         <Plus className="w-4 h-4 mr-2" />

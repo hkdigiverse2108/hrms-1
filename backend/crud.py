@@ -106,11 +106,23 @@ def fix_id(doc):
                     new_doc[k] = v.isoformat()
                 else:
                     new_doc[k] = v.strftime("%Y-%m-%d")
+            elif isinstance(v, float):
+                import math
+                if math.isnan(v) or math.isinf(v):
+                    new_doc[k] = 0.0
+                else:
+                    new_doc[k] = v
             elif isinstance(v, (dict, list)):
                 new_doc[k] = fix_id(v)
             else:
                 new_doc[k] = v
         return new_doc
+    elif isinstance(doc, ObjectId):
+        return str(doc)
+    elif isinstance(doc, float):
+        import math
+        if math.isnan(doc) or math.isinf(doc):
+            return 0.0
     return doc
 
 async def archive_and_delete_many(db, collection_name: str, query: dict):
