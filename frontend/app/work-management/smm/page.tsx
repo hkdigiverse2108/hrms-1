@@ -327,9 +327,9 @@ export default function CreativeClientsPage() {
         
         // Filter for Creative department AND must have a creative project
         const validClientIds = new Set(Object.keys(projectMap));
-        setClients(clientsData.filter((c: any) => c.department === "Creative" && validClientIds.has(c.id)));
+        setClients(clientsData.filter((c: any) => c.department?.includes("Creative") && validClientIds.has(c.id)));
       } else {
-        setClients(clientsData.filter((c: any) => c.department === "Creative"));
+        setClients(clientsData.filter((c: any) => c.department?.includes("Creative")));
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
