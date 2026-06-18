@@ -252,6 +252,7 @@ export default function ChatPage() {
   const [newStatusEmoji, setNewStatusEmoji] = useState("💬");
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [voicePreviewBlob, setVoicePreviewBlob] = useState<Blob | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const [isWsConnected, setIsWsConnected] = useState(false);
@@ -1030,9 +1031,38 @@ export default function ChatPage() {
   const handleSendMessage = async (extraData: any = null) => {
     // Prevent double-send on rapid taps
     if (isSendingRef.current) return;
-    if (!extraData && (!message.trim() && !pendingFile) || !selectedChat || !user) return;
+    if (!extraData && (!message.trim() && !pendingFile && !voicePreviewBlob) || !selectedChat || !user) return;
 
     isSendingRef.current = true;
+
+    if (voicePreviewBlob && !extraData?.isVoice) {
+      const audioFile = new File([voicePreviewBlob], "voice_message.webm", { type: 'audio/webm' });
+      const formData = new FormData();
+      formData.append('file', audioFile);
+      try {
+        const res = await fetch(`${API_URL}/chat/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const duration = recordingDuration;
+          setVoicePreviewBlob(null);
+          setRecordingDuration(0);
+          handleSendMessage({ 
+            isVoice: true, 
+            attachmentUrl: data.url, 
+            attachmentName: "Voice Message",
+            voiceDuration: duration
+          });
+        }
+      } catch (err) {
+        console.error("Error uploading voice message:", err);
+        toast.error("Failed to upload voice message");
+      }
+      isSendingRef.current = false;
+      return;
+    }
 
     const isImageFile = pendingFile && /\.(jpg|jpeg|png|gif|webp)$/i.test(pendingFile.name);
     const optimisticText = message || (pendingFile && !isImageFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : ""));
@@ -1054,7 +1084,7 @@ export default function ChatPage() {
 
     if (replyingTo) {
       payload.replyToId = replyingTo.id;
-      payload.replyToText = replyingTo.text;
+      payload.replyToText = replyingTo.text || (replyingTo.attachmentUrl ? "📷 Image" : (replyingTo.isVoice ? "🎤 Voice Message" : ""));
     }
 
     // --- Optimistic UI: show message instantly before server responds ---
@@ -1066,7 +1096,7 @@ export default function ChatPage() {
       senderId: user.id,
       isMe: true,
       replyToId: replyingTo?.id,
-      replyToText: replyingTo?.text,
+      replyToText: replyingTo?.text || (replyingTo?.attachmentUrl ? "📷 Image" : (replyingTo?.isVoice ? "🎤 Voice Message" : "")),
       _optimistic: true,
       // Show image preview instantly using blob URL before upload finishes
       ...(isImageFile ? {
@@ -1226,12 +1256,14 @@ export default function ChatPage() {
           );
         })();
 
-        // Two unified color palettes: Gold/Yellow for 'You', Blue/Cyan for 'Others'
+        // Two unified color palettes: Orange/Amber for 'You', Blue/Cyan for 'Others'
         let tagColorClass = "";
         if (isMeBubble) {
-          tagColorClass = isMe ? "text-[#fef08a] font-extrabold" : "text-[#ccfbf1] font-extrabold";
+          // Darker colors for sent bubbles (light green background #d9fdd3)
+          tagColorClass = isMe ? "text-[#b45309] font-extrabold" : "text-[#0369a1] font-extrabold";
         } else {
-          tagColorClass = isMe ? "text-[#d97706]" : "text-[#0ea5e9]";
+          // Standard colors for received bubbles (white background)
+          tagColorClass = isMe ? "text-[#d97706] font-extrabold" : "text-[#0ea5e9] font-extrabold";
         }
 
         return (
@@ -1505,9 +1537,11 @@ export default function ChatPage() {
       senderId: user.id,
       receiverId: chatType === "personal" ? recipientId : "group",
       groupId: chatType === "personal" ? null : recipientId,
-      text: forwardingMessage.text,
+      text: forwardingMessage.text || "",
       type: chatType === "general" ? "group" : chatType,
-      forwardedFrom: user.name
+      forwardedFrom: user.name,
+      attachmentUrl: forwardingMessage.attachmentUrl,
+      attachmentName: forwardingMessage.attachmentName
     };
 
     try {
@@ -1621,30 +1655,7 @@ export default function ChatPage() {
       
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const audioFile = new File([audioBlob], "voice_message.webm", { type: 'audio/webm' });
-        
-        // Upload and send
-        const formData = new FormData();
-        formData.append('file', audioFile);
-        
-        try {
-          const res = await fetch(`${API_URL}/chat/upload`, {
-            method: 'POST',
-            body: formData
-          });
-          if (res.ok) {
-            const data = await res.json();
-            handleSendMessage({ 
-              isVoice: true, 
-              attachmentUrl: data.url, 
-              attachmentName: "Voice Message",
-              voiceDuration: recordingDuration
-            });
-          }
-        } catch (err) {
-          console.error("Error uploading voice message:", err);
-        }
-        
+        setVoicePreviewBlob(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
       
@@ -2778,7 +2789,10 @@ export default function ChatPage() {
 
                               {/* Reply Preview */}
                               {msg.replyToText && (
-                                <div className="mb-1.5 p-2 rounded-lg border-l-4 border-brand-teal text-[11.1px] bg-black/5 text-[#111b21]/85">
+                                <div 
+                                  className="mb-1.5 p-2 rounded-lg border-l-4 border-brand-teal text-[11.1px] bg-black/5 text-[#111b21]/85 cursor-pointer hover:bg-black/10 transition-colors"
+                                  onClick={() => msg.replyToId && scrollToMessage(msg.replyToId)}
+                                >
                                   <div className="font-bold text-[10.5px] opacity-75 mb-0.5">
                                     {msg.isMe ? "Replying to" : selectedChat.name}
                                   </div>
@@ -3126,7 +3140,7 @@ export default function ChatPage() {
                 <div className="max-w-4xl mx-auto mb-2 flex items-center justify-between bg-gray-50 p-3 rounded-xl border-l-4 border-brand-teal animate-in slide-in-from-bottom-2">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold text-brand-teal uppercase">Replying to {replyingTo.isMe ? "Yourself" : selectedChat.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{replyingTo.text}</p>
+                    <p className="text-xs text-muted-foreground truncate">{replyingTo.text || (replyingTo.attachmentUrl ? "📷 Image" : (replyingTo.isVoice ? "🎤 Voice Message" : ""))}</p>
                   </div>
                   <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full" onClick={() => setReplyingTo(null)}>
                     <X className="w-3 h-3" />
@@ -3156,7 +3170,27 @@ export default function ChatPage() {
                 className="max-w-4xl mx-auto flex items-end gap-3 bg-transparent px-2 py-1"
               >
                 <div className="flex-1 flex items-end gap-2 bg-white px-3 py-2 rounded-[24px] border border-slate-200 shadow-xs min-h-[46px]">
-                  {isRecording ? (
+                  {voicePreviewBlob ? (
+                    <div className="flex-1 flex items-center justify-between bg-emerald-50/50 px-3 py-1.5 rounded-xl border border-emerald-100/50 animate-in fade-in duration-300">
+                      <Button 
+                        type="button"
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-red-500 hover:bg-red-100 rounded-full shrink-0"
+                        onClick={() => { setVoicePreviewBlob(null); setRecordingDuration(0); }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                      <div className="flex-1 px-4 flex items-center justify-center max-w-[250px] mx-auto">
+                        <audio controls src={URL.createObjectURL(voicePreviewBlob)} className="h-8 w-full" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold text-emerald-600 tabular-nums">
+                          {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+                        </span>
+                      </div>
+                    </div>
+                  ) : isRecording ? (
                     <div className="flex-1 flex items-center justify-between bg-red-50/50 px-3 py-1.5 rounded-xl border border-red-100/50 animate-in fade-in duration-300">
                       <div className="flex items-center gap-2">
                         <span className="flex h-2 w-2 relative">
@@ -3264,32 +3298,11 @@ export default function ChatPage() {
 
                       {/* Right side actions: Tag + Poll + Mic */}
                       <div className="flex items-center shrink-0">
-                        {/* Tagging / Mention Popover */}
+                        {/* Tagging / Mention Popover (Hidden Trigger) */}
+                        {/* Tagging / Mention Dropdown */}
                         <div className="relative">
-                          <Popover open={showTagPicker} onOpenChange={setShowTagPicker}>
-                            <PopoverTrigger asChild>
-                              <Button 
-                                type="button" 
-                                variant="ghost" 
-                                size="icon" 
-                                className={cn("text-[#54656f] hover:bg-slate-100 rounded-full h-9 w-9 shrink-0", showTagPicker && "bg-brand-teal/10 text-brand-teal")}
-                                onClick={() => {
-                                  if (!showTagPicker) {
-                                    if (!message.endsWith("@")) {
-                                      setMessage(prev => prev + (prev.endsWith(" ") || prev === "" ? "@" : " @"));
-                                    }
-                                    setTagSearchQuery("");
-                                    setShowTagPicker(true);
-                                  } else {
-                                    setShowTagPicker(false);
-                                  }
-                                }}
-                                title="Tag Someone"
-                              >
-                                <AtSign className="w-5 h-5" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent side="top" align="end" className="p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 mb-4 max-h-64 overflow-y-auto z-[100]">
+                          {showTagPicker && (
+                            <div className="absolute bottom-full right-0 p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 mb-4 max-h-64 overflow-y-auto z-[100]">
                               <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1.5 border-b border-slate-50 mb-1">
                                 Tag Colleague
                               </div>
@@ -3304,7 +3317,10 @@ export default function ChatPage() {
                                       <button
                                         key={emp.id}
                                         type="button"
-                                        onClick={() => handleTagSelect(emp)}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault(); // Keep focus on textarea
+                                          handleTagSelect(emp);
+                                        }}
                                         className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-50 rounded-xl text-left transition-all"
                                       >
                                         <Avatar className="w-7 h-7 shrink-0">
@@ -3320,8 +3336,8 @@ export default function ChatPage() {
                                   })}
                                 </div>
                               )}
-                            </PopoverContent>
-                          </Popover>
+                            </div>
+                          )}
                         </div>
 
                         {/* Poll Button */}
@@ -3357,10 +3373,10 @@ export default function ChatPage() {
                 {/* Green/Teal Circle Send Button */}
                 <Button 
                   type="submit"
-                  disabled={!message.trim() && !pendingFile && !isRecording}
+                  disabled={!message.trim() && !pendingFile && !voicePreviewBlob && !isRecording}
                   className={cn(
                     "bg-brand-teal hover:bg-brand-teal-light text-white rounded-full w-11 h-11 p-0 shadow-md transition-all shrink-0 flex items-center justify-center",
-                    (!message.trim() && !pendingFile && !isRecording) ? "opacity-60 cursor-not-allowed" : "opacity-100 active:scale-95"
+                    (!message.trim() && !pendingFile && !voicePreviewBlob && !isRecording) ? "opacity-60 cursor-not-allowed" : "opacity-100 active:scale-95"
                   )}
                 >
                   <Send className="w-5 h-5 fill-current ml-0.5" />

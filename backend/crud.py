@@ -2635,6 +2635,44 @@ async def add_client_meeting(db, client_id: str, meeting: schemas.Meeting, perfo
     # Log activity
     await log_activity(db, "Client Meeting Added", performedBy, userName, f"Added meeting: {meeting_dict.get('note', 'No notes provided')}", clientId=client_id)
     
+    # Auto-create schedules for attendees
+    client = await db.clients.find_one({"_id": ObjectId(client_id)})
+    client_name = client.get("companyName", "Client") if client else "Client"
+    
+    attendee_ids = meeting_dict.get("attendeeIds", [])
+    if attendee_ids:
+        # Try to parse start and end times
+        start_time, end_time = "09:30", "10:00"
+        if " - " in meeting_dict.get("duration", ""):
+            parts = meeting_dict["duration"].split(" - ")
+            start_time, end_time = parts[0].strip(), parts[1].strip()
+        
+        date_str = meeting_dict["date"].split(" ")[0] if " " in meeting_dict.get("date", "") else meeting_dict.get("date", "").split("T")[0]
+        
+        for emp_id in attendee_ids:
+            if not emp_id: continue
+            q = {"_id": ObjectId(emp_id)} if ObjectId.is_valid(emp_id) else {"id": emp_id}
+            emp = await db.employees.find_one(q)
+            emp_name = emp.get("name", "Unknown") if emp else "Unknown"
+            
+            schedule_data = {
+                "title": f"Meeting: {client_name}",
+                "description": meeting_dict.get("note", ""),
+                "employeeId": str(emp.get("_id", emp_id)) if emp else emp_id,
+                "employeeName": emp_name,
+                "date": date_str,
+                "startTime": start_time,
+                "endTime": end_time,
+                "type": "meeting",
+                "attendees": [a.strip() for a in meeting_dict.get("attendees", "").split(",")] if meeting_dict.get("attendees") else [],
+                "createdBy": userName
+            }
+            # create_schedule will handle Google Calendar syncing if enabled
+            try:
+                await create_schedule(db, schedule_data)
+            except Exception as e:
+                print(f"Error auto-creating schedule for meeting: {e}")
+
     doc = await db.clients.find_one({"_id": ObjectId(client_id)})
     return fix_id(doc)
 
