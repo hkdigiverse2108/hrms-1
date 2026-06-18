@@ -237,12 +237,16 @@ export default function ClientFeedbackPage() {
                       </Select>
                     </div>
                   )}
-                  {(filterProjectId === "all" ? responses : responses.filter(r => filterProjectId === "general" ? !r.projectId : r.projectId === filterProjectId)).length === 0 ? (
-                    <div className="text-center py-10 text-slate-500 bg-white rounded-xl border border-slate-200">
-                      No responses match the selected project filter.
-                    </div>
-                  ) : (
-                    (filterProjectId === "all" ? responses : responses.filter(r => filterProjectId === "general" ? !r.projectId : r.projectId === filterProjectId)).map((resp, i) => (
+                  {(() => {
+                    const filteredResponses = filterProjectId === "all" ? responses : responses.filter(r => filterProjectId === "general" ? !r.projectId : r.projectId === filterProjectId);
+                    if (filteredResponses.length === 0) {
+                      return (
+                        <div className="text-center py-10 text-slate-500 bg-white rounded-xl border border-slate-200">
+                          No responses match the selected project filter.
+                        </div>
+                      );
+                    }
+                    return filteredResponses.map((resp, i) => (
                       <Card key={i} className="shadow-sm border-t-4 border-t-brand-teal">
                       <CardContent className="pt-6">
                         <div className="mb-4 flex justify-between items-start">
@@ -271,7 +275,8 @@ export default function ClientFeedbackPage() {
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                    ));
+                  })()}
                 </div>
               )}
             </TabsContent>
