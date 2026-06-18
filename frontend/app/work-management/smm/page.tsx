@@ -282,14 +282,17 @@ export default function CreativeClientsPage() {
 
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
+  const [calendarSettings, setCalendarSettings] = useState<Record<string, any>>({});
+  const currentMonthYear = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
   const fetchClients = async () => {
     setIsLoading(true);
     try {
-      const [res, ccRes, pRes] = await Promise.all([
+      const [res, ccRes, pRes, settingsRes] = await Promise.all([
         fetch(`${API_URL}/clients`),
         fetch(`${API_URL}/content-calendar/all`),
-        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`)
+        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
+        fetch(`${API_URL}/content-calendar-settings/all?monthYear=${currentMonthYear}`)
       ]);
       
       let clientsData = [];
@@ -315,6 +318,15 @@ export default function CreativeClientsPage() {
         setPendingCounts(counts);
       }
       
+      if (settingsRes && settingsRes.ok) {
+        const settingsList = await settingsRes.json();
+        const settingsMap: Record<string, any> = {};
+        settingsList.forEach((s: any) => {
+          settingsMap[s.clientId] = s;
+        });
+        setCalendarSettings(settingsMap);
+      }
+
       if (pRes.ok) {
         const projects = await pRes.json();
         const projectMap: Record<string, any> = {};
@@ -644,6 +656,16 @@ export default function CreativeClientsPage() {
                           </Badge>
                         )}
                       </div>
+                      {calendarSettings[client.id] && calendarSettings[client.id].approvalStatus && calendarSettings[client.id].approvalStatus !== "Approved by Client" && calendarSettings[client.id].approvalStatus !== "Pending" && (
+                        <div className="mt-2 text-[10px] font-medium text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100 inline-block w-full max-w-full">
+                          <span className="font-semibold">{calendarSettings[client.id].approvalStatus}</span>
+                          {calendarSettings[client.id].statusLogs && calendarSettings[client.id].statusLogs.length > 0 && calendarSettings[client.id].statusLogs[calendarSettings[client.id].statusLogs.length - 1].reason && (
+                            <div className="text-rose-500 font-normal truncate mt-0.5" title={calendarSettings[client.id].statusLogs[calendarSettings[client.id].statusLogs.length - 1].reason}>
+                              Reason: {calendarSettings[client.id].statusLogs[calendarSettings[client.id].statusLogs.length - 1].reason}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-slate-700 text-sm font-medium">

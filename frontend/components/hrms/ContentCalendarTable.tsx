@@ -62,6 +62,10 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [selectedDates, setSelectedDates] = useState<Date[] | undefined>([]);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
+  const [showReasonDialog, setShowReasonDialog] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<string | null>(null);
+  const [statusChangeReason, setStatusChangeReason] = useState("");
+
   const handleOpenLogs = (entry: any) => {
     setCurrentLogs(entry.logs || []);
     setLogsDialogOpen(true);
@@ -304,11 +308,28 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   };
 
   const handleStatusChange = async (newStatus: string) => {
+    const oldStatus = settings?.approvalStatus || "Pending";
+    if (
+      (oldStatus === "Approved by Client" && newStatus !== "Approved by Client") ||
+      newStatus === "Rejected" ||
+      newStatus === "Changes Requested"
+    ) {
+      setPendingStatusChange(newStatus);
+      setStatusChangeReason("");
+      setShowReasonDialog(true);
+      return;
+    }
+    
+    await proceedWithStatusChange(newStatus, "");
+  };
+
+  const proceedWithStatusChange = async (newStatus: string, reason: string) => {
     try {
       const newLog = {
         timestamp: new Date().toISOString(),
         status: newStatus,
-        user: user?.name || "Unknown User"
+        user: user?.name || "Unknown User",
+        reason: reason
       };
       const updatedLogs = [...(settings?.statusLogs || []), newLog];
       const updatedSettings = { ...settings, clientId, monthYear, approvalStatus: newStatus, statusLogs: updatedLogs };
@@ -603,9 +624,10 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
           <h2 className="text-lg font-bold text-slate-800">Content Calendar</h2>
           <p className="text-xs text-slate-500">Plan and track content creation and posting</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
+        <div className="flex items-start gap-3">
+          <div className="flex items-start gap-2">
+            <div className="flex flex-col gap-1 items-end">
+              <div className="flex items-center gap-1">
               <Select 
                 value={settings?.approvalStatus || "Pending"} 
                 onValueChange={handleStatusChange}
@@ -645,6 +667,11 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                               <span className="text-[10px] text-slate-400">{dayjs(log.timestamp).format('MMM D, h:mm A')}</span>
                             </div>
                             <div className="text-xs text-slate-500">by {log.user}</div>
+                            {log.reason && (
+                              <div className="mt-1 text-xs text-rose-600 bg-rose-50 p-1.5 rounded border border-rose-100">
+                                <strong>Reason:</strong> {log.reason}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -652,6 +679,12 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                   </PopoverContent>
                 </Popover>
               )}
+            </div>
+            {settings?.statusLogs && settings.statusLogs.length > 0 && settings.statusLogs[settings.statusLogs.length - 1].reason && (
+              <div className="text-[10px] text-rose-600 font-medium max-w-[200px] truncate bg-rose-50 px-2 py-0.5 rounded border border-rose-100" title={settings.statusLogs[settings.statusLogs.length - 1].reason}>
+                Reason: {settings.statusLogs[settings.statusLogs.length - 1].reason}
+              </div>
+            )}
             </div>
             <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
               <PopoverTrigger asChild>
@@ -785,6 +818,53 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsSettingsOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveSettings} className="bg-brand-teal text-white">Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showReasonDialog} onOpenChange={setShowReasonDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reason Required</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for changing the status to <span className="font-semibold text-brand-teal">{pendingStatusChange}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label className="mb-2 block">Reason</Label>
+            <Input 
+              value={statusChangeReason} 
+              onChange={e => setStatusChangeReason(e.target.value)} 
+              placeholder="Enter reason..." 
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (!statusChangeReason.trim()) {
+                    toast.error("Reason is required");
+                    return;
+                  }
+                  setShowReasonDialog(false);
+                  proceedWithStatusChange(pendingStatusChange!, statusChangeReason);
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReasonDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={() => {
+                if (!statusChangeReason.trim()) {
+                  toast.error("Reason is required");
+                  return;
+                }
+                setShowReasonDialog(false);
+                proceedWithStatusChange(pendingStatusChange!, statusChangeReason);
+              }}
+              className="bg-brand-teal text-white"
+            >
+              Confirm
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

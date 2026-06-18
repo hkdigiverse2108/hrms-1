@@ -6184,6 +6184,11 @@ async def get_content_calendar_settings(db, client_id: str, month_year: str):
         return fix_id(settings)
     return None
 
+async def get_all_content_calendar_settings(db, month_year: str):
+    cursor = db.content_calendar_settings.find({"monthYear": month_year})
+    settings = await cursor.to_list(length=1000)
+    return [fix_id(s) for s in settings]
+
 async def upsert_content_calendar_settings(db, client_id: str, month_year: str, update_data: dict):
     if "_id" in update_data:
         del update_data["_id"]

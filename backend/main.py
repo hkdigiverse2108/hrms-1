@@ -2439,6 +2439,10 @@ async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depend
         "approvalOffset": 5
     }
 
+@app.get("/content-calendar-settings/all", response_model=List[schemas.ContentCalendarSettingsBase])
+async def get_all_content_calendar_settings(monthYear: str, db=Depends(get_db)):
+    return await crud.get_all_content_calendar_settings(db, monthYear)
+
 @app.post("/content-calendar-settings", response_model=schemas.ContentCalendarSettings)
 async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSettingsBase, db=Depends(get_db)):
     return await crud.upsert_content_calendar_settings(
