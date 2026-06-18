@@ -471,7 +471,7 @@ export default function ClientsPage() {
                   <CardContent className="p-6">
                     <div className="flex justify-between items-start mb-4">
                       <div className="w-12 h-12 bg-brand-light rounded-lg flex items-center justify-center text-brand-teal shrink-0">
-                        <Building2 className="w-6 h-6" />
+                        <Users className="w-6 h-6" />
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fetchLogs(client)} title="View History">
@@ -495,13 +495,13 @@ export default function ClientsPage() {
 
                     <div className="space-y-3">
                       <div>
-                        <h3 className="font-bold text-lg text-foreground leading-tight">{client.companyName}</h3>
+                        <h3 className="font-bold text-lg text-foreground leading-tight">{client.name || "Unknown Client"}</h3>
                       </div>
 
                       <div className="space-y-2 pt-2 border-t border-border/50">
                         <div className="flex items-center gap-2 text-sm text-foreground font-medium">
-                          <Users className="w-4 h-4 text-brand-teal" />
-                          {client.name}
+                          <Building2 className="w-4 h-4 text-brand-teal" />
+                          {client.companyName || "Unknown Company"}
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Briefcase className="w-4 h-4 text-brand-teal" />
