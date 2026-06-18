@@ -2139,12 +2139,47 @@ async def disconnect_google_calendar(employeeId: str, db=Depends(get_db)):
         if ObjectId.is_valid(employeeId):
             query = {"$or": [{"employeeId": employeeId}, {"_id": ObjectId(employeeId)}]}
             
+        emp = await db.employees.find_one(query)
+        if not emp:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+            
+        if emp.get("googleCalendarTokens"):
+            # They have connected. Let's delete events.
+            try:
+                import asyncio
+                import google_calendar
+                creds = await crud._get_creds_and_persist(db, emp)
+                if creds:
+                    # Find all schedules with a googleEventId
+                    cursor = db.schedules.find({
+                        "employeeId": employeeId,
+                        "googleEventId": {"$exists": True, "$ne": None}
+                    })
+                    schedules = await cursor.to_list(length=10000)
+                    
+                    for sched in schedules:
+                        gid = sched.get("googleEventId")
+                        if sched.get("type") == "Google Event":
+                            # Event originated from Google, so just delete the local copy
+                            await db.schedules.delete_one({"_id": sched["_id"]})
+                        else:
+                            # It's an HRMS event pushed to Google, delete from Google
+                            try:
+                                await asyncio.to_thread(google_calendar.delete_event, creds, gid)
+                            except Exception as e:
+                                print(f"Error deleting event {gid} from Google Calendar: {e}")
+                            # Remove the googleEventId from the local HRMS schedule
+                            await db.schedules.update_one(
+                                {"_id": sched["_id"]},
+                                {"$unset": {"googleEventId": ""}}
+                            )
+            except Exception as e:
+                print(f"Error cleaning up Google Calendar events during disconnect: {e}")
+            
         result = await db.employees.update_one(
-            query,
+            {"_id": emp["_id"]},
             {"$unset": {"googleCalendarTokens": ""}}
         )
-        if result.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Employee not found.")
         return {"message": "Successfully disconnected Google Calendar."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
