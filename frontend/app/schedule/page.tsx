@@ -201,9 +201,7 @@ export default function SchedulePage() {
   const fetchSchedules = async (dateStr: string) => {
     setIsLoading(true);
     try {
-      const userId = user?.id || user?.employeeId || "";
-      const empParam = isAdmin ? "" : (userId ? `&employeeId=${userId}` : "");
-      const res = await fetch(`${API_URL}/schedules?date=${dateStr}${empParam}`);
+      const res = await fetch(`${API_URL}/schedules?date=${dateStr}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
     } catch (err) {
@@ -216,9 +214,7 @@ export default function SchedulePage() {
   const fetchSchedulesRange = async (from: string, to: string) => {
     setIsLoading(true);
     try {
-      const userId = user?.id || user?.employeeId || "";
-      const empParam = isAdmin ? "" : (userId ? `&employeeId=${userId}` : "");
-      const res = await fetch(`${API_URL}/schedules?date_from=${from}&date_to=${to}${empParam}`);
+      const res = await fetch(`${API_URL}/schedules?date_from=${from}&date_to=${to}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
     } catch (err) {
