@@ -800,6 +800,7 @@ class FeedbackForm(FeedbackFormCreate):
 class FeedbackResponseCreate(BaseModel):
     formId: str
     clientId: str
+    projectId: Optional[str] = None
     answers: Dict[str, Any]
 
 class FeedbackResponse(FeedbackResponseCreate):

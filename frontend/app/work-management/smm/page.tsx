@@ -643,6 +643,14 @@ export default function CreativeClientsPage() {
           <CalendarClock className="w-4 h-4" />
           View Pending Work
         </Button>
+        <Button onClick={() => router.push('/feedback-builder/common')} className="h-10 bg-indigo-600 hover:bg-indigo-700 text-white gap-2 w-full md:w-auto shrink-0">
+          <Plus className="w-4 h-4" />
+          Create Feedback Form
+        </Button>
+        <Button onClick={() => router.push('/work-management/smm/common/feedback')} className="h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 gap-2 w-full md:w-auto shrink-0 border border-slate-200">
+          <ClipboardList className="w-4 h-4" />
+          View Common Forms
+        </Button>
 
       </div>
 
@@ -875,18 +883,7 @@ export default function CreativeClientsPage() {
                         >
                           <ClipboardList className="w-4.5 h-4.5" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-brand-teal hover:bg-teal-50 rounded-full"
-                          title="Create Feedback Form"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/feedback-builder/${client.id}`);
-                          }}
-                        >
-                          <Plus className="w-4.5 h-4.5" />
-                        </Button>
+
                         <Button 
                           variant="ghost" 
                           size="icon" 
