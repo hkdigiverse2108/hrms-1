@@ -146,7 +146,6 @@ export default function SchedulePage() {
   const handleDisconnectGoogle = async () => {
     if (!user) return;
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const res = await fetch(`${API_URL}/auth/google/disconnect?employeeId=${user.id || user.employeeId}`, {
         method: 'POST'
       });

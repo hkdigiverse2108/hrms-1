@@ -2143,8 +2143,8 @@ async def disconnect_google_calendar(employeeId: str, db=Depends(get_db)):
             query,
             {"$unset": {"googleCalendarTokens": ""}}
         )
-        if result.modified_count == 0:
-            raise HTTPException(status_code=404, detail="Employee not found or already disconnected.")
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Employee not found.")
         return {"message": "Successfully disconnected Google Calendar."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
