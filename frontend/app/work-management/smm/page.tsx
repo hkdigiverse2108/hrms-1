@@ -23,7 +23,11 @@ import {
   Banknote,
   CreditCard,
   Star,
-  UserPlus
+  UserPlus,
+  SlidersHorizontal,
+  Video,
+  Image as ImageIcon,
+  PenTool
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -42,6 +46,9 @@ import { WhatsAppSmmDialog } from "@/components/hrms/WhatsAppSmmDialog";
 import { WhatsAppIcon } from "@/components/hrms/WhatsAppIcon";
 import { SmmMeetingDialog } from "@/components/hrms/SmmMeetingDialog";
 import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -100,6 +107,10 @@ export default function CreativeClientsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [masterFilter, setMasterFilter] = useState("all");
   const [inlineEditing, setInlineEditing] = useState<{id: string, field: string} | null>(null);
+
+  // Advanced Filters
+  const [creativeFilter, setCreativeFilter] = useState("all");
+  const [serviceFilter, setServiceFilter] = useState("all");
   
   // Creative Team Assignment
   const [creativeEmployees, setCreativeEmployees] = useState<any[]>([]);
@@ -658,6 +669,21 @@ export default function CreativeClientsPage() {
       case 'pending-work': return hasPendingWork;
       default: return true;
     }
+  }).filter(c => {
+    if (creativeFilter !== "all") {
+      const isAssigned = c.assignedScriptwriterId === creativeFilter || 
+                         c.assignedReelEditorId === creativeFilter ||
+                         c.assignedPostDesignerId === creativeFilter;
+      if (!isAssigned) return false;
+    }
+
+    if (serviceFilter !== "all") {
+      if (serviceFilter === "reel" && c.reelRequired !== "Yes" && (c.reel || 0) <= 0) return false;
+      if (serviceFilter === "post" && c.postRequired !== "Yes" && (c.post || 0) <= 0) return false;
+      if (serviceFilter === "graphics" && c.graphicsRequired !== "Yes" && !c.graphics) return false;
+    }
+
+    return true;
   });
 
   return (
@@ -669,37 +695,86 @@ export default function CreativeClientsPage() {
       />
 
       <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input 
-            placeholder="Search by client name, email..." 
-            className="pl-10 h-10 border-slate-200 focus:border-brand-teal focus:ring-brand-teal"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="relative flex-1 w-full flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input 
+              placeholder="Search by client name, email..." 
+              className="pl-10 h-10 border-slate-200 focus:border-brand-teal focus:ring-brand-teal"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={`h-10 shrink-0 gap-2 border-slate-200 ${creativeFilter !== 'all' || serviceFilter !== 'all' ? 'bg-brand-teal/5 text-brand-teal border-brand-teal/30' : ''}`}>
+                <SlidersHorizontal className="w-4 h-4" />
+                Advanced Filters
+                {(creativeFilter !== 'all' || serviceFilter !== 'all') && (
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] bg-brand-teal text-white">Active</Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0 shadow-xl border-slate-200" align="start">
+              <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h4 className="font-semibold text-slate-700 text-sm">Master Filters</h4>
+                {(creativeFilter !== 'all' || serviceFilter !== 'all') && (
+                  <button onClick={() => { setCreativeFilter('all'); setServiceFilter('all'); }} className="text-xs text-slate-400 hover:text-rose-500 font-medium">Clear All</button>
+                )}
+              </div>
+              <div className="p-4 space-y-5">
+                <div className="space-y-3">
+                  <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Service Required</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button 
+                      onClick={() => setServiceFilter(serviceFilter === 'reel' ? 'all' : 'reel')}
+                      className={`flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-lg border transition-all ${serviceFilter === 'reel' ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      <Video className="w-4 h-4" />
+                      <span className="text-[11px] font-medium">Reels</span>
+                    </button>
+                    <button 
+                      onClick={() => setServiceFilter(serviceFilter === 'post' ? 'all' : 'post')}
+                      className={`flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-lg border transition-all ${serviceFilter === 'post' ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      <PenTool className="w-4 h-4" />
+                      <span className="text-[11px] font-medium">Posts</span>
+                    </button>
+                    <button 
+                      onClick={() => setServiceFilter(serviceFilter === 'graphics' ? 'all' : 'graphics')}
+                      className={`flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-lg border transition-all ${serviceFilter === 'graphics' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                      <span className="text-[11px] font-medium">Graphics</span>
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Team Member</Label>
+                  <Select value={creativeFilter} onValueChange={setCreativeFilter}>
+                    <SelectTrigger className="w-full h-10 border-slate-200">
+                      <SelectValue placeholder="All Creative Team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="font-medium">All Team Members</SelectItem>
+                      {creativeEmployees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="w-5 h-5">
+                              <AvatarFallback className="text-[9px] bg-brand-teal/10 text-brand-teal">{emp.name?.substring(0,2).toUpperCase() || emp.firstName?.substring(0,2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <span>{emp.name || `${emp.firstName} ${emp.lastName}`}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
-
-        <Select value={masterFilter} onValueChange={setMasterFilter}>
-          <SelectTrigger className="w-full md:w-[220px] h-10 bg-white border-slate-200">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-slate-500" />
-              <SelectValue placeholder="Filter clients" />
-            </div>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Clients</SelectItem>
-            <SelectItem value="whatsapp-submitted">WhatsApp Link Submitted</SelectItem>
-            <SelectItem value="whatsapp-pending">WhatsApp Link Pending</SelectItem>
-            <SelectItem value="greetings-sent">Greetings Sent</SelectItem>
-            <SelectItem value="greetings-pending">Greetings Pending</SelectItem>
-            <SelectItem value="payment-due">Payment Due</SelectItem>
-            <SelectItem value="followup-due">Follow-up Due</SelectItem>
-            <SelectItem value="active">Active Projects</SelectItem>
-            <SelectItem value="on-hold">On Hold Projects</SelectItem>
-            <SelectItem value="festival-post">Festival Post</SelectItem>
-            <SelectItem value="pending-work">Pending Work</SelectItem>
-          </SelectContent>
-        </Select>
 
         <Button onClick={() => router.push('/work-management/smm/pending')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto shrink-0">
           <CalendarClock className="w-4 h-4" />
@@ -713,7 +788,36 @@ export default function CreativeClientsPage() {
           <ClipboardList className="w-4 h-4" />
           View Common Forms
         </Button>
+      </div>
 
+      <div className="w-full mb-6 overflow-x-auto pb-2 no-scrollbar">
+        <div className="flex items-center gap-2 w-max">
+          {[
+            { value: "all", label: "All Clients" },
+            { value: "active", label: "Active Projects" },
+            { value: "pending-work", label: "Pending Work" },
+            { value: "payment-due", label: "Payment Due" },
+            { value: "followup-due", label: "Follow-up Due" },
+            { value: "on-hold", label: "On Hold Projects" },
+            { value: "festival-post", label: "Festival Post" },
+            { value: "whatsapp-submitted", label: "WA Submitted" },
+            { value: "whatsapp-pending", label: "WA Pending" },
+            { value: "greetings-sent", label: "Greetings Sent" },
+            { value: "greetings-pending", label: "Greetings Pending" },
+          ].map(filter => (
+            <button
+              key={filter.value}
+              onClick={() => setMasterFilter(filter.value)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+                masterFilter === filter.value 
+                  ? "bg-brand-teal text-white shadow-md shadow-brand-teal/20" 
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-brand-teal hover:border-brand-teal/30"
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {isLoading ? (
