@@ -27,7 +27,10 @@ import {
   SlidersHorizontal,
   Video,
   Image as ImageIcon,
-  PenTool
+  PenTool,
+  ChevronDown,
+  ChevronsUpDown,
+  Check
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -49,6 +52,61 @@ import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+const SearchableEmployeeSelect = ({ value, onChange, placeholder, employees }: { value: string, onChange: (val: string) => void, placeholder: string, employees: any[] }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const selectedEmp = employees.find((e: any) => e.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-10 border-slate-200">
+          {selectedEmp ? (selectedEmp.name || `${selectedEmp.firstName} ${selectedEmp.lastName}`) : (value === "none" ? <span className="italic text-slate-500">None</span> : <span className="text-slate-500">{placeholder}</span>)}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <div className="flex items-center border-b px-3 bg-slate-50/50">
+          <Search className="mr-2 h-4 w-4 shrink-0 opacity-50 text-slate-500" />
+          <input 
+            className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-slate-400"
+            placeholder="Search employee..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="max-h-56 overflow-y-auto p-1">
+          <div
+             className={`relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-slate-100 transition-colors ${value === "none" ? "bg-slate-100 font-medium text-slate-900" : "text-slate-600"}`}
+             onClick={() => { onChange("none"); setOpen(false); setSearch(""); }}
+          >
+            <Check className={`mr-2 h-4 w-4 text-brand-teal ${value === "none" ? "opacity-100" : "opacity-0"}`} />
+            <span className="italic">None</span>
+          </div>
+          {employees.filter((e: any) => {
+            const term = search.toLowerCase();
+            const name = (e.name || `${e.firstName} ${e.lastName}`).toLowerCase();
+            const dept = (e.department || "").toLowerCase();
+            return name.includes(term) || dept.includes(term);
+          }).map((emp: any) => (
+             <div 
+               key={emp.id}
+               className={`relative flex justify-between cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-slate-100 transition-colors ${value === emp.id ? "bg-slate-100 font-medium text-slate-900" : "text-slate-700"}`}
+               onClick={() => { onChange(emp.id); setOpen(false); setSearch(""); }}
+             >
+               <div className="flex items-center truncate">
+                 <Check className={`mr-2 h-4 w-4 shrink-0 text-brand-teal ${value === emp.id ? "opacity-100" : "opacity-0"}`} />
+                 <span className="truncate">{emp.name || `${emp.firstName} ${emp.lastName}`}</span>
+               </div>
+               {emp.department && <span className="ml-2 shrink-0 text-[10px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded-md truncate max-w-[100px]">{emp.department}</span>}
+             </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -369,7 +427,7 @@ export default function CreativeClientsPage() {
 
       if (empRes.ok) {
         const emps = await empRes.json();
-        setCreativeEmployees(emps.filter((e: any) => e.department === "Creative" || e.department === "Digital Marketing"));
+        setCreativeEmployees(emps); // No longer filtering, user requested all employees
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -1355,45 +1413,30 @@ export default function CreativeClientsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Scripting</Label>
-              <Select value={scriptwriterId} onValueChange={setScriptwriterId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select scriptwriter" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none" className="text-muted-foreground italic">None</SelectItem>
-                  {creativeEmployees.map(emp => (
-                    <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableEmployeeSelect 
+                value={scriptwriterId} 
+                onChange={setScriptwriterId} 
+                placeholder="Select scriptwriter..." 
+                employees={creativeEmployees} 
+              />
             </div>
             <div className="space-y-2">
               <Label>Reel / Editing</Label>
-              <Select value={reelEditorId} onValueChange={setReelEditorId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select editor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none" className="text-muted-foreground italic">None</SelectItem>
-                  {creativeEmployees.map(emp => (
-                    <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableEmployeeSelect 
+                value={reelEditorId} 
+                onChange={setReelEditorId} 
+                placeholder="Select editor..." 
+                employees={creativeEmployees} 
+              />
             </div>
             <div className="space-y-2">
               <Label>Post / Graphics</Label>
-              <Select value={postDesignerId} onValueChange={setPostDesignerId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select designer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none" className="text-muted-foreground italic">None</SelectItem>
-                  {creativeEmployees.map(emp => (
-                    <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableEmployeeSelect 
+                value={postDesignerId} 
+                onChange={setPostDesignerId} 
+                placeholder="Select designer..." 
+                employees={creativeEmployees} 
+              />
             </div>
             <div className="pt-4 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setAssignTeamOpen(false)}>Cancel</Button>
