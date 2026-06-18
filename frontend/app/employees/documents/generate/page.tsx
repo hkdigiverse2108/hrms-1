@@ -197,6 +197,9 @@ export default function DocumentGeneratorPage() {
 
     let htmlContent = templateData.content
 
+    // Fix MS Word pasted non-breaking spaces preventing text wrap
+    htmlContent = htmlContent.replace(/&nbsp;/g, ' ')
+
     // Replace basic variables
     htmlContent = htmlContent.replace(/\{\{todayFormatted\}\}/g, todayFormatted)
     htmlContent = htmlContent.replace(/\{\{empName\}\}/g, empName)
@@ -235,6 +238,9 @@ export default function DocumentGeneratorPage() {
     ` : ''
     
     htmlContent = htmlContent.replace(/\{\{includeAcceptance\}\}/g, acceptanceHtml)
+
+    // Replace non-breaking spaces with normal spaces to prevent giant word blocks that force mid-word breaks
+    htmlContent = htmlContent.replace(/&nbsp;/g, ' ')
 
     setPreviewContent(htmlContent)
     toast.success('Document preview generated!')
@@ -1011,7 +1017,7 @@ export default function DocumentGeneratorPage() {
                             src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
                             alt="Company Letterhead" 
                             className="w-full"
-                            style={{ objectFit: 'contain', objectPosition: 'top' }}
+                            style={{ objectFit: 'contain', objectPosition: 'top', mixBlendMode: 'multiply' }}
                           />
                         </div>
                       ))}
