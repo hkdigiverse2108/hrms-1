@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, CalendarIcon, ArrowRight } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { API_URL } from '@/lib/config';
 
 export function PendingWorkEmbedded() {
@@ -14,6 +16,11 @@ export function PendingWorkEmbedded() {
   const [clients, setClients] = useState<any[]>([]);
   const [clientProjects, setClientProjects] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+
+  // Filters
+  const [filterProject, setFilterProject] = useState<string>('all');
+  const [filterStage, setFilterStage] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -82,24 +89,96 @@ export function PendingWorkEmbedded() {
       if (entry.postingDate && entry.status !== 'Posted') tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
-    tasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
-    return tasks;
-  }, [entries, clients, clientProjects]);
+    // Apply Project Filter
+    let filteredTasks = tasks;
+    if (filterProject !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.clientId === filterProject);
+    }
+
+    // Apply Stage Filter
+    if (filterStage !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.stage.toLowerCase() === filterStage.toLowerCase());
+    }
+
+    // Apply Search Query
+    if (searchQuery.trim()) {
+      const lowerQ = searchQuery.toLowerCase();
+      filteredTasks = filteredTasks.filter(t => 
+        t.clientDisplayName.toLowerCase().includes(lowerQ) || 
+        t.taskName.toLowerCase().includes(lowerQ) ||
+        t.stage.toLowerCase().includes(lowerQ)
+      );
+    }
+
+    filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+    return filteredTasks;
+  }, [entries, clients, clientProjects, filterProject, filterStage, searchQuery]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
+      {/* Filters Bar */}
+      <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-50/50">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <ClipboardList className="w-5 h-5 text-brand-teal" />
+          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Pending Work</h2>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="relative w-full sm:w-48">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Input 
+              placeholder="Search tasks..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 text-sm bg-white"
+            />
+          </div>
+
+          <Select value={filterStage} onValueChange={setFilterStage}>
+            <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
+              <SelectValue placeholder="Stage" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stages</SelectItem>
+              <SelectItem value="script">Script</SelectItem>
+              <SelectItem value="shoot">Shoot</SelectItem>
+              <SelectItem value="editing">Editing</SelectItem>
+              <SelectItem value="approval">Approval</SelectItem>
+              <SelectItem value="posting">Posting</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterProject} onValueChange={setFilterProject}>
+            <SelectTrigger className="w-full sm:w-[200px] h-9 text-sm bg-white">
+              <SelectValue placeholder="Filter by Project" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Projects</SelectItem>
+              {Object.entries(clientProjects).map(([cId, pTitle]) => {
+                const client = clients.find(c => c.id === cId);
+                const cName = client ? (client.companyName || client.clientName) : '';
+                return (
+                  <SelectItem key={cId} value={cId}>{pTitle} ({cName})</SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
       {loading ? (
         <div className="flex-1 flex items-center justify-center p-20">
           <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
         </div>
       ) : allPendingTasks.length === 0 ? (
-        <div className="text-center py-20">
-          <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-slate-700">No pending work anywhere!</h3>
-          <p className="text-slate-500 mt-2">All projects are completely up to date.</p>
+        <div className="text-center py-20 flex-1 flex flex-col items-center justify-center">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+            <Filter className="w-8 h-8 text-slate-400" />
+          </div>
+          <h3 className="text-xl font-medium text-slate-700">No pending work found</h3>
+          <p className="text-slate-500 mt-2 text-sm">Try adjusting your filters or search query, or maybe you're just all caught up!</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto flex-1">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
               <tr>
