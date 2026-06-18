@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, CalendarClock, Calendar as CalendarIcon, ArrowRight, ArrowLeft, Check, FileText, Camera, Scissors, CheckSquare, Send } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarClock, Calendar as CalendarIcon, ArrowRight, ArrowLeft, Check, FileText, Camera, Scissors, CheckSquare, Send, ChevronDown, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ export default function PendingWorkPage() {
   const [clientProjects, setClientProjects] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [activeClientId, setActiveClientId] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const [inlineInputs, setInlineInputs] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -123,6 +124,7 @@ export default function PendingWorkPage() {
       if (entry.shootDate && !entry.shootLink) clientsMap[clientId].tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
       if (entry.editingStart && !entry.finalReelLink) clientsMap[clientId].tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       if (entry.approval && entry.isApproved !== 'Yes') clientsMap[clientId].tasks.push(enrich('Approval', entry.approval, 'approvals'));
+      if (entry.postingDate && entry.status !== 'Posted') clientsMap[clientId].tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
     return Object.values(clientsMap)
@@ -157,53 +159,68 @@ export default function PendingWorkPage() {
     posts: currentList.filter(t => t.type === 'posts'),
   };
 
+  const toggleGroup = (type: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] }));
+  };
+
   const renderTaskGroup = (title: string, icon: React.ReactNode, tasks: any[], type: string) => {
     if (tasks.length === 0) return null;
+    const isCollapsed = collapsedGroups[type];
+
     return (
-      <div className="mb-8">
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
-          {icon} {title} ({tasks.length})
-        </h3>
-        <div className="grid gap-3">
-          {tasks.map((item, idx) => {
-            const isOverdue = new Date(item.deadline) < new Date(new Date().setHours(0,0,0,0));
-            return (
-              <div key={idx} className="bg-white border border-slate-200 rounded-lg shadow-sm hover:border-brand-teal/30 hover:shadow-md transition-all p-3 flex flex-col md:flex-row md:items-center gap-4">
-                
-                {/* Left Info Section */}
-                <div className="flex-1 min-w-0 flex items-center gap-3">
-                  <Badge variant={isOverdue ? "destructive" : "secondary"} className="text-[10px] px-2 py-0.5 whitespace-nowrap min-w-[75px] justify-center">
-                    {item.deadline}
-                  </Badge>
+      <div className="mb-6 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <button 
+          onClick={() => toggleGroup(type)}
+          className="w-full text-left text-sm font-bold text-slate-600 uppercase tracking-wider p-4 flex items-center justify-between bg-slate-50/50 hover:bg-slate-100 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            {icon} {title} ({tasks.length})
+          </div>
+          {isCollapsed ? <ChevronRight className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+        </button>
+        
+        {!isCollapsed && (
+          <div className="p-4 grid gap-3 border-t border-slate-200">
+            {tasks.map((item, idx) => {
+              const isOverdue = new Date(item.deadline) < new Date(new Date().setHours(0,0,0,0));
+              return (
+                <div key={idx} className="bg-white border border-slate-200 rounded-lg shadow-sm hover:border-brand-teal/30 hover:shadow-md transition-all p-3 flex flex-col md:flex-row md:items-center gap-4">
                   
-                  <div className="flex-1 min-w-0 flex items-center gap-2">
-                    <span className="text-sm text-slate-800 font-semibold truncate">
-                      {item.concept || item.topic || (item.postReel ? `${item.postReel} Content` : `Task for ${item.postingDate || item.monthYear || 'Unknown Date'}`)}
-                    </span>
-                    <Badge variant="outline" className="text-[9px] px-1 h-4 shrink-0 font-mono text-slate-400 border-slate-200 ml-1">
-                      {item.monthYear}
+                  {/* Left Info Section */}
+                  <div className="flex-1 min-w-0 flex items-center gap-3">
+                    <Badge variant={isOverdue ? "destructive" : "secondary"} className="text-[10px] px-2 py-0.5 whitespace-nowrap min-w-[75px] justify-center">
+                      {item.deadline}
                     </Badge>
+                    
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="text-sm text-slate-800 font-semibold truncate">
+                        {item.concept || item.topic || (item.postReel ? `${item.postReel} Content` : `Task for ${item.postingDate || item.monthYear || 'Unknown Date'}`)}
+                      </span>
+                      <Badge variant="outline" className="text-[9px] px-1 h-4 shrink-0 font-mono text-slate-400 border-slate-200 ml-1">
+                        {item.monthYear}
+                      </Badge>
+                    </div>
+                  </div>
+                  
+                  {/* Right Action Section */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    {type === 'approvals' && (
+                      <Button 
+                        onClick={() => handleInlineComplete(item.id, { isApproved: 'Yes' })}
+                        disabled={savingId === item.id}
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs min-w-[140px]"
+                      >
+                        {savingId === item.id ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Check className="w-3 h-3 mr-1.5" />}
+                        Approve Content
+                      </Button>
+                    )}
                   </div>
                 </div>
-                
-                {/* Right Action Section */}
-                <div className="flex items-center gap-3 shrink-0">
-                  {type === 'approvals' && (
-                    <Button 
-                      onClick={() => handleInlineComplete(item.id, { isApproved: 'Yes' })}
-                      disabled={savingId === item.id}
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs min-w-[140px]"
-                    >
-                      {savingId === item.id ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Check className="w-3 h-3 mr-1.5" />}
-                      Approve Content
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -283,6 +300,7 @@ export default function PendingWorkPage() {
                   {renderTaskGroup("Pending Shoots", <Camera className="w-4 h-4" />, groupedTasks.shoots, 'shoots')}
                   {renderTaskGroup("Pending Edits", <Scissors className="w-4 h-4" />, groupedTasks.edits, 'edits')}
                   {renderTaskGroup("Pending Approvals", <CheckSquare className="w-4 h-4" />, groupedTasks.approvals, 'approvals')}
+                  {renderTaskGroup("Pending Posts", <Send className="w-4 h-4" />, groupedTasks.posts, 'posts')}
                 </div>
               )}
             </div>
