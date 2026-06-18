@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
@@ -22,6 +23,8 @@ interface ContentCalendarTableProps {
 }
 
 export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
+  const searchParams = useSearchParams();
+  const highlightTask = searchParams.get('highlightTask');
   const [entries, setEntries] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -134,6 +137,21 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     fetchEntries();
     fetchSettings();
   }, [clientId, monthYear]);
+
+  useEffect(() => {
+    if (entries.length > 0 && highlightTask) {
+      setTimeout(() => {
+        const el = document.getElementById(`task-${highlightTask}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("ring-2", "ring-brand-teal", "!bg-brand-teal/10");
+          setTimeout(() => {
+            el.classList.remove("ring-2", "ring-brand-teal", "!bg-brand-teal/10");
+          }, 3000);
+        }
+      }, 500);
+    }
+  }, [entries, highlightTask]);
 
   useEffect(() => {
     if (isFullScreen) {
@@ -1063,7 +1081,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                   }
                   
                   return (
-                    <tr key={entry.id} className={isDue ? "bg-red-50 border-red-200" : "odd:bg-white even:bg-slate-50"}>
+                    <tr key={entry.id} id={`task-${entry.id}`} className={`transition-all duration-1000 ${isDue ? "bg-red-50 border-red-200" : "odd:bg-white even:bg-slate-50"}`}>
                       {fieldKeys.map((key) => (
                         <td key={key} className="px-2 py-1 border border-slate-200 max-w-[200px]">
                           {isEditing ? (

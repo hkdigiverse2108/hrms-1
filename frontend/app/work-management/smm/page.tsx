@@ -48,6 +48,7 @@ import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { WhatsAppSmmDialog } from "@/components/hrms/WhatsAppSmmDialog";
 import { WhatsAppIcon } from "@/components/hrms/WhatsAppIcon";
 import { SmmMeetingDialog } from "@/components/hrms/SmmMeetingDialog";
+import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
 import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -770,6 +771,7 @@ export default function CreativeClientsPage() {
       case 'on-hold': return isOnHold;
       case 'festival-post': return (clientProjects[c.id]?.festivalPost === "Yes") || c.festivalPost === "Yes";
       case 'pending-work': return hasPendingWork;
+      case 'meeting-done': return c.meetings && c.meetings.length > 0;
       default: return true;
     }
   }).filter(c => {
@@ -881,10 +883,7 @@ export default function CreativeClientsPage() {
           </Popover>
         </div>
 
-        <Button onClick={() => router.push('/work-management/smm/pending')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto shrink-0">
-          <CalendarClock className="w-4 h-4" />
-          View Pending Work
-        </Button>
+
         <Button onClick={() => router.push('/feedback-builder/common')} className="h-10 bg-indigo-600 hover:bg-indigo-700 text-white gap-2 w-full md:w-auto shrink-0">
           <Plus className="w-4 h-4" />
           Create Feedback Form
@@ -909,6 +908,7 @@ export default function CreativeClientsPage() {
             { value: "whatsapp-pending", label: "WA Pending" },
             { value: "greetings-sent", label: "Greetings Sent" },
             { value: "greetings-pending", label: "Greetings Pending" },
+            { value: "meeting-done", label: "Meeting Done" },
           ].map(filter => (
             <button
               key={filter.value}
@@ -930,6 +930,8 @@ export default function CreativeClientsPage() {
           <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
           <p className="text-sm text-slate-500 font-medium">Fetching dashboard...</p>
         </div>
+      ) : masterFilter === 'pending-work' ? (
+        <PendingWorkEmbedded />
       ) : filteredClients.length > 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-md min-h-[calc(100vh-260px)]" data-slot="table-container">
           <div className="overflow-x-auto no-scrollbar">
