@@ -775,6 +775,7 @@ export default function CreativeClientsPage() {
       case 'festival-post': return (clientProjects[c.id]?.festivalPost === "Yes") || c.festivalPost === "Yes";
       case 'pending-work': return hasPendingWork;
       case 'meeting-done': return c.meetings && c.meetings.length > 0;
+      case 'meeting-not-done': return !c.meetings || c.meetings.length === 0;
       default: return true;
     }
   }).filter(c => {
@@ -913,6 +914,7 @@ export default function CreativeClientsPage() {
             { value: "greetings-sent", label: "Greetings Sent" },
             { value: "greetings-pending", label: "Greetings Pending" },
             { value: "meeting-done", label: "Meeting Done" },
+            { value: "meeting-not-done", label: "Meeting Not Done" },
           ].map(filter => (
             <button
               key={filter.value}
