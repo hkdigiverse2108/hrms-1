@@ -510,7 +510,8 @@ export default function SchedulePage() {
     const startMin = timeToMinutes(event.startTime);
     const endMin = timeToMinutes(event.endTime);
     const top = Math.max(0, startMin);
-    const height = Math.max(20, Math.min(1440, endMin) - top);
+    const duration = Math.max(20, Math.min(1440, endMin) - top);
+    const height = Math.max(15, duration - 1.5); // Subtract 1.5px to create visual gap for back-to-back
     const color = getEmployeeColor(event.employeeId);
     
     const userId = String(user?.id || user?.employeeId);
