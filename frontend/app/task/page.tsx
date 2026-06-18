@@ -106,6 +106,7 @@ export default function TaskManagementPage() {
   const [editingDescId, setEditingDescId] = useState<string | null>(null);
   const [editTaskDesc, setEditTaskDesc] = useState("");
   const [assigneeSearch, setAssigneeSearch] = useState("");
+  const [adminViewAllUsers, setAdminViewAllUsers] = useState(false);
 
   // Form State
   const [newTask, setNewTask] = useState<{
@@ -440,15 +441,20 @@ export default function TaskManagementPage() {
     }
     
     const isAssignedToMe = task.assignedToId === user?.id || (task.assignedToIds && task.assignedToIds.includes(user?.id));
-    const isCreatedByMe = task.assignedById === user?.id;
+    const isCreatedByMe = task.assignedById === user?.id || task.createdBy === user?.id;
     
     let ownershipMatch = true;
-    if (assignedToMe && createdByMe) {
+    
+    if (isAdmin && !adminViewAllUsers) {
       ownershipMatch = isAssignedToMe || isCreatedByMe;
+    }
+
+    if (assignedToMe && createdByMe) {
+      ownershipMatch = ownershipMatch && (isAssignedToMe || isCreatedByMe);
     } else if (assignedToMe) {
-      ownershipMatch = isAssignedToMe;
+      ownershipMatch = ownershipMatch && isAssignedToMe;
     } else if (createdByMe) {
-      ownershipMatch = isCreatedByMe;
+      ownershipMatch = ownershipMatch && isCreatedByMe;
     }
 
     return statusMatch && priorityMatch && assigneeMatch && dateMatch && ownershipMatch;
@@ -473,6 +479,27 @@ export default function TaskManagementPage() {
       >
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           
+          {isAdmin && (
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">
+              <Button 
+                variant={!adminViewAllUsers ? "secondary" : "ghost"} 
+                size="sm" 
+                className={`h-8 text-[12px] font-bold px-4 ${!adminViewAllUsers ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+                onClick={() => setAdminViewAllUsers(false)}
+              >
+                My Tasks
+              </Button>
+              <Button 
+                variant={adminViewAllUsers ? "secondary" : "ghost"} 
+                size="sm" 
+                className={`h-8 text-[12px] font-bold px-4 ${adminViewAllUsers ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+                onClick={() => setAdminViewAllUsers(true)}
+              >
+                All Users
+              </Button>
+            </div>
+          )}
+
           {/* Create Task Modal */}
           {canAdd && (
           <Dialog open={createModalOpen} onOpenChange={(val) => {

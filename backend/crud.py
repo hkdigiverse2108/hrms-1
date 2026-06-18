@@ -2997,6 +2997,9 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
     performedBy = task_dict.pop("performedBy", "Unknown")
     userName = task_dict.pop("userName", "Unknown User")
     
+    if not task_dict.get("createdBy"):
+        task_dict["createdBy"] = performedBy
+    
     if not task_dict.get("projectName") and task_dict.get("projectId"):
         project = await db.projects.find_one({"_id": ObjectId(task_dict["projectId"])})
         if project:
