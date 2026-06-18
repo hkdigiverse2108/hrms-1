@@ -777,6 +777,15 @@ export default function ChatPage() {
     }
   };
 
+  // Auto-focus message input when a chat is opened
+  useEffect(() => {
+    if (selectedChat && messageInputRef.current) {
+      setTimeout(() => {
+        messageInputRef.current?.focus();
+      }, 100);
+    }
+  }, [selectedChat]);
+
   const fetchMessages = React.useCallback(async () => {
     if (!selectedChat || !user || !user.id) return;
     const targetId = selectedChat.id || selectedChat.employeeId;
