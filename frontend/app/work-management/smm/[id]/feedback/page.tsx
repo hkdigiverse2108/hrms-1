@@ -24,6 +24,7 @@ export default function ClientFeedbackPage() {
   const [origin, setOrigin] = useState("");
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<Record<string, string>>({});
+  const [filterProjectId, setFilterProjectId] = useState<string>("all");
 
   useEffect(() => {
     setOrigin(typeof window !== "undefined" ? window.location.origin : "");
@@ -220,8 +221,29 @@ export default function ClientFeedbackPage() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {responses.map((resp, i) => (
-                    <Card key={i} className="shadow-sm border-t-4 border-t-brand-teal">
+                  {clientId === "common" && projects.length > 0 && (
+                    <div className="flex justify-end mb-4">
+                      <Select value={filterProjectId} onValueChange={setFilterProjectId}>
+                        <SelectTrigger className="w-[250px] bg-white">
+                          <SelectValue placeholder="Filter by Project" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Projects</SelectItem>
+                          <SelectItem value="general">General (No Project)</SelectItem>
+                          {projects.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {(filterProjectId === "all" ? responses : responses.filter(r => filterProjectId === "general" ? !r.projectId : r.projectId === filterProjectId)).length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 bg-white rounded-xl border border-slate-200">
+                      No responses match the selected project filter.
+                    </div>
+                  ) : (
+                    (filterProjectId === "all" ? responses : responses.filter(r => filterProjectId === "general" ? !r.projectId : r.projectId === filterProjectId)).map((resp, i) => (
+                      <Card key={i} className="shadow-sm border-t-4 border-t-brand-teal">
                       <CardContent className="pt-6">
                         <div className="mb-4 flex justify-between items-start">
                           <div>
@@ -249,7 +271,7 @@ export default function ClientFeedbackPage() {
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                  )))}
                 </div>
               )}
             </TabsContent>
