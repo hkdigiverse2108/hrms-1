@@ -309,6 +309,17 @@ export default function ChatPage() {
     }
   }, []);
 
+  // Listen for Escape key to close the active chat
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedChat(null as any);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const [showCreatePoll, setShowCreatePoll] = useState(false);
   const [pollData, setPollData] = useState({ 
     question: "", 
@@ -1843,11 +1854,6 @@ export default function ChatPage() {
         }
       }
 
-      // chats is already sorted by timestamp descending, so chats[0] is the most recent
-      const mostRecentChat = chats.find(c => c.timestamp) || chats[0];
-      if (mostRecentChat) {
-        handleSelectChat(mostRecentChat);
-      }
     }
   }, [chats, selectedChat, chatChannels, chatGroups, handleSelectChat]);
 
