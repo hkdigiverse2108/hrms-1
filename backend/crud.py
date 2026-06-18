@@ -5866,7 +5866,10 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None, date_
         
     query = {}
     if employee_id:
-        query["employeeId"] = employee_id
+        query["$or"] = [
+            {"employeeId": employee_id},
+            {"attendees": employee_id}
+        ]
     if date_str:
         try:
             target_date = datetime.strptime(date_str, "%Y-%m-%d")
