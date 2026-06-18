@@ -1073,6 +1073,8 @@ class WMTaskBase(BaseModel):
     status: Optional[str] = "todo" # todo, in-progress, review, completed
     priority: Optional[str] = "medium" # low, medium, high, urgent
     remarks: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
     
     # Graphics specific fields
     postingDate: Optional[RobustDate] = None
