@@ -2983,7 +2983,7 @@ export default function ChatPage() {
                               })()}
 
                               {/* Message Text Content */}
-                              {msg.text !== `Poll: ${msg.poll?.question}` && !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName || "")) && (
+                              {msg.text && msg.text !== `Poll: ${msg.poll?.question}` && (
                                 <div className="inline">
                                   {renderMessageText(msg.text, msg.isMe)}
                                 </div>
