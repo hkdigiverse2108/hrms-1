@@ -271,7 +271,7 @@ export default function ClientFeedbackPage() {
                         </div>
                       </CardContent>
                     </Card>
-                  )))}
+                  ))}
                 </div>
               )}
             </TabsContent>

@@ -212,6 +212,7 @@ export default function CreativeClientsPage() {
   const [paymentCustomDaysInput, setPaymentCustomDaysInput] = useState("");
   const [paymentAmountInput, setPaymentAmountInput] = useState("");
   const [paymentDatesInput, setPaymentDatesInput] = useState<number[]>([]);
+  const [paymentLastDateInput, setPaymentLastDateInput] = useState("");
   const [paymentNextDateInput, setPaymentNextDateInput] = useState("");
   
   const [feedbackConfigOpen, setFeedbackConfigOpen] = useState(false);
