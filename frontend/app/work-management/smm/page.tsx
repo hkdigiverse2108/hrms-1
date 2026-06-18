@@ -49,6 +49,7 @@ import { WhatsAppSmmDialog } from "@/components/hrms/WhatsAppSmmDialog";
 import { WhatsAppIcon } from "@/components/hrms/WhatsAppIcon";
 import { SmmMeetingDialog } from "@/components/hrms/SmmMeetingDialog";
 import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
+import { FeedbackReviewsEmbedded } from "@/components/hrms/FeedbackReviewsEmbedded";
 import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -900,6 +901,7 @@ export default function CreativeClientsPage() {
             { value: "all", label: "All Clients" },
             { value: "active", label: "Active Projects" },
             { value: "pending-work", label: "Pending Work" },
+            { value: "reviews", label: "Client Reviews" },
             { value: "payment-due", label: "Payment Due" },
             { value: "followup-due", label: "Follow-up Due" },
             { value: "on-hold", label: "On Hold Projects" },
@@ -932,6 +934,8 @@ export default function CreativeClientsPage() {
         </div>
       ) : masterFilter === 'pending-work' ? (
         <PendingWorkEmbedded />
+      ) : masterFilter === 'reviews' ? (
+        <FeedbackReviewsEmbedded />
       ) : filteredClients.length > 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-md min-h-[calc(100vh-260px)]" data-slot="table-container">
           <div className="overflow-x-auto no-scrollbar">

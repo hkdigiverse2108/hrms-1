@@ -2525,6 +2525,14 @@ async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSett
 async def create_feedback_form(form: schemas.FeedbackFormCreate, createdBy: Optional[str] = None, db=Depends(get_db)):
     return await crud.create_feedback_form(db, form, createdBy=createdBy or "Unknown")
 
+@app.get("/forms/all/forms", response_model=List[schemas.FeedbackForm])
+async def read_all_forms(db=Depends(get_db)):
+    return await crud.get_all_feedback_forms(db)
+
+@app.get("/forms/all/responses", response_model=List[schemas.FeedbackResponse])
+async def read_all_responses(db=Depends(get_db)):
+    return await crud.get_all_feedback_responses(db)
+
 @app.get("/forms/{form_id}", response_model=schemas.FeedbackForm)
 async def get_feedback_form(form_id: str, db=Depends(get_db)):
     form = await crud.get_feedback_form(db, form_id)

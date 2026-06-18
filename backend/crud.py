@@ -6262,6 +6262,14 @@ async def create_feedback_response(db, response: schemas.FeedbackResponseCreate)
     doc = await db.feedback_responses.find_one({"_id": res.inserted_id})
     return fix_id(doc)
 
+async def get_all_feedback_responses(db):
+    cursor = db.feedback_responses.find().sort("submittedAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def get_all_feedback_forms(db):
+    cursor = db.feedback_forms.find().sort("createdAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
 async def get_form_responses(db, form_id: str):
     cursor = db.feedback_responses.find({"formId": form_id}).sort("submittedAt", -1)
     return [fix_id(doc) async for doc in cursor]
