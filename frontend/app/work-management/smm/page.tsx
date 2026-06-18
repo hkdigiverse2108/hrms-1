@@ -97,6 +97,7 @@ export default function CreativeClientsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [masterFilter, setMasterFilter] = useState("all");
   const [inlineEditing, setInlineEditing] = useState<{id: string, field: string} | null>(null);
   const [logsOpen, setLogsOpen] = useState(false);
   const [clientLogs, setClientLogs] = useState<any[]>([]);
@@ -569,11 +570,33 @@ export default function CreativeClientsPage() {
     }
   };
 
-  const filteredClients = clients.filter(c => 
-    c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredClients = clients.filter(c => {
+    const matchesSearch = c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.email.toLowerCase().includes(searchTerm.toLowerCase());
+      
+    if (!matchesSearch) return false;
+
+    const projectStatus = clientProjects[c.id]?.status || "";
+    const isOnHold = projectStatus.toLowerCase() === "on-hold";
+    const isFollowupDue = clientProjects[c.id]?.nextFollowupDate && new Date(clientProjects[c.id].nextFollowupDate) <= new Date();
+    const isPaymentDue = c.nextPaymentDueDate && new Date(c.nextPaymentDueDate) <= new Date();
+    const hasPendingWork = pendingCounts[c.id] > 0;
+
+    switch(masterFilter) {
+      case 'whatsapp-submitted': return !!c.whatsappGroup;
+      case 'whatsapp-pending': return !c.whatsappGroup;
+      case 'greetings-sent': return !!c.greetingsMsgSent;
+      case 'greetings-pending': return !c.greetingsMsgSent;
+      case 'payment-due': return !!isPaymentDue;
+      case 'followup-due': return !!isFollowupDue;
+      case 'active': return !isOnHold;
+      case 'on-hold': return isOnHold;
+      case 'festival-post': return c.festivalPost === "Yes";
+      case 'pending-work': return hasPendingWork;
+      default: return true;
+    }
+  });
 
   return (
     <div className="space-y-6">
@@ -593,7 +616,30 @@ export default function CreativeClientsPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <Button onClick={() => router.push('/work-management/smm/pending')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto">
+
+        <Select value={masterFilter} onValueChange={setMasterFilter}>
+          <SelectTrigger className="w-full md:w-[220px] h-10 bg-white border-slate-200">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-500" />
+              <SelectValue placeholder="Filter clients" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Clients</SelectItem>
+            <SelectItem value="whatsapp-submitted">WhatsApp Link Submitted</SelectItem>
+            <SelectItem value="whatsapp-pending">WhatsApp Link Pending</SelectItem>
+            <SelectItem value="greetings-sent">Greetings Sent</SelectItem>
+            <SelectItem value="greetings-pending">Greetings Pending</SelectItem>
+            <SelectItem value="payment-due">Payment Due</SelectItem>
+            <SelectItem value="followup-due">Follow-up Due</SelectItem>
+            <SelectItem value="active">Active Projects</SelectItem>
+            <SelectItem value="on-hold">On Hold Projects</SelectItem>
+            <SelectItem value="festival-post">Festival Post</SelectItem>
+            <SelectItem value="pending-work">Pending Work</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button onClick={() => router.push('/work-management/smm/pending')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto shrink-0">
           <CalendarClock className="w-4 h-4" />
           View Pending Work
         </Button>
