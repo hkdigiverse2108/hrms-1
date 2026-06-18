@@ -1002,6 +1002,18 @@ class ProjectBase(BaseModel):
     followupDatesOfMonth: Optional[List[int]] = [] # 1-31
     lastFollowupDate: Optional[RobustDate] = None
     nextFollowupDate: Optional[RobustDate] = None
+    
+    # Creative Tracking Fields
+    services: Optional[str] = None
+    post: Optional[int] = 0
+    reel: Optional[int] = 0
+    festivalPost: Optional[str] = "No"
+    graphicsRequired: Optional[str] = "No"
+    postRequired: Optional[str] = "No"
+    reelRequired: Optional[str] = "No"
+    assignedScriptwriterId: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1029,6 +1041,18 @@ class ProjectUpdate(BaseModel):
     nextFollowupDate: Optional[RobustDate] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    
+    # Creative Tracking Fields
+    services: Optional[str] = None
+    post: Optional[int] = None
+    reel: Optional[int] = None
+    festivalPost: Optional[str] = None
+    graphicsRequired: Optional[str] = None
+    postRequired: Optional[str] = None
+    reelRequired: Optional[str] = None
+    assignedScriptwriterId: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
 
 class Project(ProjectBase):
     id: str

@@ -575,12 +575,18 @@ export default function CreativeClientsPage() {
 
   const handleSaveTeamAssignment = async () => {
     if (!assignTeamClient) return;
+    const project = clientProjects[assignTeamClient.id];
+    if (!project) {
+      toast.error("No creative project found for this client");
+      return;
+    }
+    
     const scriptwriter = creativeEmployees.find(e => e.id === scriptwriterId);
     const reelEditor = creativeEmployees.find(e => e.id === reelEditorId);
     const postDesigner = creativeEmployees.find(e => e.id === postDesignerId);
     
     try {
-      const res = await fetch(`${API_URL}/clients/${assignTeamClient.id}`, {
+      const res = await fetch(`${API_URL}/projects/${project.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -723,22 +729,24 @@ export default function CreativeClientsPage() {
       case 'followup-due': return !!isFollowupDue;
       case 'active': return !isOnHold;
       case 'on-hold': return isOnHold;
-      case 'festival-post': return c.festivalPost === "Yes";
+      case 'festival-post': return (clientProjects[c.id]?.festivalPost === "Yes") || c.festivalPost === "Yes";
       case 'pending-work': return hasPendingWork;
       default: return true;
     }
   }).filter(c => {
     if (creativeFilter !== "all") {
-      const isAssigned = c.assignedScriptwriterId === creativeFilter || 
-                         c.assignedReelEditorId === creativeFilter ||
-                         c.assignedPostDesignerId === creativeFilter;
+      const p = clientProjects[c.id] || {};
+      const isAssigned = (p.assignedScriptwriterId || c.assignedScriptwriterId) === creativeFilter || 
+                         (p.assignedReelEditorId || c.assignedReelEditorId) === creativeFilter ||
+                         (p.assignedPostDesignerId || c.assignedPostDesignerId) === creativeFilter;
       if (!isAssigned) return false;
     }
 
     if (serviceFilter !== "all") {
-      if (serviceFilter === "reel" && c.reelRequired !== "Yes" && (c.reel || 0) <= 0) return false;
-      if (serviceFilter === "post" && c.postRequired !== "Yes" && (c.post || 0) <= 0) return false;
-      if (serviceFilter === "graphics" && c.graphicsRequired !== "Yes" && !c.graphics) return false;
+      const p = clientProjects[c.id] || {};
+      if (serviceFilter === "reel" && p.reelRequired !== "Yes" && (p.reel || 0) <= 0 && c.reelRequired !== "Yes" && (c.reel || 0) <= 0) return false;
+      if (serviceFilter === "post" && p.postRequired !== "Yes" && (p.post || 0) <= 0 && c.postRequired !== "Yes" && (c.post || 0) <= 0) return false;
+      if (serviceFilter === "graphics" && p.graphicsRequired !== "Yes" && c.graphicsRequired !== "Yes" && !c.graphics) return false;
     }
 
     return true;
@@ -983,9 +991,9 @@ export default function CreativeClientsPage() {
                           className="cursor-pointer hover:text-brand-teal transition-colors line-clamp-2 max-w-[220px] font-medium text-slate-700"
                           onClick={() => setInlineEditing({ id: client.id, field: 'services' })}
                         >
-                          {client.services || "N/A"}
+                          {clientProjects[client.id]?.services || client.services || "N/A"}
                         </div>
-                        {client.festivalPost === "Yes" && (
+                        {(clientProjects[client.id]?.festivalPost === "Yes" || client.festivalPost === "Yes") && (
                           <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200/60 font-medium px-2 py-0.5 shadow-sm">
                             Festival Post
                           </Badge>
@@ -1043,9 +1051,10 @@ export default function CreativeClientsPage() {
                           onClick={(e) => {
                             e.stopPropagation();
                             setAssignTeamClient(client);
-                            setScriptwriterId(client.assignedScriptwriterId || "none");
-                            setReelEditorId(client.assignedReelEditorId || "none");
-                            setPostDesignerId(client.assignedPostDesignerId || "none");
+                            const p = clientProjects[client.id] || {};
+                            setScriptwriterId(p.assignedScriptwriterId || client.assignedScriptwriterId || "none");
+                            setReelEditorId(p.assignedReelEditorId || client.assignedReelEditorId || "none");
+                            setPostDesignerId(p.assignedPostDesignerId || client.assignedPostDesignerId || "none");
                             setAssignTeamOpen(true);
                           }}
                         >

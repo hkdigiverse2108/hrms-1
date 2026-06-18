@@ -22,15 +22,6 @@ export interface ClientFormData {
   state?: string;
   department: string;
   status: string;
-  services?: string;
-  festivalPost?: string;
-  post?: number;
-  graphics?: string;
-  reel?: number;
-  video?: string;
-  postRequired?: string;
-  reelRequired?: string;
-  graphicsRequired?: string;
   salesFocused?: string;
   dailyBudget?: number;
   remarks?: string;
@@ -53,15 +44,6 @@ const defaultFormData: ClientFormData = {
   state: "",
   department: "",
   status: "active",
-  services: "",
-  festivalPost: "No",
-  post: 0,
-  graphics: "",
-  reel: 0,
-  video: "",
-  postRequired: "No",
-  reelRequired: "No",
-  graphicsRequired: "No",
   salesFocused: "",
   dailyBudget: 0,
   remarks: "",
@@ -287,72 +269,6 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
             </div>
           )}
 
-          {/* Graphics Specific Fields - Updated as per user request */}
-          {isGraphics && (
-            <div className="space-y-4 border-t border-slate-100 pt-6">
-              <h4 className="text-xs font-bold text-brand-teal uppercase tracking-widest flex items-center gap-2">
-                <FileText className="w-4 h-4" /> Creative Service Fields
-              </h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="services" className="text-[10px] font-bold uppercase text-slate-400">Services</Label>
-                  <Input id="services" placeholder="e.g. Social Media" value={formData.services || ""} onChange={(e) => handleChange("services", e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="post" className="text-[10px] font-bold uppercase text-slate-400">Post Count</Label>
-                  <Input id="post" type="number" value={formData.post || 0} onChange={(e) => handleChange("post", parseInt(e.target.value) || 0)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reel" className="text-[10px] font-bold uppercase text-slate-400">Reel Count</Label>
-                  <Input id="reel" type="number" value={formData.reel || 0} onChange={(e) => handleChange("reel", parseInt(e.target.value) || 0)} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase text-slate-400">Festival Post</Label>
-                  <Select value={formData.festivalPost} onValueChange={(v) => handleChange("festivalPost", v)}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase text-slate-400">Graph Req</Label>
-                  <Select value={formData.graphicsRequired} onValueChange={(v) => handleChange("graphicsRequired", v)}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase text-slate-400">Post Req</Label>
-                  <Select value={formData.postRequired} onValueChange={(v) => handleChange("postRequired", v)}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase text-slate-400">Reel Req</Label>
-                  <Select value={formData.reelRequired} onValueChange={(v) => handleChange("reelRequired", v)}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          )}
 
 
 

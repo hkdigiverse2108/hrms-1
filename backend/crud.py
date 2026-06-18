@@ -2839,6 +2839,29 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
         if "teamLeaderName" in update_data and old_project.get("teamLeaderName") != update_data["teamLeaderName"]:
             details.append(f"Team Leader changed to {update_data['teamLeaderName']}")
         
+        # Creative Field Logging
+        creative_fields_map = {
+            "services": "Services",
+            "post": "Post Count",
+            "reel": "Reel Count",
+            "festivalPost": "Festival Post requirement",
+            "graphicsRequired": "Graphics requirement",
+            "postRequired": "Post requirement",
+            "reelRequired": "Reel requirement"
+        }
+        
+        for field, label in creative_fields_map.items():
+            if field in update_data and old_project.get(field) != update_data[field]:
+                details.append(f"{label} changed to '{update_data[field]}'")
+                
+        # Assignment Logging
+        if "assignedScriptwriterId" in update_data and old_project.get("assignedScriptwriterId") != update_data["assignedScriptwriterId"]:
+            details.append(f"Assigned Scriptwriter updated")
+        if "assignedReelEditorId" in update_data and old_project.get("assignedReelEditorId") != update_data["assignedReelEditorId"]:
+            details.append(f"Assigned Reel Editor updated")
+        if "assignedPostDesignerId" in update_data and old_project.get("assignedPostDesignerId") != update_data["assignedPostDesignerId"]:
+            details.append(f"Assigned Post Designer updated")
+        
         log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
         await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)
         
