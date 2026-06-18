@@ -2861,6 +2861,12 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
             details.append(f"Assigned Reel Editor updated")
         if "assignedPostDesignerId" in update_data and old_project.get("assignedPostDesignerId") != update_data["assignedPostDesignerId"]:
             details.append(f"Assigned Post Designer updated")
+        if "assignedShooterId" in update_data and old_project.get("assignedShooterId") != update_data["assignedShooterId"]:
+            details.append(f"Assigned Shooter updated")
+        if "assignedApproverId" in update_data and old_project.get("assignedApproverId") != update_data["assignedApproverId"]:
+            details.append(f"Assigned Approver updated")
+        if "assignedPosterId" in update_data and old_project.get("assignedPosterId") != update_data["assignedPosterId"]:
+            details.append(f"Assigned Poster updated")
         
         log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
         await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)

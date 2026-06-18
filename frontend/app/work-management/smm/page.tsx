@@ -181,6 +181,9 @@ export default function CreativeClientsPage() {
   const [scriptwriterId, setScriptwriterId] = useState("");
   const [reelEditorId, setReelEditorId] = useState("");
   const [postDesignerId, setPostDesignerId] = useState("");
+  const [shooterId, setShooterId] = useState("");
+  const [approverId, setApproverId] = useState("");
+  const [posterId, setPosterId] = useState("");
 
   const [logsOpen, setLogsOpen] = useState(false);
   const [clientLogs, setClientLogs] = useState<any[]>([]);
@@ -597,6 +600,9 @@ export default function CreativeClientsPage() {
     const scriptwriter = creativeEmployees.find(e => e.id === scriptwriterId);
     const reelEditor = creativeEmployees.find(e => e.id === reelEditorId);
     const postDesigner = creativeEmployees.find(e => e.id === postDesignerId);
+    const shooter = creativeEmployees.find(e => e.id === shooterId);
+    const approver = creativeEmployees.find(e => e.id === approverId);
+    const poster = creativeEmployees.find(e => e.id === posterId);
     
     try {
       const res = await fetch(`${API_URL}/projects/${project.id}`, {
@@ -609,6 +615,12 @@ export default function CreativeClientsPage() {
           assignedReelEditorName: reelEditorId === "none" ? null : reelEditor?.name || null,
           assignedPostDesignerId: postDesignerId === "none" ? null : postDesignerId || null,
           assignedPostDesignerName: postDesignerId === "none" ? null : postDesigner?.name || null,
+          assignedShooterId: shooterId === "none" ? null : shooterId || null,
+          assignedShooterName: shooterId === "none" ? null : shooter?.name || null,
+          assignedApproverId: approverId === "none" ? null : approverId || null,
+          assignedApproverName: approverId === "none" ? null : approver?.name || null,
+          assignedPosterId: posterId === "none" ? null : posterId || null,
+          assignedPosterName: posterId === "none" ? null : poster?.name || null,
           performedBy: user?.id,
           userName: user?.name || `${user?.firstName} ${user?.lastName}`,
         }),
@@ -783,7 +795,10 @@ export default function CreativeClientsPage() {
       const p = clientProjects[c.id] || {};
       const isAssigned = (p.assignedScriptwriterId || c.assignedScriptwriterId) === creativeFilter || 
                          (p.assignedReelEditorId || c.assignedReelEditorId) === creativeFilter ||
-                         (p.assignedPostDesignerId || c.assignedPostDesignerId) === creativeFilter;
+                         (p.assignedPostDesignerId || c.assignedPostDesignerId) === creativeFilter ||
+                         (p.assignedShooterId || c.assignedShooterId) === creativeFilter ||
+                         (p.assignedApproverId || c.assignedApproverId) === creativeFilter ||
+                         (p.assignedPosterId || c.assignedPosterId) === creativeFilter;
       if (!isAssigned) return false;
     }
 
@@ -1133,6 +1148,9 @@ export default function CreativeClientsPage() {
                               setScriptwriterId(p.assignedScriptwriterId || client.assignedScriptwriterId || "none");
                               setReelEditorId(p.assignedReelEditorId || client.assignedReelEditorId || "none");
                               setPostDesignerId(p.assignedPostDesignerId || client.assignedPostDesignerId || "none");
+                              setShooterId(p.assignedShooterId || client.assignedShooterId || "none");
+                              setApproverId(p.assignedApproverId || client.assignedApproverId || "none");
+                              setPosterId(p.assignedPosterId || client.assignedPosterId || "none");
                               setAssignTeamOpen(true);
                             }}>
                               <UserPlus className="w-4 h-4 mr-2" /> Assign Creative Team
@@ -1588,6 +1606,33 @@ export default function CreativeClientsPage() {
                 value={postDesignerId} 
                 onChange={setPostDesignerId} 
                 placeholder="Select designer..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Shoot / Videography</Label>
+              <SearchableEmployeeSelect 
+                value={shooterId} 
+                onChange={setShooterId} 
+                placeholder="Select shooter..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Approval / QC</Label>
+              <SearchableEmployeeSelect 
+                value={approverId} 
+                onChange={setApproverId} 
+                placeholder="Select approver..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Posting / Publisher</Label>
+              <SearchableEmployeeSelect 
+                value={posterId} 
+                onChange={setPosterId} 
+                placeholder="Select poster..." 
                 employees={creativeEmployees} 
               />
             </div>

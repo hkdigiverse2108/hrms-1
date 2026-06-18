@@ -912,6 +912,12 @@ class ClientBase(BaseModel):
     assignedReelEditorName: Optional[str] = None
     assignedPostDesignerId: Optional[str] = None
     assignedPostDesignerName: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
+    assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -973,6 +979,12 @@ class ClientUpdate(BaseModel):
     assignedReelEditorName: Optional[str] = None
     assignedPostDesignerId: Optional[str] = None
     assignedPostDesignerName: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
+    assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
 
 class Client(ClientBase):
     id: str
@@ -1022,6 +1034,9 @@ class ProjectBase(BaseModel):
     assignedScriptwriterId: Optional[str] = None
     assignedReelEditorId: Optional[str] = None
     assignedPostDesignerId: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedPosterId: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1067,6 +1082,9 @@ class ProjectUpdate(BaseModel):
     assignedScriptwriterId: Optional[str] = None
     assignedReelEditorId: Optional[str] = None
     assignedPostDesignerId: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedPosterId: Optional[str] = None
 
 class Project(ProjectBase):
     id: str
