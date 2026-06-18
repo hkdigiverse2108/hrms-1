@@ -104,6 +104,73 @@ async def content_calendar_reminder_task():
             
         await asyncio.sleep(300) # Sleep for 5 minutes
 
+async def feedback_reminder_task():
+    from database import db
+    import crud
+    import schemas
+    
+    print("[Feedback Reminder] Task started.", flush=True)
+    await asyncio.sleep(15) # wait for startup
+    
+    while True:
+        try:
+            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+            today_str = now.strftime("%Y-%m-%d")
+            
+            # Check for Morning Reminder (e.g. 9:00 AM - 9:09 AM)
+            if now.hour == 9 and now.minute < 10:
+                # Find projects where nextFeedbackDate is today or overdue
+                projects = await db.projects.find({
+                    "nextFeedbackDate": {"$lte": today_str},
+                    "status": {"$ne": "completed"}
+                }).to_list(length=1000)
+                
+                if projects:
+                    for project in projects:
+                        project_id = str(project["_id"]) if "_id" in project else project.get("id")
+                        client_name = project.get("clientName", "Unknown Client")
+                        project_title = project.get("title", "Unknown Project")
+                        
+                        target_id = project.get("teamLeaderId")
+                        if not target_id:
+                            # fallback to admin
+                            admins = await db.employees.find({"role": {"$regex": "^Admin$", "$options": "i"}}).to_list(length=1)
+                            if admins:
+                                target_id = str(admins[0]["_id"]) if "_id" in admins[0] else admins[0].get("id")
+                                
+                        if target_id:
+                            # Check if we already notified today to prevent spam within the 10 min window
+                            # Using start of day for check
+                            start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                            existing_notif = await db.notifications.find_one({
+                                "employee_id": target_id,
+                                "type": "feedback_reminder",
+                                "reference_id": project_id,
+                                "title": "Feedback Collection Due"
+                            }, sort=[("_id", -1)])
+                            
+                            should_notify = True
+                            if existing_notif and existing_notif.get("created_at"):
+                                # check if created_at was today
+                                created_at = existing_notif.get("created_at")
+                                if hasattr(created_at, "replace"):
+                                    if created_at >= start_of_day:
+                                        should_notify = False
+                            
+                            if should_notify:
+                                await crud.create_notification(db, schemas.NotificationCreate(
+                                    employee_id=target_id,
+                                    title="Feedback Collection Due",
+                                    message=f"It is time to collect feedback for project '{project_title}' ({client_name}).",
+                                    type="feedback_reminder",
+                                    reference_id=project_id
+                                ))
+
+        except Exception as e:
+            print(f"[Feedback Reminder] Error: {e}", flush=True)
+            
+        await asyncio.sleep(300) # Sleep for 5 minutes
+
 @asynccontextmanager
 async def lifespan(app):
     # --- Startup ---
@@ -308,6 +375,7 @@ async def lifespan(app):
         print(f"[Chat Indexing] Failed to create chat indexes: {e}", flush=True)
 
     reminder_task = asyncio.create_task(content_calendar_reminder_task())
+    feedback_task = asyncio.create_task(feedback_reminder_task())
     yield
     # --- Shutdown ---
     try:
@@ -319,6 +387,8 @@ async def lifespan(app):
     try:
         if not reminder_task.done():
             reminder_task.cancel()
+        if not feedback_task.done():
+            feedback_task.cancel()
     except Exception:
         pass
     # Reload trigger: 1

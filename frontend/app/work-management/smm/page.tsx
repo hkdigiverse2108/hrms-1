@@ -212,8 +212,16 @@ export default function CreativeClientsPage() {
   const [paymentCustomDaysInput, setPaymentCustomDaysInput] = useState("");
   const [paymentAmountInput, setPaymentAmountInput] = useState("");
   const [paymentDatesInput, setPaymentDatesInput] = useState<number[]>([]);
-  const [paymentLastDateInput, setPaymentLastDateInput] = useState("");
   const [paymentNextDateInput, setPaymentNextDateInput] = useState("");
+  
+  const [feedbackConfigOpen, setFeedbackConfigOpen] = useState(false);
+  const [feedbackConfigProject, setFeedbackConfigProject] = useState<any>(null);
+  const [feedbackTypeInput, setFeedbackTypeInput] = useState("Interval");
+  const [feedbackIntervalInput, setFeedbackIntervalInput] = useState("");
+  const [feedbackDaysOfWeekInput, setFeedbackDaysOfWeekInput] = useState<number[]>([]);
+  const [feedbackDatesOfMonthInput, setFeedbackDatesOfMonthInput] = useState<number[]>([]);
+  const [feedbackLastDateInput, setFeedbackLastDateInput] = useState("");
+  const [feedbackNextDateInput, setFeedbackNextDateInput] = useState("");
   
   const [newRemarkText, setNewRemarkText] = useState("");
   const [isAddingRemark, setIsAddingRemark] = useState(false);
@@ -707,6 +715,36 @@ export default function CreativeClientsPage() {
     }
   };
 
+  const handleSaveFeedbackConfig = async () => {
+    if (!feedbackConfigProject) return;
+    try {
+      const res = await fetch(`${API_URL}/projects/${feedbackConfigProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          feedbackType: feedbackTypeInput,
+          feedbackIntervalDays: parseInt(feedbackIntervalInput) || null,
+          feedbackDaysOfWeek: feedbackDaysOfWeekInput,
+          feedbackDatesOfMonth: feedbackDatesOfMonthInput,
+          lastFeedbackDate: feedbackLastDateInput || null,
+          nextFeedbackDate: feedbackNextDateInput || null,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Feedback configuration saved");
+        setFeedbackConfigOpen(false);
+        fetchClients();
+      } else {
+        toast.error("Failed to save feedback configuration");
+      }
+    } catch (err) {
+      console.error("Error saving feedback config:", err);
+      toast.error("An error occurred");
+    }
+  };
+
   const filteredClients = clients.filter(c => {
     const matchesSearch = c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1099,6 +1137,30 @@ export default function CreativeClientsPage() {
                           <CalendarClock className="w-4.5 h-4.5" />
                         </Button>
                         <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-9 w-9 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-full"
+                          title="Feedback Collection Reminder"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const p = clientProjects[client.id];
+                            if (p) {
+                              setFeedbackConfigProject(p);
+                              setFeedbackTypeInput(p.feedbackType || "Interval");
+                              setFeedbackIntervalInput(p.feedbackIntervalDays ? String(p.feedbackIntervalDays) : "");
+                              setFeedbackDaysOfWeekInput(p.feedbackDaysOfWeek || []);
+                              setFeedbackDatesOfMonthInput(p.feedbackDatesOfMonth || []);
+                              setFeedbackLastDateInput(p.lastFeedbackDate || "");
+                              setFeedbackNextDateInput(p.nextFeedbackDate || "");
+                              setFeedbackConfigOpen(true);
+                            } else {
+                              toast.error("No active project found for this client.");
+                            }
+                          }}
+                        >
+                          <History className="w-4.5 h-4.5" />
+                        </Button>
+                        <Button 
                           variant="ghost"  
                           size="icon" 
                           className={`h-9 w-9 rounded-full ${client.whatsappGroup ? 'text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10' : 'text-slate-400 hover:text-[#25D366] hover:bg-[#25D366]/10'}`}
@@ -1312,6 +1374,104 @@ export default function CreativeClientsPage() {
               <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={handleFollowupCompleteWithRemark}>
                 <CheckCircle2 className="w-4 h-4 mr-2" /> Mark as Done
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Feedback Config Dialog */}
+      <Dialog open={feedbackConfigOpen} onOpenChange={setFeedbackConfigOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Feedback Reminder Schedule</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Reminder Frequency</Label>
+              <Select value={feedbackTypeInput} onValueChange={setFeedbackTypeInput}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Interval">Every X Days</SelectItem>
+                  <SelectItem value="Weekly">Weekly</SelectItem>
+                  <SelectItem value="Monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {feedbackTypeInput === "Interval" && (
+              <div className="space-y-2">
+                <Label>Interval (Days)</Label>
+                <Input 
+                  type="number" 
+                  placeholder="e.g. 15" 
+                  value={feedbackIntervalInput} 
+                  onChange={(e) => setFeedbackIntervalInput(e.target.value)} 
+                />
+              </div>
+            )}
+
+            {feedbackTypeInput === "Weekly" && (
+              <div className="space-y-2">
+                <Label>Days of the week</Label>
+                <div className="flex flex-wrap gap-2">
+                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, idx) => {
+                    const isSelected = feedbackDaysOfWeekInput.includes(idx);
+                    return (
+                      <Badge 
+                        key={day} 
+                        variant={isSelected ? "default" : "outline"}
+                        className={`cursor-pointer ${isSelected ? 'bg-brand-teal text-white border-brand-teal hover:bg-brand-teal/90' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600'}`}
+                        onClick={() => {
+                          if (isSelected) setFeedbackDaysOfWeekInput(prev => prev.filter(d => d !== idx));
+                          else setFeedbackDaysOfWeekInput(prev => [...prev, idx]);
+                        }}
+                      >
+                        {day}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {feedbackTypeInput === "Monthly" && (
+              <div className="space-y-2">
+                <Label>Dates of the month (1-31)</Label>
+                <Input 
+                  placeholder="e.g. 1, 15" 
+                  value={feedbackDatesOfMonthInput.join(", ")}
+                  onChange={(e) => {
+                    const parts = e.target.value.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 31);
+                    setFeedbackDatesOfMonthInput(parts);
+                  }}
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Last Feedback Collected</Label>
+                <Input 
+                  type="date" 
+                  value={feedbackLastDateInput} 
+                  onChange={(e) => setFeedbackLastDateInput(e.target.value)} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Next Reminder Date</Label>
+                <Input 
+                  type="date" 
+                  value={feedbackNextDateInput} 
+                  onChange={(e) => setFeedbackNextDateInput(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setFeedbackConfigOpen(false)}>Cancel</Button>
+              <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleSaveFeedbackConfig}>Save Configuration</Button>
             </div>
           </div>
         </DialogContent>

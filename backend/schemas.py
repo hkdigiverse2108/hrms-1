@@ -1003,6 +1003,14 @@ class ProjectBase(BaseModel):
     lastFollowupDate: Optional[RobustDate] = None
     nextFollowupDate: Optional[RobustDate] = None
     
+    # Feedback Collection Fields
+    feedbackType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
+    feedbackIntervalDays: Optional[int] = None
+    feedbackDaysOfWeek: Optional[List[int]] = [] # 0=Monday, 6=Sunday
+    feedbackDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastFeedbackDate: Optional[RobustDate] = None
+    nextFeedbackDate: Optional[RobustDate] = None
+    
     # Creative Tracking Fields
     services: Optional[str] = None
     post: Optional[int] = 0
@@ -1039,6 +1047,12 @@ class ProjectUpdate(BaseModel):
     followupDatesOfMonth: Optional[List[int]] = None
     lastFollowupDate: Optional[RobustDate] = None
     nextFollowupDate: Optional[RobustDate] = None
+    feedbackType: Optional[str] = None
+    feedbackIntervalDays: Optional[int] = None
+    feedbackDaysOfWeek: Optional[List[int]] = None
+    feedbackDatesOfMonth: Optional[List[int]] = None
+    lastFeedbackDate: Optional[RobustDate] = None
+    nextFeedbackDate: Optional[RobustDate] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
     
