@@ -30,7 +30,8 @@ import {
   PenTool,
   ChevronDown,
   ChevronsUpDown,
-  Check
+  Check,
+  MoreHorizontal
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -53,6 +54,7 @@ import { FeedbackReviewsEmbedded } from "@/components/hrms/FeedbackReviewsEmbedd
 import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const SearchableEmployeeSelect = ({ value, onChange, placeholder, employees }: { value: string, onChange: (val: string) => void, placeholder: string, employees: any[] }) => {
@@ -1088,85 +1090,12 @@ export default function CreativeClientsPage() {
                     </td>
                     <td className="px-6 py-4 text-right align-middle whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5 opacity-100 transition-all duration-200">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full"
-                          title="Assign Creative Team"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setAssignTeamClient(client);
-                            const p = clientProjects[client.id] || {};
-                            setScriptwriterId(p.assignedScriptwriterId || client.assignedScriptwriterId || "none");
-                            setReelEditorId(p.assignedReelEditorId || client.assignedReelEditorId || "none");
-                            setPostDesignerId(p.assignedPostDesignerId || client.assignedPostDesignerId || "none");
-                            setAssignTeamOpen(true);
-                          }}
-                        >
-                          <UserPlus className="w-4.5 h-4.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-full"
-                          title="Payment Settings"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPaymentConfigClient(client);
-                            setPaymentFrequencyInput(client.paymentFrequency || "One-Time");
-                            setPaymentCustomDaysInput(client.paymentCustomDays ? String(client.paymentCustomDays) : "");
-                            setPaymentAmountInput(client.paymentAmount ? String(client.paymentAmount) : "");
-                            setPaymentDatesInput(client.paymentDatesOfMonth || []);
-                            setPaymentLastDateInput(client.lastPaymentDate || "");
-                            setPaymentNextDateInput(client.nextPaymentDueDate || "");
-                            setPaymentConfigOpen(true);
-                          }}
-                        >
-                          <CreditCard className="w-4.5 h-4.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full"
-                          title="Set Follow-up Rules"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFollowupConfigClient(client);
-                            setFollowupTypeInput(client.followupType || "Interval");
-                            setFollowupIntervalInput(client.followupIntervalDays ? String(client.followupIntervalDays) : "");
-                            setFollowupDaysOfWeekInput(client.followupDaysOfWeek || []);
-                            setFollowupDatesOfMonthInput(client.followupDatesOfMonth || []);
-                            setFollowupLastDateInput(client.lastFollowupDate || "");
-                            setFollowupConfigOpen(true);
-                            fetchFollowupHistory(client);
-                          }}
-                        >
-                          <CalendarClock className="w-4.5 h-4.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-full"
-                          title="Feedback Collection Reminder"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const p = clientProjects[client.id];
-                            if (p) {
-                              setFeedbackConfigProject(p);
-                              setFeedbackTypeInput(p.feedbackType || "Interval");
-                              setFeedbackIntervalInput(p.feedbackIntervalDays ? String(p.feedbackIntervalDays) : "");
-                              setFeedbackDaysOfWeekInput(p.feedbackDaysOfWeek || []);
-                              setFeedbackDatesOfMonthInput(p.feedbackDatesOfMonth || []);
-                              setFeedbackLastDateInput(p.lastFeedbackDate || "");
-                              setFeedbackNextDateInput(p.nextFeedbackDate || "");
-                              setFeedbackConfigOpen(true);
-                            } else {
-                              toast.error("No active project found for this client.");
-                            }
-                          }}
-                        >
-                          <History className="w-4.5 h-4.5" />
-                        </Button>
+                        <SmmMeetingDialog 
+                          client={client} 
+                          onUpdate={fetchClients} 
+                          userId={user?.userId} 
+                          userName={user?.name} 
+                        />
                         <Button 
                           variant="ghost"  
                           size="icon" 
@@ -1180,61 +1109,107 @@ export default function CreativeClientsPage() {
                         >
                           <WhatsAppIcon className="w-4.5 h-4.5" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-full"
-                          title="Manage Client Reviews"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setReviewClient(client);
-                            setReviewDialogOpen(true);
-                          }}
-                        >
-                          <Star className="w-4.5 h-4.5" />
-                        </Button>
-                        <SmmMeetingDialog 
-                          client={client} 
-                          onUpdate={fetchClients} 
-                          userId={user?.userId} 
-                          userName={user?.name} 
-                        />
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full"
-                          title="View Forms & Feedback"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/work-management/smm/${client.id}/feedback`);
-                          }}
-                        >
-                          <ClipboardList className="w-4.5 h-4.5" />
-                        </Button>
 
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"
-                          title="View Activity Logs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            fetchLogs(client);
-                          }}
-                        >
-                          <History className="w-4.5 h-4.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-destructive hover:bg-destructive/10 rounded-full" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(client.id);
-                          }}
-                        >
-                          <Trash2 className="w-4.5 h-4.5" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-9 w-9 text-slate-400 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreHorizontal className="w-4.5 h-4.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuLabel className="text-xs text-slate-500 font-normal">Manage Client</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              setAssignTeamClient(client);
+                              const p = clientProjects[client.id] || {};
+                              setScriptwriterId(p.assignedScriptwriterId || client.assignedScriptwriterId || "none");
+                              setReelEditorId(p.assignedReelEditorId || client.assignedReelEditorId || "none");
+                              setPostDesignerId(p.assignedPostDesignerId || client.assignedPostDesignerId || "none");
+                              setAssignTeamOpen(true);
+                            }}>
+                              <UserPlus className="w-4 h-4 mr-2" /> Assign Creative Team
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              setPaymentConfigClient(client);
+                              setPaymentFrequencyInput(client.paymentFrequency || "One-Time");
+                              setPaymentCustomDaysInput(client.paymentCustomDays ? String(client.paymentCustomDays) : "");
+                              setPaymentAmountInput(client.paymentAmount ? String(client.paymentAmount) : "");
+                              setPaymentDatesInput(client.paymentDatesOfMonth || []);
+                              setPaymentLastDateInput(client.lastPaymentDate || "");
+                              setPaymentNextDateInput(client.nextPaymentDueDate || "");
+                              setPaymentConfigOpen(true);
+                            }}>
+                              <CreditCard className="w-4 h-4 mr-2" /> Payment Settings
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              setFollowupConfigClient(client);
+                              setFollowupTypeInput(client.followupType || "Interval");
+                              setFollowupIntervalInput(client.followupIntervalDays ? String(client.followupIntervalDays) : "");
+                              setFollowupDaysOfWeekInput(client.followupDaysOfWeek || []);
+                              setFollowupDatesOfMonthInput(client.followupDatesOfMonth || []);
+                              setFollowupLastDateInput(client.lastFollowupDate || "");
+                              setFollowupConfigOpen(true);
+                              fetchFollowupHistory(client);
+                            }}>
+                              <CalendarClock className="w-4 h-4 mr-2" /> Follow-up Rules
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              const p = clientProjects[client.id];
+                              if (p) {
+                                setFeedbackConfigProject(p);
+                                setFeedbackTypeInput(p.feedbackType || "Interval");
+                                setFeedbackIntervalInput(p.feedbackIntervalDays ? String(p.feedbackIntervalDays) : "");
+                                setFeedbackDaysOfWeekInput(p.feedbackDaysOfWeek || []);
+                                setFeedbackDatesOfMonthInput(p.feedbackDatesOfMonth || []);
+                                setFeedbackLastDateInput(p.lastFeedbackDate || "");
+                                setFeedbackNextDateInput(p.nextFeedbackDate || "");
+                                setFeedbackConfigOpen(true);
+                              } else {
+                                toast.error("No active project found for this client.");
+                              }
+                            }}>
+                              <History className="w-4 h-4 mr-2 text-emerald-600" /> Feedback Collection
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              setReviewClient(client);
+                              setReviewDialogOpen(true);
+                            }}>
+                              <Star className="w-4 h-4 mr-2 text-amber-500" /> Client Reviews
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/work-management/smm/${client.id}/feedback`);
+                            }}>
+                              <ClipboardList className="w-4 h-4 mr-2 text-indigo-600" /> View Forms & Feedback
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              fetchLogs(client);
+                            }}>
+                              <History className="w-4 h-4 mr-2" /> Activity Logs
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(client.id);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>
