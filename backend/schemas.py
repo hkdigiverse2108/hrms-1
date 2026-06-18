@@ -903,6 +903,14 @@ class ClientBase(BaseModel):
     nextPaymentDueDate: Optional[RobustDate] = None
     paymentRemarks: Optional[str] = None
     workReviews: Optional[List[dict]] = []
+    
+    # Creative Team Assignments
+    assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -957,6 +965,13 @@ class ClientUpdate(BaseModel):
     nextPaymentDueDate: Optional[RobustDate] = None
     paymentRemarks: Optional[str] = None
     workReviews: Optional[List[dict]] = None
+    
+    assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
 
 class Client(ClientBase):
     id: str

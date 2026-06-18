@@ -22,7 +22,8 @@ import {
   CalendarClock,
   Banknote,
   CreditCard,
-  Star
+  Star,
+  UserPlus
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -98,6 +99,15 @@ export default function CreativeClientsPage() {
   const [editingClient, setEditingClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [inlineEditing, setInlineEditing] = useState<{id: string, field: string} | null>(null);
+  
+  // Creative Team Assignment
+  const [creativeEmployees, setCreativeEmployees] = useState<any[]>([]);
+  const [assignTeamClient, setAssignTeamClient] = useState<any>(null);
+  const [assignTeamOpen, setAssignTeamOpen] = useState(false);
+  const [scriptwriterId, setScriptwriterId] = useState("");
+  const [reelEditorId, setReelEditorId] = useState("");
+  const [postDesignerId, setPostDesignerId] = useState("");
+
   const [logsOpen, setLogsOpen] = useState(false);
   const [clientLogs, setClientLogs] = useState<any[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
@@ -288,11 +298,12 @@ export default function CreativeClientsPage() {
   const fetchClients = async () => {
     setIsLoading(true);
     try {
-      const [res, ccRes, pRes, settingsRes] = await Promise.all([
+      const [res, ccRes, pRes, settingsRes, empRes] = await Promise.all([
         fetch(`${API_URL}/clients`),
         fetch(`${API_URL}/content-calendar/all`),
         fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
-        fetch(`${API_URL}/content-calendar-settings/all?monthYear=${currentMonthYear}`)
+        fetch(`${API_URL}/content-calendar-settings/all?monthYear=${currentMonthYear}`),
+        fetch(`${API_URL}/employees`)
       ]);
       
       let clientsData = [];
@@ -342,6 +353,11 @@ export default function CreativeClientsPage() {
         setClients(clientsData.filter((c: any) => c.department?.includes("Creative") && validClientIds.has(c.id)));
       } else {
         setClients(clientsData.filter((c: any) => c.department?.includes("Creative")));
+      }
+
+      if (empRes.ok) {
+        const emps = await empRes.json();
+        setCreativeEmployees(emps.filter((e: any) => e.department === "Creative" || e.department === "Digital Marketing"));
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -483,6 +499,40 @@ export default function CreativeClientsPage() {
       }
     } catch (err) {
       console.error("Error saving payment config:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+  const handleSaveTeamAssignment = async () => {
+    if (!assignTeamClient) return;
+    const scriptwriter = creativeEmployees.find(e => e.id === scriptwriterId);
+    const reelEditor = creativeEmployees.find(e => e.id === reelEditorId);
+    const postDesigner = creativeEmployees.find(e => e.id === postDesignerId);
+    
+    try {
+      const res = await fetch(`${API_URL}/clients/${assignTeamClient.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          assignedScriptwriterId: scriptwriterId === "none" ? null : scriptwriterId || null,
+          assignedScriptwriterName: scriptwriterId === "none" ? null : scriptwriter?.name || null,
+          assignedReelEditorId: reelEditorId === "none" ? null : reelEditorId || null,
+          assignedReelEditorName: reelEditorId === "none" ? null : reelEditor?.name || null,
+          assignedPostDesignerId: postDesignerId === "none" ? null : postDesignerId || null,
+          assignedPostDesignerName: postDesignerId === "none" ? null : postDesigner?.name || null,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Team assigned successfully");
+        setAssignTeamOpen(false);
+        fetchClients();
+      } else {
+        toast.error("Failed to assign team");
+      }
+    } catch (err) {
+      console.error("Error assigning team:", err);
       toast.error("An error occurred");
     }
   };
@@ -762,6 +812,22 @@ export default function CreativeClientsPage() {
                     </td>
                     <td className="px-6 py-4 text-right align-middle whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5 opacity-100 transition-all duration-200">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-9 w-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full"
+                          title="Assign Creative Team"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAssignTeamClient(client);
+                            setScriptwriterId(client.assignedScriptwriterId || "none");
+                            setReelEditorId(client.assignedReelEditorId || "none");
+                            setPostDesignerId(client.assignedPostDesignerId || "none");
+                            setAssignTeamOpen(true);
+                          }}
+                        >
+                          <UserPlus className="w-4.5 h-4.5" />
+                        </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
@@ -1125,6 +1191,66 @@ export default function CreativeClientsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Assign Team Dialog */}
+      <Dialog open={assignTeamOpen} onOpenChange={setAssignTeamOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Creative Team</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Scripting</Label>
+              <Select value={scriptwriterId} onValueChange={setScriptwriterId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select scriptwriter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-muted-foreground italic">None</SelectItem>
+                  {creativeEmployees.map(emp => (
+                    <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Reel / Editing</Label>
+              <Select value={reelEditorId} onValueChange={setReelEditorId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select editor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-muted-foreground italic">None</SelectItem>
+                  {creativeEmployees.map(emp => (
+                    <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Post / Graphics</Label>
+              <Select value={postDesignerId} onValueChange={setPostDesignerId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select designer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-muted-foreground italic">None</SelectItem>
+                  {creativeEmployees.map(emp => (
+                    <SelectItem key={emp.id} value={emp.id}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="pt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAssignTeamOpen(false)}>Cancel</Button>
+              <Button className="bg-brand-teal text-white hover:bg-brand-teal-light" onClick={handleSaveTeamAssignment}>
+                Save Assignments
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <ClientReviewDialog 
         open={reviewDialogOpen} 
         onOpenChange={setReviewDialogOpen} 
