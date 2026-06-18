@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import React, { useState, useEffect, Suspense } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,18 @@ import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 
 export default function PublicFeedbackPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center text-brand-teal">Loading...</div>}>
+      <PublicFeedbackPageContent />
+    </Suspense>
+  );
+}
+
+function PublicFeedbackPageContent() {
   const { formId } = useParams();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
+  const projectName = searchParams.get("projectName");
   const [form, setForm] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -62,6 +73,7 @@ export default function PublicFeedbackPage() {
         body: JSON.stringify({
           formId,
           clientId: form.clientId,
+          projectId: projectId || null,
           answers
         })
       });
@@ -105,7 +117,17 @@ export default function PublicFeedbackPage() {
               <CheckCircle2 className="w-8 h-8" />
             </div>
             <h2 className="text-2xl font-bold text-slate-800">Thank You!</h2>
-            <p className="text-slate-500 mt-2">Your response has been submitted successfully. We appreciate your feedback!</p>
+            <p className="text-slate-500 mt-2 mb-6">Your response has been submitted successfully. We appreciate your feedback!</p>
+            <Button 
+              variant="outline" 
+              className="border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white"
+              onClick={() => {
+                setSubmitted(false);
+                setAnswers({});
+              }}
+            >
+              Submit Another Response
+            </Button>
           </CardContent>
         </Card>
       </div>

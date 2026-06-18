@@ -2588,6 +2588,17 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
             else:
                 update_data["nextFollowupDate"] = None
                 
+        if update_data.get("status") == "on-hold":
+            await db.projects.update_many(
+                {"clientId": client_id},
+                {"$set": {"status": "on-hold"}}
+            )
+        elif update_data.get("status") == "active":
+            await db.projects.update_many(
+                {"clientId": client_id},
+                {"$set": {"status": "in-progress"}}
+            )
+            
         await db.clients.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
         
         details = []
@@ -2603,6 +2614,8 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "clients"})
+            if update_data.get("status") in ["on-hold", "active"]:
+                await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
         except Exception:
             pass
             

@@ -489,12 +489,13 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     // Right-aligned meta details
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
+    doc.setFont("helvetica", "normal");
     doc.text(`Month: ${monthYear}`, pageWidth - 14, 20, { align: "right" });
 
     // Decorative separator line
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.5);
-    doc.line(14, 32, pageWidth - 14, 32);
+    doc.line(14, 38, pageWidth - 14, 38);
 
     const columnsToRender = selectedColumnsForPdf;
     const indicesToRender = columnsToRender.map(col => tableHeaders.indexOf(col));
@@ -515,7 +516,29 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", font: "helvetica" },
       headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: 'bold', halign: 'center' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { top: 38, right: 14, bottom: 20, left: 14 }
+      margin: { top: 44, right: 14, bottom: 20, left: 14 },
+      willDrawCell: (data) => {
+        if (data.section === 'body') {
+          const rawValue = String(data.cell.raw || "");
+          if (rawValue.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/)) {
+            doc.setTextColor(0, 102, 204); // Blue color for links
+          }
+        }
+      },
+      didDrawCell: (data) => {
+        if (data.section === 'body') {
+          const rawValue = String(data.cell.raw || "");
+          const urlMatch = rawValue.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/);
+          if (urlMatch) {
+            let url = urlMatch[0];
+            if (url.startsWith('www.')) {
+              url = 'https://' + url;
+            }
+            // Add an invisible clickable link over the cell with the real URL (allows right-click -> copy link)
+            doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: url });
+          }
+        }
+      }
     });
 
     // Add Footer with Page Numbers

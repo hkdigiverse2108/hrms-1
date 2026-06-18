@@ -98,6 +98,7 @@ export default function CreativeClientsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [masterFilter, setMasterFilter] = useState("all");
   const [inlineEditing, setInlineEditing] = useState<{id: string, field: string} | null>(null);
   
   // Creative Team Assignment
@@ -631,11 +632,33 @@ export default function CreativeClientsPage() {
     }
   };
 
-  const filteredClients = clients.filter(c => 
-    c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredClients = clients.filter(c => {
+    const matchesSearch = c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.email.toLowerCase().includes(searchTerm.toLowerCase());
+      
+    if (!matchesSearch) return false;
+
+    const projectStatus = clientProjects[c.id]?.status || "";
+    const isOnHold = projectStatus.toLowerCase() === "on-hold";
+    const isFollowupDue = clientProjects[c.id]?.nextFollowupDate && new Date(clientProjects[c.id].nextFollowupDate) <= new Date();
+    const isPaymentDue = c.nextPaymentDueDate && new Date(c.nextPaymentDueDate) <= new Date();
+    const hasPendingWork = pendingCounts[c.id] > 0;
+
+    switch(masterFilter) {
+      case 'whatsapp-submitted': return !!c.whatsappGroup;
+      case 'whatsapp-pending': return !c.whatsappGroup;
+      case 'greetings-sent': return !!c.greetingsMsgSent;
+      case 'greetings-pending': return !c.greetingsMsgSent;
+      case 'payment-due': return !!isPaymentDue;
+      case 'followup-due': return !!isFollowupDue;
+      case 'active': return !isOnHold;
+      case 'on-hold': return isOnHold;
+      case 'festival-post': return c.festivalPost === "Yes";
+      case 'pending-work': return hasPendingWork;
+      default: return true;
+    }
+  });
 
   return (
     <div className="space-y-6">
@@ -655,9 +678,40 @@ export default function CreativeClientsPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <Button onClick={() => router.push('/work-management/smm/pending')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto">
+
+        <Select value={masterFilter} onValueChange={setMasterFilter}>
+          <SelectTrigger className="w-full md:w-[220px] h-10 bg-white border-slate-200">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-500" />
+              <SelectValue placeholder="Filter clients" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Clients</SelectItem>
+            <SelectItem value="whatsapp-submitted">WhatsApp Link Submitted</SelectItem>
+            <SelectItem value="whatsapp-pending">WhatsApp Link Pending</SelectItem>
+            <SelectItem value="greetings-sent">Greetings Sent</SelectItem>
+            <SelectItem value="greetings-pending">Greetings Pending</SelectItem>
+            <SelectItem value="payment-due">Payment Due</SelectItem>
+            <SelectItem value="followup-due">Follow-up Due</SelectItem>
+            <SelectItem value="active">Active Projects</SelectItem>
+            <SelectItem value="on-hold">On Hold Projects</SelectItem>
+            <SelectItem value="festival-post">Festival Post</SelectItem>
+            <SelectItem value="pending-work">Pending Work</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button onClick={() => router.push('/work-management/smm/pending')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto shrink-0">
           <CalendarClock className="w-4 h-4" />
           View Pending Work
+        </Button>
+        <Button onClick={() => router.push('/feedback-builder/common')} className="h-10 bg-indigo-600 hover:bg-indigo-700 text-white gap-2 w-full md:w-auto shrink-0">
+          <Plus className="w-4 h-4" />
+          Create Feedback Form
+        </Button>
+        <Button onClick={() => router.push('/work-management/smm/common/feedback')} className="h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 gap-2 w-full md:w-auto shrink-0 border border-slate-200">
+          <ClipboardList className="w-4 h-4" />
+          View Common Forms
         </Button>
 
       </div>
@@ -778,9 +832,16 @@ export default function CreativeClientsPage() {
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-2.5">
-                        <Badge className={client.status === "active" ? "bg-emerald-50 text-emerald-600 border-emerald-200/60 shadow-sm font-semibold" : "bg-red-50 text-red-600 border-red-200/60 shadow-sm font-semibold"}>
-                          {client.status?.toUpperCase() || "ACTIVE"}
-                        </Badge>
+                        {(() => {
+                          const projectStatus = clientProjects[client.id]?.status || "";
+                          const isOnHold = projectStatus.toLowerCase() === "on-hold";
+                          const displayText = isOnHold ? "ON HOLD" : "ACTIVE";
+                          return (
+                            <Badge className={!isOnHold ? "bg-emerald-50 text-emerald-600 border-emerald-200/60 shadow-sm font-semibold" : "bg-red-50 text-red-600 border-red-200/60 shadow-sm font-semibold"}>
+                              {displayText}
+                            </Badge>
+                          );
+                        })()}
                         {clientProjects[client.id]?.nextFollowupDate && new Date(clientProjects[client.id].nextFollowupDate) <= new Date() && (
                           <Badge 
                             className="bg-rose-50 text-rose-600 border-rose-200/60 animate-pulse flex items-center gap-1.5 shadow-sm cursor-pointer hover:bg-rose-100 hover:text-rose-700 transition-colors"
@@ -910,18 +971,7 @@ export default function CreativeClientsPage() {
                         >
                           <ClipboardList className="w-4.5 h-4.5" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-brand-teal hover:bg-teal-50 rounded-full"
-                          title="Create Feedback Form"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/feedback-builder/${client.id}`);
-                          }}
-                        >
-                          <Plus className="w-4.5 h-4.5" />
-                        </Button>
+
                         <Button 
                           variant="ghost" 
                           size="icon" 

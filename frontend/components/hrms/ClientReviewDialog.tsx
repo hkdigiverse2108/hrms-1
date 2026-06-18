@@ -222,11 +222,6 @@ export function ClientReviewDialog({ open, onOpenChange, client, onSaved }: Clie
                         </span>
                       </div>
                     </div>
-                    <div>
-                      {review.status === "Pending" && <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 shadow-none border-0"><Clock className="w-3 h-3 mr-1"/> Pending</Badge>}
-                      {review.status === "Completed" && <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 shadow-none border-0"><CheckCircle className="w-3 h-3 mr-1"/> Completed</Badge>}
-                      {review.status === "Needs Revision" && <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 shadow-none border-0"><XCircle className="w-3 h-3 mr-1"/> Revision Needed</Badge>}
-                    </div>
                   </div>
                   
                   <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-md italic border-l-2 border-brand-teal">
@@ -243,58 +238,6 @@ export function ClientReviewDialog({ open, onOpenChange, client, onSaved }: Clie
                         onBlur={() => handleSaveAdminComment(review.id)}
                         className="h-16 text-sm resize-none"
                       />
-                    </div>
-                    <div className="flex gap-2 justify-between items-center">
-                      {review.logs && review.logs.length > 0 ? (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500 hover:text-slate-700 px-2 -ml-2">
-                              <History className="w-3.5 h-3.5 mr-1.5" />
-                              View History ({review.logs.length})
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-72 p-0" align="start">
-                            <div className="p-3 border-b border-slate-100 bg-slate-50/50 rounded-t-md">
-                              <h4 className="text-xs font-semibold text-slate-700">Status History</h4>
-                            </div>
-                            <div className="p-3 space-y-3 max-h-[250px] overflow-y-auto">
-                              {review.logs.map((log: any, idx: number) => (
-                                <div key={idx} className="flex gap-3 text-sm relative">
-                                  {idx !== review.logs.length - 1 && (
-                                    <div className="absolute left-[9px] top-5 bottom-[-16px] w-[2px] bg-slate-100" />
-                                  )}
-                                  <div className="w-5 h-5 rounded-full bg-slate-50 border-2 border-brand-teal/20 flex items-center justify-center shrink-0 z-10 mt-0.5">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-brand-teal/60" />
-                                  </div>
-                                  <div className="flex-1 pb-2">
-                                    <div className="flex justify-between items-start">
-                                      <p className="text-xs font-semibold text-slate-700">{log.status}</p>
-                                      <span className="text-[10px] font-medium text-slate-400">{new Date(log.timestamp).toLocaleDateString()}</span>
-                                    </div>
-                                    <p className="text-[10px] text-slate-500 mt-0.5">By {log.user}</p>
-                                    {log.comment && (
-                                      <div className="mt-1.5 p-2 bg-slate-50 rounded border border-slate-100 text-xs text-slate-600 italic">
-                                        "{log.comment}"
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      ) : <div />}
-                      
-                      <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-none"
-                          disabled={updatingId === review.id}
-                          onClick={() => handleUpdateReviewStatus(review.id, "Completed")}
-                        >
-                          {updatingId === review.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Completed"}
-                        </Button>
-                      </div>
                     </div>
                   </div>
                 </div>
