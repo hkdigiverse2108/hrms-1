@@ -124,6 +124,29 @@ const getSenderColor = (name: string) => {
   return colors[index];
 };
 
+const ChatLink = ({ href, target, rel, className, children, onClick, textColor }: any) => {
+  const [isHovered, setIsHovered] = useState(false);
+  return (
+    <a
+      href={href}
+      target={target}
+      rel={rel}
+      className={className}
+      style={{ 
+        textDecorationLine: isHovered ? 'underline' : 'none',
+        textUnderlineOffset: '3px',
+        textDecorationThickness: '1px',
+        color: textColor
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={onClick}
+    >
+      {children}
+    </a>
+  );
+};
+
 const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   const { confirm } = useConfirm();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -376,14 +399,13 @@ export default function ChatPage() {
     setMessage(val);
     handleTyping();
 
-    const lastAtIdx = val.lastIndexOf("@");
-    if (lastAtIdx !== -1 && lastAtIdx >= val.length - 20) {
-      const textAfterAt = val.slice(lastAtIdx + 1);
-      if (!textAfterAt.includes(" ")) {
-        setShowTagPicker(true);
-        setTagSearchQuery(textAfterAt);
-        return;
-      }
+    // Only trigger mention if @ is at the start or preceded by a space
+    const atMatch = val.match(/(^|\s)@([^\s]*)$/);
+    if (atMatch) {
+      const textAfterAt = atMatch[2];
+      setShowTagPicker(true);
+      setTagSearchQuery(textAfterAt);
+      return;
     }
     setShowTagPicker(false);
   };
@@ -1280,11 +1302,13 @@ export default function ChatPage() {
       .map(name => name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
 
     const mentionRegex = namePatterns.length > 0
-      ? new RegExp(`(@(?:${namePatterns.join('|')})\\b|@\\w+)`, 'gi')
-      : /(@\w+)/g;
+      ? new RegExp(`(^|\\s)(@(?:${namePatterns.join('|')})\\b|@\\w+)`, 'gi')
+      : /(^|\s)(@\w+)/g;
 
     const parts = text.split(mentionRegex);
     const withMentions = parts.map((part, i) => {
+      if (!part) return null;
+      
       if (part.startsWith("@")) {
         const name = part.substring(1);
         const isMe = (() => {
@@ -1324,24 +1348,36 @@ export default function ChatPage() {
         );
       }
       
-      // Then, handle URL parsing and search highlighting for non-mention parts
-      const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-      const textParts = part.split(urlRegex);
+      // Then, handle URL and Email parsing and search highlighting for non-mention parts
+      const urlOrEmailRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+      const textParts = part.split(urlOrEmailRegex);
 
       return textParts.map((tp, k) => {
-        if (tp.match(urlRegex)) {
-          const href = tp.startsWith('http') ? tp : `https://${tp}`;
+        if (!tp) return null; // Filter out empty strings from split
+        
+        if (tp.match(urlOrEmailRegex)) {
+          let href = tp;
+          let isMail = false;
+          if (tp.includes('@') && !tp.startsWith('http') && !tp.startsWith('www.')) {
+            href = `mailto:${tp}`;
+            isMail = true;
+          } else if (tp.startsWith('www.')) {
+            href = `https://${tp}`;
+          }
+          const hexColor = isMeBubble ? "#0369a1" : "#0ea5e9";
+
           return (
-            <a 
+            <ChatLink 
               key={`url-${i}-${k}`} 
               href={href} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-[#027eb5] hover:underline break-all"
-              onClick={(e) => e.stopPropagation()}
+              target={isMail ? undefined : "_blank"} 
+              rel={isMail ? undefined : "noopener noreferrer"}
+              className="break-all font-medium cursor-pointer"
+              textColor={hexColor}
+              onClick={(e: any) => e.stopPropagation()}
             >
               {tp}
-            </a>
+            </ChatLink>
           );
         }
 
@@ -3372,15 +3408,12 @@ export default function ChatPage() {
                         {/* Tagging / Mention Popover (Hidden Trigger) */}
                         {/* Tagging / Mention Dropdown */}
                         <div className="relative">
-                          {showTagPicker && (
+                          {showTagPicker && filteredEmployees.length > 0 && (
                             <div className="absolute bottom-full right-0 p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 mb-4 max-h-64 overflow-y-auto z-[100]">
                               <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1.5 border-b border-slate-50 mb-1">
                                 Tag Colleague
                               </div>
-                              {filteredEmployees.length === 0 ? (
-                                <div className="text-xs text-muted-foreground text-center py-4">No colleagues found</div>
-                              ) : (
-                                <div className="space-y-0.5">
+                              <div className="space-y-0.5">
                                   {filteredEmployees.map((emp) => {
                                     const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
                                     const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
@@ -3406,7 +3439,6 @@ export default function ChatPage() {
                                     );
                                   })}
                                 </div>
-                              )}
                             </div>
                           )}
                         </div>
