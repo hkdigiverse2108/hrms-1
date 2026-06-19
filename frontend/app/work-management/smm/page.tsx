@@ -914,7 +914,7 @@ export default function CreativeClientsPage() {
       </div>
 
       <div className="w-full mb-6 overflow-x-auto pb-2 no-scrollbar">
-        <div className="flex items-center gap-2 w-max">
+        <div className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60">
           {[
             { value: "all", label: "All Clients" },
             { value: "active", label: "Active Projects" },
@@ -934,10 +934,10 @@ export default function CreativeClientsPage() {
             <button
               key={filter.value}
               onClick={() => setMasterFilter(filter.value)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+              className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
                 masterFilter === filter.value 
-                  ? "bg-brand-teal text-white shadow-md shadow-brand-teal/20" 
-                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-brand-teal hover:border-brand-teal/30"
+                  ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
               }`}
             >
               {filter.label}
