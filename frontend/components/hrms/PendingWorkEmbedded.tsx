@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ export function PendingWorkEmbedded() {
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterStage, setFilterStage] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterDate, setFilterDate] = useState<string>('');
 
   useEffect(() => {
     fetchData();
@@ -129,9 +130,14 @@ export function PendingWorkEmbedded() {
       );
     }
 
+    // Apply Date Filter
+    if (filterDate) {
+      filteredTasks = filteredTasks.filter(t => t.deadline === filterDate);
+    }
+
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, clients, clientProjects, filterProject, filterStage, searchQuery]);
+  }, [entries, clients, clientProjects, filterProject, filterStage, searchQuery, filterDate]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
@@ -151,6 +157,25 @@ export function PendingWorkEmbedded() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-9 text-sm bg-white"
             />
+          </div>
+
+          <div className="relative w-full sm:w-[160px]">
+            <Input 
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="h-9 text-sm bg-white pr-8 text-slate-600"
+            />
+            {filterDate && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="absolute right-0 top-0 h-9 w-9 hover:bg-transparent"
+                onClick={() => setFilterDate('')}
+              >
+                <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+              </Button>
+            )}
           </div>
 
           <Select value={filterStage} onValueChange={setFilterStage}>
