@@ -2797,10 +2797,11 @@ export default function ChatPage() {
             )}
 
             {/* Chat Messages */}
-            <div 
-              ref={scrollRef}
-              className="flex-1 overflow-y-auto p-6 space-y-4 whatsapp-chat-bg custom-scrollbar"
-            >
+            <div className="flex-1 flex flex-col whatsapp-chat-bg overflow-hidden relative">
+              <div 
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent custom-scrollbar"
+              >
               <div className="flex justify-center">
                 <span className="px-3 py-1 bg-white border border-border rounded-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider shadow-sm">
                   Conversation with {selectedChat.name}
@@ -3258,7 +3259,7 @@ export default function ChatPage() {
             </div>
 
             {/* Chat Input */}
-            <div className="p-4 border-t border-border bg-white">
+            <div className="p-4 bg-transparent">
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -3509,7 +3510,8 @@ export default function ChatPage() {
                 </Button>
               </form>
             </div>
-          </>
+          </div>
+        </>
           ) : null
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-4">
