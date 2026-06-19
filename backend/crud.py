@@ -3744,7 +3744,10 @@ async def get_chat_groups(db, user_id: str):
         fixed = fix_id(row)
         last_msg = await db.messages.find_one({"groupId": fixed["id"]}, sort=[("timestamp", -1)])
         if last_msg:
-            fixed["lastMessage"] = last_msg.get("text", "")
+            text = last_msg.get("text", "")
+            if not text and (last_msg.get("attachmentUrl") or last_msg.get("attachmentName")):
+                text = "Sent a file"
+            fixed["lastMessage"] = text
             try:
                 from datetime import datetime
                 t_str = last_msg["timestamp"].replace("Z", "+00:00")
@@ -3874,6 +3877,8 @@ async def get_chat_summaries(db, user_id: str):
                 ]
             },
             "lastMessage": {"$first": "$text"},
+            "attachmentUrl": {"$first": "$attachmentUrl"},
+            "attachmentName": {"$first": "$attachmentName"},
             "timestamp": {"$first": "$timestamp"},
             "isSeen": {"$first": "$isSeen"},
             "senderId": {"$first": "$senderId"}
@@ -3925,7 +3930,10 @@ async def get_chat_channels(db):
         fixed = fix_id(row)
         last_msg = await db.messages.find_one({"groupId": fixed["id"]}, sort=[("timestamp", -1)])
         if last_msg:
-            fixed["lastMessage"] = last_msg.get("text", "")
+            text = last_msg.get("text", "")
+            if not text and (last_msg.get("attachmentUrl") or last_msg.get("attachmentName")):
+                text = "Sent a file"
+            fixed["lastMessage"] = text
             try:
                 from datetime import datetime
                 t_str = last_msg["timestamp"].replace("Z", "+00:00")

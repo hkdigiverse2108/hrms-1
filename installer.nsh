@@ -36,6 +36,10 @@
 !macro customInstall
   DetailPrint "Setting folder permissions for Next.js runtime configurations..."
   nsExec::ExecToLog 'icacls "$INSTDIR" /grant *S-1-5-32-545:(OI)(CI)F /T'
+  
+  # Auto-launch application after silent background update install
+  IfSilent 0 +2
+    Exec '"$INSTDIR\HRMS.exe"'
 !macroend
 
 !macro customUnInstall

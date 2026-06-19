@@ -1864,7 +1864,11 @@ export default function ChatPage() {
           id: emp.id || emp.employeeId,
           name: emp.id === user?.id ? `${empName} (You)` : empName,
           status: isOnline ? "Online" : "Offline",
-          lastMessage: summary?.lastMessage || "Click to start chatting",
+          lastMessage: summary?.lastMessage 
+            ? summary.lastMessage 
+            : (summary?.attachmentUrl || summary?.attachmentName)
+              ? "Sent a file"
+              : "Click to start chatting",
           time: summary?.timestamp ? dayjs(summary.timestamp).format("hh:mm A") : "",
           timestamp: summary?.timestamp || 0,
           avatar: emp.profilePhoto 
@@ -1926,6 +1930,18 @@ export default function ChatPage() {
 
     }
   }, [chats, selectedChat, chatChannels, chatGroups, handleSelectChat]);
+
+  // Disable outer layout scroll on mount of Chat page to prevent page overflow
+  useEffect(() => {
+    const siteLayout = document.querySelector(".site-layout");
+    if (siteLayout) {
+      const originalOverflow = (siteLayout as HTMLElement).style.overflow;
+      (siteLayout as HTMLElement).style.overflow = "hidden";
+      return () => {
+        (siteLayout as HTMLElement).style.overflow = originalOverflow;
+      };
+    }
+  }, []);
 
   // Listen for notification clicks when already on the chat page
   useEffect(() => {
@@ -2013,7 +2029,7 @@ export default function ChatPage() {
   }, [unreadCounts, chatChannels]);
 
   return (
-    <div className="flex h-[calc(100vh-175px)] bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+    <div className="flex h-[calc(100vh-120px)] bg-white border border-border rounded-xl overflow-hidden shadow-sm">
       {/* Messages Sidebar */}
       <div className={cn(
         "w-full md:w-[350px] border-r border-border flex flex-col bg-gray-50/30",
@@ -2870,8 +2886,10 @@ export default function ChatPage() {
                         ) : (
                           <div className="relative group/msg max-w-full w-fit">
                             <div className={cn(
-                              "whatsapp-bubble px-3 py-1.5 pb-2 text-[14.2px] leading-[19px] whitespace-pre-wrap break-words select-text w-fit",
-                              msg.isMe ? "whatsapp-bubble-sent" : "whatsapp-bubble-received"
+                              "whatsapp-bubble px-3 py-1.5 pb-2 text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text w-fit",
+                              msg.isMe 
+                                ? (isConsecutive ? "bg-[#d9fdd3] text-[#111b21] rounded-[7.5px]" : "whatsapp-bubble-sent")
+                                : (isConsecutive ? "bg-white text-[#111b21] rounded-[7.5px]" : "whatsapp-bubble-received")
                             )}>
                               {/* Group chat sender display name */}
                               {isGroup && !msg.isMe && !isConsecutive && (
