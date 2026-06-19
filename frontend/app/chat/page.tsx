@@ -2013,7 +2013,7 @@ export default function ChatPage() {
   }, [unreadCounts, chatChannels]);
 
   return (
-    <div className="flex h-[calc(100vh-120px)] bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+    <div className="flex h-[calc(100vh-175px)] bg-white border border-border rounded-xl overflow-hidden shadow-sm">
       {/* Messages Sidebar */}
       <div className={cn(
         "w-full md:w-[350px] border-r border-border flex flex-col bg-gray-50/30",
@@ -2805,6 +2805,7 @@ export default function ChatPage() {
                 const displayName = isGroup ? (sender?.name || msg.sender || "User") : selectedChat.name;
 
                 const showDateSeparator = index === 0 || !dayjs(msg.timestamp).isSame(dayjs(displayMessages[index - 1].timestamp), 'day');
+                const isConsecutive = index > 0 && String(displayMessages[index - 1].senderId) === String(msg.senderId) && !showDateSeparator;
                 const isToday = dayjs(msg.timestamp).isSame(dayjs(), 'day');
                 const isYesterday = dayjs(msg.timestamp).isSame(dayjs().subtract(1, 'day'), 'day');
                 const dateText = isToday ? "Today" : isYesterday ? "Yesterday" : dayjs(msg.timestamp).format("MMMM D, YYYY");
@@ -2838,12 +2839,16 @@ export default function ChatPage() {
                       )}
                     >
                       {!msg.isMe && (
-                        <Avatar className="w-8 h-8 border border-border shrink-0 mb-1" title={displayName}>
-                          {avatarSrc && <AvatarImage src={avatarSrc} />}
-                          <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
-                            {avatarFallback}
-                          </AvatarFallback>
-                        </Avatar>
+                        isConsecutive ? (
+                          <div className="w-8 h-8 shrink-0 mb-1" />
+                        ) : (
+                          <Avatar className="w-8 h-8 border border-border shrink-0 mb-1" title={displayName}>
+                            {avatarSrc && <AvatarImage src={avatarSrc} />}
+                            <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
+                              {avatarFallback}
+                            </AvatarFallback>
+                          </Avatar>
+                        )
                       )}
                       <div className={cn(
                         "flex flex-col max-w-[85%] sm:max-w-[70%]",
@@ -2869,7 +2874,7 @@ export default function ChatPage() {
                               msg.isMe ? "whatsapp-bubble-sent" : "whatsapp-bubble-received"
                             )}>
                               {/* Group chat sender display name */}
-                              {isGroup && !msg.isMe && (
+                              {isGroup && !msg.isMe && !isConsecutive && (
                                 <span 
                                   className="block text-[12.8px] font-bold mb-1 select-none" 
                                   style={{ color: getSenderColor(displayName) }}

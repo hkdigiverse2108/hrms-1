@@ -66,27 +66,57 @@ def get_now():
         elapsed = time.monotonic() - _mono_anchor
         return _real_time_anchor + timedelta(seconds=elapsed)
 
+_PLACEHOLDER_TIMES = {"", "--", "--:--", "-"}
+
+def _is_placeholder_time(time_str) -> bool:
+    if time_str is None:
+        return True
+    return str(time_str).strip() in _PLACEHOLDER_TIMES
+
+def _record_to_date(date_val) -> date:
+    if isinstance(date_val, datetime):
+        if date_val.tzinfo is not None:
+            return date_val.astimezone(IST).date()
+        return date_val.date()
+    if isinstance(date_val, date):
+        return date_val
+    date_str = str(date_val).split('T')[0].split(' ')[0]
+    return datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+
+def _resolve_punch_start_time(record: dict) -> Optional[str]:
+    candidates = [
+        record.get("lastPunchIn"),
+        record.get("checkIn"),
+    ]
+    punches = record.get("punches") or []
+    for punch in reversed(punches):
+        candidates.append(punch.get("punchIn"))
+    for candidate in candidates:
+        if candidate and not _is_placeholder_time(candidate):
+            return str(candidate).strip()
+    return None
+
 def parse_datetime(date_val, time_str):
-    if not time_str:
+    if _is_placeholder_time(time_str):
         return get_now()
     time_str = str(time_str).strip()
-    if time_str in {"-", "--", "--:--"}:
-        return get_now()
     if isinstance(date_val, (date, datetime)):
         date_str = date_val.strftime("%Y-%m-%d")
     else:
-        # Extract only the date part in case date_val is an ISO timestamp string or full datetime string
         date_str = str(date_val).split('T')[0].split(' ')[0]
-    date_formats = ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y")
-    time_formats = ("%H:%M:%S", "%H:%M", "%I:%M:%S %p", "%I:%M %p", "%I:%M:%S%p", "%I:%M%p")
-    for date_fmt in date_formats:
-        for time_fmt in time_formats:
-            try:
-                dt = datetime.strptime(f"{date_str} {time_str}", f"{date_fmt} {time_fmt}")
-                return IST.localize(dt)
-            except ValueError:
-                continue
-    raise ValueError(f"Cannot parse time: {time_str}")
+    combined_formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %I:%M:%S %p",
+        "%Y-%m-%d %I:%M %p",
+    ]
+    for fmt in combined_formats:
+        try:
+            dt = datetime.strptime(f"{date_str} {time_str}", fmt)
+            return IST.localize(dt)
+        except ValueError:
+            continue
+    return get_now()
 
 def fix_id(doc):
     from datetime import datetime, date
@@ -859,11 +889,17 @@ async def run_payroll_processing(db, month: str, year: int):
         att_start_dt_aware = att_start_dt_naive.replace(tzinfo=IST)
         att_end_dt_aware = (att_end_dt_naive - timedelta(seconds=1)).replace(tzinfo=IST)
         
+        emp_id_query = [{"employeeId": emp_id}]
+        if ObjectId.is_valid(emp_id):
+            emp_id_query.append({"employeeId": ObjectId(emp_id)})
+
         attendance_cursor = db.attendance.find({
-            "employeeId": emp_id,
-            "$or": [
-                {"date": {"$gte": att_start_dt_naive, "$lt": att_end_dt_naive}},
-                {"date": {"$gte": att_start_dt_aware, "$lte": att_end_dt_aware}}
+            "$and": [
+                {"$or": emp_id_query},
+                {"$or": [
+                    {"date": {"$gte": att_start_dt_naive, "$lt": att_end_dt_naive}},
+                    {"date": {"$gte": att_start_dt_aware, "$lte": att_end_dt_aware}}
+                ]}
             ]
         })
         attendance_records = await attendance_cursor.to_list(length=100)
@@ -1695,10 +1731,128 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
     return None
 
 
-async def get_attendance_status(db, employee_id: str):
-    # Find most recent active punch (checkOut missing)
+async def _apply_punch_out_to_record(db, record: dict, close_dt: datetime, auto_remark: Optional[str] = None):
+    """Close an open attendance record at close_dt. Works with raw MongoDB docs."""
+    start_time_str = _resolve_punch_start_time(record)
+    if not start_time_str:
+        now_time_str = close_dt.strftime("%H:%M:%S")
+        await db.attendance.update_one(
+            {"_id": record["_id"]},
+            {"$set": {
+                "checkOut": now_time_str,
+                "status": "Logged",
+                "workHours": "0h 0m",
+                "accumulatedWorkSeconds": 0,
+                "remarks": auto_remark or record.get("remarks") or "-",
+            }}
+        )
+        return await db.attendance.find_one({"_id": record["_id"]})
+
+    check_in_time = parse_datetime(record['date'], start_time_str)
+    if close_dt < check_in_time:
+        close_dt = check_in_time + timedelta(minutes=1)
+
+    breaks = record.get("breaks", [])
+    total_break_seconds = 0
+    updated_breaks = []
+
+    for b in breaks:
+        b_copy = dict(b)
+        b_start_str = b_copy.get("startTime")
+        if b_start_str and not _is_placeholder_time(b_start_str):
+            b_start = parse_datetime(record['date'], b_start_str)
+            if b_start >= check_in_time:
+                b_end_str = b_copy.get("endTime")
+                if b_end_str and not _is_placeholder_time(b_end_str):
+                    b_end = parse_datetime(record['date'], b_end_str)
+                    if b_end < b_start:
+                        b_end += timedelta(days=1)
+                    break_dur = (b_end - b_start).total_seconds()
+                else:
+                    b_end = close_dt
+                    break_dur = (b_end - b_start).total_seconds()
+                    b_copy["endTime"] = close_dt.strftime("%H:%M:%S")
+                    b_copy["duration"] = f"{int(break_dur // 60)}m"
+                total_break_seconds += break_dur
+        updated_breaks.append(b_copy)
+
+    raw_session_seconds = (close_dt - check_in_time).total_seconds()
+    session_work_seconds = max(0.0, raw_session_seconds - total_break_seconds)
+
+    accumulated_seconds = record.get("accumulatedWorkSeconds") or 0
+    total_seconds = accumulated_seconds + session_work_seconds
+
+    hours, remainder = divmod(int(total_seconds), 3600)
+    minutes, _ = divmod(remainder, 60)
+    work_hours = f"{hours}h {minutes}m"
+    now_time_str = close_dt.strftime("%H:%M:%S")
+
+    punches = record.get("punches", [])
+    update_data = {
+        "checkOut": now_time_str,
+        "workHours": work_hours,
+        "status": "Logged",
+        "accumulatedWorkSeconds": total_seconds,
+        "breaks": updated_breaks,
+    }
+
+    if punches:
+        punches_copy = [dict(p) for p in punches]
+        if punches_copy[-1].get("punchOut") in [None, ""]:
+            punches_copy[-1]["punchOut"] = now_time_str
+        update_data["punches"] = punches_copy
+    else:
+        update_data["punches"] = [{"punchIn": start_time_str, "punchOut": now_time_str}]
+
+    if auto_remark:
+        existing_remarks = record.get("remarks") or ""
+        if not existing_remarks or existing_remarks == "-":
+            update_data["remarks"] = auto_remark
+        elif auto_remark not in existing_remarks:
+            update_data["remarks"] = f"{existing_remarks}; {auto_remark}"
+
+    await db.attendance.update_one({"_id": record["_id"]}, {"$set": update_data})
+    return await db.attendance.find_one({"_id": record["_id"]})
+
+
+async def auto_close_stale_open_sessions(db, employee_id: str) -> int:
+    """Auto-close open attendance sessions from previous days (forgotten punch-out)."""
+    today_date = get_now().date()
+    query_or = [{"employeeId": employee_id}]
+    if ObjectId.is_valid(employee_id):
+        query_or.append({"employeeId": ObjectId(employee_id)})
+        
     cursor = db.attendance.find({
-        "employeeId": employee_id,
+        "$or": query_or,
+        "checkOut": None,
+    }).sort("date", -1)
+    records = await cursor.to_list(length=50)
+    closed = 0
+
+    for record in records:
+        rec_date = _record_to_date(record.get("date"))
+        if rec_date >= today_date:
+            continue
+        close_dt = IST.localize(datetime.combine(rec_date, datetime.strptime("23:59:59", "%H:%M:%S").time()))
+        await _apply_punch_out_to_record(
+            db,
+            record,
+            close_dt,
+            auto_remark="Auto-closed: previous day session was left open",
+        )
+        closed += 1
+
+    return closed
+
+
+async def get_attendance_status(db, employee_id: str):
+    await auto_close_stale_open_sessions(db, employee_id)
+    query_or = [{"employeeId": employee_id}]
+    if ObjectId.is_valid(employee_id):
+        query_or.append({"employeeId": ObjectId(employee_id)})
+        
+    cursor = db.attendance.find({
+        "$or": query_or,
         "checkOut": None
     }).sort("date", -1).limit(1)
     records = await cursor.to_list(length=1)
@@ -1709,6 +1863,8 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
     employee = await get_employee(db, employee_id)
     if not employee:
         return None
+
+    await auto_close_stale_open_sessions(db, employee_id)
     
     today = get_now()
     today_str = today.strftime("%Y-%m-%d")
@@ -1789,8 +1945,12 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
         print(f"Error checking leave for punch-in: {e_leave}")
 
     # Check for existing record for today to consolidate - supports naive and aware dates
+    query_or = [{"employeeId": employee_id}]
+    if ObjectId.is_valid(employee_id):
+        query_or.append({"employeeId": ObjectId(employee_id)})
+        
     existing_record = await db.attendance.find_one({
-        "employeeId": employee_id,
+        "$or": query_or,
         "date": {"$in": [today_dt_naive, today_dt_aware]}
     })
 
@@ -1908,83 +2068,20 @@ async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
     status = await get_attendance_status(db, employee_id)
     if not status:
         return None
-    
+
+    record = await db.attendance.find_one({"_id": ObjectId(status["id"])})
+    if not record:
+        return None
+
     if punch_out_time:
         if len(punch_out_time.split(':')) == 2:
             punch_out_time = f"{punch_out_time}:00"
-        now = parse_datetime(status['date'], punch_out_time)
+        close_dt = parse_datetime(record['date'], punch_out_time)
     else:
-        now = get_now()
-    # Use lastPunchIn if available to calculate session duration, otherwise fallback to checkIn
-    start_time_str = status.get("lastPunchIn") or status["checkIn"]
-    check_in_time = parse_datetime(status['date'], start_time_str)
-    if now < check_in_time:
-        now += timedelta(days=1)
-    
-    # Calculate break seconds that occurred during this session (since check_in_time)
-    breaks = status.get("breaks", [])
-    total_break_seconds = 0
-    updated_breaks = []
-    
-    for b in breaks:
-        b_copy = dict(b)
-        b_start_str = b_copy.get("startTime")
-        if b_start_str:
-            b_start = parse_datetime(status['date'], b_start_str)
-            if b_start >= check_in_time:
-                b_end_str = b_copy.get("endTime")
-                if b_end_str:
-                    b_end = parse_datetime(status['date'], b_end_str)
-                    if b_end < b_start:
-                        b_end += timedelta(days=1)
-                    break_dur = (b_end - b_start).total_seconds()
-                else:
-                    # User punched out while on active break: close the break at now
-                    b_end = now
-                    if b_end < b_start:
-                        b_end += timedelta(days=1)
-                    break_dur = (b_end - b_start).total_seconds()
-                    b_copy["endTime"] = now.strftime("%H:%M:%S")
-                    b_copy["duration"] = f"{int(break_dur // 60)}m"
-                total_break_seconds += break_dur
-        updated_breaks.append(b_copy)
-        
-    raw_session_seconds = (now - check_in_time).total_seconds()
-    session_work_seconds = max(0.0, raw_session_seconds - total_break_seconds)
-    
-    accumulated_seconds = status.get("accumulatedWorkSeconds") or 0
-    total_seconds = accumulated_seconds + session_work_seconds
-    
-    hours, remainder = divmod(int(total_seconds), 3600)
-    minutes, _ = divmod(remainder, 60)
-    work_hours = f"{hours}h {minutes}m"
-    
-    # Update the last punch log entry
-    punches = status.get("punches", [])
-    now_time_str = now.strftime("%H:%M:%S")
-    
-    update_data = {
-        "checkOut": now_time_str,
-        "workHours": work_hours,
-        "status": "Logged",
-        "accumulatedWorkSeconds": total_seconds,
-        "breaks": updated_breaks
-    }
+        close_dt = get_now()
 
-    if punches:
-        punches_copy = [dict(p) for p in punches]
-        punches_copy[-1]["punchOut"] = now_time_str
-        update_data["punches"] = punches_copy
-    else:
-        update_data["punches"] = [{"punchIn": start_time_str, "punchOut": now_time_str}]
-    
-    await db.attendance.update_one(
-        {"_id": ObjectId(status["id"])},
-        {"$set": update_data}
-    )
-    
-    updated_doc = await db.attendance.find_one({"_id": ObjectId(status["id"])})
-    return fix_id(updated_doc)
+    updated = await _apply_punch_out_to_record(db, record, close_dt)
+    return fix_id(updated)
 
 async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
     attendance_dict = attendance.dict()
@@ -2107,10 +2204,13 @@ async def break_in(db, employee_id: str):
     return fix_id(result)
 
 async def break_out(db, employee_id: str):
-    # Find record where status is 'On Break'
-    # Find most recent record where status is 'On Break'
+    await auto_close_stale_open_sessions(db, employee_id)
+    query_or = [{"employeeId": employee_id}]
+    if ObjectId.is_valid(employee_id):
+        query_or.append({"employeeId": ObjectId(employee_id)})
+        
     cursor = db.attendance.find({
-        "employeeId": employee_id,
+        "$or": query_or,
         "status": "On Break",
         "checkOut": None
     }).sort("date", -1).limit(1)
@@ -5047,11 +5147,14 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
             
             if recovery_type and start_time and end_time:
                 # Modern type-based approval logic
+                emp_id = doc['employee_id']
+                query_or = [{'employeeId': emp_id}, {'employee_id': emp_id}]
+                if ObjectId.is_valid(emp_id):
+                    query_or.append({'employeeId': ObjectId(emp_id)})
+                    query_or.append({'employee_id': ObjectId(emp_id)})
+                    
                 search_query = {
-                    '$or': [
-                        {'employeeId': doc['employee_id']},
-                        {'employee_id': doc['employee_id']}
-                    ],
+                    '$or': query_or,
                     'date': doc['date']
                 }
                 print(f"DEBUG: Searching attendance records for recovery: {doc['date']}")
@@ -5141,13 +5244,19 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                 reason = doc.get('reason', '')
                 
                 # Fuzzy search for attendance (find all records for the day)
+                emp_id = doc['employee_id']
+                query_or = [
+                    {'employeeId': {'$regex': f'^{re.escape(str(emp_id))}$', '$options': 'i'}},
+                    {'employee_id': {'$regex': f'^{re.escape(str(emp_id))}$', '$options': 'i'}},
+                    {'employeeName': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}},
+                    {'employee_name': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}}
+                ]
+                if ObjectId.is_valid(emp_id):
+                    query_or.append({'employeeId': ObjectId(emp_id)})
+                    query_or.append({'employee_id': ObjectId(emp_id)})
+                    
                 search_query = {
-                    '$or': [
-                        {'employeeId': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
-                        {'employee_id': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
-                        {'employeeName': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}},
-                        {'employee_name': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}}
-                    ],
+                    '$or': query_or,
                     'date': doc['date']
                 }
                 print(f"DEBUG: Searching all attendance records for date: {doc['date']}")
