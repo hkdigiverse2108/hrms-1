@@ -43,6 +43,7 @@ import {
   UserMinus,
   Filter,
   Check,
+  Info,
   Clock,
   Layout,
   ExternalLink,
@@ -74,6 +75,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Tabs,
@@ -257,6 +261,7 @@ export default function ChatPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const [isWsConnected, setIsWsConnected] = useState(false);
   const selectedChatRef = useRef<any>(null);
+  const [msgInfoData, setMsgInfoData] = useState<any>(null);
 
   const isSelectedChatOnline = selectedChat?.type === 'personal' && (onlineUsers.has(selectedChat.id) || onlineUsers.has(selectedChat.employeeId));
 
@@ -266,15 +271,35 @@ export default function ChatPage() {
       return <Clock className={cn("w-3 h-3", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
     }
     
-    const isSeenByOthers = msg.seenBy && msg.seenBy.filter((id: string) => id !== user?.id).length > 0;
+    const isGroupMsg = !!msg.groupId || msg.receiverId === "group" || msg.type === "group";
+    const uniqueSeenBy = Array.from(new Set(msg.seenBy || []));
+    const seenByOthersCount = uniqueSeenBy.filter((id: any) => String(id) !== String(user?.id)).length;
+    const isSeenByOthers = seenByOthersCount > 0;
+    
+    if (isGroupMsg) {
+      const isChannel = chatChannels.some(c => String(c.id) === String(msg.groupId) || String(c.id) === String(msg.receiverId));
+      const isGroup = chatGroups.some(g => String(g.id) === String(msg.groupId) || String(g.id) === String(msg.receiverId));
+      
+      let totalMembers = 0;
+      if (isChannel) {
+        totalMembers = employees.length;
+      } else if (isGroup) {
+        const group = chatGroups.find(g => String(g.id) === String(msg.groupId) || String(g.id) === String(msg.receiverId));
+        const uniqueMembers = Array.from(new Set(group?.members || []));
+        totalMembers = uniqueMembers.length;
+      }
+
+      const requiredSeenCount = totalMembers > 1 ? totalMembers - 1 : 0; // Exclude sender
+
+      if (requiredSeenCount > 0 && seenByOthersCount >= requiredSeenCount) {
+        return <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />;
+      } else {
+        return <CheckCheck className={cn("w-3.5 h-3.5", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
+      }
+    }
     
     if (isSeenByOthers) {
       return <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />;
-    }
-    
-    const isGroupMsg = !!msg.groupId || msg.receiverId === "group" || msg.type === "group";
-    if (isGroupMsg) {
-      return <CheckCheck className={cn("w-3.5 h-3.5", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
     }
     
     const isRecipientOnline = onlineUsers.has(msg.receiverId);
@@ -3075,6 +3100,14 @@ export default function ChatPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align={msg.isMe ? "end" : "start"} className="w-56">
+                                  {msg.isMe && (!!msg.groupId || msg.receiverId === "group" || msg.type === "group") && (
+                                    <DropdownMenuItem 
+                                      className="gap-2"
+                                      onClick={() => setMsgInfoData(msg)}
+                                    >
+                                      <Info className="w-4 h-4" /> Message Info
+                                    </DropdownMenuItem>
+                                  )}
                                   <DropdownMenuItem 
                                     className="gap-2"
                                     onClick={() => setReplyingTo(msg)}
@@ -3737,7 +3770,7 @@ export default function ChatPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 max-h-[400px] overflow-y-auto space-y-3">
-            {selectedChat?.members?.map((memberId: string) => {
+            {Array.from(new Set(selectedChat?.members || [])).map((memberId: any) => {
               const member = employees.find((e: any) => e.id === memberId);
               if (!member) return null;
               return (
@@ -4010,6 +4043,60 @@ export default function ChatPage() {
               {previewImage.name}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Message Info Modal */}
+      <Dialog open={!!msgInfoData} onOpenChange={(open) => {
+        if (!open) setMsgInfoData(null);
+      }}>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-brand-teal">Message Info</DialogTitle>
+            <DialogDescription>
+              See who has read your message.
+            </DialogDescription>
+          </DialogHeader>
+          {(() => {
+            if (!msgInfoData) return null;
+
+            const latestMsg = currentMessages.find((m: any) => String(m.id) === String(msgInfoData.id)) || msgInfoData;
+            const seenBy = latestMsg.seenBy || [];
+            const readByUsers = seenBy.filter((id: string) => String(id) !== String(user?.id));
+
+            return (
+              <div className="py-2">
+                {/* Read by section */}
+                <h4 className="text-[12px] font-bold mb-2 text-[#53bdeb] uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCheck className="w-4 h-4" /> Read by
+                </h4>
+                <div className="max-h-[300px] overflow-y-auto space-y-0.5 pr-1">
+                  {readByUsers.length > 0 ? (
+                    readByUsers.map((id: string) => {
+                      const emp = employees.find((e: any) => String(e.id) === String(id));
+                      if (!emp) return null;
+                      return (
+                        <div key={id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg transition-colors">
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage src={getAvatarUrl(emp.avatar)} />
+                            <AvatarFallback className="bg-brand-light text-brand-teal text-[10px]">
+                              {emp.name ? emp.name[0]?.toUpperCase() : "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-800 truncate">{emp.name}</p>
+                          </div>
+                          <CheckCheck className="w-4 h-4 text-[#53bdeb]" />
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-slate-500 py-2 italic px-2">No one has read this message yet.</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
