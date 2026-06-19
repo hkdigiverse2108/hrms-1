@@ -763,6 +763,18 @@ export default function CreativeClientsPage() {
   };
 
   const filteredClients = clients.filter(c => {
+    const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
+    if (isEmployeeOrIntern && user?.id) {
+      const p = clientProjects[c.id] || {};
+      const isAssigned = (p.assignedScriptwriterId || c.assignedScriptwriterId) === user.id || 
+                         (p.assignedReelEditorId || c.assignedReelEditorId) === user.id ||
+                         (p.assignedPostDesignerId || c.assignedPostDesignerId) === user.id ||
+                         (p.assignedShooterId || c.assignedShooterId) === user.id ||
+                         (p.assignedApproverId || c.assignedApproverId) === user.id ||
+                         (p.assignedPosterId || c.assignedPosterId) === user.id;
+      if (!isAssigned) return false;
+    }
+
     const matchesSearch = c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.email.toLowerCase().includes(searchTerm.toLowerCase());

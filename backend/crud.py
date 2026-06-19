@@ -2752,7 +2752,15 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                 task_list = await task_cursor.to_list(length=1000)
                 project_ids = list(set([t.get("projectId") for t in task_list if t.get("projectId")]))
                 
-                or_conditions = [{"teamLeaderId": userId}]
+                or_conditions = [
+                    {"teamLeaderId": userId},
+                    {"assignedScriptwriterId": userId},
+                    {"assignedReelEditorId": userId},
+                    {"assignedPostDesignerId": userId},
+                    {"assignedShooterId": userId},
+                    {"assignedApproverId": userId},
+                    {"assignedPosterId": userId}
+                ]
                 if project_ids:
                     project_ids_as_obj = []
                     for pid in project_ids:

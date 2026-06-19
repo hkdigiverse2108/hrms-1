@@ -14,7 +14,7 @@ export function PendingWorkEmbedded() {
   
   const [entries, setEntries] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
-  const [clientProjects, setClientProjects] = useState<Record<string, string>>({});
+  const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -47,10 +47,10 @@ export function PendingWorkEmbedded() {
       
       if (pRes.ok) {
         const projects = await pRes.json();
-        const projectMap: Record<string, string> = {};
+        const projectMap: Record<string, any> = {};
         projects.forEach((p: any) => {
           if (p.clientId && p.department === 'Creative') {
-            projectMap[p.clientId] = p.title;
+            projectMap[p.clientId] = p;
           }
         });
         setClientProjects(projectMap);
@@ -64,12 +64,17 @@ export function PendingWorkEmbedded() {
 
   const allPendingTasks = useMemo(() => {
     const tasks: any[] = [];
+    const storedUser = localStorage.getItem('user');
+    const user = storedUser ? JSON.parse(storedUser) : null;
+    const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
 
     entries.forEach(entry => {
       const client = clients.find(c => c.id === entry.clientId);
+      const project = clientProjects[entry.clientId];
+      if (!project) return; // Only show if active creative project
+      
       const clientName = client ? (client.companyName || client.clientName || 'Unknown Client') : 'Unknown Client';
-      const projectName = clientProjects[entry.clientId];
-      if (!projectName) return; // Only show if active creative project
+      const projectName = project.title;
       const displayName = `${projectName} (${clientName})`;
 
       const enrich = (stage: string, deadline: string, type: string) => ({
@@ -82,11 +87,25 @@ export function PendingWorkEmbedded() {
         taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`)
       });
 
-      if (entry.scriptDate && !entry.scriptLink) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
-      if (entry.shootDate && !entry.shootLink) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
-      if (entry.editingStart && !entry.finalReelLink) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
-      if (entry.approval && entry.isApproved !== 'Yes') tasks.push(enrich('Approval', entry.approval, 'approvals'));
-      if (entry.postingDate && entry.status !== 'Posted') tasks.push(enrich('Posting', entry.postingDate, 'posts'));
+      const canSeeTask = (stage: string) => {
+        if (!isEmployeeOrIntern) return true;
+        const uId = user?.id;
+        if (!uId) return false;
+        
+        if (stage === 'Script') return (project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
+        if (stage === 'Shoot') return (project.assignedShooterId || client?.assignedShooterId) === uId;
+        if (stage === 'Editing') return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId || (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+        if (stage === 'Approval') return (project.assignedApproverId || client?.assignedApproverId) === uId;
+        if (stage === 'Posting') return (project.assignedPosterId || client?.assignedPosterId) === uId;
+        
+        return true;
+      };
+
+      if (entry.scriptDate && !entry.scriptLink && canSeeTask('Script')) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
+      if (entry.shootDate && !entry.shootLink && canSeeTask('Shoot')) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
+      if (entry.editingStart && !entry.finalReelLink && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
+      if (entry.approval && entry.isApproved !== 'Yes' && canSeeTask('Approval')) tasks.push(enrich('Approval', entry.approval, 'approvals'));
+      if (entry.postingDate && entry.status !== 'Posted' && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
     // Apply Project Filter
@@ -154,11 +173,11 @@ export function PendingWorkEmbedded() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Projects</SelectItem>
-              {Object.entries(clientProjects).map(([cId, pTitle]) => {
+              {Object.entries(clientProjects).map(([cId, project]) => {
                 const client = clients.find(c => c.id === cId);
                 const cName = client ? (client.companyName || client.clientName) : '';
                 return (
-                  <SelectItem key={cId} value={cId}>{pTitle} ({cName})</SelectItem>
+                  <SelectItem key={cId} value={cId}>{project.title} ({cName})</SelectItem>
                 );
               })}
             </SelectContent>
