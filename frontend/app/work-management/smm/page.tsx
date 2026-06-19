@@ -161,6 +161,7 @@ export default function CreativeClientsPage() {
   const router = useRouter();
   const { confirm } = useConfirm();
   const { user } = useUser();
+  const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
   const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -763,7 +764,6 @@ export default function CreativeClientsPage() {
   };
 
   const filteredClients = clients.filter(c => {
-    const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
     if (isEmployeeOrIntern && user?.id) {
       const p = clientProjects[c.id] || {};
       const isAssigned = (p.assignedScriptwriterId || c.assignedScriptwriterId) === user.id || 
@@ -1099,8 +1099,8 @@ export default function CreativeClientsPage() {
                           <Phone className="w-3 h-3" /> 
                         </div>
                         <span 
-                          className="cursor-pointer hover:text-brand-teal transition-colors"
-                          onClick={() => setInlineEditing({ id: client.id, field: 'phone' })}
+                          className={`truncate max-w-[180px] ${!isEmployeeOrIntern ? 'cursor-pointer hover:text-brand-teal transition-colors' : ''}`}
+                          onClick={() => !isEmployeeOrIntern && setInlineEditing({ id: client.id, field: 'phone' })}
                         >
                           {client.phone || "N/A"}
                         </span>
@@ -1112,8 +1112,8 @@ export default function CreativeClientsPage() {
                           <Mail className="w-3 h-3" /> 
                         </div>
                         <span 
-                          className="cursor-pointer hover:text-brand-teal transition-colors truncate max-w-[180px]"
-                          onClick={() => setInlineEditing({ id: client.id, field: 'email' })}
+                          className={`truncate max-w-[180px] ${!isEmployeeOrIntern ? 'cursor-pointer hover:text-brand-teal transition-colors' : ''}`}
+                          onClick={() => !isEmployeeOrIntern && setInlineEditing({ id: client.id, field: 'email' })}
                         >
                           {client.email || "N/A"}
                         </span>
@@ -1122,8 +1122,8 @@ export default function CreativeClientsPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div 
-                          className="cursor-pointer hover:text-brand-teal transition-colors line-clamp-2 max-w-[220px] font-medium text-slate-700"
-                          onClick={() => setInlineEditing({ id: client.id, field: 'services' })}
+                          className={`line-clamp-2 max-w-[220px] font-medium text-slate-700 ${!isEmployeeOrIntern ? 'cursor-pointer hover:text-brand-teal transition-colors' : ''}`}
+                          onClick={() => !isEmployeeOrIntern && setInlineEditing({ id: client.id, field: 'services' })}
                         >
                           {clientProjects[client.id]?.services || client.services || "N/A"}
                         </div>
@@ -1197,7 +1197,8 @@ export default function CreativeClientsPage() {
                           <WhatsAppIcon className="w-4.5 h-4.5" />
                         </Button>
 
-                        <DropdownMenu>
+                        {!isEmployeeOrIntern && (
+                          <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button 
                               variant="ghost" 
@@ -1299,7 +1300,8 @@ export default function CreativeClientsPage() {
                               <Trash2 className="w-4 h-4 mr-2" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
-                        </DropdownMenu>
+                          </DropdownMenu>
+                        )}
                       </div>
                     </td>
                   </tr>
