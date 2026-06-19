@@ -419,18 +419,33 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     const user = storedUser ? JSON.parse(storedUser) : null;
     const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
 
+    const payload = { ...editForm, updatedBy: userName };
+    if (payload.postingDate && typeof payload.postingDate === "string") {
+      const parts = payload.postingDate.split("-");
+      if (parts.length >= 2) {
+        payload.monthYear = `${parts[0]}-${parts[1]}`;
+      }
+    }
+
     try {
       const res = await fetch(`${API_URL}/content-calendar/${editingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...editForm, updatedBy: userName }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const updated = await res.json();
-        setEntries(entries.map(e => e.id === editingId ? updated : e));
+        
+        if (updated.monthYear && updated.monthYear !== monthYear) {
+          setEntries(entries.filter(e => e.id !== editingId));
+          toast.success(`Row moved to ${updated.monthYear}`);
+        } else {
+          setEntries(entries.map(e => e.id === editingId ? updated : e));
+          toast.success("Row updated");
+        }
+        
         setEditingId(null);
         setIsNewRow(false);
-        toast.success("Row updated");
       } else {
         toast.error("Failed to update row");
       }

@@ -2010,6 +2010,7 @@ class ContentCalendarEntryCreate(ContentCalendarEntryBase):
     pass
 
 class ContentCalendarEntryUpdate(BaseModel):
+    monthYear: Optional[str] = None
     postingDate: Optional[str] = None
     postingDay: Optional[str] = None
     postReel: Optional[str] = None
