@@ -22,7 +22,7 @@
 
   run_uninstaller:
     DetailPrint "Silent uninstall of previous version: $0"
-    ExecWait '$0 /S'
+    ExecWait '$0 /S _?=$INSTDIR'
   done:
 !macroend
 

@@ -61,7 +61,10 @@ import {
   BarChart2,
   Play,
   Pause,
-  Square
+  Square,
+  Crop,
+  Type,
+  PenTool
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -260,8 +263,22 @@ export default function ChatPage() {
   const [laterTab, setLaterTab] = useState<"In progress" | "Archived" | "Completed">("In progress");
   const [showDeletedNotification, setShowDeletedNotification] = useState(true); // Placeholder for demo, normally would be based on actual deletion events
   const [showNewChat, setShowNewChat] = useState(false);
+  const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
   const [previewImageMsgId, setPreviewImageMsgId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null);
+  const [pendingFileUrl, setPendingFileUrl] = useState<string>("");
+
+  useEffect(() => {
+    if (!pendingFile) {
+      setPendingFileUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(pendingFile);
+    setPendingFileUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [pendingFile]);
 
   const imageMessages = useMemo(() => {
     return currentMessages.filter(msg => msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName));
@@ -465,7 +482,14 @@ export default function ChatPage() {
       try { setChatNotificationPrefs(JSON.parse(savedPrefs)); } catch (e) { console.error(e); }
     }
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
+      try {
+        const p = Notification.requestPermission();
+        if (p && typeof p.catch === "function") {
+          p.catch((err) => console.warn("Notification request permission rejected:", err));
+        }
+      } catch (err) {
+        console.warn("Notification permission request failed:", err);
+      }
     }
     const savedDnd = localStorage.getItem("globalDndEnabled");
     if (savedDnd) setGlobalDndEnabled(savedDnd === "true");
@@ -3284,40 +3308,6 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {pendingFile && (
-                <div className="max-w-4xl mx-auto mb-2 flex items-center justify-between bg-[#f0f2f5] p-2.5 rounded-lg border-l-4 border-l-[#00a884] shadow-xs animate-in slide-in-from-bottom-2">
-                  <div className="flex items-center gap-3 min-w-0">
-                    {pendingFile.type.startsWith("image/") ? (
-                      <div className="w-10 h-10 rounded-md overflow-hidden bg-black/5 shrink-0">
-                        <img 
-                          src={URL.createObjectURL(pendingFile)} 
-                          alt="preview" 
-                          className="w-full h-full object-cover" 
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-10 h-10 rounded-md bg-brand-teal/10 flex items-center justify-center shrink-0">
-                        <FileIcon className="w-5 h-5 text-brand-teal" />
-                      </div>
-                    )}
-                    <div className="min-w-0 text-left">
-                      <p className="text-[12px] font-bold text-[#00a884] uppercase">
-                        {pendingFile.type.startsWith("image/") ? "Photo" : "Document"}
-                      </p>
-                      <p className="text-xs text-slate-500 truncate">{pendingFile.name}</p>
-                    </div>
-                  </div>
-                  <Button 
-                    type="button"
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-6 w-6 rounded-full hover:bg-slate-200 text-slate-500" 
-                    onClick={() => setPendingFile(null)}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              )}
 
               <form 
                 onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
@@ -4408,6 +4398,120 @@ export default function ChatPage() {
           </button>
         </div>
       )}
+
+      {/* File Send Preview Modal (WhatsApp style) */}
+      <Dialog open={!!pendingFile} onOpenChange={(open) => !open && setPendingFile(null)}>
+        <DialogContent className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#18191a] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden">
+          <DialogTitle className="sr-only">Send File Preview</DialogTitle>
+          
+          {/* Top Bar */}
+          <div className="h-14 px-6 bg-[#18191a] flex items-center justify-between text-white shrink-0 z-50">
+            <div className="flex items-center gap-4">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                onClick={() => setPendingFile(null)}
+              >
+                <X className="w-6 h-6" />
+              </Button>
+            </div>
+            
+            {/* WhatsApp Editing Tools */}
+            <div className="flex items-center gap-1.5 text-gray-400">
+              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
+                <Crop className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
+                <Smile className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
+                <Type className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
+                <PenTool className="w-5 h-5" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Center File Display */}
+          <div className="flex-1 relative w-full flex items-center justify-center p-4">
+            {pendingFile && (
+              pendingFile.type.startsWith("image/") ? (
+                <img 
+                  src={pendingFileUrl} 
+                  alt={pendingFile.name}
+                  className="max-w-full max-h-[60vh] object-contain select-none shadow-2xl rounded-sm animate-in zoom-in-95 duration-200"
+                />
+              ) : (
+                <div className="bg-[#202c33] p-8 rounded-2xl flex flex-col items-center gap-4 border border-[#2f3b43] max-w-sm w-full text-white animate-in zoom-in-95 duration-200">
+                  <div className="w-20 h-20 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal">
+                    <FileIcon className="w-10 h-10" />
+                  </div>
+                  <div className="text-center min-w-0 w-full">
+                    <p className="font-bold truncate text-sm">{pendingFile.name}</p>
+                    <p className="text-xs text-gray-400 mt-1">{(pendingFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Bottom Bar containing Input and Thumbnails */}
+          <div className="bg-[#18191a] p-4 shrink-0 flex flex-col items-center gap-4 border-t border-white/5">
+            {/* Caption Input Box */}
+            <div className="max-w-3xl w-full flex items-center gap-3 bg-[#2a3942] px-4 py-2.5 rounded-lg border border-transparent focus-within:border-[#00a884] shadow-md">
+              <Smile className="w-6 h-6 text-gray-400 cursor-pointer hover:text-white shrink-0" />
+              <input 
+                type="text" 
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="Type a message"
+                className="flex-1 bg-transparent border-none text-white text-[15px] placeholder:text-gray-400 outline-none focus:outline-none"
+              />
+            </div>
+
+            {/* Thumbnails strip and Send button */}
+            <div className="max-w-3xl w-full flex items-center justify-between gap-4 mt-2">
+              <div className="flex items-center gap-2 overflow-x-auto py-1">
+                {pendingFile && (
+                  <div className="w-14 h-14 rounded-md overflow-hidden border-2 border-brand-teal scale-105 relative shrink-0">
+                    {pendingFile.type.startsWith("image/") ? (
+                      <img src={pendingFileUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-[#202c33] flex items-center justify-center text-brand-teal">
+                        <FileIcon className="w-6 h-6" />
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button 
+                  type="button" 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-14 h-14 rounded-md border-2 border-dashed border-gray-600 hover:border-gray-400 flex items-center justify-center text-gray-400 hover:text-white transition shrink-0"
+                >
+                  <Plus className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Teal/Green Send Button */}
+              <button 
+                type="button"
+                onClick={() => handleSendMessage()}
+                className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-14 h-14 shadow-lg flex items-center justify-center transition-all shrink-0"
+              >
+                <Send className="w-6 h-6 fill-current ml-0.5" />
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
