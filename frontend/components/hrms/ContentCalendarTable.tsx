@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Badge } from "@/components/ui/badge";
 import { useUserContext } from "@/context/UserContext";
 import dayjs from "dayjs";
 
@@ -61,6 +62,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false);
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<any[]>([]);
+  const [isCommonLogs, setIsCommonLogs] = useState(false);
 
   const [selectedDates, setSelectedDates] = useState<Date[] | undefined>([]);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -71,6 +73,23 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
 
   const handleOpenLogs = (entry: any) => {
     setCurrentLogs(entry.logs || []);
+    setIsCommonLogs(false);
+    setLogsDialogOpen(true);
+  };
+
+  const handleOpenCommonLogs = () => {
+    const allLogs = entries.flatMap(entry => {
+      if (!entry.logs || !Array.isArray(entry.logs)) return [];
+      return entry.logs.map((log: any) => ({
+        ...log,
+        rowConcept: entry.concept || entry.topic || entry.postingDate || "Unknown Row"
+      }));
+    });
+    
+    allLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    setCurrentLogs(allLogs);
+    setIsCommonLogs(true);
     setLogsDialogOpen(true);
   };
   const tableHeaders = [
@@ -813,6 +832,10 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
             </PopoverContent>
           </Popover>
           </div>
+          <Button onClick={handleOpenCommonLogs} size="sm" variant="outline" className="text-slate-700">
+            <History className="w-4 h-4 mr-1" />
+            Common Logs
+          </Button>
           <Button onClick={() => { setSettingsForm(settings); setIsSettingsOpen(true); }} size="icon" variant="outline" title="Settings">
             <Settings2 className="w-4 h-4 text-slate-600" />
           </Button>
@@ -972,9 +995,9 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
               <History className="h-5 w-5" />
             </div>
             <div>
-              <DialogTitle className="text-[22px] font-bold text-slate-900">Row Activity History</DialogTitle>
+              <DialogTitle className="text-[22px] font-bold text-slate-900">{isCommonLogs ? "Project Activity Logs" : "Row Activity History"}</DialogTitle>
               <DialogDescription className="text-xs text-slate-500 mt-1 italic">
-                Content Calendar
+                {isCommonLogs ? "Combined logs for this content calendar" : "Content Calendar Row"}
               </DialogDescription>
             </div>
           </div>
@@ -1008,6 +1031,11 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                             <div className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border ${actionColor} tracking-wider`}>
                               {actionText}
                             </div>
+                            {isCommonLogs && log.rowConcept && (
+                              <Badge className="ml-1 bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 shadow-none font-medium px-1.5 py-0">
+                                {log.rowConcept}
+                              </Badge>
+                            )}
                           </div>
                           <span className="text-[10px] text-slate-400 font-medium">
                             {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
