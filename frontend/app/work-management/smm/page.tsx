@@ -922,14 +922,7 @@ export default function CreativeClientsPage() {
             { value: "reviews", label: "Client Reviews" },
             { value: "payment-due", label: "Payment Due" },
             { value: "followup-due", label: "Follow-up Due" },
-            { value: "on-hold", label: "On Hold Projects" },
-            { value: "festival-post", label: "Festival Post" },
-            { value: "whatsapp-submitted", label: "WA Submitted" },
-            { value: "whatsapp-pending", label: "WA Pending" },
-            { value: "greetings-sent", label: "Greetings Sent" },
-            { value: "greetings-pending", label: "Greetings Pending" },
-            { value: "meeting-done", label: "Meeting Done" },
-            { value: "meeting-not-done", label: "Meeting Not Done" },
+            { value: "on-hold", label: "On Hold" },
           ].map(filter => (
             <button
               key={filter.value}
@@ -943,6 +936,71 @@ export default function CreativeClientsPage() {
               {filter.label}
             </button>
           ))}
+
+          <div className="w-px h-6 bg-slate-200 mx-1"></div>
+
+          <button
+            onClick={() => setMasterFilter("festival-post")}
+            className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+              masterFilter === "festival-post" 
+                ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
+            }`}
+          >
+            Festival Post
+          </button>
+
+          <Select 
+            value={
+              ["whatsapp-submitted", "whatsapp-pending", "greetings-sent", "greetings-pending"].includes(masterFilter) 
+                ? masterFilter 
+                : ""
+            } 
+            onValueChange={(val) => {
+              if (val) setMasterFilter(val);
+            }}
+          >
+            <SelectTrigger 
+              className={`w-[140px] h-9 border-none font-bold rounded-lg ${
+                ["whatsapp-submitted", "whatsapp-pending", "greetings-sent", "greetings-pending"].includes(masterFilter)
+                  ? "bg-white text-brand-teal shadow-sm" 
+                  : "bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
+              }`}
+            >
+              <SelectValue placeholder="WhatsApp" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="whatsapp-submitted">Group Created</SelectItem>
+              <SelectItem value="whatsapp-pending">Group Pending</SelectItem>
+              <SelectItem value="greetings-sent">Greetings Sent</SelectItem>
+              <SelectItem value="greetings-pending">Greetings Pending</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select 
+            value={
+              ["meeting-done", "meeting-not-done"].includes(masterFilter) 
+                ? masterFilter 
+                : ""
+            } 
+            onValueChange={(val) => {
+              if (val) setMasterFilter(val);
+            }}
+          >
+            <SelectTrigger 
+              className={`w-[130px] h-9 border-none font-bold rounded-lg ${
+                ["meeting-done", "meeting-not-done"].includes(masterFilter)
+                  ? "bg-white text-brand-teal shadow-sm" 
+                  : "bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
+              }`}
+            >
+              <SelectValue placeholder="Meetings" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="meeting-done">Meeting Done</SelectItem>
+              <SelectItem value="meeting-not-done">Meeting Pending</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
