@@ -6155,7 +6155,14 @@ async def get_content_calendar_entries(db, client_id: str, month_year: str = Non
     try:
         query = {"clientId": client_id}
         if month_year:
-            query["monthYear"] = month_year
+            query["$or"] = [
+                {"monthYear": month_year},
+                {"postingDate": {"$regex": f"^{month_year}"}},
+                {"scriptDate": {"$regex": f"^{month_year}"}},
+                {"shootDate": {"$regex": f"^{month_year}"}},
+                {"editingStart": {"$regex": f"^{month_year}"}},
+                {"actualPostingDate": {"$regex": f"^{month_year}"}}
+            ]
         cursor = db.content_calendar_entries.find(query)
         entries = await cursor.to_list(length=1000)
         return [fix_id(e) for e in entries]

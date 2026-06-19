@@ -434,18 +434,10 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        const updated = await res.json();
-        
-        if (updated.monthYear && updated.monthYear !== monthYear) {
-          setEntries(entries.filter(e => e.id !== editingId));
-          toast.success(`Row moved to ${updated.monthYear}`);
-        } else {
-          setEntries(entries.map(e => e.id === editingId ? updated : e));
-          toast.success("Row updated");
-        }
-        
+        toast.success("Row updated");
         setEditingId(null);
         setIsNewRow(false);
+        fetchEntries();
       } else {
         toast.error("Failed to update row");
       }
