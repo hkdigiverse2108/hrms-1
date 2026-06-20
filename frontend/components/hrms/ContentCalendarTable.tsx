@@ -1084,7 +1084,18 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
             <thead>
               <tr className="bg-slate-50">
                 {tableHeaders.map((h, i) => (
-                  <th key={i} className="px-3 py-2 font-semibold text-slate-600 text-xs uppercase tracking-wider border border-slate-200">
+                  <th 
+                    key={i} 
+                    className={`px-3 py-2 font-semibold text-slate-600 text-xs uppercase tracking-wider border border-slate-200 ${
+                      i <= 2 ? "sticky z-20 bg-slate-50" : ""
+                    }`}
+                    style={{
+                      left: i === 0 ? 0 : i === 1 ? '140px' : i === 2 ? '260px' : 'auto',
+                      minWidth: i === 0 ? '140px' : i === 1 ? '120px' : i === 2 ? '100px' : 'auto',
+                      maxWidth: i === 0 ? '140px' : i === 1 ? '120px' : i === 2 ? '100px' : 'auto',
+                      boxShadow: i === 2 ? 'inset -1px 0 0 0 #e2e8f0, 2px 0 4px -2px rgba(0,0,0,0.1)' : (i < 2 ? 'inset -1px 0 0 0 #e2e8f0' : undefined)
+                    }}
+                  >
                     {h}
                   </th>
                 ))}
@@ -1117,8 +1128,20 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                   
                   return (
                     <tr key={entry.id} id={`task-${entry.id}`} className={`transition-all duration-1000 ${isDue ? "bg-red-50 border-red-200" : "odd:bg-white even:bg-slate-50"}`}>
-                      {fieldKeys.map((key) => (
-                        <td key={key} className="px-2 py-1 border border-slate-200 max-w-[200px]">
+                      {fieldKeys.map((key, index) => (
+                        <td 
+                          key={key} 
+                          className={`px-2 py-1 border border-slate-200 max-w-[200px] ${
+                            index <= 2 ? "sticky z-10" : ""
+                          }`}
+                          style={{
+                            left: index === 0 ? 0 : index === 1 ? '140px' : index === 2 ? '260px' : 'auto',
+                            minWidth: index === 0 ? '140px' : index === 1 ? '120px' : index === 2 ? '100px' : 'auto',
+                            maxWidth: index === 0 ? '140px' : index === 1 ? '120px' : index === 2 ? '100px' : 'auto',
+                            backgroundColor: index <= 2 ? 'inherit' : undefined,
+                            boxShadow: index === 2 ? 'inset -1px 0 0 0 #e2e8f0, 2px 0 4px -2px rgba(0,0,0,0.1)' : (index < 2 ? 'inset -1px 0 0 0 #e2e8f0' : undefined)
+                          }}
+                        >
                           {isEditing ? (
                             key === "postReel" ? (
                               <Select 
