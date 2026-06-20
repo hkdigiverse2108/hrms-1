@@ -446,6 +446,14 @@ export default function AttendancePage() {
       return;
     }
     try {
+      const startObj = dayjs(`2000-01-01 ${recoveryForm.recordedBreakIn}`);
+      const endObj = dayjs(`2000-01-01 ${recoveryForm.actualBreakOut}`);
+      let diffMins = 0;
+      if (startObj.isValid() && endObj.isValid()) {
+        diffMins = endObj.diff(startObj, 'minute');
+        if (diffMins < 0) diffMins = 0;
+      }
+
       const res = await fetch(`${API_URL}/time-recovery`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -453,8 +461,11 @@ export default function AttendancePage() {
           employee_id: user?.id || user?.employeeId,
           employee_name: user?.name || "Unknown",
           date: recoveryForm.date,
-          late_minutes: 0, // Not used in this version
-          recovery_minutes: 0, // Not used in this version
+          late_minutes: 0,
+          recovery_minutes: diffMins,
+          recovery_type: "break",
+          start_time: recoveryForm.recordedBreakIn,
+          end_time: recoveryForm.actualBreakOut,
           reason: `Break-In: ${recoveryForm.recordedBreakIn}, Actual Break-Out: ${recoveryForm.actualBreakOut}. ${recoveryForm.reason}`,
           status: "pending"
         })

@@ -550,7 +550,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           employee_name: user.name || "Employee",
           date: dayjs().format("YYYY-MM-DD"),
           late_minutes: 0,
-          recovery_minutes: 0,
+          recovery_minutes: endObj.diff(startObj, 'minute'),
           recovery_type: recoveryForm.type,
           start_time: `${startStr}:00`,
           end_time: `${endStr}:00`,

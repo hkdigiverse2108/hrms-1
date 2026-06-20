@@ -4989,10 +4989,12 @@ async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
                     continue
                 
                 # Create the notification document
+                rec_date = doc.get('date', '')
+                date_str = str(rec_date).split(' ')[0] if rec_date else ''
                 notification = {
                     "employee_id": staff_id,
                     "title": "New Time Recovery Request",
-                    "message": f"{doc.get('employee_name', 'An employee')} has submitted a time recovery request for {doc.get('date')}.",
+                    "message": f"{doc.get('employee_name', 'An employee')} has submitted a time recovery request for {date_str}.",
                     "type": "attendance",
                     "reference_id": str(doc["_id"]),
                     "is_read": False,
@@ -5445,10 +5447,12 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
     if doc:
         try:
             status_title = "Approved" if status == "approved" else "Rejected"
+            rec_date = doc.get('date', '')
+            date_str = str(rec_date).split(' ')[0] if rec_date else ''
             emp_notification = {
                 "employee_id": doc["employee_id"],
                 "title": f"Time Recovery {status_title}",
-                "message": f"Your time recovery request for {doc['date']} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
+                "message": f"Your time recovery request for {date_str} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
                 "type": "attendance",
                 "reference_id": str(doc["_id"]),
                 "is_read": False,
