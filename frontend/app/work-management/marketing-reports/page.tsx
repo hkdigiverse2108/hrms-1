@@ -21,6 +21,7 @@ import {
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 import { 
   Table, 
   TableBody, 
@@ -470,6 +471,9 @@ export default function MarketingReportsPage() {
             Marketing Reports
           </h1>
           <p className="text-slate-500 text-sm mt-1">Track daily performance and monthly ROI metrics</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <OtherWorkDialog />
         </div>
       </div>
 
