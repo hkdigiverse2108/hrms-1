@@ -16,6 +16,7 @@ interface ChatContextType {
   lastEvent: ChatEvent | null;
   markAsSeen: (chatId: string) => void;
   onlineUsers: Set<string>;
+  isWindowFocused: boolean;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -28,6 +29,32 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [lastEvent, setLastEvent] = useState<ChatEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<any>(null);
+  const [isWindowFocused, setIsWindowFocused] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const handleFocus = () => setIsWindowFocused(true);
+    const handleBlur = () => setIsWindowFocused(false);
+
+    setIsWindowFocused(document.hasFocus());
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+
+    let unsubscribeIPC: (() => void) | undefined;
+    if ((window as any).electronAPI && typeof (window as any).electronAPI.onWindowFocusChange === 'function') {
+      unsubscribeIPC = (window as any).electronAPI.onWindowFocusChange((focused: boolean) => {
+        setIsWindowFocused(focused);
+      });
+    }
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+      if (unsubscribeIPC) unsubscribeIPC();
+    };
+  }, []);
 
   const totalUnreadCount = Object.values(unreadCounts).reduce((sum, val) => sum + (val || 0), 0);
 
@@ -256,7 +283,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
             const activeChatId = localStorage.getItem("activeChatId");
             const isChatPage = window.location.pathname.startsWith("/chat");
-            const isTabActive = typeof document !== "undefined" && document.hasFocus();
+            const isTabActive = typeof document !== "undefined" && document.hasFocus() && isWindowFocused;
             const isUserViewingThisChat = isChatPage && isTabActive && activeChatId === messageChatId;
 
             if (isUserViewingThisChat) {
@@ -432,7 +459,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id]);
 
   return (
-    <ChatContext.Provider value={{ ws, unreadCounts, totalUnreadCount, lastEvent, markAsSeen, onlineUsers }}>
+    <ChatContext.Provider value={{ ws, unreadCounts, totalUnreadCount, lastEvent, markAsSeen, onlineUsers, isWindowFocused }}>
       {children}
     </ChatContext.Provider>
   );

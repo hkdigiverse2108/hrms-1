@@ -9,6 +9,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   startUpdate: (downloadUrl) => ipcRenderer.invoke('start-update', downloadUrl),
   updateBadge: (count, dataUrl) => ipcRenderer.send('update-badge', count, dataUrl),
+  onWindowFocusChange: (callback) => {
+    const subscription = (event, isFocused) => callback(isFocused);
+    ipcRenderer.on('window-focus-change', subscription);
+    return () => ipcRenderer.removeListener('window-focus-change', subscription);
+  },
   onUpdateProgress: (callback) => {
     const subscription = (event, progress) => callback(progress);
     ipcRenderer.on('update-progress', subscription);

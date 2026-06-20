@@ -1,23 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreHorizontal, 
-  Download, 
-  Calendar as CalendarIcon,
-  TrendingUp,
-  BarChart3,
-  FileText,
-  Loader2,
-  History,
-  ClipboardList,
-  Edit2,
-  Trash2,
-  Users
-} from "lucide-react";
+import { Search, Loader2, ArrowUpDown, ChevronDown, Check, Trash2, Edit2, Play, Users, BarChart3, Clock, CheckCircle2, MoreVertical, Plus, Info, TrendingUp, Power, FileText, History, ClipboardList, Calendar as CalendarIcon, Download, Filter, MoreHorizontal } from "lucide-react";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -150,6 +134,125 @@ export default function MarketingReportsPage() {
           setDateFilter("");
         }
       }
+    }
+  };
+  const [newCampaignName, setNewCampaignName] = useState<{ [key: string]: string }>({});
+
+  const handleAddCampaign = async (clientId: string) => {
+    const name = newCampaignName[clientId];
+    if (!name || !name.trim()) return;
+    const client = clients.find(c => c.id === clientId);
+    if (!client) return;
+    const currentCampaigns = client.campaigns || [];
+    const exists = currentCampaigns.some((c: any) => (typeof c === 'string' ? c : c.name) === name.trim());
+    if (exists) {
+      toast.error("Campaign already exists");
+      return;
+    }
+    const updatedCampaigns = [...currentCampaigns, { name: name.trim(), isActive: true }];
+    try {
+      const res = await fetch(`${API_URL}/clients/${clientId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaigns: updatedCampaigns, performedBy: user?.id, userName: user?.name })
+      });
+      if (res.ok) {
+        toast.success("Campaign added");
+        setNewCampaignName(prev => ({...prev, [clientId]: ""}));
+        fetchClients();
+      } else {
+        toast.error("Failed to add campaign");
+      }
+    } catch(err) {
+      toast.error("Failed to add campaign");
+    }
+  };
+
+  const handleRemoveCampaign = async (clientId: string, campaignToRemove: string) => {
+    if (!canEditMarketing) {
+      toast.error("You do not have permission to edit campaigns");
+      return;
+    }
+    const isConfirmed = await confirm({
+      title: "Confirm Action",
+      message: "Are you sure you want to remove this campaign?",
+      destructive: true,
+      confirmText: "Remove"
+    });
+    if (!isConfirmed) return;
+
+    const client = clients.find(c => c.id === clientId);
+    if (!client) return;
+    const updatedCampaigns = (client.campaigns || []).filter((c: any) => (typeof c === 'string' ? c : c.name) !== campaignToRemove);
+    try {
+      const res = await fetch(`${API_URL}/clients/${clientId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaigns: updatedCampaigns, performedBy: user?.id, userName: user?.name })
+      });
+      if (res.ok) {
+        toast.success("Campaign removed");
+        fetchClients();
+      } else {
+        toast.error("Failed to remove campaign");
+      }
+    } catch(err) {
+      toast.error("Failed to remove campaign");
+    }
+  };
+
+  const handleToggleCampaignStatus = async (clientId: string, campaignName: string) => {
+    if (!canEditMarketing) {
+      toast.error("You do not have permission to edit campaigns");
+      return;
+    }
+    const client = clients.find(c => c.id === clientId);
+    if (!client) return;
+    const updatedCampaigns = (client.campaigns || []).map((c: any) => {
+      const cName = typeof c === 'string' ? c : c.name;
+      const cActive = typeof c === 'string' ? true : c.isActive;
+      if (cName === campaignName) {
+        return { name: cName, isActive: !cActive };
+      }
+      return typeof c === 'string' ? { name: cName, isActive: true } : c;
+    });
+    try {
+      const res = await fetch(`${API_URL}/clients/${clientId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaigns: updatedCampaigns, performedBy: user?.id, userName: user?.name })
+      });
+      if (res.ok) {
+        toast.success("Campaign status updated");
+        fetchClients();
+      } else {
+        toast.error("Failed to update campaign status");
+      }
+    } catch(err) {
+      toast.error("Failed to update campaign status");
+    }
+  };
+
+  const [viewClientReports, setViewClientReports] = useState<string | null>(null);
+  const [clientReportsData, setClientReportsData] = useState<{daily: any[], monthly: any[]}>({daily: [], monthly: []});
+  const [loadingClientReports, setLoadingClientReports] = useState(false);
+
+  const handleViewClientReports = async (clientId: string) => {
+    setViewClientReports(clientId);
+    setLoadingClientReports(true);
+    try {
+      const [dailyRes, monthlyRes] = await Promise.all([
+        fetch(`${API_URL}/marketing/reports/daily?client_id=${clientId}`),
+        fetch(`${API_URL}/marketing/reports/monthly?client_id=${clientId}`)
+      ]);
+      const daily = await dailyRes.json();
+      const monthly = await monthlyRes.json();
+      setClientReportsData({ daily: Array.isArray(daily) ? daily : [], monthly: Array.isArray(monthly) ? monthly : [] });
+    } catch(err) {
+      console.error(err);
+      toast.error("Failed to load client reports");
+    } finally {
+      setLoadingClientReports(false);
     }
   };
 
@@ -462,6 +565,93 @@ export default function MarketingReportsPage() {
         isLoading={isLoadingLogs}
       />
 
+      <Dialog open={!!viewClientReports} onOpenChange={(open) => !open && setViewClientReports(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Client Reports: {clients.find(c => c.id === viewClientReports)?.companyName}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto custom-scrollbar">
+            {loadingClientReports ? (
+              <div className="flex justify-center items-center py-20">
+                <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
+              </div>
+            ) : (
+              <div className="space-y-8 p-1">
+                <div>
+                  <h3 className="text-lg font-semibold mb-3 text-slate-800">Daily Reports</h3>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50 hover:bg-slate-50">
+                          <TableHead className="font-bold text-slate-700">Date</TableHead>
+                          <TableHead className="font-bold text-slate-700">Campaign</TableHead>
+                          <TableHead className="text-center font-bold text-slate-700">Reach</TableHead>
+                          <TableHead className="text-center font-bold text-slate-700">Impressions</TableHead>
+                          <TableHead className="text-center font-bold text-slate-700">Leads</TableHead>
+                          <TableHead className="text-center font-bold text-slate-700">Spend (₹)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {clientReportsData.daily.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-8 text-slate-400 italic">No daily reports found.</TableCell>
+                          </TableRow>
+                        ) : (
+                          clientReportsData.daily.map(r => (
+                            <TableRow key={r.id}>
+                              <TableCell>{normalizeDate(r.date)}</TableCell>
+                              <TableCell>{r.campaignName}</TableCell>
+                              <TableCell className="text-center">{r.reach}</TableCell>
+                              <TableCell className="text-center">{r.impression}</TableCell>
+                              <TableCell className="text-center">{r.leads}</TableCell>
+                              <TableCell className="text-center">{r.spend}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold mb-3 text-slate-800">Monthly Reports</h3>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50 hover:bg-slate-50">
+                          <TableHead className="font-bold text-slate-700">Month</TableHead>
+                          <TableHead className="text-center font-bold text-slate-700">Total Spend (₹)</TableHead>
+                          <TableHead className="text-center font-bold text-slate-700">Total Leads</TableHead>
+                          <TableHead className="text-center font-bold text-slate-700">Total Sales</TableHead>
+                          <TableHead className="text-center font-bold text-slate-700">Total Revenue (₹)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {clientReportsData.monthly.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-8 text-slate-400 italic">No monthly reports found.</TableCell>
+                          </TableRow>
+                        ) : (
+                          clientReportsData.monthly.map(r => (
+                            <TableRow key={r.id}>
+                              <TableCell className="font-medium">{r.month}</TableCell>
+                              <TableCell className="text-center">{r.totalSpend}</TableCell>
+                              <TableCell className="text-center">{r.totalLeads}</TableCell>
+                              <TableCell className="text-center">{r.totalSales}</TableCell>
+                              <TableCell className="text-center">{r.totalRevenue}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Header Area */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -479,9 +669,11 @@ export default function MarketingReportsPage() {
           <TabsList className="bg-slate-100 p-1 rounded-lg">
             <TabsTrigger value="daily" className="px-6 py-2 rounded-md transition-all">Daily Reports</TabsTrigger>
             <TabsTrigger value="monthly" className="px-6 py-2 rounded-md transition-all">Monthly Reports</TabsTrigger>
+            <TabsTrigger value="clients" className="px-6 py-2 rounded-md transition-all">Clients</TabsTrigger>
           </TabsList>
         </div>
 
+        {activeTab !== 'clients' && (
         <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-xl border shadow-sm mb-6">
           <div className="flex-1 min-w-[200px] space-y-1.5">
             <Label className="text-xs text-slate-500">Search Campaign or Client</Label>
@@ -548,6 +740,109 @@ export default function MarketingReportsPage() {
               )}
             </div>
           </div>
+        )}
+
+        <TabsContent value="clients" className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0">
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-800">Client Campaigns</h2>
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input 
+                  placeholder="Search clients..." 
+                  className="pl-10 h-9" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="overflow-auto flex-1 custom-scrollbar grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-max">
+              {clients.filter(c => c.companyName.toLowerCase().includes(searchQuery.toLowerCase())).map(client => (
+                <div 
+                  key={client.id} 
+                  className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col gap-4 h-fit cursor-pointer hover:shadow-md hover:border-brand-teal/30 transition-all duration-200 group relative"
+                  onClick={() => handleViewClientReports(client.id)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal shrink-0">
+                        <Users className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-slate-800 text-base">{client.companyName}</div>
+                        <div className="text-sm text-slate-500">{client.campaigns?.filter((c: any) => typeof c === 'string' ? true : c.isActive).length || 0} active campaign(s)</div>
+                      </div>
+                    </div>
+                    <div className="text-xs font-medium text-brand-teal flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      View Reports <TrendingUp className="w-3 h-3" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 mt-2">
+                    {client.campaigns?.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {client.campaigns.map((campRaw: any) => {
+                          const campName = typeof campRaw === 'string' ? campRaw : campRaw.name;
+                          const isActive = typeof campRaw === 'string' ? true : campRaw.isActive;
+                          return (
+                          <div key={campName} className={`flex items-center gap-1.5 border px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${isActive ? 'bg-white border-slate-200 text-slate-700 hover:border-slate-300' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
+                            <span className={`truncate max-w-[140px] ${!isActive && 'line-through decoration-slate-300'}`} title={campName}>{campName}</span>
+                            {canEditMarketing && (
+                              <div className="flex items-center gap-0.5 ml-1">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleToggleCampaignStatus(client.id, campName); }} 
+                                  className={`p-1 rounded transition-colors ${isActive ? 'text-slate-400 hover:text-amber-500 hover:bg-amber-50' : 'text-slate-300 hover:text-emerald-500 hover:bg-emerald-50'}`}
+                                  title={isActive ? "Deactivate Campaign" : "Activate Campaign"}
+                                >
+                                  <Power className="w-3 h-3" />
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleRemoveCampaign(client.id, campName); }} 
+                                  className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1 rounded transition-colors"
+                                  title="Remove Campaign"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )})}
+                      </div>
+                    ) : (
+                      <div className="w-full py-5 border border-dashed border-slate-200 rounded-lg flex items-center justify-center">
+                        <span className="text-sm text-slate-400 italic">No campaigns added yet</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {canAddMarketing && (
+                    <div className="flex items-center gap-2 mt-auto pt-4 border-t border-slate-50" onClick={e => e.stopPropagation()}>
+                      <div className="relative flex-1">
+                        <Plus className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Input 
+                          placeholder="Add new campaign..." 
+                          className="h-10 text-sm pl-9 bg-slate-50/50 border-slate-200 focus-visible:ring-brand-teal/30"
+                          value={newCampaignName[client.id] || ""}
+                          onChange={(e) => setNewCampaignName(prev => ({...prev, [client.id]: e.target.value}))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAddCampaign(client.id);
+                          }}
+                        />
+                      </div>
+                      <Button 
+                        size="sm" 
+                        className="h-10 px-4 bg-slate-400 hover:bg-slate-500 text-white transition-colors" 
+                        onClick={() => handleAddCampaign(client.id)}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
 
         <TabsContent value="daily" className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0">
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
@@ -597,7 +892,19 @@ export default function MarketingReportsPage() {
                           </Select>
                         </TableCell>
                         <TableCell className="p-1">
-                          <Input placeholder="Campaign..." className="h-8 text-[10px] bg-white" value={dailyFormData.campaignName} onChange={e => setDailyFormData({...dailyFormData, campaignName: e.target.value})} />
+                          <Select 
+                            value={dailyFormData.campaignName} 
+                            onValueChange={v => setDailyFormData({...dailyFormData, campaignName: v})}
+                            disabled={!dailyFormData.clientId}
+                          >
+                            <SelectTrigger className="h-8 text-[10px] bg-white"><SelectValue placeholder="Campaign" /></SelectTrigger>
+                            <SelectContent>
+                              {dailyFormData.clientId ? clients.find(c => c.id === dailyFormData.clientId)?.campaigns?.filter((c: any) => (typeof c === 'string' ? true : c.isActive)).map((c: any) => {
+                                const name = typeof c === 'string' ? c : c.name;
+                                return <SelectItem key={name} value={name}>{name}</SelectItem>
+                              }) : null}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell className="p-1">
                           <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.reach || ""} onChange={e => setDailyFormData({...dailyFormData, reach: parseInt(e.target.value) || 0})} />
@@ -698,13 +1005,20 @@ export default function MarketingReportsPage() {
                             }}
                           >
                             {inlineEditing?.id === report.id && inlineEditing?.field === 'campaignName' ? (
-                              <Input 
-                                autoFocus
-                                className="h-8 text-xs outline-none" 
-                                defaultValue={report.campaignName} 
-                                onBlur={e => handleInlineUpdate(report.id, 'campaignName', e.target.value, 'daily')}
-                                onKeyDown={e => e.key === 'Enter' && handleInlineUpdate(report.id, 'campaignName', e.currentTarget.value, 'daily')}
-                              />
+                              <Select 
+                                onValueChange={(v) => handleInlineUpdate(report.id, 'campaignName', v, 'daily')}
+                                defaultValue={report.campaignName}
+                              >
+                                <SelectTrigger className="h-8 text-xs outline-none">
+                                  <SelectValue placeholder="Select Campaign" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {clients.find(c => c.id === report.clientId)?.campaigns?.filter((c: any) => (typeof c === 'string' ? true : c.isActive)).map((c: any) => {
+                                    const name = typeof c === 'string' ? c : c.name;
+                                    return <SelectItem key={name} value={name}>{name}</SelectItem>
+                                  })}
+                                </SelectContent>
+                              </Select>
                             ) : report.campaignName}
                           </TableCell>
 

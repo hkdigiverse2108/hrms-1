@@ -550,7 +550,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           employee_name: user.name || "Employee",
           date: dayjs().format("YYYY-MM-DD"),
           late_minutes: 0,
-          recovery_minutes: 0,
+          recovery_minutes: endObj.diff(startObj, 'minute'),
           recovery_type: recoveryForm.type,
           start_time: `${startStr}:00`,
           end_time: `${endStr}:00`,
@@ -687,8 +687,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <Sidebar />
       <Layout className="site-layout h-screen overflow-y-auto relative custom-scrollbar">
         <Header />
-        <Content className="px-4 sm:px-6 lg:px-8 pb-8 mx-auto w-full max-w-[1600px]">
+        <Content 
+          className="px-4 sm:px-6 lg:px-8 mx-auto w-full max-w-[1600px]"
+          style={{ paddingBottom: '24px' }}
+        >
           {hasAccess ? children : <AccessDenied />}
+          <div style={{ height: '24px', width: '100%', clear: 'both' }}></div>
         </Content>
       </Layout>
 

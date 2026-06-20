@@ -235,7 +235,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
 
 export default function ChatPage() {
   const { user } = useUser();
-  const { ws, lastEvent, unreadCounts, markAsSeen: contextMarkAsSeen, onlineUsers } = useChatContext();
+  const { ws, lastEvent, unreadCounts, markAsSeen: contextMarkAsSeen, onlineUsers, isWindowFocused } = useChatContext();
   const { data: apiData, isLoading } = useApi();
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [message, setMessage] = useState("");
@@ -268,6 +268,7 @@ export default function ChatPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null);
   const [pendingFileUrl, setPendingFileUrl] = useState<string>("");
   const [showPickerForMsgId, setShowPickerForMsgId] = useState<string | null>(null);
+  const [showPreviewEmojiPicker, setShowPreviewEmojiPicker] = useState(false);
 
   useEffect(() => {
     if (!pendingFile) {
@@ -883,6 +884,17 @@ export default function ChatPage() {
       }
     };
   }, [selectedChat]);
+ 
+  // Mark active chat as seen when window gains focus
+  useEffect(() => {
+    if (isWindowFocused && selectedChat) {
+      const chatId = selectedChat.id || selectedChat.employeeId;
+      if (chatId) {
+        markAsSeen(chatId);
+        fetchChatSummaries();
+      }
+    }
+  }, [isWindowFocused, selectedChat, fetchChatSummaries]);
 
   const handleSelectChat = (chat: any) => {
     if (!chat) return;
@@ -1117,7 +1129,9 @@ export default function ChatPage() {
           }
           return [...prev, { ...data, isMe: data.senderId === user.id }];
         });
-        markAsSeen(messageChatId);
+        if (isWindowFocused) {
+          markAsSeen(messageChatId);
+        }
       }
       
       // Live refresh lists
@@ -2277,8 +2291,8 @@ export default function ChatPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3 className="font-bold text-[14px] text-foreground truncate">{chat.name}</h3>
                           {unreadCounts[chat.id] > 0 && (
                             <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
@@ -2286,7 +2300,7 @@ export default function ChatPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-[10px] font-semibold text-muted-foreground">{chat.time}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{chat.time}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -2348,8 +2362,8 @@ export default function ChatPage() {
                       </Avatar>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3 className="font-bold text-[14px] text-foreground truncate">{group.name}</h3>
                           {unreadCounts[group.id] > 0 && (
                             <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
@@ -2357,7 +2371,7 @@ export default function ChatPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-[10px] font-semibold text-muted-foreground">{group.lastMessageTime}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{group.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
@@ -2436,8 +2450,8 @@ export default function ChatPage() {
                       </Avatar>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3 className="font-bold text-[14px] text-foreground truncate">{channel.name}</h3>
                           {unreadCounts[channel.id] > 0 && (
                             <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
@@ -2445,7 +2459,7 @@ export default function ChatPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-[10px] font-semibold text-muted-foreground">{channel.lastMessageTime}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{channel.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
@@ -2714,7 +2728,7 @@ export default function ChatPage() {
                     <img 
                       src={pendingFileUrl} 
                       alt={pendingFile.name}
-                      className="max-w-full max-h-[50vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
+                      className="max-w-full max-h-[65vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
                     />
                   ) : (
                     <div className="bg-white p-8 rounded-2xl flex flex-col items-center gap-4 border border-slate-200 max-w-sm w-full text-slate-800 shadow-md animate-in zoom-in-95 duration-200">
@@ -2730,11 +2744,25 @@ export default function ChatPage() {
                 )}
               </div>
 
-              {/* Bottom Bar containing Input and Thumbnails */}
-              <div className="bg-[#f0f2f5] p-4 shrink-0 flex flex-col items-center gap-4 border-t border-slate-200">
-                {/* Caption Input Box */}
-                <div className="max-w-3xl w-full flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-transparent focus-within:border-brand-teal shadow-xs">
-                  <Smile className="w-6 h-6 text-slate-400 cursor-pointer hover:text-slate-600 shrink-0" />
+              {/* Bottom Bar containing Caption Input and Send Button */}
+              <div className="bg-[#f0f2f5] p-4 shrink-0 flex items-center gap-3 border-t border-slate-200 justify-center w-full">
+                <div className="max-w-3xl flex-1 flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-transparent focus-within:border-brand-teal shadow-xs">
+                  <Popover open={showPreviewEmojiPicker} onOpenChange={setShowPreviewEmojiPicker}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="text-slate-400 hover:text-slate-600 shrink-0 focus:outline-none">
+                        <Smile className="w-6 h-6" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="start" className="p-0 border-none bg-transparent shadow-none w-auto mb-4 z-[100]">
+                      <EmojiPicker 
+                        onEmojiSelect={(emoji) => {
+                          setMessage(prev => prev + emoji);
+                          setShowPreviewEmojiPicker(false);
+                        }}
+                        onClose={() => setShowPreviewEmojiPicker(false)}
+                      />
+                    </PopoverContent>
+                  </Popover>
                   <input 
                     type="text" 
                     value={message}
@@ -2745,36 +2773,18 @@ export default function ChatPage() {
                         handleSendMessage();
                       }
                     }}
-                    placeholder="Type a message"
+                    placeholder="Add a caption..."
                     className="flex-1 bg-transparent border-none text-slate-800 text-[15px] placeholder:text-slate-400 outline-none focus:outline-none"
                   />
                 </div>
-
-                {/* Thumbnails strip and Send button */}
-                <div className="max-w-3xl w-full flex items-center justify-between gap-4 mt-2">
-                  <div className="flex items-center gap-2 overflow-x-auto py-1">
-                    {pendingFile && (
-                      <div className="w-14 h-14 rounded-md overflow-hidden border-2 border-brand-teal scale-105 relative shrink-0">
-                        {pendingFile.type.startsWith("image/") ? (
-                          <img src={pendingFileUrl} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-white border border-slate-200 flex items-center justify-center text-brand-teal">
-                            <FileIcon className="w-6 h-6" />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Teal/Green Send Button */}
-                  <button 
-                    type="button"
-                    onClick={() => handleSendMessage()}
-                    className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-14 h-14 shadow-lg flex items-center justify-center transition-all shrink-0"
-                  >
-                    <Send className="w-6 h-6 fill-current ml-0.5" />
-                  </button>
-                </div>
+                {/* Send Button */}
+                <button 
+                  type="button"
+                  onClick={() => handleSendMessage()}
+                  className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-12 h-12 shadow-md flex items-center justify-center transition-all shrink-0"
+                >
+                  <Send className="w-5 h-5 fill-current ml-0.5" />
+                </button>
               </div>
             </div>
           ) : !showRightSidebar ? (
@@ -4229,26 +4239,26 @@ export default function ChatPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Image Preview Modal (WhatsApp Style) */}
+      {/* Image Preview Modal (WhatsApp Style - Light Theme) */}
       <Dialog open={!!previewImageMsgId} onOpenChange={(open) => !open && setPreviewImageMsgId(null)}>
-        <DialogContent className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#0c0c0d] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden">
+        <DialogContent className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#eaebeb] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden">
           <DialogTitle className="sr-only">Image Preview</DialogTitle>
           
           {/* Top Bar */}
           {currentPreviewMsg && (
-            <div className="h-16 px-6 bg-[#18181a] flex items-center justify-between text-white shrink-0 z-50 border-b border-white/5">
+            <div className="h-16 px-6 bg-[#f0f2f5] flex items-center justify-between text-slate-800 shrink-0 z-50 border-b border-slate-200">
               <div className="flex items-center gap-3">
-                <Avatar className="w-9 h-9 border border-white/10">
+                <Avatar className="w-9 h-9 border border-slate-200">
                   <AvatarImage src={currentPreviewMsg.isMe ? getAvatarUrl(user?.profilePhoto) : getAvatarUrl(selectedChat?.avatar)} />
                   <AvatarFallback className="bg-brand-teal text-white font-bold text-xs">
                     {(currentPreviewMsg.isMe ? user?.name : selectedChat?.name)?.[0]}
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 text-left">
-                  <p className="text-sm font-bold truncate leading-snug">
+                  <p className="text-sm font-bold truncate leading-snug text-slate-800">
                     {currentPreviewMsg.isMe ? `${user?.name} (You)` : (employees.find(e => e.id === currentPreviewMsg.senderId)?.name || currentPreviewMsg.sender || selectedChat?.name)}
                   </p>
-                  <p className="text-[10px] text-slate-400 font-medium">
+                  <p className="text-[10px] text-slate-500 font-medium">
                     {dayjs(currentPreviewMsg.timestamp).format("MMMM D, YYYY [at] hh:mm A")}
                   </p>
                 </div>
@@ -4258,7 +4268,7 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
                   onClick={() => currentPreviewMsg.replyToId && scrollToMessage(currentPreviewMsg.replyToId)}
                 >
                   <Reply className="w-5 h-5" />
@@ -4266,7 +4276,7 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
                   onClick={() => setForwardingMessage(currentPreviewMsg)}
                 >
                   <Forward className="w-5 h-5" />
@@ -4274,7 +4284,7 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
                   onClick={() => handleDownload(currentPreviewMsg.attachmentUrl, currentPreviewMsg.attachmentName)}
                 >
                   <Download className="w-5 h-5" />
@@ -4282,7 +4292,7 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
                   onClick={() => setPreviewImageMsgId(null)}
                 >
                   <X className="w-5 h-5" />
@@ -4297,7 +4307,7 @@ export default function ChatPage() {
             {currentPreviewIndex > 0 && (
               <button 
                 onClick={handlePrevImage}
-                className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition z-50"
+                className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
@@ -4319,7 +4329,7 @@ export default function ChatPage() {
             {currentPreviewIndex < imageMessages.length - 1 && (
               <button 
                 onClick={handleNextImage}
-                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition z-50"
+                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
               >
                 <ChevronLeft className="w-6 h-6 rotate-180" />
               </button>
@@ -4328,7 +4338,7 @@ export default function ChatPage() {
 
           {/* Bottom Thumbnail Strip Carousel */}
           {imageMessages.length > 1 && (
-            <div className="h-20 bg-[#18181a] border-t border-white/5 flex items-center justify-center gap-2 p-2 shrink-0 overflow-x-auto">
+            <div className="h-20 bg-[#f0f2f5] border-t border-slate-200 flex items-center justify-center gap-2 p-2 shrink-0 overflow-x-auto">
               {imageMessages.map((msg) => {
                 const isSelected = msg.id === previewImageMsgId;
                 const thumbUrl = msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
@@ -4340,7 +4350,7 @@ export default function ChatPage() {
                     onClick={() => setPreviewImageMsgId(msg.id)}
                     className={cn(
                       "w-12 h-12 rounded-md overflow-hidden cursor-pointer border-2 transition-all relative shrink-0",
-                      isSelected ? "border-brand-teal scale-105" : "border-transparent opacity-50 hover:opacity-100"
+                      isSelected ? "border-brand-teal scale-105" : "border-slate-300 opacity-50 hover:opacity-100"
                     )}
                   >
                     <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
@@ -4452,6 +4462,17 @@ export default function ChatPage() {
               </PopoverContent>
             </Popover>
           </div>
+
+          {contextMenu.msg.isMe && (
+            <button 
+              type="button"
+              onClick={() => { setMsgInfoData(contextMenu.msg); setContextMenu(null); }}
+              className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+            >
+              <Info className="w-4 h-4 text-slate-400" />
+              Message Info
+            </button>
+          )}
 
           <button 
             type="button"

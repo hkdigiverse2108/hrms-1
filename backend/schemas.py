@@ -857,6 +857,19 @@ class Notification(NotificationBase):
         from_attributes = True
 
 # Client Schemas
+def parse_campaigns(v: Any) -> List[Dict[str, Any]]:
+    if not v:
+        return []
+    res = []
+    for item in v:
+        if isinstance(item, str):
+            res.append({"name": item, "isActive": True})
+        elif isinstance(item, dict):
+            res.append(item)
+    return res
+
+RobustCampaigns = Annotated[List[Dict[str, Any]], BeforeValidator(parse_campaigns)]
+
 class ClientBase(BaseModel):
     name: str
     companyName: str
@@ -918,6 +931,7 @@ class ClientBase(BaseModel):
     assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
     assignedPosterName: Optional[str] = None
+    campaigns: Optional[RobustCampaigns] = []
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -972,6 +986,7 @@ class ClientUpdate(BaseModel):
     nextPaymentDueDate: Optional[RobustDate] = None
     paymentRemarks: Optional[str] = None
     workReviews: Optional[List[dict]] = None
+    campaigns: Optional[RobustCampaigns] = None
     
     assignedScriptwriterId: Optional[str] = None
     assignedScriptwriterName: Optional[str] = None
