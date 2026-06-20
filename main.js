@@ -514,6 +514,19 @@ function createWindow() {
 
   mainWindow.on('focus', () => {
     mainWindow.flashFrame(false);
+    mainWindow.webContents.send('window-focus-change', true);
+  });
+
+  mainWindow.on('blur', () => {
+    mainWindow.webContents.send('window-focus-change', false);
+  });
+
+  mainWindow.on('minimize', () => {
+    mainWindow.webContents.send('window-focus-change', false);
+  });
+
+  mainWindow.on('restore', () => {
+    mainWindow.webContents.send('window-focus-change', true);
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

@@ -4226,26 +4226,26 @@ export default function ChatPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Image Preview Modal (WhatsApp Style) */}
+      {/* Image Preview Modal (WhatsApp Style - Light Theme) */}
       <Dialog open={!!previewImageMsgId} onOpenChange={(open) => !open && setPreviewImageMsgId(null)}>
-        <DialogContent className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#0c0c0d] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden">
+        <DialogContent className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#eaebeb] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden">
           <DialogTitle className="sr-only">Image Preview</DialogTitle>
           
           {/* Top Bar */}
           {currentPreviewMsg && (
-            <div className="h-16 px-6 bg-[#18181a] flex items-center justify-between text-white shrink-0 z-50 border-b border-white/5">
+            <div className="h-16 px-6 bg-[#f0f2f5] flex items-center justify-between text-slate-800 shrink-0 z-50 border-b border-slate-200">
               <div className="flex items-center gap-3">
-                <Avatar className="w-9 h-9 border border-white/10">
+                <Avatar className="w-9 h-9 border border-slate-200">
                   <AvatarImage src={currentPreviewMsg.isMe ? getAvatarUrl(user?.profilePhoto) : getAvatarUrl(selectedChat?.avatar)} />
                   <AvatarFallback className="bg-brand-teal text-white font-bold text-xs">
                     {(currentPreviewMsg.isMe ? user?.name : selectedChat?.name)?.[0]}
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 text-left">
-                  <p className="text-sm font-bold truncate leading-snug">
+                  <p className="text-sm font-bold truncate leading-snug text-slate-800">
                     {currentPreviewMsg.isMe ? `${user?.name} (You)` : (employees.find(e => e.id === currentPreviewMsg.senderId)?.name || currentPreviewMsg.sender || selectedChat?.name)}
                   </p>
-                  <p className="text-[10px] text-slate-400 font-medium">
+                  <p className="text-[10px] text-slate-500 font-medium">
                     {dayjs(currentPreviewMsg.timestamp).format("MMMM D, YYYY [at] hh:mm A")}
                   </p>
                 </div>
@@ -4255,7 +4255,7 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
                   onClick={() => currentPreviewMsg.replyToId && scrollToMessage(currentPreviewMsg.replyToId)}
                 >
                   <Reply className="w-5 h-5" />
@@ -4263,7 +4263,7 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
                   onClick={() => setForwardingMessage(currentPreviewMsg)}
                 >
                   <Forward className="w-5 h-5" />
@@ -4271,7 +4271,7 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
                   onClick={() => handleDownload(currentPreviewMsg.attachmentUrl, currentPreviewMsg.attachmentName)}
                 >
                   <Download className="w-5 h-5" />
@@ -4279,7 +4279,7 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
                   onClick={() => setPreviewImageMsgId(null)}
                 >
                   <X className="w-5 h-5" />
@@ -4294,7 +4294,7 @@ export default function ChatPage() {
             {currentPreviewIndex > 0 && (
               <button 
                 onClick={handlePrevImage}
-                className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition z-50"
+                className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
@@ -4316,7 +4316,7 @@ export default function ChatPage() {
             {currentPreviewIndex < imageMessages.length - 1 && (
               <button 
                 onClick={handleNextImage}
-                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition z-50"
+                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
               >
                 <ChevronLeft className="w-6 h-6 rotate-180" />
               </button>
@@ -4325,7 +4325,7 @@ export default function ChatPage() {
 
           {/* Bottom Thumbnail Strip Carousel */}
           {imageMessages.length > 1 && (
-            <div className="h-20 bg-[#18181a] border-t border-white/5 flex items-center justify-center gap-2 p-2 shrink-0 overflow-x-auto">
+            <div className="h-20 bg-[#f0f2f5] border-t border-slate-200 flex items-center justify-center gap-2 p-2 shrink-0 overflow-x-auto">
               {imageMessages.map((msg) => {
                 const isSelected = msg.id === previewImageMsgId;
                 const thumbUrl = msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
@@ -4337,7 +4337,7 @@ export default function ChatPage() {
                     onClick={() => setPreviewImageMsgId(msg.id)}
                     className={cn(
                       "w-12 h-12 rounded-md overflow-hidden cursor-pointer border-2 transition-all relative shrink-0",
-                      isSelected ? "border-brand-teal scale-105" : "border-transparent opacity-50 hover:opacity-100"
+                      isSelected ? "border-brand-teal scale-105" : "border-slate-300 opacity-50 hover:opacity-100"
                     )}
                   >
                     <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
