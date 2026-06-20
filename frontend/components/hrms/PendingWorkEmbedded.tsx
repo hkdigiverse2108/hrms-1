@@ -191,7 +191,7 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
             clientId: 'other-work',
             stage: ow.status,
             deadline: ow.deadline,
-            type: 'other-work',
+            type: ow.taskType || 'other-work',
             taskName: ow.title,
             isOtherWork: true
           });
@@ -208,7 +208,7 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
     // Apply Task Type Filter
     if (filterTaskType !== 'all') {
       if (filterTaskType === 'other-work') {
-        filteredTasks = filteredTasks.filter(t => t.isOtherWork);
+        filteredTasks = filteredTasks.filter(t => t.isOtherWork && t.type !== 'digital-marketing');
       } else if (filterTaskType === 'content-calendar') {
         filteredTasks = filteredTasks.filter(t => !t.isOtherWork && t.type !== 'digital-marketing');
       } else if (filterTaskType === 'digital-marketing') {

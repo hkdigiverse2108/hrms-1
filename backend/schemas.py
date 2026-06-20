@@ -2093,6 +2093,7 @@ class OtherWorkBase(BaseModel):
     assignerName: str
     deadline: str
     status: str = "Pending"
+    taskType: Optional[str] = "other-work"
     logs: Optional[List[dict]] = None
 
 class OtherWorkCreate(OtherWorkBase):

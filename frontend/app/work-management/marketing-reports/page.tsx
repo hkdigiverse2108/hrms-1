@@ -663,7 +663,7 @@ export default function MarketingReportsPage() {
           <p className="text-slate-500 text-sm mt-1">Track daily performance and monthly ROI metrics</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <OtherWorkDialog />
+          <OtherWorkDialog source="digital-marketing" />
         </div>
       </div>
 
