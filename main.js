@@ -512,7 +512,49 @@ function createWindow() {
     }
   });
 
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http:') || url.startsWith('https:')) {
+      const isFrontend = url.startsWith(frontendUrl);
+      if (!isFrontend) {
+        const { shell } = require('electron');
+        shell.openExternal(url);
+        return { action: 'deny' };
+      }
+    }
+    return { action: 'allow' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url.startsWith('http:') || url.startsWith('https:')) {
+      const isFrontend = url.startsWith(frontendUrl);
+      if (!isFrontend) {
+        event.preventDefault();
+        const { shell } = require('electron');
+        shell.openExternal(url);
+      }
+    }
+  });
+
   const { ipcMain, Notification } = require('electron');
+  ipcMain.on('update-badge', (event, count, dataUrl) => {
+    log(`Received update-badge event: ${count}`);
+    if (mainWindow) {
+      if (count === 0 || !dataUrl) {
+        mainWindow.setOverlayIcon(null, '');
+        if (process.platform === 'darwin') {
+          app.setBadgeCount(0);
+        }
+      } else {
+        const { nativeImage } = require('electron');
+        const img = nativeImage.createFromDataURL(dataUrl);
+        mainWindow.setOverlayIcon(img, `${count} unread messages`);
+        if (process.platform === 'darwin') {
+          app.setBadgeCount(count);
+        }
+      }
+    }
+  });
+
   ipcMain.on('focus-window', () => {
     log('Received focus-window IPC event. Bringing window to foreground.');
     if (mainWindow) {

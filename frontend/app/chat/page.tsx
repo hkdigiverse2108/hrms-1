@@ -267,6 +267,7 @@ export default function ChatPage() {
   const [previewImageMsgId, setPreviewImageMsgId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null);
   const [pendingFileUrl, setPendingFileUrl] = useState<string>("");
+  const [showPickerForMsgId, setShowPickerForMsgId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!pendingFile) {
@@ -402,6 +403,9 @@ export default function ChatPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (previewImageMsgId || pendingFile) {
+          return;
+        }
         setSelectedChat(null as any);
       }
     };
@@ -414,7 +418,29 @@ export default function ChatPage() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("click", handleCloseMenu);
     };
-  }, []);
+  }, [previewImageMsgId, pendingFile]);
+
+  // Arrow key navigation for image preview
+  useEffect(() => {
+    if (!previewImageMsgId) return;
+
+    const handleArrowKeys = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        if (currentPreviewIndex > 0) {
+          setPreviewImageMsgId(imageMessages[currentPreviewIndex - 1].id);
+        }
+      } else if (e.key === "ArrowRight") {
+        if (currentPreviewIndex < imageMessages.length - 1) {
+          setPreviewImageMsgId(imageMessages[currentPreviewIndex + 1].id);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleArrowKeys);
+    return () => {
+      window.removeEventListener("keydown", handleArrowKeys);
+    };
+  }, [previewImageMsgId, currentPreviewIndex, imageMessages]);
 
   const [showCreatePoll, setShowCreatePoll] = useState(false);
   const [pollData, setPollData] = useState({ 
@@ -2662,7 +2688,110 @@ export default function ChatPage() {
           </div>
         )}
         {selectedChat ? (
-          !showRightSidebar ? (
+          pendingFile ? (
+            <div className="absolute inset-0 z-45 bg-white flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
+              {/* Top Bar */}
+              <div className="h-14 px-6 bg-white border-b border-slate-100 flex items-center justify-between text-slate-800 shrink-0 z-50">
+                <div className="flex items-center gap-4">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full"
+                    onClick={() => setPendingFile(null)}
+                  >
+                    <X className="w-6 h-6" />
+                  </Button>
+                  <span className="font-bold text-sm">Preview</span>
+                </div>
+                
+                {/* WhatsApp Editing Tools */}
+                <div className="flex items-center gap-1.5 text-slate-500">
+                  <Button variant="ghost" size="icon" className="hover:text-slate-800 hover:bg-slate-100 rounded-full h-9 w-9">
+                    <Crop className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="hover:text-slate-800 hover:bg-slate-100 rounded-full h-9 w-9">
+                    <Smile className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="hover:text-slate-800 hover:bg-slate-100 rounded-full h-9 w-9">
+                    <Type className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="hover:text-slate-800 hover:bg-slate-100 rounded-full h-9 w-9">
+                    <PenTool className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Center File Display */}
+              <div className="flex-1 relative w-full flex items-center justify-center p-4 bg-[#f0f2f5]/40">
+                {pendingFile && (
+                  pendingFile.type.startsWith("image/") ? (
+                    <img 
+                      src={pendingFileUrl} 
+                      alt={pendingFile.name}
+                      className="max-w-full max-h-[50vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
+                    />
+                  ) : (
+                    <div className="bg-white p-8 rounded-2xl flex flex-col items-center gap-4 border border-slate-200 max-w-sm w-full text-slate-800 shadow-md animate-in zoom-in-95 duration-200">
+                      <div className="w-20 h-20 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal">
+                        <FileIcon className="w-10 h-10" />
+                      </div>
+                      <div className="text-center min-w-0 w-full">
+                        <p className="font-bold truncate text-sm">{pendingFile.name}</p>
+                        <p className="text-xs text-slate-400 mt-1">{(pendingFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Bottom Bar containing Input and Thumbnails */}
+              <div className="bg-[#f0f2f5] p-4 shrink-0 flex flex-col items-center gap-4 border-t border-slate-200">
+                {/* Caption Input Box */}
+                <div className="max-w-3xl w-full flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-transparent focus-within:border-brand-teal shadow-xs">
+                  <Smile className="w-6 h-6 text-slate-400 cursor-pointer hover:text-slate-600 shrink-0" />
+                  <input 
+                    type="text" 
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    placeholder="Type a message"
+                    className="flex-1 bg-transparent border-none text-slate-800 text-[15px] placeholder:text-slate-400 outline-none focus:outline-none"
+                  />
+                </div>
+
+                {/* Thumbnails strip and Send button */}
+                <div className="max-w-3xl w-full flex items-center justify-between gap-4 mt-2">
+                  <div className="flex items-center gap-2 overflow-x-auto py-1">
+                    {pendingFile && (
+                      <div className="w-14 h-14 rounded-md overflow-hidden border-2 border-brand-teal scale-105 relative shrink-0">
+                        {pendingFile.type.startsWith("image/") ? (
+                          <img src={pendingFileUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-white border border-slate-200 flex items-center justify-center text-brand-teal">
+                            <FileIcon className="w-6 h-6" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Teal/Green Send Button */}
+                  <button 
+                    type="button"
+                    onClick={() => handleSendMessage()}
+                    className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-14 h-14 shadow-lg flex items-center justify-center transition-all shrink-0"
+                  >
+                    <Send className="w-6 h-6 fill-current ml-0.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : !showRightSidebar ? (
           <>
             {/* Chat Header */}
             <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
@@ -2878,6 +3007,9 @@ export default function ChatPage() {
 
                 const showDateSeparator = index === 0 || !dayjs(msg.timestamp).isSame(dayjs(displayMessages[index - 1].timestamp), 'day');
                 const isConsecutive = index > 0 && String(displayMessages[index - 1].senderId) === String(msg.senderId) && !showDateSeparator;
+                const isLastInConsecutive = index === displayMessages.length - 1 || 
+                  String(displayMessages[index + 1].senderId) !== String(msg.senderId) || 
+                  !dayjs(displayMessages[index + 1].timestamp).isSame(dayjs(msg.timestamp), 'day');
                 const isToday = dayjs(msg.timestamp).isSame(dayjs(), 'day');
                 const isYesterday = dayjs(msg.timestamp).isSame(dayjs().subtract(1, 'day'), 'day');
                 const dateText = isToday ? "Today" : isYesterday ? "Yesterday" : dayjs(msg.timestamp).format("MMMM D, YYYY");
@@ -2906,15 +3038,15 @@ export default function ChatPage() {
                     <div 
                       id={`msg-${msg.id}`}
                       className={cn(
-                        "flex items-end gap-2 group w-full mb-1",
-                        msg.isMe ? "justify-end" : "justify-start"
+                        "flex gap-2 group w-full mb-1",
+                        msg.isMe ? "justify-end items-end" : "justify-start items-start"
                       )}
                     >
                       {!msg.isMe && (
                         isConsecutive ? (
-                          <div className="w-8 h-8 shrink-0 mb-1" />
+                          <div className="w-8 h-8 shrink-0 mt-1" />
                         ) : (
-                          <Avatar className="w-8 h-8 border border-border shrink-0 mb-1" title={displayName}>
+                          <Avatar className="w-8 h-8 border border-border shrink-0 mt-1 animate-in fade-in duration-200" title={displayName}>
                             {avatarSrc && <AvatarImage src={avatarSrc} />}
                             <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
                               {avatarFallback}
@@ -3227,7 +3359,7 @@ export default function ChatPage() {
                                   <Forward className="w-3.5 h-3.5" />
                                 </Button>
                               ) : (
-                                <Popover>
+                                <Popover onOpenChange={(open) => { if (!open) setShowPickerForMsgId(null); }}>
                                   <PopoverTrigger asChild>
                                     <Button 
                                       type="button" 
@@ -3239,18 +3371,56 @@ export default function ChatPage() {
                                       <Smile className="w-3.5 h-3.5" />
                                     </Button>
                                   </PopoverTrigger>
-                                  <PopoverContent side="top" align="center" className="p-1 border border-slate-200/80 bg-white/95 backdrop-blur-md rounded-full shadow-lg w-auto mb-1 z-50 flex items-center gap-0.5 animate-in zoom-in-95 duration-100">
-                                    {["👍", "❤️", "😂", "😮", "😢", "🙏"].map(emoji => (
-                                      <Button
-                                        key={emoji}
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7 rounded-full hover:bg-slate-100 text-base p-0"
-                                        onClick={() => handleToggleReaction(msg.id, emoji)}
-                                      >
-                                        {emoji}
-                                      </Button>
-                                    ))}
+                                  <PopoverContent 
+                                    side="top" 
+                                    align="center" 
+                                    className={cn(
+                                      "border border-slate-200/80 bg-white/95 backdrop-blur-md shadow-lg z-50 animate-in zoom-in-95 duration-100",
+                                      showPickerForMsgId === msg.id 
+                                        ? "p-0 rounded-2xl border-none shadow-none w-auto mb-2" 
+                                        : "p-1 rounded-full flex items-center gap-0.5 w-auto mb-1"
+                                    )}
+                                  >
+                                    {showPickerForMsgId === msg.id ? (
+                                      <EmojiPicker 
+                                        onEmojiSelect={(emoji) => {
+                                          handleToggleReaction(msg.id, emoji);
+                                          setShowPickerForMsgId(null);
+                                          document.body.click();
+                                        }}
+                                        onClose={() => setShowPickerForMsgId(null)}
+                                      />
+                                    ) : (
+                                      <>
+                                        {["👍", "❤️", "😂", "😮", "😢", "🙏"].map(emoji => (
+                                          <Button
+                                            key={emoji}
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 rounded-full hover:bg-slate-100 text-base p-0"
+                                            onClick={() => {
+                                              handleToggleReaction(msg.id, emoji);
+                                              document.body.click();
+                                            }}
+                                          >
+                                            {emoji}
+                                          </Button>
+                                        ))}
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 rounded-full hover:bg-slate-100 text-slate-500 font-bold flex items-center justify-center p-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowPickerForMsgId(msg.id);
+                                          }}
+                                          title="More Emojis"
+                                        >
+                                          <Plus className="w-3.5 h-3.5 text-slate-500" />
+                                        </Button>
+                                      </>
+                                    )}
                                   </PopoverContent>
                                 </Popover>
                               )}
@@ -4253,6 +4423,7 @@ export default function ChatPage() {
       {/* Right-click Context Menu */}
       {contextMenu && (
         <div 
+          key={`${contextMenu.msg.id}-${contextMenu.x}-${contextMenu.y}`}
           className="fixed z-[999] bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-2xl p-1.5 min-w-[200px] animate-in fade-in zoom-in-95 duration-100"
           style={{ 
             top: Math.min(contextMenu.y, typeof window !== 'undefined' ? window.innerHeight - 440 : contextMenu.y), 
@@ -4260,6 +4431,42 @@ export default function ChatPage() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Reaction Bar */}
+          <div className="flex items-center justify-between px-2 py-1 mb-1.5 bg-slate-50/50 rounded-lg border-b border-slate-100 gap-1">
+            {["👍", "❤️", "😂", "😮", "😢", "🙏"].map(emoji => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => {
+                  handleToggleReaction(contextMenu.msg.id, emoji);
+                  setContextMenu(null);
+                }}
+                className="w-7 h-7 text-lg hover:scale-125 transition-transform flex items-center justify-center rounded-full hover:bg-slate-100"
+              >
+                {emoji}
+              </button>
+            ))}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="right" className="p-0 border-none bg-transparent shadow-none z-[1000] w-auto">
+                <EmojiPicker
+                  onEmojiSelect={(emoji) => {
+                    handleToggleReaction(contextMenu.msg.id, emoji);
+                    setContextMenu(null);
+                  }}
+                  onClose={() => {}}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
           <button 
             type="button"
             onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); }}
@@ -4271,13 +4478,57 @@ export default function ChatPage() {
           
           <button 
             type="button"
-            onClick={() => { 
-              if (contextMenu.msg.text) {
+            onClick={async () => { 
+              if (contextMenu.msg.text && !contextMenu.msg.attachmentName) {
                 navigator.clipboard.writeText(contextMenu.msg.text);
                 toast.success("Copied to clipboard!");
               } else if (contextMenu.msg.attachmentName) {
-                navigator.clipboard.writeText(contextMenu.msg.attachmentName);
-                toast.success("Copied file name to clipboard!");
+                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(contextMenu.msg.attachmentName);
+                if (isImage) {
+                  try {
+                    const fullUrl = contextMenu.msg.attachmentUrl.startsWith('http') 
+                      ? contextMenu.msg.attachmentUrl 
+                      : `${API_URL}${contextMenu.msg.attachmentUrl}`;
+                    
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = fullUrl;
+                    img.onload = () => {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = img.naturalWidth;
+                      canvas.height = img.naturalHeight;
+                      const ctx = canvas.getContext('2d');
+                      if (ctx) {
+                        ctx.drawImage(img, 0, 0);
+                        canvas.toBlob(async (pngBlob) => {
+                          if (pngBlob) {
+                            try {
+                              await navigator.clipboard.write([
+                                new ClipboardItem({
+                                  [pngBlob.type]: pngBlob
+                                })
+                              ]);
+                              toast.success("Image copied to clipboard!");
+                            } catch (err) {
+                              navigator.clipboard.writeText(fullUrl);
+                              toast.success("Copied image link to clipboard!");
+                            }
+                          }
+                        }, 'image/png');
+                      }
+                    };
+                    img.onerror = () => {
+                      navigator.clipboard.writeText(fullUrl);
+                      toast.success("Copied image link to clipboard!");
+                    };
+                  } catch (e) {
+                    navigator.clipboard.writeText(contextMenu.msg.attachmentName);
+                    toast.success("Copied file name to clipboard!");
+                  }
+                } else {
+                  navigator.clipboard.writeText(contextMenu.msg.attachmentName);
+                  toast.success("Copied file name to clipboard!");
+                }
               }
               setContextMenu(null); 
             }}
@@ -4307,35 +4558,6 @@ export default function ChatPage() {
 
           <button 
             type="button"
-            onClick={() => { toast.success("Meta AI analyzing message..."); setContextMenu(null); }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <div className="w-4 h-4 rounded-full border border-purple-400/50 bg-purple-50 flex items-center justify-center text-[9px] font-bold text-purple-600">✨</div>
-            Ask Meta AI
-          </button>
-
-          <button 
-            type="button"
-            onClick={() => { toast.success("Added to starred messages"); setContextMenu(null); }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <Star className="w-4 h-4 text-slate-400" />
-            Star
-          </button>
-
-          <div className="my-1 border-t border-slate-100" />
-
-          <button 
-            type="button"
-            onClick={() => { toast.info("Select mode enabled"); setContextMenu(null); }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <Checkbox checked={false} className="w-4 h-4 rounded-sm border-slate-300 pointer-events-none" />
-            Select
-          </button>
-
-          <button 
-            type="button"
             onClick={() => { 
               if (contextMenu.msg.attachmentUrl) {
                 handleDownload(contextMenu.msg.attachmentUrl, contextMenu.msg.attachmentName);
@@ -4355,163 +4577,8 @@ export default function ChatPage() {
             <Download className="w-4 h-4 text-slate-400" />
             Save as
           </button>
-
-          <button 
-            type="button"
-            onClick={() => { 
-              const shareText = contextMenu.msg.text || contextMenu.msg.attachmentUrl || "";
-              navigator.clipboard.writeText(shareText);
-              toast.success("Share link/text copied!");
-              setContextMenu(null); 
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <ExternalLink className="w-4 h-4 text-slate-400" />
-            Share
-          </button>
-
-          <button 
-            type="button"
-            onClick={() => { 
-              if (contextMenu.msg.attachmentUrl) {
-                window.open(contextMenu.msg.attachmentUrl.startsWith('http') ? contextMenu.msg.attachmentUrl : `${API_URL}${contextMenu.msg.attachmentUrl}`, '_blank');
-              } else {
-                toast.info("No links/attachments to open.");
-              }
-              setContextMenu(null); 
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <Layout className="w-4 h-4 text-slate-400" />
-            Open with
-          </button>
-
-          <div className="my-1 border-t border-slate-100" />
-
-          <button 
-            type="button"
-            onClick={() => { toast.success("Message reported to administrator."); setContextMenu(null); }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors"
-          >
-            <Info className="w-4 h-4 text-red-400" />
-            Report
-          </button>
         </div>
       )}
-
-      {/* File Send Preview Modal (WhatsApp style) */}
-      <Dialog open={!!pendingFile} onOpenChange={(open) => !open && setPendingFile(null)}>
-        <DialogContent className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#18191a] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden">
-          <DialogTitle className="sr-only">Send File Preview</DialogTitle>
-          
-          {/* Top Bar */}
-          <div className="h-14 px-6 bg-[#18191a] flex items-center justify-between text-white shrink-0 z-50">
-            <div className="flex items-center gap-4">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
-                onClick={() => setPendingFile(null)}
-              >
-                <X className="w-6 h-6" />
-              </Button>
-            </div>
-            
-            {/* WhatsApp Editing Tools */}
-            <div className="flex items-center gap-1.5 text-gray-400">
-              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
-                <Crop className="w-5 h-5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
-                <Smile className="w-5 h-5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
-                <Type className="w-5 h-5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
-                <PenTool className="w-5 h-5" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Center File Display */}
-          <div className="flex-1 relative w-full flex items-center justify-center p-4">
-            {pendingFile && (
-              pendingFile.type.startsWith("image/") ? (
-                <img 
-                  src={pendingFileUrl} 
-                  alt={pendingFile.name}
-                  className="max-w-full max-h-[60vh] object-contain select-none shadow-2xl rounded-sm animate-in zoom-in-95 duration-200"
-                />
-              ) : (
-                <div className="bg-[#202c33] p-8 rounded-2xl flex flex-col items-center gap-4 border border-[#2f3b43] max-w-sm w-full text-white animate-in zoom-in-95 duration-200">
-                  <div className="w-20 h-20 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal">
-                    <FileIcon className="w-10 h-10" />
-                  </div>
-                  <div className="text-center min-w-0 w-full">
-                    <p className="font-bold truncate text-sm">{pendingFile.name}</p>
-                    <p className="text-xs text-gray-400 mt-1">{(pendingFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-
-          {/* Bottom Bar containing Input and Thumbnails */}
-          <div className="bg-[#18191a] p-4 shrink-0 flex flex-col items-center gap-4 border-t border-white/5">
-            {/* Caption Input Box */}
-            <div className="max-w-3xl w-full flex items-center gap-3 bg-[#2a3942] px-4 py-2.5 rounded-lg border border-transparent focus-within:border-[#00a884] shadow-md">
-              <Smile className="w-6 h-6 text-gray-400 cursor-pointer hover:text-white shrink-0" />
-              <input 
-                type="text" 
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-                placeholder="Type a message"
-                className="flex-1 bg-transparent border-none text-white text-[15px] placeholder:text-gray-400 outline-none focus:outline-none"
-              />
-            </div>
-
-            {/* Thumbnails strip and Send button */}
-            <div className="max-w-3xl w-full flex items-center justify-between gap-4 mt-2">
-              <div className="flex items-center gap-2 overflow-x-auto py-1">
-                {pendingFile && (
-                  <div className="w-14 h-14 rounded-md overflow-hidden border-2 border-brand-teal scale-105 relative shrink-0">
-                    {pendingFile.type.startsWith("image/") ? (
-                      <img src={pendingFileUrl} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-[#202c33] flex items-center justify-center text-brand-teal">
-                        <FileIcon className="w-6 h-6" />
-                      </div>
-                    )}
-                  </div>
-                )}
-                <button 
-                  type="button" 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-14 h-14 rounded-md border-2 border-dashed border-gray-600 hover:border-gray-400 flex items-center justify-center text-gray-400 hover:text-white transition shrink-0"
-                >
-                  <Plus className="w-6 h-6" />
-                </button>
-              </div>
-
-              {/* Teal/Green Send Button */}
-              <button 
-                type="button"
-                onClick={() => handleSendMessage()}
-                className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-14 h-14 shadow-lg flex items-center justify-center transition-all shrink-0"
-              >
-                <Send className="w-6 h-6 fill-current ml-0.5" />
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

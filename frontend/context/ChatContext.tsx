@@ -31,6 +31,36 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const totalUnreadCount = Object.values(unreadCounts).reduce((sum, val) => sum + (val || 0), 0);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ((window as any).electronAPI && typeof (window as any).electronAPI.updateBadge === 'function') {
+      if (totalUnreadCount === 0) {
+        (window as any).electronAPI.updateBadge(0, null);
+      } else {
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.beginPath();
+          ctx.arc(16, 16, 14, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ef4444'; // Red color
+          ctx.fill();
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 18px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const text = totalUnreadCount > 99 ? '99+' : String(totalUnreadCount);
+          ctx.fillText(text, 16, 16);
+          
+          const dataUrl = canvas.toDataURL('image/png');
+          (window as any).electronAPI.updateBadge(totalUnreadCount, dataUrl);
+        }
+      }
+    }
+  }, [totalUnreadCount]);
+
   // Initialize audio context on first interaction
   useEffect(() => {
     const unlockAudio = () => {

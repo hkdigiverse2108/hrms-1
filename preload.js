@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showNotification: (title, options) => ipcRenderer.send('show-notification', title, options),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   startUpdate: (downloadUrl) => ipcRenderer.invoke('start-update', downloadUrl),
+  updateBadge: (count, dataUrl) => ipcRenderer.send('update-badge', count, dataUrl),
   onUpdateProgress: (callback) => {
     const subscription = (event, progress) => callback(progress);
     ipcRenderer.on('update-progress', subscription);
