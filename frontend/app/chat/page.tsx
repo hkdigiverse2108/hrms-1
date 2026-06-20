@@ -2704,21 +2704,7 @@ export default function ChatPage() {
                   <span className="font-bold text-sm">Preview</span>
                 </div>
                 
-                {/* WhatsApp Editing Tools */}
-                <div className="flex items-center gap-1.5 text-slate-500">
-                  <Button variant="ghost" size="icon" className="hover:text-slate-800 hover:bg-slate-100 rounded-full h-9 w-9">
-                    <Crop className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="hover:text-slate-800 hover:bg-slate-100 rounded-full h-9 w-9">
-                    <Smile className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="hover:text-slate-800 hover:bg-slate-100 rounded-full h-9 w-9">
-                    <Type className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="hover:text-slate-800 hover:bg-slate-100 rounded-full h-9 w-9">
-                    <PenTool className="w-5 h-5" />
-                  </Button>
-                </div>
+                {/* WhatsApp Editing Tools Removed */}
               </div>
 
               {/* Center File Display */}

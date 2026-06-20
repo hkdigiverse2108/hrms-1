@@ -33,6 +33,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    
+    // Update document title for both browser and Electron titlebar syncing
+    document.title = totalUnreadCount > 0 ? `(${totalUnreadCount}) HRMS` : 'HRMS';
+
     if ((window as any).electronAPI && typeof (window as any).electronAPI.updateBadge === 'function') {
       if (totalUnreadCount === 0) {
         (window as any).electronAPI.updateBadge(0, null);

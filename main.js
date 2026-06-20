@@ -512,6 +512,10 @@ function createWindow() {
     }
   });
 
+  mainWindow.on('focus', () => {
+    mainWindow.flashFrame(false);
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http:') || url.startsWith('https:')) {
       const isFrontend = url.startsWith(frontendUrl);
@@ -541,6 +545,7 @@ function createWindow() {
     if (mainWindow) {
       if (count === 0 || !dataUrl) {
         mainWindow.setOverlayIcon(null, '');
+        mainWindow.setTitle('HRMS Application');
         if (process.platform === 'darwin') {
           app.setBadgeCount(0);
         }
@@ -548,8 +553,12 @@ function createWindow() {
         const { nativeImage } = require('electron');
         const img = nativeImage.createFromDataURL(dataUrl);
         mainWindow.setOverlayIcon(img, `${count} unread messages`);
+        mainWindow.setTitle(`(${count}) HRMS Application`);
         if (process.platform === 'darwin') {
           app.setBadgeCount(count);
+        }
+        if (!mainWindow.isFocused()) {
+          mainWindow.flashFrame(true);
         }
       }
     }
@@ -591,6 +600,9 @@ function createWindow() {
         icon: iconPath
       });
       notif.show();
+      if (mainWindow && !mainWindow.isFocused()) {
+        mainWindow.flashFrame(true);
+      }
       
       notif.on('click', () => {
         log('Notification clicked, focusing window.');
