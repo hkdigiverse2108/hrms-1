@@ -115,8 +115,8 @@ export default function DashboardPage() {
     if (user?.id) {
       fetchStatus();
       fetchHistory();
+      fetchLeaveRequests();
       if (user.role === "Admin" || user.role === "HR") {
-        fetchLeaveRequests();
         fetchEmployees();
         fetchInterns();
         fetchAllAttendance();
@@ -501,10 +501,6 @@ export default function DashboardPage() {
         )}
       </PageHeader>
  
-      {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />}
-
-      {isHR && <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />}
-
       {(!isAdmin) && (
         <EmployeeView 
           user={user} 
@@ -520,8 +516,13 @@ export default function DashboardPage() {
           isTimeSynced={isTimeSynced}
           getISTNow={getISTNow}
           punchCardRef={punchCardRef}
+          leaves={leaveRequests}
         />
       )}
+
+      {isHR && <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />}
+
+      {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />}
  
       <RequestPunchOutDialog 
         open={isRequestDialogOpen}
@@ -649,7 +650,7 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
           <DepartmentDistribution />
         </div>
         <div className="lg:col-span-1">
-          <EventsSidebar user={user} />
+          <EventsSidebar user={user} leaves={leaves} />
         </div>
       </div>
     </div>
@@ -763,7 +764,7 @@ function HRView({ user, leaves, applications, assets }: { user: any, leaves: any
           </div>
         </div>
         <div className="lg:col-span-1">
-          <EventsSidebar user={user} />
+          <EventsSidebar user={user} leaves={leaves} />
         </div>
       </div>
     </div>
@@ -783,7 +784,8 @@ function EmployeeView({
   currentTime,
   isTimeSynced,
   getISTNow,
-  punchCardRef
+  punchCardRef,
+  leaves
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -797,7 +799,8 @@ function EmployeeView({
   currentTime: Date,
   isTimeSynced: boolean,
   getISTNow: () => Date,
-  punchCardRef: React.RefObject<HTMLDivElement | null>
+  punchCardRef: React.RefObject<HTMLDivElement | null>,
+  leaves: any[]
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
@@ -992,7 +995,7 @@ function EmployeeView({
         </div>
  
         <div className="lg:col-span-1">
-          <EventsSidebar user={user} />
+          <EventsSidebar user={user} leaves={leaves} />
         </div>
       </div>
  
@@ -1066,7 +1069,7 @@ function EmployeeView({
   );
 }
  
-function EventsSidebar({ user }: { user: any }) {
+function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [isViewAllOpen, setIsViewAllOpen] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
@@ -1365,6 +1368,62 @@ function EventsSidebar({ user }: { user: any }) {
         onEditEvent={handleEditClick}
         onDeleteEvent={handleDeleteEvent}
       />
+
+      {/* Upcoming Approved Leaves Card */}
+      {(() => {
+        const today = dayjs();
+        const upcomingApprovedLeaves = (leaves || [])
+          .filter((l: any) => {
+            if (l.status !== 'Approved') return false;
+            const endDate = dayjs(l.end_date, "DD-MM-YYYY");
+            return endDate.isSameOrAfter(today, 'day');
+          })
+          .sort((a: any, b: any) => {
+            const dateA = dayjs(a.start_date, "DD-MM-YYYY");
+            const dateB = dayjs(b.start_date, "DD-MM-YYYY");
+            return dateA.diff(dateB);
+          });
+
+        return (
+          <div className="mt-6 bg-white border border-border rounded-xl p-5 shadow-xs">
+            <h4 className="font-bold text-[14px] text-[#111827] mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
+              <UserX className="w-4 h-4 text-brand-teal" /> Upcoming Approved Leaves
+            </h4>
+            <div className="space-y-3">
+              {upcomingApprovedLeaves.length > 0 ? (
+                upcomingApprovedLeaves.slice(0, 5).map((leave: any, idx: number) => {
+                  const start = dayjs(leave.start_date, "DD-MM-YYYY");
+                  const end = dayjs(leave.end_date, "DD-MM-YYYY");
+                  const dateDisplay = start.isSame(end, 'day') 
+                    ? start.format("MMM DD, YYYY")
+                    : `${start.format("MMM DD")} - ${end.format("MMM DD, YYYY")}`;
+                  
+                  return (
+                    <div key={leave.id || idx} className="p-3 rounded-lg border border-gray-100/50 bg-[#F9FAFB]/50 hover:bg-gray-50 transition-all flex items-center gap-3">
+                      <Avatar className="h-8 w-8 shrink-0">
+                        <AvatarFallback className="bg-brand-light text-brand-teal font-extrabold text-[10px] uppercase">
+                          {(leave.employee_name || "L")[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-slate-800 truncate">{leave.employee_name}</div>
+                        <div className="text-[10px] text-slate-500 font-medium capitalize mt-0.5">{leave.type} • {leave.duration}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] font-extrabold text-brand-teal bg-brand-light/60 px-2 py-0.5 rounded-md whitespace-nowrap">
+                          {dateDisplay}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-center text-xs text-muted-foreground py-2">No upcoming approved leaves.</p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

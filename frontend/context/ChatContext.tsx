@@ -28,8 +28,68 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [lastEvent, setLastEvent] = useState<ChatEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<any>(null);
+  const [isWindowFocused, setIsWindowFocused] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const handleFocus = () => setIsWindowFocused(true);
+    const handleBlur = () => setIsWindowFocused(false);
+
+    setIsWindowFocused(document.hasFocus());
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+
+    let unsubscribeIPC: (() => void) | undefined;
+    if ((window as any).electronAPI && typeof (window as any).electronAPI.onWindowFocusChange === 'function') {
+      unsubscribeIPC = (window as any).electronAPI.onWindowFocusChange((focused: boolean) => {
+        setIsWindowFocused(focused);
+      });
+    }
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+      if (unsubscribeIPC) unsubscribeIPC();
+    };
+  }, []);
 
   const totalUnreadCount = Object.values(unreadCounts).reduce((sum, val) => sum + (val || 0), 0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    // Update document title for both browser and Electron titlebar syncing
+    document.title = totalUnreadCount > 0 ? `(${totalUnreadCount}) HRMS` : 'HRMS';
+
+    if ((window as any).electronAPI && typeof (window as any).electronAPI.updateBadge === 'function') {
+      if (totalUnreadCount === 0) {
+        (window as any).electronAPI.updateBadge(0, null);
+      } else {
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.beginPath();
+          ctx.arc(16, 16, 14, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ef4444'; // Red color
+          ctx.fill();
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 18px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const text = totalUnreadCount > 99 ? '99+' : String(totalUnreadCount);
+          ctx.fillText(text, 16, 16);
+          
+          const dataUrl = canvas.toDataURL('image/png');
+          (window as any).electronAPI.updateBadge(totalUnreadCount, dataUrl);
+        }
+      }
+    }
+  }, [totalUnreadCount]);
 
   // Initialize audio context on first interaction
   useEffect(() => {
@@ -222,7 +282,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             const messageChatId = isGroupMsg ? data.groupId : (data.senderId === user.id ? data.receiverId : data.senderId);
             const activeChatId = localStorage.getItem("activeChatId");
             const isChatPage = window.location.pathname.startsWith("/chat");
-            const isTabActive = typeof document !== "undefined" && document.hasFocus();
+            const isTabActive = typeof document !== "undefined" && document.hasFocus() && isWindowFocused;
             const isUserViewingThisChat = isChatPage && isTabActive && activeChatId === messageChatId;
 
             if (isUserViewingThisChat) {
