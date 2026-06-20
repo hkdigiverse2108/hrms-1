@@ -51,7 +51,15 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchIn
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/time_recovery`, {
+      const startObj = dayjs(`${dayjs().format("YYYY-MM-DD")} ${punchInTime}`);
+      const endObj = dayjs(`${dayjs().format("YYYY-MM-DD")} ${formData.punchOutTime}`);
+      let diffMins = 0;
+      if (startObj.isValid() && endObj.isValid()) {
+        diffMins = endObj.diff(startObj, 'minute');
+        if (diffMins < 0) diffMins = 0;
+      }
+
+      const res = await fetch(`${API_URL}/time-recovery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -59,7 +67,10 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchIn
           employee_name: employeeName,
           date: dayjs().format("YYYY-MM-DD"),
           late_minutes: 0,
-          recovery_minutes: 0,
+          recovery_minutes: diffMins,
+          recovery_type: "work",
+          start_time: punchInTime.includes(":") ? (punchInTime.split(" ").length > 1 ? dayjs(`${dayjs().format("YYYY-MM-DD")} ${punchInTime}`).format("HH:mm:ss") : punchInTime) : `${punchInTime}:00`,
+          end_time: `${formData.punchOutTime}:00`,
           reason: `Forgot Punch-Out. Actual Punch-Out: ${formData.punchOutTime}. Reason: ${formData.reason === 'other' ? formData.otherReason : formData.reason}`,
           status: "pending"
         })

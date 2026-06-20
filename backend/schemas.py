@@ -857,6 +857,19 @@ class Notification(NotificationBase):
         from_attributes = True
 
 # Client Schemas
+def parse_campaigns(v: Any) -> List[Dict[str, Any]]:
+    if not v:
+        return []
+    res = []
+    for item in v:
+        if isinstance(item, str):
+            res.append({"name": item, "isActive": True})
+        elif isinstance(item, dict):
+            res.append(item)
+    return res
+
+RobustCampaigns = Annotated[List[Dict[str, Any]], BeforeValidator(parse_campaigns)]
+
 class ClientBase(BaseModel):
     name: str
     companyName: str
@@ -918,6 +931,7 @@ class ClientBase(BaseModel):
     assignedApproverName: Optional[str] = None
     assignedPosterId: Optional[str] = None
     assignedPosterName: Optional[str] = None
+    campaigns: Optional[RobustCampaigns] = []
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -972,6 +986,7 @@ class ClientUpdate(BaseModel):
     nextPaymentDueDate: Optional[RobustDate] = None
     paymentRemarks: Optional[str] = None
     workReviews: Optional[List[dict]] = None
+    campaigns: Optional[RobustCampaigns] = None
     
     assignedScriptwriterId: Optional[str] = None
     assignedScriptwriterName: Optional[str] = None
@@ -2005,6 +2020,8 @@ class ContentCalendarEntryBase(BaseModel):
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
 
 class ContentCalendarEntryCreate(ContentCalendarEntryBase):
     pass
@@ -2030,6 +2047,8 @@ class ContentCalendarEntryUpdate(BaseModel):
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
 
 class ContentCalendarEntry(ContentCalendarEntryBase):
     id: str
@@ -2064,3 +2083,31 @@ class ContentCalendarSettings(ContentCalendarSettingsBase):
     class Config:
         from_attributes = True
 
+# --- Other Work ---
+class OtherWorkBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assigneeId: str
+    assigneeName: str
+    assignerId: str
+    assignerName: str
+    deadline: str
+    status: str = "Pending"
+    logs: Optional[List[dict]] = None
+
+class OtherWorkCreate(OtherWorkBase):
+    pass
+
+class OtherWorkUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
+    deadline: Optional[str] = None
+    status: Optional[str] = None
+    logs: Optional[List[dict]] = None
+
+class OtherWork(OtherWorkBase):
+    id: str
+    class Config:
+        from_attributes = True
