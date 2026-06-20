@@ -140,7 +140,7 @@ export function OtherWorkDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="h-10 bg-indigo-600 hover:bg-indigo-700 text-white gap-2 w-full md:w-auto shrink-0 shadow-sm">
+        <Button className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto shrink-0 shadow-sm">
           <Plus className="w-4 h-4" />
           Assign Other Work
         </Button>

@@ -21,9 +21,9 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
-  // Filters
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterStage, setFilterStage] = useState<string>('all');
+  const [filterTaskType, setFilterTaskType] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState<string>('');
 
@@ -205,6 +205,15 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
       filteredTasks = filteredTasks.filter(t => t.clientId === filterProject);
     }
 
+    // Apply Task Type Filter
+    if (filterTaskType !== 'all') {
+      if (filterTaskType === 'other-work') {
+        filteredTasks = filteredTasks.filter(t => t.isOtherWork);
+      } else if (filterTaskType === 'content-calendar') {
+        filteredTasks = filteredTasks.filter(t => !t.isOtherWork);
+      }
+    }
+
     // Apply Stage Filter
     if (filterStage !== 'all') {
       filteredTasks = filteredTasks.filter(t => t.stage.toLowerCase() === filterStage.toLowerCase());
@@ -261,7 +270,7 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, searchQuery, filterDate, type]);
+  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, searchQuery, filterDate, type]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
@@ -303,6 +312,17 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
               </Button>
             )}
           </div>
+
+          <Select value={filterTaskType} onValueChange={setFilterTaskType}>
+            <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
+              <SelectValue placeholder="Task Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="content-calendar">Content Calendar</SelectItem>
+              <SelectItem value="other-work">Other Work</SelectItem>
+            </SelectContent>
+          </Select>
 
           <Select value={filterStage} onValueChange={setFilterStage}>
             <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
