@@ -268,6 +268,7 @@ export default function ChatPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null);
   const [pendingFileUrl, setPendingFileUrl] = useState<string>("");
   const [showPickerForMsgId, setShowPickerForMsgId] = useState<string | null>(null);
+  const [showPreviewEmojiPicker, setShowPreviewEmojiPicker] = useState(false);
 
   useEffect(() => {
     if (!pendingFile) {
@@ -2277,8 +2278,8 @@ export default function ChatPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3 className="font-bold text-[14px] text-foreground truncate">{chat.name}</h3>
                           {unreadCounts[chat.id] > 0 && (
                             <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
@@ -2286,7 +2287,7 @@ export default function ChatPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-[10px] font-semibold text-muted-foreground">{chat.time}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{chat.time}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -2348,8 +2349,8 @@ export default function ChatPage() {
                       </Avatar>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3 className="font-bold text-[14px] text-foreground truncate">{group.name}</h3>
                           {unreadCounts[group.id] > 0 && (
                             <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
@@ -2357,7 +2358,7 @@ export default function ChatPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-[10px] font-semibold text-muted-foreground">{group.lastMessageTime}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{group.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
@@ -2436,8 +2437,8 @@ export default function ChatPage() {
                       </Avatar>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3 className="font-bold text-[14px] text-foreground truncate">{channel.name}</h3>
                           {unreadCounts[channel.id] > 0 && (
                             <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
@@ -2445,7 +2446,7 @@ export default function ChatPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-[10px] font-semibold text-muted-foreground">{channel.lastMessageTime}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{channel.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
@@ -2714,7 +2715,7 @@ export default function ChatPage() {
                     <img 
                       src={pendingFileUrl} 
                       alt={pendingFile.name}
-                      className="max-w-full max-h-[50vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
+                      className="max-w-full max-h-[65vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
                     />
                   ) : (
                     <div className="bg-white p-8 rounded-2xl flex flex-col items-center gap-4 border border-slate-200 max-w-sm w-full text-slate-800 shadow-md animate-in zoom-in-95 duration-200">
@@ -2730,11 +2731,25 @@ export default function ChatPage() {
                 )}
               </div>
 
-              {/* Bottom Bar containing Input and Thumbnails */}
-              <div className="bg-[#f0f2f5] p-4 shrink-0 flex flex-col items-center gap-4 border-t border-slate-200">
-                {/* Caption Input Box */}
-                <div className="max-w-3xl w-full flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-transparent focus-within:border-brand-teal shadow-xs">
-                  <Smile className="w-6 h-6 text-slate-400 cursor-pointer hover:text-slate-600 shrink-0" />
+              {/* Bottom Bar containing Caption Input and Send Button */}
+              <div className="bg-[#f0f2f5] p-4 shrink-0 flex items-center gap-3 border-t border-slate-200 justify-center w-full">
+                <div className="max-w-3xl flex-1 flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-transparent focus-within:border-brand-teal shadow-xs">
+                  <Popover open={showPreviewEmojiPicker} onOpenChange={setShowPreviewEmojiPicker}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="text-slate-400 hover:text-slate-600 shrink-0 focus:outline-none">
+                        <Smile className="w-6 h-6" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="start" className="p-0 border-none bg-transparent shadow-none w-auto mb-4 z-[100]">
+                      <EmojiPicker 
+                        onEmojiSelect={(emoji) => {
+                          setMessage(prev => prev + emoji);
+                          setShowPreviewEmojiPicker(false);
+                        }}
+                        onClose={() => setShowPreviewEmojiPicker(false)}
+                      />
+                    </PopoverContent>
+                  </Popover>
                   <input 
                     type="text" 
                     value={message}
@@ -2745,36 +2760,18 @@ export default function ChatPage() {
                         handleSendMessage();
                       }
                     }}
-                    placeholder="Type a message"
+                    placeholder="Add a caption..."
                     className="flex-1 bg-transparent border-none text-slate-800 text-[15px] placeholder:text-slate-400 outline-none focus:outline-none"
                   />
                 </div>
-
-                {/* Thumbnails strip and Send button */}
-                <div className="max-w-3xl w-full flex items-center justify-between gap-4 mt-2">
-                  <div className="flex items-center gap-2 overflow-x-auto py-1">
-                    {pendingFile && (
-                      <div className="w-14 h-14 rounded-md overflow-hidden border-2 border-brand-teal scale-105 relative shrink-0">
-                        {pendingFile.type.startsWith("image/") ? (
-                          <img src={pendingFileUrl} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-white border border-slate-200 flex items-center justify-center text-brand-teal">
-                            <FileIcon className="w-6 h-6" />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Teal/Green Send Button */}
-                  <button 
-                    type="button"
-                    onClick={() => handleSendMessage()}
-                    className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-14 h-14 shadow-lg flex items-center justify-center transition-all shrink-0"
-                  >
-                    <Send className="w-6 h-6 fill-current ml-0.5" />
-                  </button>
-                </div>
+                {/* Send Button */}
+                <button 
+                  type="button"
+                  onClick={() => handleSendMessage()}
+                  className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-12 h-12 shadow-md flex items-center justify-center transition-all shrink-0"
+                >
+                  <Send className="w-5 h-5 fill-current ml-0.5" />
+                </button>
               </div>
             </div>
           ) : !showRightSidebar ? (
