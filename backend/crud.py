@@ -5188,6 +5188,58 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
 
                     if recovery_type in ['meeting', 'work']:
+                        # Fix: Trim or remove breaks that overlap with this recovery
+                        def parse_t(t_str):
+                            if not t_str: return 0
+                            pts = t_str.split(':')
+                            try:
+                                return int(pts[0])*3600 + int(pts[1])*60 + (int(pts[2]) if len(pts)>2 else 0)
+                            except: return 0
+                        
+                        def format_t(sec):
+                            sec = sec % 86400
+                            return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
+                            
+                        rec_in = parse_t(fmt_start)
+                        rec_out = parse_t(fmt_end)
+                        if rec_out < rec_in:
+                            rec_out += 86400
+                            
+                        new_breaks = []
+                        for b in breaks:
+                            b_start = b.get("startTime")
+                            b_end = b.get("endTime")
+                            if not b_start or not b_end:
+                                new_breaks.append(b)
+                                continue
+                                
+                            b_in = parse_t(b_start)
+                            b_out = parse_t(b_end)
+                            if b_out < b_in:
+                                b_out += 86400
+                                
+                            overlap_start = max(rec_in, b_in)
+                            overlap_end = min(rec_out, b_out)
+                            
+                            if overlap_start < overlap_end:
+                                # There is overlap
+                                if rec_in <= b_in and rec_out >= b_out:
+                                    continue # fully engulfed, remove break
+                                elif b_in < rec_in and b_out > rec_out:
+                                    # Split into two
+                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                                elif b_in >= rec_in and b_out > rec_out:
+                                    # Trim start
+                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                                elif b_in < rec_in and b_out <= rec_out:
+                                    # Trim end
+                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                            else:
+                                new_breaks.append(b)
+                                
+                        breaks = new_breaks
+
                         punches.append({
                             "punchIn": fmt_start,
                             "punchOut": fmt_end,
