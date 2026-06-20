@@ -895,24 +895,55 @@ export default function CreativeClientsPage() {
           {[
             { value: "all", label: "All Clients" },
             { value: "active", label: "Active Projects" },
-            { value: "pending-work", label: "Pending Work" },
+            { value: "work-group", label: "Work" },
             { value: "reviews", label: "Client Reviews" },
             { value: "payment-due", label: "Payment Due" },
             { value: "followup-due", label: "Follow-up Due" },
             { value: "on-hold", label: "On Hold" },
-          ].map(filter => (
-            <button
-              key={filter.value}
-              onClick={() => setMasterFilter(filter.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
-                masterFilter === filter.value 
-                  ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
-                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
+          ].map(filter => {
+            if (filter.value === "work-group") {
+              return (
+                <DropdownMenu key="work-group">
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                        ["pending-work", "todays-work", "upcoming-work"].includes(masterFilter)
+                          ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
+                          : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
+                      }`}
+                    >
+                      Work
+                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    <DropdownMenuItem onClick={() => setMasterFilter("pending-work")} className="font-medium cursor-pointer">
+                      Pending Work
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setMasterFilter("todays-work")} className="font-medium cursor-pointer">
+                      Today's Work
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setMasterFilter("upcoming-work")} className="font-medium cursor-pointer">
+                      Upcoming Work
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            }
+            return (
+              <button
+                key={filter.value}
+                onClick={() => setMasterFilter(filter.value)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                  masterFilter === filter.value 
+                    ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
+                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
+                }`}
+              >
+                {filter.label}
+              </button>
+            );
+          })}
 
           <div className="w-px h-6 bg-slate-200 mx-1"></div>
 
@@ -986,8 +1017,8 @@ export default function CreativeClientsPage() {
           <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
           <p className="text-sm text-slate-500 font-medium">Fetching dashboard...</p>
         </div>
-      ) : masterFilter === 'pending-work' ? (
-        <PendingWorkEmbedded />
+      ) : ['pending-work', 'todays-work', 'upcoming-work'].includes(masterFilter) ? (
+        <PendingWorkEmbedded type={masterFilter as "pending-work" | "todays-work" | "upcoming-work"} />
       ) : masterFilter === 'reviews' ? (
         <FeedbackReviewsEmbedded />
       ) : filteredClients.length > 0 ? (

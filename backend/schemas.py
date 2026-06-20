@@ -2005,6 +2005,8 @@ class ContentCalendarEntryBase(BaseModel):
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
 
 class ContentCalendarEntryCreate(ContentCalendarEntryBase):
     pass
@@ -2030,6 +2032,8 @@ class ContentCalendarEntryUpdate(BaseModel):
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
 
 class ContentCalendarEntry(ContentCalendarEntryBase):
     id: str

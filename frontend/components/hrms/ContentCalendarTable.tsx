@@ -96,14 +96,14 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     "Posting Date", "Posting Day", "Post/Reel", "Concept", "Topic", "Reference",
     "Script Date", "Script Link", "Shoot Date", "Shoot Link", "Editing Start",
     "Final Reel Link", "Final Post Link", "Approval by Het", "Is Approved", "Thumbnail Link",
-    "Posting Link IG", "Actual Posting Date", ""
+    "Posting Link IG", "Actual Posting Date", "Remark", ""
   ];
 
   const fieldKeys = [
     "postingDate", "postingDay", "postReel", "concept", "topic", "reference",
     "scriptDate", "scriptLink", "shootDate", "shootLink", "editingStart",
     "finalReelLink", "finalPostLink", "approval", "isApproved", "thumbnailLink",
-    "postingLinkOfIg", "actualPostingDate"
+    "postingLinkOfIg", "actualPostingDate", "remark"
   ];
   
   const [selectedColumnsForPdf, setSelectedColumnsForPdf] = useState<string[]>(tableHeaders.filter(h => h !== ""));

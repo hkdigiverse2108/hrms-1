@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList, X } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList, X, Check, Edit2, History } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { API_URL } from '@/lib/config';
 
-export function PendingWorkEmbedded() {
+export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending-work" | "todays-work" | "upcoming-work" }) {
   const router = useRouter();
   
   const [entries, setEntries] = useState<any[]>([]);
@@ -22,6 +24,37 @@ export function PendingWorkEmbedded() {
   const [filterStage, setFilterStage] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState<string>('');
+
+  const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null);
+  const [editingRemarkValue, setEditingRemarkValue] = useState<string>('');
+  
+  const [logsDialogOpen, setLogsDialogOpen] = useState(false);
+  const [currentLogs, setCurrentLogs] = useState<any[]>([]);
+
+  const handleOpenLogs = (entry: any) => {
+    setCurrentLogs(entry.logs || []);
+    setLogsDialogOpen(true);
+  };
+
+  const handleSaveRemark = async (id: string, stage: string) => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
+
+      const response = await fetch(`${API_URL}/content-calendar/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remark: editingRemarkValue, updatedBy: userName, remarkStage: stage }),
+      });
+      if (response.ok) {
+        setEntries(entries.map(e => e.id === id ? { ...e, remark: editingRemarkValue, remarkStage: stage } : e));
+        setEditingRemarkId(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -135,9 +168,29 @@ export function PendingWorkEmbedded() {
       filteredTasks = filteredTasks.filter(t => t.deadline === filterDate);
     }
 
+    // Apply Type Filter
+    if (type) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      filteredTasks = filteredTasks.filter(t => {
+        const hasApplicableRemark = t.remark && t.remark.trim() !== '' && (!t.remarkStage || t.stage === t.remarkStage);
+
+        if (type === 'pending-work') {
+          return hasApplicableRemark;
+        }
+        
+        const deadlineDate = new Date(t.deadline);
+        deadlineDate.setHours(0, 0, 0, 0);
+        
+        if (type === 'todays-work') return deadlineDate <= today;
+        if (type === 'upcoming-work') return deadlineDate > today;
+        return true;
+      });
+    }
+
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, clients, clientProjects, filterProject, filterStage, searchQuery, filterDate]);
+  }, [entries, clients, clientProjects, filterProject, filterStage, searchQuery, filterDate, type]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
@@ -145,7 +198,9 @@ export function PendingWorkEmbedded() {
       <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-50/50">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <ClipboardList className="w-5 h-5 text-brand-teal" />
-          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Pending Work</h2>
+          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+            {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : 'Pending Work'}
+          </h2>
         </div>
         
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -230,6 +285,7 @@ export function PendingWorkEmbedded() {
                 <th className="px-6 py-4 whitespace-nowrap">Client / Project</th>
                 <th className="px-6 py-4 whitespace-nowrap">Stage</th>
                 <th className="px-6 py-4 whitespace-nowrap">Task Details</th>
+                <th className="px-6 py-4 whitespace-nowrap">Remark</th>
                 <th className="px-6 py-4 text-right whitespace-nowrap">Action</th>
               </tr>
             </thead>
@@ -261,17 +317,66 @@ export function PendingWorkEmbedded() {
                         )}
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-slate-600 max-w-[200px]">
+                      {(() => {
+                        const isApplicable = !item.remarkStage || item.remarkStage === item.stage;
+                        const displayRemark = isApplicable ? item.remark : null;
+
+                        return editingRemarkId === `${item.id}-${item.stage}` ? (
+                          <div className="flex items-center gap-1.5 min-w-[150px]">
+                            <Input 
+                              value={editingRemarkValue}
+                              onChange={(e) => setEditingRemarkValue(e.target.value)}
+                              className="h-8 text-xs px-2 py-1 w-full focus-visible:ring-brand-teal"
+                              autoFocus
+                              placeholder="Type reason..."
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveRemark(item.id, item.stage);
+                                if (e.key === 'Escape') setEditingRemarkId(null);
+                              }}
+                            />
+                            <button onClick={() => handleSaveRemark(item.id, item.stage)} className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors" title="Save">
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setEditingRemarkId(null)} className="text-slate-400 hover:bg-slate-100 p-1.5 rounded transition-colors" title="Cancel">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div 
+                            className="cursor-pointer py-1 px-1 -mx-1 rounded hover:bg-slate-100 truncate flex-1 text-slate-600"
+                            onClick={() => {
+                              setEditingRemarkId(`${item.id}-${item.stage}`);
+                              setEditingRemarkValue(displayRemark || '');
+                            }}
+                            title={displayRemark || ""}
+                          >
+                            {displayRemark || "-"}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <Button
-                        onClick={() => router.push(`/work-management/smm/${item.clientId}?highlightTask=${item.id}`)}
-                        variant="ghost"
-                        size="sm"
-                        className="text-brand-teal hover:bg-brand-teal/10 hover:text-brand-teal gap-1"
-                      >
-                        <CalendarIcon className="w-3.5 h-3.5" />
-                        Show in Calendar
-                        <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                      </Button>
+                      <div className="flex justify-end items-center gap-2">
+                        <Button
+                          onClick={() => handleOpenLogs(item)}
+                          variant="ghost"
+                          size="icon"
+                          title="View Logs"
+                          className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                        >
+                          <History className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          onClick={() => router.push(`/work-management/smm/${item.clientId}?highlightTask=${item.id}`)}
+                          variant="ghost"
+                          size="icon"
+                          title="Show in Calendar"
+                          className="h-8 w-8 text-brand-teal hover:bg-brand-teal/10 hover:text-brand-teal"
+                        >
+                          <CalendarIcon className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -280,6 +385,65 @@ export function PendingWorkEmbedded() {
           </table>
         </div>
       )}
+
+      <Dialog open={logsDialogOpen} onOpenChange={setLogsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 overflow-hidden bg-slate-50">
+          <DialogHeader className="px-6 py-4 bg-white border-b border-slate-200">
+            <DialogTitle className="text-[22px] font-bold text-slate-900">Task Activity History</DialogTitle>
+            <p className="text-sm text-slate-500">Log of all modifications to this task</p>
+          </DialogHeader>
+          <div className="p-6 overflow-y-auto flex-1">
+            {currentLogs.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-8">No activity logs found for this task.</p>
+            ) : (
+              <div className="space-y-4">
+                {currentLogs.slice().reverse().map((log: any, i: number) => {
+                  let dateStr = log.timestamp;
+                  try {
+                    dateStr = new Intl.DateTimeFormat('en-US', {
+                      day: 'numeric', month: 'short', year: 'numeric',
+                      hour: 'numeric', minute: 'numeric', hour12: true
+                    }).format(new Date(log.timestamp));
+                  } catch (e) {}
+
+                  return (
+                    <div key={i} className="flex gap-4">
+                      <div className="flex flex-col items-center">
+                        <div className="w-8 h-8 rounded-full bg-brand-teal/10 flex items-center justify-center flex-shrink-0">
+                          <History className="w-4 h-4 text-brand-teal" />
+                        </div>
+                        {i < currentLogs.length - 1 && <div className="w-px h-full bg-slate-200 my-1" />}
+                      </div>
+                      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex-1 mb-2">
+                        <div className="flex items-start justify-between gap-4 mb-2">
+                          <div className="font-semibold text-slate-800">{log.action || 'Activity'}</div>
+                          <div className="text-[11px] text-slate-500 font-medium whitespace-nowrap bg-slate-100 px-2 py-1 rounded-md">
+                            {dateStr}
+                          </div>
+                        </div>
+                        <div className="text-sm text-slate-600 mb-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                          {log.details || 'No details provided'}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                            {(log.userName || '?')[0].toUpperCase()}
+                          </div>
+                          <span className="text-xs font-medium text-slate-500">{log.userName || 'Unknown User'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="p-4 bg-white border-t border-slate-200 text-right">
+            <Button onClick={() => setLogsDialogOpen(false)} className="bg-brand-teal hover:bg-brand-teal/90 text-white px-8 rounded-lg font-medium shadow-sm">
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
