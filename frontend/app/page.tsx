@@ -805,7 +805,9 @@ function EmployeeView({
   const isPunchedIn = attendanceStatus?.isPunchedIn;
   const isOnBreak = attendanceStatus?.record?.status === "On Break";
   const punchInTimeRaw = attendanceStatus?.record?.checkIn || (recentAttendance[0]?.checkIn || "Not Started");
-  const punchOutTimeRaw = attendanceStatus?.record?.checkOut || (recentAttendance[0]?.checkOut || "Active");
+  const punchOutTimeRaw = isPunchedIn
+    ? (attendanceStatus?.record?.checkOut || "Active")
+    : (attendanceStatus?.record?.checkOut || recentAttendance[0]?.checkOut || "Active");
   const punchInTime = formatTime12h(punchInTimeRaw);
   const punchOutTime = formatTime12h(punchOutTimeRaw);
 

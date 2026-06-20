@@ -61,7 +61,10 @@ import {
   BarChart2,
   Play,
   Pause,
-  Square
+  Square,
+  Crop,
+  Type,
+  PenTool
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -261,7 +264,45 @@ export default function ChatPage() {
   const [showDeletedNotification, setShowDeletedNotification] = useState(true); // Placeholder for demo, normally would be based on actual deletion events
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
-  const [previewImage, setPreviewImage] = useState<{url: string, name: string} | null>(null);
+  const [previewImageMsgId, setPreviewImageMsgId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null);
+  const [pendingFileUrl, setPendingFileUrl] = useState<string>("");
+
+  useEffect(() => {
+    if (!pendingFile) {
+      setPendingFileUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(pendingFile);
+    setPendingFileUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [pendingFile]);
+
+  const imageMessages = useMemo(() => {
+    return currentMessages.filter(msg => msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName));
+  }, [currentMessages]);
+
+  const currentPreviewMsg = useMemo(() => {
+    return currentMessages.find(m => m.id === previewImageMsgId);
+  }, [currentMessages, previewImageMsgId]);
+
+  const currentPreviewIndex = useMemo(() => {
+    return imageMessages.findIndex(m => m.id === previewImageMsgId);
+  }, [imageMessages, previewImageMsgId]);
+
+  const handlePrevImage = () => {
+    if (currentPreviewIndex > 0) {
+      setPreviewImageMsgId(imageMessages[currentPreviewIndex - 1].id);
+    }
+  };
+
+  const handleNextImage = () => {
+    if (currentPreviewIndex < imageMessages.length - 1) {
+      setPreviewImageMsgId(imageMessages[currentPreviewIndex + 1].id);
+    }
+  };
 
   const [chatChannels, setChatChannels] = useState<any[]>([]);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -357,15 +398,22 @@ export default function ChatPage() {
     }
   }, []);
 
-  // Listen for Escape key to close the active chat
+  // Listen for Escape key to close the active chat and click to close context menu
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setSelectedChat(null as any);
       }
     };
+    const handleCloseMenu = () => {
+      setContextMenu(null);
+    };
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("click", handleCloseMenu);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("click", handleCloseMenu);
+    };
   }, []);
 
   const [showCreatePoll, setShowCreatePoll] = useState(false);
@@ -434,7 +482,14 @@ export default function ChatPage() {
       try { setChatNotificationPrefs(JSON.parse(savedPrefs)); } catch (e) { console.error(e); }
     }
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
+      try {
+        const p = Notification.requestPermission();
+        if (p && typeof p.catch === "function") {
+          p.catch((err) => console.warn("Notification request permission rejected:", err));
+        }
+      } catch (err) {
+        console.warn("Notification permission request failed:", err);
+      }
     }
     const savedDnd = localStorage.getItem("globalDndEnabled");
     if (savedDnd) setGlobalDndEnabled(savedDnd === "true");
@@ -1864,7 +1919,11 @@ export default function ChatPage() {
           id: emp.id || emp.employeeId,
           name: emp.id === user?.id ? `${empName} (You)` : empName,
           status: isOnline ? "Online" : "Offline",
-          lastMessage: summary?.lastMessage || "Click to start chatting",
+          lastMessage: summary?.lastMessage 
+            ? summary.lastMessage 
+            : (summary?.attachmentUrl || summary?.attachmentName)
+              ? "Sent a file"
+              : "Click to start chatting",
           time: summary?.timestamp ? dayjs(summary.timestamp).format("hh:mm A") : "",
           timestamp: summary?.timestamp || 0,
           avatar: emp.profilePhoto 
@@ -1926,6 +1985,18 @@ export default function ChatPage() {
 
     }
   }, [chats, selectedChat, chatChannels, chatGroups, handleSelectChat]);
+
+  // Disable outer layout scroll on mount of Chat page to prevent page overflow
+  useEffect(() => {
+    const siteLayout = document.querySelector(".site-layout");
+    if (siteLayout) {
+      const originalOverflow = (siteLayout as HTMLElement).style.overflow;
+      (siteLayout as HTMLElement).style.overflow = "hidden";
+      return () => {
+        (siteLayout as HTMLElement).style.overflow = originalOverflow;
+      };
+    }
+  }, []);
 
   // Listen for notification clicks when already on the chat page
   useEffect(() => {
@@ -2781,10 +2852,11 @@ export default function ChatPage() {
             )}
 
             {/* Chat Messages */}
-            <div 
-              ref={scrollRef}
-              className="flex-1 overflow-y-auto p-6 space-y-4 whatsapp-chat-bg custom-scrollbar"
-            >
+            <div className="flex-1 flex flex-col whatsapp-chat-bg overflow-hidden relative">
+              <div 
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent custom-scrollbar"
+              >
               <div className="flex justify-center">
                 <span className="px-3 py-1 bg-white border border-border rounded-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider shadow-sm">
                   Conversation with {selectedChat.name}
@@ -2805,6 +2877,7 @@ export default function ChatPage() {
                 const displayName = isGroup ? (sender?.name || msg.sender || "User") : selectedChat.name;
 
                 const showDateSeparator = index === 0 || !dayjs(msg.timestamp).isSame(dayjs(displayMessages[index - 1].timestamp), 'day');
+                const isConsecutive = index > 0 && String(displayMessages[index - 1].senderId) === String(msg.senderId) && !showDateSeparator;
                 const isToday = dayjs(msg.timestamp).isSame(dayjs(), 'day');
                 const isYesterday = dayjs(msg.timestamp).isSame(dayjs().subtract(1, 'day'), 'day');
                 const dateText = isToday ? "Today" : isYesterday ? "Yesterday" : dayjs(msg.timestamp).format("MMMM D, YYYY");
@@ -2838,12 +2911,16 @@ export default function ChatPage() {
                       )}
                     >
                       {!msg.isMe && (
-                        <Avatar className="w-8 h-8 border border-border shrink-0 mb-1" title={displayName}>
-                          {avatarSrc && <AvatarImage src={avatarSrc} />}
-                          <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
-                            {avatarFallback}
-                          </AvatarFallback>
-                        </Avatar>
+                        isConsecutive ? (
+                          <div className="w-8 h-8 shrink-0 mb-1" />
+                        ) : (
+                          <Avatar className="w-8 h-8 border border-border shrink-0 mb-1" title={displayName}>
+                            {avatarSrc && <AvatarImage src={avatarSrc} />}
+                            <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
+                              {avatarFallback}
+                            </AvatarFallback>
+                          </Avatar>
+                        )
                       )}
                       <div className={cn(
                         "flex flex-col max-w-[85%] sm:max-w-[70%]",
@@ -2864,12 +2941,24 @@ export default function ChatPage() {
                           </div>
                         ) : (
                           <div className="relative group/msg max-w-full w-fit">
-                            <div className={cn(
-                              "whatsapp-bubble px-3 py-1.5 pb-2 text-[14.2px] leading-[19px] whitespace-pre-wrap break-words select-text w-fit",
-                              msg.isMe ? "whatsapp-bubble-sent" : "whatsapp-bubble-received"
-                            )}>
+                            <div 
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setContextMenu({
+                                  x: e.clientX,
+                                  y: e.clientY,
+                                  msg
+                                });
+                              }}
+                              className={cn(
+                                "whatsapp-bubble px-3 py-1.5 pb-2 text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text w-fit relative",
+                                msg.isMe 
+                                  ? (isConsecutive ? "bg-[#d9fdd3] text-[#111b21] rounded-[7.5px]" : "whatsapp-bubble-sent")
+                                  : (isConsecutive ? "bg-white text-[#111b21] rounded-[7.5px]" : "whatsapp-bubble-received")
+                              )}
+                            >
                               {/* Group chat sender display name */}
-                              {isGroup && !msg.isMe && (
+                              {isGroup && !msg.isMe && !isConsecutive && (
                                 <span 
                                   className="block text-[12.8px] font-bold mb-1 select-none" 
                                   style={{ color: getSenderColor(displayName) }}
@@ -2911,10 +3000,7 @@ export default function ChatPage() {
                                     alt={msg.attachmentName} 
                                     className="max-w-[280px] sm:max-w-[360px] max-h-[300px] w-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
                                     onLoad={() => scrollToBottom(true)}
-                                    onClick={() => setPreviewImage({
-                                      url: msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl : msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`,
-                                      name: msg.attachmentName || 'Image'
-                                    })}
+                                    onClick={() => setPreviewImageMsgId(msg.id)}
                                   />
                                   {/* Timestamp overlay if no message text is present */}
                                   {!msg.text && (
@@ -3124,83 +3210,50 @@ export default function ChatPage() {
                               </div>
                             )}
 
-                            {/* Hover Options Dropdown Trigger */}
+                            {/* Hover options: Smile icon for text message, Forward icon for image/attachments */}
                             <div className={cn(
-                              "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover/msg:opacity-100 transition-opacity z-10",
-                              msg.isMe ? "-left-10" : "-right-10"
+                              "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover/msg:opacity-100 transition-opacity z-10 flex items-center gap-1.5",
+                              msg.isMe ? "-left-12" : "-right-12"
                             )}>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-black/5">
-                                    <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align={msg.isMe ? "end" : "start"} className="w-56">
-                                  {msg.isMe && (!!msg.groupId || msg.receiverId === "group" || msg.type === "group") && (
-                                    <DropdownMenuItem 
-                                      className="gap-2"
-                                      onClick={() => setMsgInfoData(msg)}
+                              {msg.attachmentName || msg.isVoice ? (
+                                <Button 
+                                  type="button" 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 rounded-full bg-white hover:bg-slate-100 border border-slate-200/60 shadow-[0_1px_2px_rgba(0,0,0,0.08)] text-slate-500"
+                                  onClick={() => setForwardingMessage(msg)}
+                                  title="Forward"
+                                >
+                                  <Forward className="w-3.5 h-3.5" />
+                                </Button>
+                              ) : (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button 
+                                      type="button" 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-7 w-7 rounded-full bg-white hover:bg-slate-100 border border-slate-200/60 shadow-[0_1px_2px_rgba(0,0,0,0.08)] text-slate-500"
+                                      title="React"
                                     >
-                                      <Info className="w-4 h-4" /> Message Info
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem 
-                                    className="gap-2"
-                                    onClick={() => setReplyingTo(msg)}
-                                  >
-                                    <Reply className="w-4 h-4" /> Reply
-                                  </DropdownMenuItem>
-                                  {!(msg.poll || msg.isVoice) && (
-                                    <DropdownMenuItem 
-                                      className="gap-2"
-                                      onClick={() => setForwardingMessage(msg)}
-                                    >
-                                      <Forward className="w-4 h-4" /> Forward message...
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem 
-                                    className="gap-2"
-                                    onClick={() => handleToggleSave(msg.id)}
-                                  >
-                                    <Bookmark className={cn("w-4 h-4", msg.savedBy?.includes(user?.id) && "fill-current text-brand-teal")} /> 
-                                    {msg.savedBy?.includes(user?.id) ? "Unsave" : "Save for later"}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  {!(msg.poll || msg.isVoice) && (
-                                    <DropdownMenuItem 
-                                      className="gap-2"
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(msg.text);
-                                      }}
-                                    >
-                                      <Copy className="w-4 h-4" /> Copy message
-                                    </DropdownMenuItem>
-                                  )}
-
-                                  <DropdownMenuItem 
-                                    className="gap-2"
-                                    onClick={() => handleTogglePin(msg.id)}
-                                  >
-                                    <Pin className={cn("w-4 h-4", msg.isPinned && "fill-current text-brand-teal")} /> 
-                                    {msg.isPinned ? "Unpin from conversation" : "Pin to this conversation"}
-                                  </DropdownMenuItem>
-
-                                  <DropdownMenuSeparator />
-                                  <div className="p-2 flex flex-wrap gap-1 justify-center">
-                                    {["👍", "❤️", "😂", "😮", "😢", "🔥"].map(emoji => (
+                                      <Smile className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent side="top" align="center" className="p-1 border border-slate-200/80 bg-white/95 backdrop-blur-md rounded-full shadow-lg w-auto mb-1 z-50 flex items-center gap-0.5 animate-in zoom-in-95 duration-100">
+                                    {["👍", "❤️", "😂", "😮", "😢", "🙏"].map(emoji => (
                                       <Button
                                         key={emoji}
                                         variant="ghost"
                                         size="icon"
-                                        className="h-8 w-8 rounded-full hover:bg-brand-teal/10 hover:text-brand-teal text-lg p-0"
+                                        className="h-7 w-7 rounded-full hover:bg-slate-100 text-base p-0"
                                         onClick={() => handleToggleReaction(msg.id, emoji)}
                                       >
                                         {emoji}
                                       </Button>
                                     ))}
-                                  </div>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
                             </div>
                           </div>
                         )}
@@ -3235,7 +3288,7 @@ export default function ChatPage() {
             </div>
 
             {/* Chat Input */}
-            <div className="p-4 border-t border-border bg-white">
+            <div className="p-3 border-t border-slate-200/80 bg-[#f0f2f5] shrink-0">
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -3255,26 +3308,10 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {pendingFile && (
-                <div className="max-w-4xl mx-auto mb-2 flex items-center justify-between bg-brand-teal/5 p-3 rounded-xl border border-brand-teal/20 animate-in slide-in-from-bottom-2">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="bg-brand-teal/10 p-2 rounded-lg">
-                      <FileIcon className="w-4 h-4 text-brand-teal" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-bold text-brand-teal uppercase">Ready to send</p>
-                      <p className="text-xs text-muted-foreground truncate">{pendingFile.name}</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-red-500 hover:bg-red-50" onClick={() => setPendingFile(null)}>
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              )}
 
               <form 
                 onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
-                className="max-w-4xl mx-auto flex items-end gap-3 bg-transparent px-2 py-1"
+                className="w-full flex items-end gap-3 bg-transparent px-2"
               >
                 <div className="flex-1 flex items-end gap-2 bg-white px-3 py-2 rounded-[24px] border border-slate-200 shadow-xs min-h-[46px]">
                   {voicePreviewBlob ? (
@@ -3403,10 +3440,9 @@ export default function ChatPage() {
                         className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-[15px] placeholder:text-[#8696a0] text-[#111b21] min-h-[24px] max-h-[120px] py-1.5 px-2 resize-none overflow-y-auto outline-none focus:outline-none"
                       />
 
-                      {/* Right side actions: Tag + Poll + Mic */}
+                      {/* Right side actions: Tag + Poll + Send/Mic */}
                       <div className="flex items-center shrink-0">
                         {/* Tagging / Mention Popover (Hidden Trigger) */}
-                        {/* Tagging / Mention Dropdown */}
                         <div className="relative">
                           {showTagPicker && filteredEmployees.length > 0 && (
                             <div className="absolute bottom-full right-0 p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 mb-4 max-h-64 overflow-y-auto z-[100]">
@@ -3457,36 +3493,37 @@ export default function ChatPage() {
                           </Button>
                         )}
 
-                        {/* Mic Button */}
-                        <Button 
-                          type="button"
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-[#54656f] hover:bg-slate-100 rounded-full h-9 w-9 shrink-0"
-                          onClick={startRecording}
-                          title="Voice Message"
-                        >
-                          <Mic className="w-5 h-5" />
-                        </Button>
+                        {/* Send or Mic Button */}
+                        {(message.trim() || pendingFile || voicePreviewBlob) ? (
+                          <Button 
+                            type="submit"
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-brand-teal hover:bg-slate-100 rounded-full h-9 w-9 shrink-0"
+                            title="Send Message"
+                          >
+                            <Send className="w-5 h-5 fill-current" />
+                          </Button>
+                        ) : (
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-[#54656f] hover:bg-slate-100 rounded-full h-9 w-9 shrink-0"
+                            onClick={startRecording}
+                            title="Voice Message"
+                          >
+                            <Mic className="w-5 h-5" />
+                          </Button>
+                        )}
                       </div>
                     </>
                   )}
                 </div>
-
-                {/* Green/Teal Circle Send Button */}
-                <Button 
-                  type="submit"
-                  disabled={!message.trim() && !pendingFile && !voicePreviewBlob && !isRecording}
-                  className={cn(
-                    "bg-brand-teal hover:bg-brand-teal-light text-white rounded-full w-11 h-11 p-0 shadow-md transition-all shrink-0 flex items-center justify-center",
-                    (!message.trim() && !pendingFile && !voicePreviewBlob && !isRecording) ? "opacity-60 cursor-not-allowed" : "opacity-100 active:scale-95"
-                  )}
-                >
-                  <Send className="w-5 h-5 fill-current ml-0.5" />
-                </Button>
               </form>
             </div>
-          </>
+          </div>
+        </>
           ) : null
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-4">
@@ -3531,10 +3568,7 @@ export default function ChatPage() {
                             className="bg-white border border-border p-3 rounded-2xl hover:shadow-md transition-all group/file cursor-pointer"
                             onClick={() => {
                               if (/\.(jpg|jpeg|png|gif|webp)$/i.test(file.attachmentName || "")) {
-                                setPreviewImage({
-                                  url: file.attachmentUrl?.startsWith('http') ? file.attachmentUrl : `${API_URL}${file.attachmentUrl}`,
-                                  name: file.attachmentName || 'Image'
-                                });
+                                setPreviewImageMsgId(file.id);
                               } else {
                                 handleDownload(file.attachmentUrl, file.attachmentName);
                               }
@@ -4039,40 +4073,124 @@ export default function ChatPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Image Preview Modal */}
-      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="sm:max-w-[800px] p-0 overflow-hidden bg-black/95 border-none shadow-2xl [&>button:last-child]:hidden">
+      {/* Image Preview Modal (WhatsApp Style) */}
+      <Dialog open={!!previewImageMsgId} onOpenChange={(open) => !open && setPreviewImageMsgId(null)}>
+        <DialogContent className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#0c0c0d] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden">
           <DialogTitle className="sr-only">Image Preview</DialogTitle>
-          <div className="absolute top-0 right-0 p-4 z-50 flex items-center gap-2">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-white hover:bg-white/20 rounded-full"
-              onClick={() => previewImage && handleDownload(previewImage.url, previewImage.name)}
-            >
-              <Download className="w-5 h-5" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-white hover:bg-white/20 rounded-full"
-              onClick={() => setPreviewImage(null)}
-            >
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
-          <div className="relative w-full h-[80vh] flex items-center justify-center p-4">
-            {previewImage && (
+          
+          {/* Top Bar */}
+          {currentPreviewMsg && (
+            <div className="h-16 px-6 bg-[#18181a] flex items-center justify-between text-white shrink-0 z-50 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-9 h-9 border border-white/10">
+                  <AvatarImage src={currentPreviewMsg.isMe ? getAvatarUrl(user?.profilePhoto) : getAvatarUrl(selectedChat?.avatar)} />
+                  <AvatarFallback className="bg-brand-teal text-white font-bold text-xs">
+                    {(currentPreviewMsg.isMe ? user?.name : selectedChat?.name)?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 text-left">
+                  <p className="text-sm font-bold truncate leading-snug">
+                    {currentPreviewMsg.isMe ? `${user?.name} (You)` : (employees.find(e => e.id === currentPreviewMsg.senderId)?.name || currentPreviewMsg.sender || selectedChat?.name)}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    {dayjs(currentPreviewMsg.timestamp).format("MMMM D, YYYY [at] hh:mm A")}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-1">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  onClick={() => currentPreviewMsg.replyToId && scrollToMessage(currentPreviewMsg.replyToId)}
+                >
+                  <Reply className="w-5 h-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  onClick={() => setForwardingMessage(currentPreviewMsg)}
+                >
+                  <Forward className="w-5 h-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  onClick={() => handleDownload(currentPreviewMsg.attachmentUrl, currentPreviewMsg.attachmentName)}
+                >
+                  <Download className="w-5 h-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                  onClick={() => setPreviewImageMsgId(null)}
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Center Image View Area */}
+          <div className="flex-1 relative w-full flex items-center justify-center p-4">
+            {/* Left Nav Arrow */}
+            {currentPreviewIndex > 0 && (
+              <button 
+                onClick={handlePrevImage}
+                className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition z-50"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+            )}
+
+            {currentPreviewMsg && (
               <img 
-                src={previewImage.url} 
-                alt={previewImage.name}
-                className="max-w-full max-h-full object-contain select-none"
+                src={
+                  currentPreviewMsg.attachmentUrl?.startsWith('blob:') ? currentPreviewMsg.attachmentUrl :
+                  currentPreviewMsg.attachmentUrl?.startsWith('http') ? currentPreviewMsg.attachmentUrl :
+                  `${API_URL}${currentPreviewMsg.attachmentUrl}`
+                } 
+                alt={currentPreviewMsg.attachmentName}
+                className="max-w-full max-h-[75vh] object-contain select-none shadow-2xl rounded-sm"
               />
             )}
+
+            {/* Right Nav Arrow */}
+            {currentPreviewIndex < imageMessages.length - 1 && (
+              <button 
+                onClick={handleNextImage}
+                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white transition z-50"
+              >
+                <ChevronLeft className="w-6 h-6 rotate-180" />
+              </button>
+            )}
           </div>
-          {previewImage && (
-            <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white text-center text-sm font-medium truncate">
-              {previewImage.name}
+
+          {/* Bottom Thumbnail Strip Carousel */}
+          {imageMessages.length > 1 && (
+            <div className="h-20 bg-[#18181a] border-t border-white/5 flex items-center justify-center gap-2 p-2 shrink-0 overflow-x-auto">
+              {imageMessages.map((msg) => {
+                const isSelected = msg.id === previewImageMsgId;
+                const thumbUrl = msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
+                  msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
+                  `${API_URL}${msg.attachmentUrl}`;
+                return (
+                  <div 
+                    key={msg.id}
+                    onClick={() => setPreviewImageMsgId(msg.id)}
+                    className={cn(
+                      "w-12 h-12 rounded-md overflow-hidden cursor-pointer border-2 transition-all relative shrink-0",
+                      isSelected ? "border-brand-teal scale-105" : "border-transparent opacity-50 hover:opacity-100"
+                    )}
+                  >
+                    <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
+                );
+              })}
             </div>
           )}
         </DialogContent>
@@ -4129,6 +4247,269 @@ export default function ChatPage() {
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Right-click Context Menu */}
+      {contextMenu && (
+        <div 
+          className="fixed z-[999] bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-2xl p-1.5 min-w-[200px] animate-in fade-in zoom-in-95 duration-100"
+          style={{ 
+            top: Math.min(contextMenu.y, typeof window !== 'undefined' ? window.innerHeight - 440 : contextMenu.y), 
+            left: Math.min(contextMenu.x, typeof window !== 'undefined' ? window.innerWidth - 220 : contextMenu.x) 
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button 
+            type="button"
+            onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Reply className="w-4 h-4 text-slate-400" />
+            Reply
+          </button>
+          
+          <button 
+            type="button"
+            onClick={() => { 
+              if (contextMenu.msg.text) {
+                navigator.clipboard.writeText(contextMenu.msg.text);
+                toast.success("Copied to clipboard!");
+              } else if (contextMenu.msg.attachmentName) {
+                navigator.clipboard.writeText(contextMenu.msg.attachmentName);
+                toast.success("Copied file name to clipboard!");
+              }
+              setContextMenu(null); 
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Copy className="w-4 h-4 text-slate-400" />
+            Copy
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { setForwardingMessage(contextMenu.msg); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Forward className="w-4 h-4 text-slate-400" />
+            Forward
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { handleTogglePin(contextMenu.msg.id); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Pin className={cn("w-4 h-4 text-slate-400", contextMenu.msg.isPinned && "fill-current text-brand-teal")} />
+            {contextMenu.msg.isPinned ? "Unpin" : "Pin"}
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { toast.success("Meta AI analyzing message..."); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <div className="w-4 h-4 rounded-full border border-purple-400/50 bg-purple-50 flex items-center justify-center text-[9px] font-bold text-purple-600">✨</div>
+            Ask Meta AI
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { toast.success("Added to starred messages"); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Star className="w-4 h-4 text-slate-400" />
+            Star
+          </button>
+
+          <div className="my-1 border-t border-slate-100" />
+
+          <button 
+            type="button"
+            onClick={() => { toast.info("Select mode enabled"); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Checkbox checked={false} className="w-4 h-4 rounded-sm border-slate-300 pointer-events-none" />
+            Select
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { 
+              if (contextMenu.msg.attachmentUrl) {
+                handleDownload(contextMenu.msg.attachmentUrl, contextMenu.msg.attachmentName);
+              } else if (contextMenu.msg.text) {
+                const blob = new Blob([contextMenu.msg.text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `msg-${contextMenu.msg.id}.txt`;
+                a.click();
+                toast.success("Saved text message!");
+              }
+              setContextMenu(null); 
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Download className="w-4 h-4 text-slate-400" />
+            Save as
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { 
+              const shareText = contextMenu.msg.text || contextMenu.msg.attachmentUrl || "";
+              navigator.clipboard.writeText(shareText);
+              toast.success("Share link/text copied!");
+              setContextMenu(null); 
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <ExternalLink className="w-4 h-4 text-slate-400" />
+            Share
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { 
+              if (contextMenu.msg.attachmentUrl) {
+                window.open(contextMenu.msg.attachmentUrl.startsWith('http') ? contextMenu.msg.attachmentUrl : `${API_URL}${contextMenu.msg.attachmentUrl}`, '_blank');
+              } else {
+                toast.info("No links/attachments to open.");
+              }
+              setContextMenu(null); 
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Layout className="w-4 h-4 text-slate-400" />
+            Open with
+          </button>
+
+          <div className="my-1 border-t border-slate-100" />
+
+          <button 
+            type="button"
+            onClick={() => { toast.success("Message reported to administrator."); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors"
+          >
+            <Info className="w-4 h-4 text-red-400" />
+            Report
+          </button>
+        </div>
+      )}
+
+      {/* File Send Preview Modal (WhatsApp style) */}
+      <Dialog open={!!pendingFile} onOpenChange={(open) => !open && setPendingFile(null)}>
+        <DialogContent className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#18191a] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden">
+          <DialogTitle className="sr-only">Send File Preview</DialogTitle>
+          
+          {/* Top Bar */}
+          <div className="h-14 px-6 bg-[#18191a] flex items-center justify-between text-white shrink-0 z-50">
+            <div className="flex items-center gap-4">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full"
+                onClick={() => setPendingFile(null)}
+              >
+                <X className="w-6 h-6" />
+              </Button>
+            </div>
+            
+            {/* WhatsApp Editing Tools */}
+            <div className="flex items-center gap-1.5 text-gray-400">
+              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
+                <Crop className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
+                <Smile className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
+                <Type className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="hover:text-white hover:bg-white/10 rounded-full h-9 w-9">
+                <PenTool className="w-5 h-5" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Center File Display */}
+          <div className="flex-1 relative w-full flex items-center justify-center p-4">
+            {pendingFile && (
+              pendingFile.type.startsWith("image/") ? (
+                <img 
+                  src={pendingFileUrl} 
+                  alt={pendingFile.name}
+                  className="max-w-full max-h-[60vh] object-contain select-none shadow-2xl rounded-sm animate-in zoom-in-95 duration-200"
+                />
+              ) : (
+                <div className="bg-[#202c33] p-8 rounded-2xl flex flex-col items-center gap-4 border border-[#2f3b43] max-w-sm w-full text-white animate-in zoom-in-95 duration-200">
+                  <div className="w-20 h-20 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal">
+                    <FileIcon className="w-10 h-10" />
+                  </div>
+                  <div className="text-center min-w-0 w-full">
+                    <p className="font-bold truncate text-sm">{pendingFile.name}</p>
+                    <p className="text-xs text-gray-400 mt-1">{(pendingFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Bottom Bar containing Input and Thumbnails */}
+          <div className="bg-[#18191a] p-4 shrink-0 flex flex-col items-center gap-4 border-t border-white/5">
+            {/* Caption Input Box */}
+            <div className="max-w-3xl w-full flex items-center gap-3 bg-[#2a3942] px-4 py-2.5 rounded-lg border border-transparent focus-within:border-[#00a884] shadow-md">
+              <Smile className="w-6 h-6 text-gray-400 cursor-pointer hover:text-white shrink-0" />
+              <input 
+                type="text" 
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="Type a message"
+                className="flex-1 bg-transparent border-none text-white text-[15px] placeholder:text-gray-400 outline-none focus:outline-none"
+              />
+            </div>
+
+            {/* Thumbnails strip and Send button */}
+            <div className="max-w-3xl w-full flex items-center justify-between gap-4 mt-2">
+              <div className="flex items-center gap-2 overflow-x-auto py-1">
+                {pendingFile && (
+                  <div className="w-14 h-14 rounded-md overflow-hidden border-2 border-brand-teal scale-105 relative shrink-0">
+                    {pendingFile.type.startsWith("image/") ? (
+                      <img src={pendingFileUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-[#202c33] flex items-center justify-center text-brand-teal">
+                        <FileIcon className="w-6 h-6" />
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button 
+                  type="button" 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-14 h-14 rounded-md border-2 border-dashed border-gray-600 hover:border-gray-400 flex items-center justify-center text-gray-400 hover:text-white transition shrink-0"
+                >
+                  <Plus className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Teal/Green Send Button */}
+              <button 
+                type="button"
+                onClick={() => handleSendMessage()}
+                className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-14 h-14 shadow-lg flex items-center justify-center transition-all shrink-0"
+              >
+                <Send className="w-6 h-6 fill-current ml-0.5" />
+              </button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

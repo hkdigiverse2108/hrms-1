@@ -68,13 +68,13 @@ let isQuitting = false;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function spawnDetachedWithRetry(exePath, attempts = 6) {
+async function spawnDetachedWithRetry(exePath, args = [], attempts = 6) {
   let lastError = null;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const child = await new Promise((resolve, reject) => {
-        const spawned = spawn(exePath, [], {
+        const spawned = spawn(exePath, args, {
           detached: true,
           stdio: 'ignore',
           windowsHide: true
@@ -693,7 +693,7 @@ function createWindow() {
       log(`[Update] Download complete. Spawning installer: ${tempPath}`);
       
       // Execute the installer after Windows has released the downloaded file handle.
-      await spawnDetachedWithRetry(tempPath);
+      await spawnDetachedWithRetry(tempPath, ['/S']);
       
       // Close sub-processes and quit app
       killSubprocesses();
