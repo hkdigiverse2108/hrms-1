@@ -10,11 +10,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { API_URL } from '@/lib/config';
+import { toast } from 'sonner';
 
-export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending-work" | "todays-work" | "upcoming-work" }) {
+export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work" }) {
   const router = useRouter();
   
   const [entries, setEntries] = useState<any[]>([]);
+  const [otherWorkEntries, setOtherWorkEntries] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -56,6 +58,27 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
     }
   };
 
+  const handleUpdateOtherWorkStatus = async (id: string, newStatus: string) => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
+
+      const response = await fetch(`${API_URL}/other-work/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, updatedBy: userName }),
+      });
+      if (response.ok) {
+        setOtherWorkEntries(otherWorkEntries.map(e => e.id === id ? { ...e, status: newStatus } : e));
+        toast.success(`Task marked as ${newStatus}`);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update status");
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -66,10 +89,11 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
       const storedUser = localStorage.getItem('user');
       const user = storedUser ? JSON.parse(storedUser) : null;
       
-      const [entriesRes, clientsRes, pRes] = await Promise.all([
+      const [entriesRes, clientsRes, pRes, otherWorkRes] = await Promise.all([
         fetch(`${API_URL}/content-calendar/all`),
         fetch(`${API_URL}/clients`),
-        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`)
+        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
+        fetch(`${API_URL}/other-work/all`)
       ]);
       
       if (entriesRes.ok && clientsRes.ok) {
@@ -77,6 +101,11 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
         const fetchedClients = await clientsRes.json();
         setEntries(fetchedEntries);
         setClients(fetchedClients);
+      }
+      
+      if (otherWorkRes.ok) {
+        const fetchedOtherWork = await otherWorkRes.json();
+        setOtherWorkEntries(fetchedOtherWork);
       }
       
       if (pRes.ok) {
@@ -142,6 +171,34 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
       if (entry.postingDate && entry.status !== 'Posted' && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
+    otherWorkEntries.forEach(ow => {
+      const uId = user?.id;
+      const isAssignee = ow.assigneeId === uId;
+      const isAssigner = ow.assignerId === uId;
+      
+      // Assignee sees it in their today/upcoming/pending until they submit for review
+      // Assigner sees it in their pending when it's Ready for Review
+      let canSee = false;
+      if (ow.status === 'Pending') canSee = isAssignee;
+      else if (ow.status === 'Ready for Review') canSee = isAssigner || isAssignee;
+      else if (ow.status === 'Approved') canSee = isAssignee || isAssigner; // Show in completed
+
+      if (!isEmployeeOrIntern || canSee) {
+        if (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved') {
+          tasks.push({
+            ...ow,
+            clientDisplayName: `Assigned by ${ow.assignerName}`,
+            clientId: 'other-work',
+            stage: ow.status,
+            deadline: ow.deadline,
+            type: 'other-work',
+            taskName: ow.title,
+            isOtherWork: true
+          });
+        }
+      }
+    });
+
     // Apply Project Filter
     let filteredTasks = tasks;
     if (filterProject !== 'all') {
@@ -173,10 +230,24 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       filteredTasks = filteredTasks.filter(t => {
+        if (t.isOtherWork) {
+          if (type === 'completed-work') return t.status === 'Approved';
+          if (type === 'pending-work') return t.status === 'Pending' || t.status === 'Ready for Review';
+          const deadlineDate = new Date(t.deadline);
+          deadlineDate.setHours(0, 0, 0, 0);
+          if (type === 'todays-work') return deadlineDate <= today && t.status === 'Pending';
+          if (type === 'upcoming-work') return deadlineDate > today && t.status === 'Pending';
+          return true;
+        }
+
         const hasApplicableRemark = t.remark && t.remark.trim() !== '' && (!t.remarkStage || t.stage === t.remarkStage);
 
         if (type === 'pending-work') {
           return hasApplicableRemark;
+        }
+        
+        if (type === 'completed-work') {
+          return false; // For now, only Other Work is shown in completed work
         }
         
         const deadlineDate = new Date(t.deadline);
@@ -190,7 +261,7 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, clients, clientProjects, filterProject, filterStage, searchQuery, filterDate, type]);
+  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, searchQuery, filterDate, type]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
@@ -199,7 +270,7 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <ClipboardList className="w-5 h-5 text-brand-teal" />
           <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : 'Pending Work'}
+            {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : 'Pending Work'}
           </h2>
         </div>
         
@@ -358,24 +429,68 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex justify-end items-center gap-2">
-                        <Button
-                          onClick={() => handleOpenLogs(item)}
-                          variant="ghost"
-                          size="icon"
-                          title="View Logs"
-                          className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                        >
-                          <History className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          onClick={() => router.push(`/work-management/smm/${item.clientId}?highlightTask=${item.id}`)}
-                          variant="ghost"
-                          size="icon"
-                          title="Show in Calendar"
-                          className="h-8 w-8 text-brand-teal hover:bg-brand-teal/10 hover:text-brand-teal"
-                        >
-                          <CalendarIcon className="w-4 h-4" />
-                        </Button>
+                        {item.isOtherWork ? (
+                          <>
+                            {item.status === 'Pending' && (
+                              <Button 
+                                size="sm" 
+                                className="bg-brand-teal hover:bg-brand-teal/90 text-white text-xs h-7"
+                                onClick={() => handleUpdateOtherWorkStatus(item.id, 'Ready for Review')}
+                              >
+                                Submit for Review
+                              </Button>
+                            )}
+                            {item.status === 'Ready for Review' && (
+                              <>
+                                <Button 
+                                  size="sm" 
+                                  className="bg-green-600 hover:bg-green-700 text-white text-xs h-7"
+                                  onClick={() => handleUpdateOtherWorkStatus(item.id, 'Approved')}
+                                >
+                                  Approve
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="destructive"
+                                  className="text-xs h-7"
+                                  onClick={() => handleUpdateOtherWorkStatus(item.id, 'Pending')}
+                                >
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              onClick={() => handleOpenLogs(item)}
+                              variant="ghost"
+                              size="icon"
+                              title="View Logs"
+                              className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                            >
+                              <History className="w-4 h-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              onClick={() => handleOpenLogs(item)}
+                              variant="ghost"
+                              size="icon"
+                              title="View Logs"
+                              className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                            >
+                              <History className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              onClick={() => router.push(`/work-management/smm/${item.clientId}?highlightTask=${item.id}`)}
+                              variant="ghost"
+                              size="icon"
+                              title="Show in Calendar"
+                              className="h-8 w-8 text-brand-teal hover:bg-brand-teal/10 hover:text-brand-teal"
+                            >
+                              <CalendarIcon className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

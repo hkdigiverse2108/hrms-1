@@ -2847,6 +2847,34 @@ async def upload_desktop_release(
         print("[Desktop Release Error]", err_msg, flush=True)
         raise HTTPException(status_code=500, detail=err_msg)
 
+# --- Other Work API ---
+@app.get("/other-work/all", response_model=List[schemas.OtherWork])
+async def get_all_other_work(db=Depends(get_db)):
+    try:
+        return await crud.get_all_other_work(db)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return []
+
+@app.post("/other-work", response_model=schemas.OtherWork)
+async def create_other_work(entry: schemas.OtherWorkCreate, db=Depends(get_db)):
+    return await crud.create_other_work(db, entry.model_dump())
+
+@app.put("/other-work/{entry_id}", response_model=schemas.OtherWork)
+async def update_other_work(entry_id: str, entry: schemas.OtherWorkUpdate, db=Depends(get_db)):
+    updated = await crud.update_other_work(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/other-work/{entry_id}")
+async def delete_other_work(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_other_work(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8001)))
     print(f"Starting HRMS Backend on http://0.0.0.0:{port}")

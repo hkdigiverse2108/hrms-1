@@ -2068,3 +2068,31 @@ class ContentCalendarSettings(ContentCalendarSettingsBase):
     class Config:
         from_attributes = True
 
+# --- Other Work ---
+class OtherWorkBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assigneeId: str
+    assigneeName: str
+    assignerId: str
+    assignerName: str
+    deadline: str
+    status: str = "Pending"
+    logs: Optional[List[dict]] = None
+
+class OtherWorkCreate(OtherWorkBase):
+    pass
+
+class OtherWorkUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
+    deadline: Optional[str] = None
+    status: Optional[str] = None
+    logs: Optional[List[dict]] = None
+
+class OtherWork(OtherWorkBase):
+    id: str
+    class Config:
+        from_attributes = True

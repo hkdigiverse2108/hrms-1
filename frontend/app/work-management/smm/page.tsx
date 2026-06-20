@@ -56,6 +56,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 
 const SearchableEmployeeSelect = ({ value, onChange, placeholder, employees }: { value: string, onChange: (val: string) => void, placeholder: string, employees: any[] }) => {
   const [open, setOpen] = useState(false);
@@ -879,7 +880,7 @@ export default function CreativeClientsPage() {
           </Popover>
         </div>
 
-
+        <OtherWorkDialog />
         <Button onClick={() => router.push('/feedback-builder/common')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto shrink-0">
           <Plus className="w-4 h-4" />
           Create Feedback Form
@@ -907,7 +908,7 @@ export default function CreativeClientsPage() {
                   <DropdownMenuTrigger asChild>
                     <button
                       className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
-                        ["pending-work", "todays-work", "upcoming-work"].includes(masterFilter)
+                        ["pending-work", "todays-work", "upcoming-work", "completed-work"].includes(masterFilter)
                           ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
                           : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
                       }`}
@@ -925,6 +926,9 @@ export default function CreativeClientsPage() {
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setMasterFilter("upcoming-work")} className="font-medium cursor-pointer">
                       Upcoming Work
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setMasterFilter("completed-work")} className="font-medium cursor-pointer text-brand-teal">
+                      Completed Work
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1017,8 +1021,8 @@ export default function CreativeClientsPage() {
           <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
           <p className="text-sm text-slate-500 font-medium">Fetching dashboard...</p>
         </div>
-      ) : ['pending-work', 'todays-work', 'upcoming-work'].includes(masterFilter) ? (
-        <PendingWorkEmbedded type={masterFilter as "pending-work" | "todays-work" | "upcoming-work"} />
+      ) : ['pending-work', 'todays-work', 'upcoming-work', 'completed-work'].includes(masterFilter) ? (
+        <PendingWorkEmbedded type={masterFilter as "pending-work" | "todays-work" | "upcoming-work" | "completed-work"} />
       ) : masterFilter === 'reviews' ? (
         <FeedbackReviewsEmbedded />
       ) : filteredClients.length > 0 ? (
