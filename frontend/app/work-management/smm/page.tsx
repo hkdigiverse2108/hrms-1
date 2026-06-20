@@ -927,7 +927,7 @@ export default function CreativeClientsPage() {
                     <DropdownMenuItem onClick={() => setMasterFilter("upcoming-work")} className="font-medium cursor-pointer">
                       Upcoming Work
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setMasterFilter("completed-work")} className="font-medium cursor-pointer text-brand-teal">
+                    <DropdownMenuItem onClick={() => setMasterFilter("completed-work")} className="font-medium cursor-pointer">
                       Completed Work
                     </DropdownMenuItem>
                   </DropdownMenuContent>

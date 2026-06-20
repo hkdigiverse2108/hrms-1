@@ -210,7 +210,9 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
       if (filterTaskType === 'other-work') {
         filteredTasks = filteredTasks.filter(t => t.isOtherWork);
       } else if (filterTaskType === 'content-calendar') {
-        filteredTasks = filteredTasks.filter(t => !t.isOtherWork);
+        filteredTasks = filteredTasks.filter(t => !t.isOtherWork && t.type !== 'digital-marketing');
+      } else if (filterTaskType === 'digital-marketing') {
+        filteredTasks = filteredTasks.filter(t => t.type === 'digital-marketing');
       }
     }
 
@@ -321,6 +323,7 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
               <SelectItem value="all">All Types</SelectItem>
               <SelectItem value="content-calendar">Content Calendar</SelectItem>
               <SelectItem value="other-work">Other Work</SelectItem>
+              <SelectItem value="digital-marketing">Digital Marketing</SelectItem>
             </SelectContent>
           </Select>
 
@@ -522,58 +525,80 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
       )}
 
       <Dialog open={logsDialogOpen} onOpenChange={setLogsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 overflow-hidden bg-slate-50">
-          <DialogHeader className="px-6 py-4 bg-white border-b border-slate-200">
-            <DialogTitle className="text-[22px] font-bold text-slate-900">Task Activity History</DialogTitle>
-            <p className="text-sm text-slate-500">Log of all modifications to this task</p>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-slate-50 border-0 shadow-2xl rounded-2xl">
+          <DialogHeader className="px-6 py-6 bg-white flex flex-row items-center gap-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] relative z-10">
+            <div className="w-14 h-14 rounded-full bg-brand-teal/10 flex items-center justify-center flex-shrink-0">
+              <History className="w-6 h-6 text-brand-teal" />
+            </div>
+            <div className="flex flex-col gap-1 items-start text-left">
+              <DialogTitle className="text-[22px] font-bold text-slate-900 m-0 leading-none">Row Activity History</DialogTitle>
+              <p className="text-[13px] text-slate-500 italic m-0">Content Calendar Row</p>
+            </div>
           </DialogHeader>
-          <div className="p-6 overflow-y-auto flex-1">
+          <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
             {currentLogs.length === 0 ? (
               <p className="text-sm text-slate-500 text-center py-8">No activity logs found for this task.</p>
             ) : (
-              <div className="space-y-4">
-                {currentLogs.slice().reverse().map((log: any, i: number) => {
-                  let dateStr = log.timestamp;
-                  try {
-                    dateStr = new Intl.DateTimeFormat('en-US', {
-                      day: 'numeric', month: 'short', year: 'numeric',
-                      hour: 'numeric', minute: 'numeric', hour12: true
-                    }).format(new Date(log.timestamp));
-                  } catch (e) {}
+              <div className="relative pl-1">
+                {/* Vertical Timeline Line */}
+                <div className="absolute left-[9px] top-6 bottom-6 w-px bg-slate-200 z-0" />
+                
+                <div className="space-y-4">
+                  {currentLogs.slice().reverse().map((log: any, i: number) => {
+                    let dateStr = log.timestamp;
+                    try {
+                      dateStr = new Intl.DateTimeFormat('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                        hour: 'numeric', minute: '2-digit', hour12: true
+                      }).format(new Date(log.timestamp));
+                    } catch (e) {}
 
-                  return (
-                    <div key={i} className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <div className="w-8 h-8 rounded-full bg-brand-teal/10 flex items-center justify-center flex-shrink-0">
-                          <History className="w-4 h-4 text-brand-teal" />
+                    const isCreated = log.action?.toLowerCase().includes('create') || log.details?.toLowerCase().includes('create');
+                    const badgeColor = isCreated ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600";
+                    const badgeText = isCreated ? "CREATED" : "UPDATED";
+                    
+                    const detailsList = log.details ? log.details.split(', ').filter((d: string) => d.trim() !== '') : [];
+
+                    return (
+                      <div key={i} className="flex gap-6 relative z-10">
+                        <div className="flex flex-col items-center mt-[22px]">
+                          <div className="w-3 h-3 rounded-full border-2 border-brand-teal bg-white" />
                         </div>
-                        {i < currentLogs.length - 1 && <div className="w-px h-full bg-slate-200 my-1" />}
-                      </div>
-                      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex-1 mb-2">
-                        <div className="flex items-start justify-between gap-4 mb-2">
-                          <div className="font-semibold text-slate-800">{log.action || 'Activity'}</div>
-                          <div className="text-[11px] text-slate-500 font-medium whitespace-nowrap bg-slate-100 px-2 py-1 rounded-md">
-                            {dateStr}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)] flex-1">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <span className="font-bold text-slate-900 text-[15px]">{log.userName || 'Admin'}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${badgeColor} uppercase tracking-wider`}>
+                                {badgeText}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-400 font-medium">
+                              {dateStr}
+                            </div>
                           </div>
-                        </div>
-                        <div className="text-sm text-slate-600 mb-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                          {log.details || 'No details provided'}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
-                            {(log.userName || '?')[0].toUpperCase()}
-                          </div>
-                          <span className="text-xs font-medium text-slate-500">{log.userName || 'Unknown User'}</span>
+                          <ul className="space-y-1.5">
+                            {detailsList.length > 0 ? detailsList.map((detail: string, idx: number) => (
+                              <li key={idx} className="flex items-start gap-2 text-[13px] text-slate-600">
+                                <span className="text-slate-400 mt-[3px] text-lg leading-none">•</span>
+                                <span className="leading-relaxed">{detail}</span>
+                              </li>
+                            )) : (
+                              <li className="flex items-start gap-2 text-[13px] text-slate-600">
+                                <span className="text-slate-400 mt-[3px] text-lg leading-none">•</span>
+                                <span className="leading-relaxed">{log.action || 'No details provided'}</span>
+                              </li>
+                            )}
+                          </ul>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
-          <div className="p-4 bg-white border-t border-slate-200 text-right">
-            <Button onClick={() => setLogsDialogOpen(false)} className="bg-brand-teal hover:bg-brand-teal/90 text-white px-8 rounded-lg font-medium shadow-sm">
+          <div className="p-4 bg-white border-t border-slate-200 flex justify-end">
+            <Button onClick={() => setLogsDialogOpen(false)} className="bg-brand-teal hover:bg-brand-teal/90 text-white px-8 rounded-lg font-bold shadow-sm h-10">
               Close
             </Button>
           </div>
