@@ -16,6 +16,7 @@ interface ChatContextType {
   lastEvent: ChatEvent | null;
   markAsSeen: (chatId: string) => void;
   onlineUsers: Set<string>;
+  isWindowFocused: boolean;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -458,7 +459,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id]);
 
   return (
-    <ChatContext.Provider value={{ ws, unreadCounts, totalUnreadCount, lastEvent, markAsSeen, onlineUsers }}>
+    <ChatContext.Provider value={{ ws, unreadCounts, totalUnreadCount, lastEvent, markAsSeen, onlineUsers, isWindowFocused }}>
       {children}
     </ChatContext.Provider>
   );

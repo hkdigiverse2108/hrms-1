@@ -51,6 +51,8 @@ import {
 import { useUserContext } from "@/context/UserContext";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import dayjs from "dayjs";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+dayjs.extend(isSameOrAfter);
 import { TablePagination } from "@/components/common/TablePagination";
 import { formatTime12h } from "@/lib/utils";
 import { RequestPunchOutDialog } from "@/components/dashboard/RequestPunchOutDialog";
@@ -94,6 +96,7 @@ const formatWorkHours = (workHours: string) => {
 
 export default function DashboardPage() {
   const { user, isLoading, getISTNow, isTimeSynced } = useUserContext();
+  const [hrActiveFilter, setHrActiveFilter] = useState<string | null>(null);
   const [attendanceStatus, setAttendanceStatus] = useState<{isPunchedIn: boolean, record: any} | null>(null);
   const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
   const [isPunching, setIsPunching] = useState(false);
@@ -501,28 +504,82 @@ export default function DashboardPage() {
         )}
       </PageHeader>
  
-      {(!isAdmin) && (
-        <EmployeeView 
-          user={user} 
-          attendanceStatus={attendanceStatus} 
-          handlePunch={handlePunch} 
-          handleGoingForMeeting={handleGoingForMeeting}
-          isPunching={isPunching}
-          workTime={workTime}
-          totalBreakTime={totalBreakTime}
-          allTimeHours={allTimeHours}
-          recentAttendance={recentAttendance}
-          currentTime={currentTime}
-          isTimeSynced={isTimeSynced}
-          getISTNow={getISTNow}
-          punchCardRef={punchCardRef}
-          leaves={leaveRequests}
-        />
+      {isAdmin ? (
+        <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            {/* 1. If HR, show the 4 HR StatCards on top */}
+            {isHR && (
+              <HRView 
+                user={user} 
+                leaves={leaveRequests} 
+                applications={applications} 
+                assets={assets} 
+                showStatsOnly={true}
+                activeFilter={hrActiveFilter}
+                setActiveFilter={setHrActiveFilter}
+              />
+            )}
+
+            {/* 2. Show Employee Punch Card Box */}
+            <EmployeeView 
+              user={user} 
+              attendanceStatus={attendanceStatus} 
+              handlePunch={handlePunch} 
+              handleGoingForMeeting={handleGoingForMeeting}
+              isPunching={isPunching}
+              workTime={workTime}
+              totalBreakTime={totalBreakTime}
+              allTimeHours={allTimeHours}
+              recentAttendance={recentAttendance}
+              currentTime={currentTime}
+              isTimeSynced={isTimeSynced}
+              getISTNow={getISTNow}
+              punchCardRef={punchCardRef}
+              showPunchCardOnly={true}
+            />
+
+            {/* 3. Show Employee stats and Recent Attendance table */}
+            <EmployeeView 
+              user={user} 
+              attendanceStatus={attendanceStatus} 
+              handlePunch={handlePunch} 
+              handleGoingForMeeting={handleGoingForMeeting}
+              isPunching={isPunching}
+              workTime={workTime}
+              totalBreakTime={totalBreakTime}
+              allTimeHours={allTimeHours}
+              recentAttendance={recentAttendance}
+              currentTime={currentTime}
+              isTimeSynced={isTimeSynced}
+              getISTNow={getISTNow}
+              punchCardRef={punchCardRef}
+              showStatsAndAttendanceOnly={true}
+            />
+
+            {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
+            {isHR && (
+              <HRView 
+                user={user} 
+                leaves={leaveRequests} 
+                applications={applications} 
+                assets={assets} 
+                showListsOnly={true}
+                activeFilter={hrActiveFilter}
+                setActiveFilter={setHrActiveFilter}
+              />
+            )}
+
+            {/* 5. Show Upcoming Approved Leaves Card */}
+            <UpcomingApprovedLeavesCard leaves={leaveRequests} />
+          </div>
+
+          <div className="lg:col-span-1">
+            <EventsSidebar user={user} leaves={leaveRequests} />
+          </div>
+        </div>
       )}
-
-      {isHR && <HRView user={user} leaves={leaveRequests} applications={applications} assets={assets} />}
-
-      {isAdmin && <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />}
  
       <RequestPunchOutDialog 
         open={isRequestDialogOpen}
@@ -536,6 +593,68 @@ export default function DashboardPage() {
           punchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }}
       />
+    </div>
+  );
+}
+
+function UpcomingApprovedLeavesCard({ leaves }: { leaves: any[] }) {
+  const today = dayjs();
+  const upcomingApprovedLeaves = (leaves || [])
+    .filter((l: any) => {
+      if (l.status !== 'Approved') return false;
+      const endDate = dayjs(l.end_date, "DD-MM-YYYY");
+      return endDate.isSameOrAfter(today, 'day');
+    })
+    .sort((a: any, b: any) => {
+      const dateA = dayjs(a.start_date, "DD-MM-YYYY");
+      const dateB = dayjs(b.start_date, "DD-MM-YYYY");
+      return dateA.diff(dateB);
+    });
+
+  return (
+    <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+      <div className="p-5 border-b border-border flex justify-between items-center bg-white">
+        <div className="flex items-center gap-2">
+          <CalendarIcon className="w-5 h-5 text-brand-teal" />
+          <h3 className="font-bold text-lg text-[#111827]">Upcoming Approved Leaves</h3>
+        </div>
+      </div>
+      <div className="p-0">
+        {upcomingApprovedLeaves.length > 0 ? (
+          <div className="divide-y divide-border">
+            {upcomingApprovedLeaves.slice(0, 5).map((leave: any, idx: number) => {
+              const start = dayjs(leave.start_date, "DD-MM-YYYY");
+              const end = dayjs(leave.end_date, "DD-MM-YYYY");
+              const dateDisplay = start.isSame(end, 'day') 
+                ? start.format("MMM DD, YYYY")
+                : `${start.format("MMM DD")} - ${end.format("MMM DD, YYYY")}`;
+              
+              return (
+                <div key={leave.id || idx} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
+                        {(leave.employee_name || "L")[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-950">{leave.employee_name}</div>
+                      <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-brand-light text-brand-teal rounded-md">
+                    {dateDisplay}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            No upcoming approved leaves found
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -573,7 +692,7 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard 
           title="Total Employees" 
           value={totalEmployeesCount.toString()} 
@@ -648,6 +767,7 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
             </div>
           </div>
           <DepartmentDistribution />
+          <UpcomingApprovedLeavesCard leaves={leaves} />
         </div>
         <div className="lg:col-span-1">
           <EventsSidebar user={user} leaves={leaves} />
@@ -657,116 +777,141 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
   );
 }
  
-function HRView({ user, leaves, applications, assets }: { user: any, leaves: any[], applications: any[], assets: any[] }) {
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+function HRView({ 
+  user, 
+  leaves, 
+  applications, 
+  assets,
+  showStatsOnly = false,
+  showListsOnly = false,
+  activeFilter: externalActiveFilter,
+  setActiveFilter: externalSetActiveFilter
+}: { 
+  user: any, 
+  leaves: any[], 
+  applications: any[], 
+  assets: any[],
+  showStatsOnly?: boolean,
+  showListsOnly?: boolean,
+  activeFilter?: string | null,
+  setActiveFilter?: (val: string | null) => void
+}) {
+  const [internalActiveFilter, setInternalActiveFilter] = useState<string | null>(null);
+  const activeFilter = externalActiveFilter !== undefined ? externalActiveFilter : internalActiveFilter;
+  const setActiveFilter = externalSetActiveFilter !== undefined ? externalSetActiveFilter : setInternalActiveFilter;
 
   const filteredLeaves = activeFilter 
     ? leaves.filter(l => l.status === activeFilter) 
     : leaves;
 
+  const statsSection = (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div onClick={() => setActiveFilter(activeFilter === 'Pending' ? null : 'Pending')} className="cursor-pointer">
+        <StatCard 
+          title="Pending Leaves" 
+          value={leaves.filter(l => l.status === 'Pending').length.toString().padStart(2, '0')} 
+          trend="Action Required" 
+          trendLabel="awaiting approval" 
+          icon={<CalendarIcon className={`w-5 h-5 ${activeFilter === 'Pending' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
+          color={activeFilter === 'Pending' ? 'brand' : undefined}
+        />
+      </div>
+
+      <Link href="/recruitment/hiring-board">
+        <StatCard title="New Applications" value={(applications?.length || 0).toString().padStart(2, '0')} trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
+      </Link>
+      <div onClick={() => setActiveFilter(activeFilter === 'Approved' ? null : 'Approved')} className="cursor-pointer">
+        <StatCard 
+          title="Approved Leaves" 
+          value={leaves.filter(l => l.status === 'Approved').length.toString().padStart(2, '0')} 
+          trend="Past & Future" 
+          trendLabel="approved requests" 
+          icon={<CheckCircle2 className={`w-5 h-5 ${activeFilter === 'Approved' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
+          color={activeFilter === 'Approved' ? 'brand' : undefined}
+        />
+      </div>
+      <StatCard title="Asset Requests" value={(assets?.filter(a => a.status === 'Requested' || a.status === 'Pending')?.length || 0).toString().padStart(2, '0')} trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
+    </div>
+  );
+
+  const listsSection = (
+    <div className="space-y-6">
+      <div className="bg-white border border-border rounded-xl shadow-sm">
+        <div className="p-5 border-b border-border flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <h3 className="font-bold text-lg text-[#111827]">Recent Leave Requests</h3>
+            {activeFilter && (
+              <Badge variant="outline" className="bg-brand-light text-brand-teal border-brand-teal/20 px-2 py-0">
+                {activeFilter}
+                <X className="w-3 h-3 ml-1 cursor-pointer" onClick={() => setActiveFilter(null)} />
+              </Badge>
+            )}
+          </div>
+          <Link href="/leave">
+            <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
+          </Link>
+        </div>
+        <div className="p-0">
+          {filteredLeaves.length > 0 ? filteredLeaves.slice(0, 5).map((leave, i) => (
+            <div key={i} className="flex items-center justify-between p-4 border-b last:border-0 border-border hover:bg-gray-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{leave.employee_name[0]}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="text-sm font-semibold">{leave.employee_name}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
+                </div>
+              </div>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-md ${
+                leave.status === 'Approved' ? 'bg-green-50 text-green-600' : 
+                leave.status === 'Rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+              }`}>
+                {leave.status}
+              </span>
+            </div>
+          )) : (
+            <div className="p-8 text-center text-sm text-muted-foreground">No {activeFilter ? activeFilter.toLowerCase() : ''} leave requests found</div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold text-lg text-[#111827]">Upcoming Interviews</h3>
+          <Link href="/recruitment/hiring-board">
+            <Button variant="ghost" size="sm" className="text-brand-teal">Hiring Board</Button>
+          </Link>
+        </div>
+        <div className="space-y-4">
+          {applications && applications.length > 0 ? (
+            applications.slice(0, 3).map((app, i) => (
+              <div key={i} className="flex gap-4 p-3 rounded-lg border border-border hover:border-brand-teal/30 transition-colors">
+                <div className="bg-brand-light p-2 rounded-md h-fit"><Clock className="w-4 h-4 text-brand-teal" /></div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm">{app.candidate_name || app.name}</h4>
+                  <p className="text-xs text-muted-foreground">{app.applied_for || app.role}</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs font-bold text-brand-teal">{app.status || 'Applied'}</div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-8 text-center text-sm text-muted-foreground">No upcoming interviews or recent applications</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (showStatsOnly) return statsSection;
+  if (showListsOnly) return listsSection;
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div onClick={() => setActiveFilter(activeFilter === 'Pending' ? null : 'Pending')} className="cursor-pointer">
-          <StatCard 
-            title="Pending Leaves" 
-            value={leaves.filter(l => l.status === 'Pending').length.toString().padStart(2, '0')} 
-            trend="Action Required" 
-            trendLabel="awaiting approval" 
-            icon={<CalendarIcon className={`w-5 h-5 ${activeFilter === 'Pending' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
-            color={activeFilter === 'Pending' ? 'brand' : undefined}
-          />
-        </div>
-
-        <Link href="/recruitment/hiring-board">
-          <StatCard title="New Applications" value={(applications?.length || 0).toString().padStart(2, '0')} trend="+5" trendLabel="this week" icon={<FileCheck className="w-5 h-5 text-muted-foreground" />} trendUp/>
-        </Link>
-        <div onClick={() => setActiveFilter(activeFilter === 'Approved' ? null : 'Approved')} className="cursor-pointer">
-          <StatCard 
-            title="Approved Leaves" 
-            value={leaves.filter(l => l.status === 'Approved').length.toString().padStart(2, '0')} 
-            trend="Past & Future" 
-            trendLabel="approved requests" 
-            icon={<CheckCircle2 className={`w-5 h-5 ${activeFilter === 'Approved' ? 'text-brand-teal' : 'text-muted-foreground'}`} />} 
-            color={activeFilter === 'Approved' ? 'brand' : undefined}
-          />
-        </div>
-        <StatCard title="Asset Requests" value={(assets?.filter(a => a.status === 'Requested' || a.status === 'Pending')?.length || 0).toString().padStart(2, '0')} trend="Pending" trendLabel="laptop & equipment" icon={<AlertCircle className="w-5 h-5 text-muted-foreground" />} trendUp={false} />
-      </div>
- 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-border rounded-xl shadow-sm">
-            <div className="p-5 border-b border-border flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <h3 className="font-bold text-lg text-[#111827]">Recent Leave Requests</h3>
-                {activeFilter && (
-                  <Badge variant="outline" className="bg-brand-light text-brand-teal border-brand-teal/20 px-2 py-0">
-                    {activeFilter}
-                    <X className="w-3 h-3 ml-1 cursor-pointer" onClick={() => setActiveFilter(null)} />
-                  </Badge>
-                )}
-              </div>
-              <Link href="/leave">
-                <Button variant="ghost" size="sm" className="text-brand-teal">View All</Button>
-              </Link>
-            </div>
-            <div className="p-0">
-              {filteredLeaves.length > 0 ? filteredLeaves.slice(0, 5).map((leave, i) => (
-                <div key={i} className="flex items-center justify-between p-4 border-b last:border-0 border-border hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback className="bg-brand-light text-brand-teal font-bold">{leave.employee_name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="text-sm font-semibold">{leave.employee_name}</div>
-                      <div className="text-xs text-muted-foreground capitalize">{leave.type} • {leave.duration}</div>
-                    </div>
-                  </div>
-                  <span className={`text-xs font-semibold px-2 py-1 rounded-md ${
-                    leave.status === 'Approved' ? 'bg-green-50 text-green-600' : 
-                    leave.status === 'Rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
-                  }`}>
-                    {leave.status}
-                  </span>
-                </div>
-              )) : (
-                <div className="p-8 text-center text-sm text-muted-foreground">No {activeFilter ? activeFilter.toLowerCase() : ''} leave requests found</div>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg text-[#111827]">Upcoming Interviews</h3>
-              <Link href="/recruitment/hiring-board">
-                <Button variant="ghost" size="sm" className="text-brand-teal">Hiring Board</Button>
-              </Link>
-            </div>
-            <div className="space-y-4">
-              {applications && applications.length > 0 ? (
-                applications.slice(0, 3).map((app, i) => (
-                  <div key={i} className="flex gap-4 p-3 rounded-lg border border-border hover:border-brand-teal/30 transition-colors">
-                    <div className="bg-brand-light p-2 rounded-md h-fit"><Clock className="w-4 h-4 text-brand-teal" /></div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-sm">{app.candidate_name || app.name}</h4>
-                      <p className="text-xs text-muted-foreground">{app.applied_for || app.role}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs font-bold text-brand-teal">{app.status || 'Applied'}</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-sm text-muted-foreground">No upcoming interviews or recent applications</div>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="lg:col-span-1">
-          <EventsSidebar user={user} leaves={leaves} />
-        </div>
-      </div>
+      {statsSection}
+      {listsSection}
     </div>
   );
 }
@@ -785,7 +930,9 @@ function EmployeeView({
   isTimeSynced,
   getISTNow,
   punchCardRef,
-  leaves
+  leaves,
+  showPunchCardOnly = false,
+  showStatsAndAttendanceOnly = false
 }: { 
   user: any, 
   attendanceStatus: any, 
@@ -800,7 +947,9 @@ function EmployeeView({
   isTimeSynced: boolean,
   getISTNow: () => Date,
   punchCardRef: React.RefObject<HTMLDivElement | null>,
-  leaves: any[]
+  leaves?: any[],
+  showPunchCardOnly?: boolean,
+  showStatsAndAttendanceOnly?: boolean
 }) {
   const userName = user?.name || "Guest";
   const firstName = user?.firstName || userName.split(' ')[0];
@@ -823,13 +972,8 @@ function EmployeeView({
       return `${h}h ${m}m`;
     }
     return "Not Started";
-  };
- 
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div ref={punchCardRef} className="bg-white border border-border rounded-2xl p-8 shadow-sm scroll-mt-20 relative overflow-hidden">
+  };  const punchCardSection = (
+    <div ref={punchCardRef} className="bg-white border border-border rounded-2xl p-8 shadow-sm scroll-mt-20 relative overflow-hidden">
             <div className="flex justify-between items-start mb-8">
               <div className="flex flex-col gap-4">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-light/50 border border-brand-teal/20 rounded-full w-fit">
@@ -890,17 +1034,17 @@ function EmployeeView({
               </div>
               <div className="text-sm text-gray-500 font-medium min-h-[20px] flex items-center justify-center gap-2">
                 {isPunchedIn ? (
-                  isOnBreak ? (
-                    <span className="text-amber-600 font-bold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                      On Break
-                    </span>
-                  ) : (
-                    <span className="text-brand-teal font-bold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse"></span>
-                      Live Tracking Active
-                    </span>
-                  )
+                   isOnBreak ? (
+                     <span className="text-amber-600 font-bold flex items-center gap-1.5">
+                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                       On Break
+                     </span>
+                   ) : (
+                     <span className="text-brand-teal font-bold flex items-center gap-1.5">
+                       <span className="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse"></span>
+                       Live Tracking Active
+                     </span>
+                   )
                 ) : (
                   <span className="text-gray-400 font-bold">Not Started</span>
                 )}
@@ -923,7 +1067,7 @@ function EmployeeView({
                   <><Coffee className="w-5 h-5 mr-3" /> {isOnBreak ? 'Break Out' : 'Take Break'}</>
                 )}
               </Button>
-
+ 
               <Button 
                 onClick={handleGoingForMeeting} 
                 disabled={isPunching || !isPunchedIn || isOnBreak}
@@ -946,22 +1090,24 @@ function EmployeeView({
               </Button>
             </div>
  
-            <div className="grid grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border border-brand-teal/10 rounded-xl overflow-hidden bg-white">
                {[
                  { label: 'First In', value: punchInTime, highlight: false },
                  { label: 'Last Out', value: punchOutTime, highlight: punchOutTime === "Active" },
                  { label: 'Break In Time', value: totalBreakTime, highlight: false },
                  { label: 'Worked Time', value: isPunchedIn ? "Active" : (workTime !== "00:00:00" ? getFormattedWorkedTime() : "Not Started"), highlight: isPunchedIn },
                ].map((item, idx) => (
-                 <div key={idx} className={`p-4 ${idx < 3 ? 'border-r border-brand-teal/10' : ''} bg-[#EAF7F6]/10`}>
+                 <div key={idx} className={`p-4 ${idx < 3 ? 'sm:border-r border-brand-teal/10' : ''} ${idx === 0 || idx === 2 ? 'border-r border-brand-teal/10' : ''} ${idx < 2 ? 'border-b sm:border-b-0 border-brand-teal/10' : ''} bg-[#EAF7F6]/10`}>
                    <div className="text-[10px] font-bold text-gray-500 uppercase mb-1">{item.label}</div>
                    <div className={`text-sm font-black ${item.highlight ? 'text-brand-teal' : 'text-[#111827]'}`}>{item.value}</div>
                  </div>
                ))}
             </div>
           </div>
- 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  );
+
+  const statsSection = (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard 
                 title="Today's Hours" 
                 value={isPunchedIn ? workTime.split(':').slice(0, 2).join('h ') + 'm' : (workTime !== "00:00:00" ? getFormattedWorkedTime() : '0h 0m')} 
@@ -992,14 +1138,10 @@ function EmployeeView({
                hideTrend
              />
           </div>
-        </div>
- 
-        <div className="lg:col-span-1">
-          <EventsSidebar user={user} leaves={leaves} />
-        </div>
-      </div>
- 
-      <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+  );
+
+  const attendanceSection = (
+    <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
         <div className="px-6 py-5 flex justify-between items-center">
           <h3 className="font-bold text-lg text-foreground">Recent Attendance</h3>
         </div>
@@ -1063,8 +1205,24 @@ function EmployeeView({
             </tbody>
           </table>
         </div>
-
       </div>
+  );
+
+  if (showPunchCardOnly) return punchCardSection;
+  if (showStatsAndAttendanceOnly) {
+    return (
+      <div className="space-y-6">
+        {statsSection}
+        {attendanceSection}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {punchCardSection}
+      {statsSection}
+      {attendanceSection}
     </div>
   );
 }
@@ -1368,62 +1526,6 @@ function EventsSidebar({ user, leaves }: { user: any, leaves: any[] }) {
         onEditEvent={handleEditClick}
         onDeleteEvent={handleDeleteEvent}
       />
-
-      {/* Upcoming Approved Leaves Card */}
-      {(() => {
-        const today = dayjs();
-        const upcomingApprovedLeaves = (leaves || [])
-          .filter((l: any) => {
-            if (l.status !== 'Approved') return false;
-            const endDate = dayjs(l.end_date, "DD-MM-YYYY");
-            return endDate.isSameOrAfter(today, 'day');
-          })
-          .sort((a: any, b: any) => {
-            const dateA = dayjs(a.start_date, "DD-MM-YYYY");
-            const dateB = dayjs(b.start_date, "DD-MM-YYYY");
-            return dateA.diff(dateB);
-          });
-
-        return (
-          <div className="mt-6 bg-white border border-border rounded-xl p-5 shadow-xs">
-            <h4 className="font-bold text-[14px] text-[#111827] mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
-              <UserX className="w-4 h-4 text-brand-teal" /> Upcoming Approved Leaves
-            </h4>
-            <div className="space-y-3">
-              {upcomingApprovedLeaves.length > 0 ? (
-                upcomingApprovedLeaves.slice(0, 5).map((leave: any, idx: number) => {
-                  const start = dayjs(leave.start_date, "DD-MM-YYYY");
-                  const end = dayjs(leave.end_date, "DD-MM-YYYY");
-                  const dateDisplay = start.isSame(end, 'day') 
-                    ? start.format("MMM DD, YYYY")
-                    : `${start.format("MMM DD")} - ${end.format("MMM DD, YYYY")}`;
-                  
-                  return (
-                    <div key={leave.id || idx} className="p-3 rounded-lg border border-gray-100/50 bg-[#F9FAFB]/50 hover:bg-gray-50 transition-all flex items-center gap-3">
-                      <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarFallback className="bg-brand-light text-brand-teal font-extrabold text-[10px] uppercase">
-                          {(leave.employee_name || "L")[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-bold text-slate-800 truncate">{leave.employee_name}</div>
-                        <div className="text-[10px] text-slate-500 font-medium capitalize mt-0.5">{leave.type} • {leave.duration}</div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-[10px] font-extrabold text-brand-teal bg-brand-light/60 px-2 py-0.5 rounded-md whitespace-nowrap">
-                          {dateDisplay}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-center text-xs text-muted-foreground py-2">No upcoming approved leaves.</p>
-              )}
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }

@@ -235,7 +235,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
 
 export default function ChatPage() {
   const { user } = useUser();
-  const { ws, lastEvent, unreadCounts, markAsSeen: contextMarkAsSeen, onlineUsers } = useChatContext();
+  const { ws, lastEvent, unreadCounts, markAsSeen: contextMarkAsSeen, onlineUsers, isWindowFocused } = useChatContext();
   const { data: apiData, isLoading } = useApi();
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [message, setMessage] = useState("");
@@ -884,6 +884,17 @@ export default function ChatPage() {
       }
     };
   }, [selectedChat]);
+ 
+  // Mark active chat as seen when window gains focus
+  useEffect(() => {
+    if (isWindowFocused && selectedChat) {
+      const chatId = selectedChat.id || selectedChat.employeeId;
+      if (chatId) {
+        markAsSeen(chatId);
+        fetchChatSummaries();
+      }
+    }
+  }, [isWindowFocused, selectedChat, fetchChatSummaries]);
 
   const handleSelectChat = (chat: any) => {
     if (!chat) return;
@@ -1118,7 +1129,9 @@ export default function ChatPage() {
           }
           return [...prev, { ...data, isMe: data.senderId === user.id }];
         });
-        markAsSeen(messageChatId);
+        if (isWindowFocused) {
+          markAsSeen(messageChatId);
+        }
       }
       
       // Live refresh lists
