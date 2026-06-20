@@ -312,7 +312,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         window.dispatchEvent(new Event("attendance-update"));
       }
     } catch (err) {
-      console.error("Error during inactivity punch out:", err);
+      console.warn("Error during inactivity punch out:", err);
     }
   }, [user, showRecoveryModal]);
 
@@ -358,7 +358,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         }
       }
     } catch (err) {
-      console.error("Error fetching status during recovery check:", err);
+      console.warn("Error fetching status during recovery check:", err);
     }
 
     // IF NOT PUNCHED IN, DO NOT SHOW POPUPS OR CHECK INACTIVITY!
@@ -511,7 +511,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           setShowRecoveryModal(true);
           window.dispatchEvent(new Event("attendance-update"));
         } catch (err) {
-          console.error("Focus sync error:", err);
+          console.warn("Focus sync error:", err);
         }
       }
     }
@@ -582,7 +582,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         toast.error("Failed to submit recovery request.");
       }
     } catch (err) {
-      console.error("Error submitting recovery:", err);
+      console.warn("Error submitting recovery:", err);
       toast.error("Failed to connect to the server.");
     } finally {
       setIsSubmittingRecovery(false);
@@ -595,19 +595,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
 
     // 1. All users listen to window focus and attendance updates to check pending recovery
-    const handleFocus = () => { checkPendingRecovery().catch(console.error); };
+    const handleFocus = () => { checkPendingRecovery().catch(e => console.warn("Recovery check error:", e)); };
     window.addEventListener("focus", handleFocus);
 
     const handleAttendanceUpdate = () => {
       localStorage.setItem("last_activity_timestamp", Date.now().toString());
       lastActivityTimeRef.current = Date.now();
       resetInactivityTimer();
-      checkPendingRecovery().catch(console.error);
+      checkPendingRecovery().catch(e => console.warn("Recovery check error:", e));
     };
     window.addEventListener("attendance-update", handleAttendanceUpdate);
 
     // Initial check on mount
-    checkPendingRecovery().catch(console.error);
+    checkPendingRecovery().catch(e => console.warn("Recovery check error:", e));
 
     // 2. Track OS/browser activity and set inactivity timeouts
     const events = ["mousemove", "keydown", "mousedown", "touchstart", "scroll", "click"];
