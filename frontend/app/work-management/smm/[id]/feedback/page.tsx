@@ -39,14 +39,18 @@ export default function ClientFeedbackPage() {
       const [formsRes, respRes, projRes] = await Promise.all([
         fetch(`${API_URL}/forms/client/${clientId}`),
         fetch(`${API_URL}/forms/client/${clientId}/responses`),
-        clientId === "common" ? fetch(`${API_URL}/projects`) : Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
+        fetch(`${API_URL}/projects`)
       ]);
       if (formsRes.ok && respRes.ok) {
         setForms(await formsRes.json());
         setResponses(await respRes.json());
-        if (projRes.ok && clientId === "common") {
+        if (projRes.ok) {
           const allProjects = await projRes.json();
-          setProjects(allProjects.filter((p: any) => p.department === "Creative"));
+          if (clientId === "common") {
+            setProjects(allProjects.filter((p: any) => p.department === "Creative"));
+          } else {
+            setProjects(allProjects.filter((p: any) => p.clientId === clientId && p.department === "Creative"));
+          }
         }
       }
     } catch (err) {
@@ -98,7 +102,8 @@ export default function ClientFeedbackPage() {
   const getProjectName = (projectId: string) => {
     if (!projectId) return null;
     const proj = projects.find(p => p.id === projectId);
-    return proj ? proj.title : "Unknown Project";
+    if (!proj) return "Unknown Project";
+    return clientId === "common" && proj.clientName ? `${proj.title} (${proj.clientName})` : proj.title;
   };
 
   return (
