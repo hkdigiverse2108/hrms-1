@@ -25,7 +25,8 @@ export interface ClientFormData {
   salesFocused?: string;
   dailyBudget?: number;
   remarks?: string;
-  responsibility?: string;
+  assignedEmployeeId?: string;
+  assignedEmployeeName?: string;
   dailyFollowup?: string;
   interviewDate?: string;
   interviewTime?: string;
@@ -47,7 +48,8 @@ const defaultFormData: ClientFormData = {
   salesFocused: "",
   dailyBudget: 0,
   remarks: "",
-  responsibility: "",
+  assignedEmployeeId: "",
+    assignedEmployeeName: "",
   dailyFollowup: "No",
   interviewDate: "",
   interviewTime: "",
@@ -250,8 +252,8 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="responsibility" className="text-[10px] font-bold uppercase text-slate-400">Assigned To</Label>
-                  <Select value={formData.responsibility} onValueChange={(v) => handleChange("responsibility", v)}>
+                  <Label htmlFor="assignedEmployeeId" className="text-[10px] font-bold uppercase text-slate-400">Assigned To</Label>
+                  <Select value={formData.assignedEmployeeId} onValueChange={(v) => handleChange("assignedEmployeeId", v)}>
                     <SelectTrigger className="h-8"><SelectValue placeholder="Select Employee" /></SelectTrigger>
                     <SelectContent>
                       {employees.map((emp) => (

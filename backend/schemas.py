@@ -893,7 +893,8 @@ class ClientBase(BaseModel):
     salesFocused: Optional[str] = "No"
     dailyBudget: Optional[float] = 0
     remarks: Optional[str] = None
-    responsibility: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     dailyFollowup: Optional[str] = "No"
     followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
     followupIntervalDays: Optional[int] = None
@@ -939,6 +940,8 @@ class ClientCreate(ClientBase):
 
 class ClientUpdate(BaseModel):
     name: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     companyName: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -960,7 +963,8 @@ class ClientUpdate(BaseModel):
     salesFocused: Optional[str] = None
     dailyBudget: Optional[float] = None
     remarks: Optional[str] = None
-    responsibility: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     meetings: Optional[List[dict]] = []
     dailyFollowup: Optional[str] = None
     interviewDate: Optional[RobustDate] = None

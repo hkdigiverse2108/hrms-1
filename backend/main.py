@@ -1106,8 +1106,8 @@ async def delete_event(event_id: str, db=Depends(get_db)): return await crud.del
 
 # Client Endpoints
 @app.get("/clients", response_model=List[schemas.Client])
-async def read_clients(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
-    return await crud.get_clients(db, skip=skip, limit=limit)
+async def read_clients(skip: int = 0, limit: int = 10000, db=Depends(get_db), token_payload: dict = Depends(auth.require_auth)):
+    return await crud.get_clients(db, skip=skip, limit=limit, user_info=token_payload)
 
 @app.get("/clients/{client_id}", response_model=schemas.Client)
 async def read_client(client_id: str, db=Depends(get_db)):
@@ -1278,8 +1278,8 @@ async def create_marketing_daily_report(report: schemas.MarketingDailyReportCrea
     return await crud.create_marketing_daily_report(db, report)
 
 @app.get("/marketing/reports/daily", response_model=List[schemas.MarketingDailyReport])
-async def get_marketing_daily_reports(client_id: str = None, date: str = None, db=Depends(get_db)):
-    return await crud.get_marketing_daily_reports(db, client_id, date)
+async def get_marketing_daily_reports(client_id: str = None, date: str = None, db=Depends(get_db), token_payload: dict = Depends(auth.require_auth)):
+    return await crud.get_marketing_daily_reports(db, client_id, date, user_info=token_payload)
 
 @app.put("/marketing/reports/daily/{report_id}", response_model=schemas.MarketingDailyReport)
 async def update_marketing_daily_report(report_id: str, report: schemas.MarketingDailyReportUpdate, db=Depends(get_db)):
@@ -1300,8 +1300,8 @@ async def create_marketing_monthly_report(report: schemas.MarketingMonthlyReport
     return await crud.create_marketing_monthly_report(db, report)
 
 @app.get("/marketing/reports/monthly", response_model=List[schemas.MarketingMonthlyReport])
-async def get_marketing_monthly_reports(client_id: str = None, month: str = None, db=Depends(get_db)):
-    return await crud.get_marketing_monthly_reports(db, client_id, month)
+async def get_marketing_monthly_reports(client_id: str = None, month: str = None, db=Depends(get_db), token_payload: dict = Depends(auth.require_auth)):
+    return await crud.get_marketing_monthly_reports(db, client_id, month, user_info=token_payload)
 
 @app.put("/marketing/reports/monthly/{report_id}", response_model=schemas.MarketingMonthlyReport)
 async def update_marketing_monthly_report(report_id: str, report: schemas.MarketingMonthlyReportUpdate, db=Depends(get_db)):
