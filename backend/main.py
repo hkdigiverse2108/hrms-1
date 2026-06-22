@@ -2649,9 +2649,233 @@ async def upload_desktop_release(
     except Exception as e:
         err_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
         print("[Desktop Release Error]", err_msg, flush=True)
+
+
+
+
+# --- Content Calendar API ---
+@app.get("/content-calendar/all")
+async def get_all_content_calendar_entries(db=Depends(get_db)):
+    try:
+        return await crud.get_all_content_calendar_entries(db)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+@app.get("/content-calendar")
+async def get_content_calendar_entries(clientId: str, monthYear: Optional[str] = None, db=Depends(get_db)):
+    try:
+        return await crud.get_content_calendar_entries(db, client_id=clientId, month_year=monthYear)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+@app.post("/content-calendar", response_model=schemas.ContentCalendarEntry)
+async def create_content_calendar_entry(entry: schemas.ContentCalendarEntryCreate, db=Depends(get_db)):
+    return await crud.create_content_calendar_entry(db, entry.model_dump())
+
+@app.put("/content-calendar/{entry_id}", response_model=schemas.ContentCalendarEntry)
+async def update_content_calendar_entry(entry_id: str, entry: schemas.ContentCalendarEntryUpdate, db=Depends(get_db)):
+    updated = await crud.update_content_calendar_entry(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/content-calendar/{entry_id}")
+async def delete_content_calendar_entry(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_content_calendar_entry(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
+
+@app.get("/content-calendar-settings", response_model=schemas.ContentCalendarSettingsBase)
+async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depends(get_db)):
+    settings = await crud.get_content_calendar_settings(db, clientId, monthYear)
+    if settings:
+        return settings
+    # Return defaults if not found
+    return {
+        "clientId": clientId,
+        "monthYear": monthYear,
+        "scriptDateOffset": 14,
+        "shootDateOffset": 12,
+        "editingStartOffset": 6,
+        "approvalOffset": 5
+    }
+
+@app.get("/content-calendar-settings/all", response_model=List[schemas.ContentCalendarSettingsBase])
+async def get_all_content_calendar_settings(monthYear: str, db=Depends(get_db)):
+    return await crud.get_all_content_calendar_settings(db, monthYear)
+
+@app.post("/content-calendar-settings", response_model=schemas.ContentCalendarSettings)
+async def upsert_content_calendar_settings(settings: schemas.ContentCalendarSettingsBase, db=Depends(get_db)):
+    return await crud.upsert_content_calendar_settings(
+        db, settings.clientId, settings.monthYear, settings.model_dump()
+    )
+
+# Dynamic Feedback Forms
+
+@app.post("/forms", response_model=schemas.FeedbackForm)
+async def create_feedback_form(form: schemas.FeedbackFormCreate, createdBy: Optional[str] = None, db=Depends(get_db)):
+    return await crud.create_feedback_form(db, form, createdBy=createdBy or "Unknown")
+
+@app.get("/forms/all/forms", response_model=List[schemas.FeedbackForm])
+async def read_all_forms(db=Depends(get_db)):
+    return await crud.get_all_feedback_forms(db)
+
+@app.get("/forms/all/responses", response_model=List[schemas.FeedbackResponse])
+async def read_all_responses(db=Depends(get_db)):
+    return await crud.get_all_feedback_responses(db)
+
+@app.get("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def get_feedback_form(form_id: str, db=Depends(get_db)):
+    form = await crud.get_feedback_form(db, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return form
+
+@app.get("/forms/client/{client_id}", response_model=List[schemas.FeedbackForm])
+async def get_client_feedback_forms(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_feedback_forms(db, client_id)
+
+@app.put("/forms/{form_id}", response_model=schemas.FeedbackForm)
+async def update_feedback_form(form_id: str, form: schemas.FeedbackFormCreate, db=Depends(get_db)):
+    updated_form = await crud.update_feedback_form(db, form_id, form)
+    if not updated_form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return updated_form
+
+@app.delete("/forms/{form_id}")
+async def delete_feedback_form(form_id: str, db=Depends(get_db)):
+    deleted = await crud.delete_feedback_form(db, form_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return {"message": "Form deleted successfully"}
+
+@app.post("/forms/{form_id}/responses", response_model=schemas.FeedbackResponse)
+async def submit_feedback_response(form_id: str, response: schemas.FeedbackResponseCreate, db=Depends(get_db)):
+    if response.formId != form_id:
+        raise HTTPException(status_code=400, detail="Form ID mismatch")
+    return await crud.create_feedback_response(db, response)
+
+@app.get("/forms/{form_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_form_responses(form_id: str, db=Depends(get_db)):
+    return await crud.get_form_responses(db, form_id)
+
+@app.get("/forms/client/{client_id}/responses", response_model=List[schemas.FeedbackResponse])
+async def get_client_form_responses(client_id: str, db=Depends(get_db)):
+    return await crud.get_client_form_responses(db, client_id)
+# --- Desktop Auto-Update Endpoints ---
+@app.get("/desktop/version")
+async def get_desktop_version(db=Depends(get_db)):
+    """Retrieve the latest desktop app version, download URL, and changelog."""
+    release = await db.desktop_releases.find_one(sort=[("created_at", -1)])
+    if not release:
+        return {
+            "version": "1.0.0",
+            "downloadUrl": "",
+            "changelog": []
+        }
+    return {
+        "version": release.get("version"),
+        "downloadUrl": release.get("downloadUrl"),
+        "changelog": release.get("changelog", [])
+    }
+
+@app.post("/desktop/release")
+async def upload_desktop_release(
+    version: str = Form(...),
+    changelog: str = Form(...),  # JSON string or comma-separated
+    file: UploadFile = File(...),
+    token_payload: dict = Depends(auth.require_admin),
+    db=Depends(get_db)
+):
+    """Admin-only endpoint to upload a new compiled desktop installer .exe and log its version."""
+    import shutil
+    import json
+    import traceback
+    
+    try:
+        # Create directory uploads/desktop if it doesn't exist
+        desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
+        if not os.path.exists(desktop_dir):
+            os.makedirs(desktop_dir)
+            
+        # Standardize filename to prevent path traversal issues
+        safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
+        filename = f"HRMS_Setup_{safe_version}.exe"
+        file_path = os.path.join(desktop_dir, filename)
+        
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Generate download URL (relative path)
+        download_url = f"/uploads/desktop/{filename}"
+        
+        # Parse changelog
+        changelog_list = []
+        try:
+            changelog_list = json.loads(changelog)
+            if not isinstance(changelog_list, list):
+                changelog_list = [str(changelog_list)]
+        except Exception:
+            # Fallback to newline separation
+            changelog_list = [line.strip() for line in changelog.split("\n") if line.strip()]
+            if not changelog_list:
+                changelog_list = [line.strip() for line in changelog.split(",") if line.strip()]
+                
+        # Insert new release into DB
+        from datetime import datetime
+        new_release = {
+            "version": version,
+            "downloadUrl": download_url,
+            "changelog": changelog_list,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        result = await db.desktop_releases.insert_one(new_release)
+        inserted_id = result.inserted_id
+        
+        return {
+            "message": "Release uploaded successfully",
+            "release": {**new_release, "_id": str(inserted_id)}
+        }
+    except Exception as e:
+        err_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
+        print("[Desktop Release Error]", err_msg, flush=True)
         raise HTTPException(status_code=500, detail=err_msg)
+
+# --- Other Work API ---
+@app.get("/other-work/all", response_model=List[schemas.OtherWork])
+async def get_all_other_work(db=Depends(get_db)):
+    try:
+        return await crud.get_all_other_work(db)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return []
+
+@app.post("/other-work", response_model=schemas.OtherWork)
+async def create_other_work(entry: schemas.OtherWorkCreate, db=Depends(get_db)):
+    return await crud.create_other_work(db, entry.model_dump())
+
+@app.put("/other-work/{entry_id}", response_model=schemas.OtherWork)
+async def update_other_work(entry_id: str, entry: schemas.OtherWorkUpdate, db=Depends(get_db)):
+    updated = await crud.update_other_work(db, entry_id, entry.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+@app.delete("/other-work/{entry_id}")
+async def delete_other_work(entry_id: str, db=Depends(get_db)):
+    success = await crud.delete_other_work(db, entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry deleted successfully"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8001)))
-    print(f"Starting HRMS Backend on http://0.0.0.0:{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
+    uvicorn.run(app, host="127.0.0.1", port=port)

@@ -4989,10 +4989,12 @@ async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
                     continue
                 
                 # Create the notification document
+                rec_date = doc.get('date', '')
+                date_str = str(rec_date).split(' ')[0] if rec_date else ''
                 notification = {
                     "employee_id": staff_id,
                     "title": "New Time Recovery Request",
-                    "message": f"{doc.get('employee_name', 'An employee')} has submitted a time recovery request for {doc.get('date')}.",
+                    "message": f"{doc.get('employee_name', 'An employee')} has submitted a time recovery request for {date_str}.",
                     "type": "attendance",
                     "reference_id": str(doc["_id"]),
                     "is_read": False,
@@ -5445,10 +5447,12 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
     if doc:
         try:
             status_title = "Approved" if status == "approved" else "Rejected"
+            rec_date = doc.get('date', '')
+            date_str = str(rec_date).split(' ')[0] if rec_date else ''
             emp_notification = {
                 "employee_id": doc["employee_id"],
                 "title": f"Time Recovery {status_title}",
-                "message": f"Your time recovery request for {doc['date']} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
+                "message": f"Your time recovery request for {date_str} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
                 "type": "attendance",
                 "reference_id": str(doc["_id"]),
                 "is_read": False,
@@ -6490,4 +6494,64 @@ async def delete_feedback_form(db, form_id: str):
     
     # Delete the form
     res = await db.feedback_forms.delete_one({"_id": ObjectId(form_id)})
+    return res.deleted_count > 0
+
+# --- Other Work ---
+async def get_all_other_work(db):
+    cursor = db.other_work.find().sort("created_at", -1)
+    items = await cursor.to_list(length=5000)
+    return [fix_id(item) for item in items]
+
+async def create_other_work(db, data: dict):
+    from datetime import datetime
+    data["created_at"] = datetime.now().isoformat()
+    data["updated_at"] = datetime.now().isoformat()
+    if "logs" not in data or not data["logs"]:
+        data["logs"] = [{
+            "timestamp": data["created_at"],
+            "action": "Task created",
+            "details": f"Task '{data.get('title')}' created by {data.get('assignerName')}",
+            "userName": data.get('assignerName', "System")
+        }]
+    res = await db.other_work.insert_one(data)
+    doc = await db.other_work.find_one({"_id": res.inserted_id})
+    return fix_id(doc)
+
+async def update_other_work(db, work_id: str, update_data: dict):
+    from bson import ObjectId
+    from datetime import datetime
+    if not ObjectId.is_valid(work_id):
+        return None
+    existing = await db.other_work.find_one({"_id": ObjectId(work_id)})
+    if not existing:
+        return None
+    
+    update_data["updated_at"] = datetime.now().isoformat()
+    
+    changes = []
+    updater = update_data.pop("updatedBy", "System")
+    for k, v in update_data.items():
+        if k not in ["logs", "created_at", "updated_at"]:
+            if existing.get(k) != v:
+                changes.append(f"'{k}' changed to '{v}'")
+                
+    if changes:
+        logs = existing.get("logs", [])
+        logs.append({
+            "timestamp": datetime.now().isoformat(),
+            "action": "Task updated",
+            "details": ", ".join(changes),
+            "userName": updater
+        })
+        update_data["logs"] = logs
+        
+    await db.other_work.update_one({"_id": ObjectId(work_id)}, {"$set": update_data})
+    doc = await db.other_work.find_one({"_id": ObjectId(work_id)})
+    return fix_id(doc)
+
+async def delete_other_work(db, work_id: str):
+    from bson import ObjectId
+    if not ObjectId.is_valid(work_id):
+        return False
+    res = await db.other_work.delete_one({"_id": ObjectId(work_id)})
     return res.deleted_count > 0

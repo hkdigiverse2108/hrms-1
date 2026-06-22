@@ -507,76 +507,78 @@ export default function DashboardPage() {
       {isAdmin ? (
         <AdminView user={user} leaves={leaveRequests} employees={employees} interns={interns} allAttendance={allAttendance} getISTNow={getISTNow} />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* 1. If HR, show the 4 HR StatCards on top */}
-            {isHR && (
-              <HRView 
-                user={user} 
-                leaves={leaveRequests} 
-                applications={applications} 
-                assets={assets} 
-                showStatsOnly={true}
-                activeFilter={hrActiveFilter}
-                setActiveFilter={setHrActiveFilter}
-              />
-            )}
-
-            {/* 2. Show Employee Punch Card Box */}
-            <EmployeeView 
+        <div className="space-y-6">
+          {/* 1. If HR, show the 4 HR StatCards on top (full width) */}
+          {isHR && (
+            <HRView 
               user={user} 
-              attendanceStatus={attendanceStatus} 
-              handlePunch={handlePunch} 
-              handleGoingForMeeting={handleGoingForMeeting}
-              isPunching={isPunching}
-              workTime={workTime}
-              totalBreakTime={totalBreakTime}
-              allTimeHours={allTimeHours}
-              recentAttendance={recentAttendance}
-              currentTime={currentTime}
-              isTimeSynced={isTimeSynced}
-              getISTNow={getISTNow}
-              punchCardRef={punchCardRef}
-              showPunchCardOnly={true}
+              leaves={leaveRequests} 
+              applications={applications} 
+              assets={assets} 
+              showStatsOnly={true}
+              activeFilter={hrActiveFilter}
+              setActiveFilter={setHrActiveFilter}
             />
+          )}
 
-            {/* 3. Show Employee stats and Recent Attendance table */}
-            <EmployeeView 
-              user={user} 
-              attendanceStatus={attendanceStatus} 
-              handlePunch={handlePunch} 
-              handleGoingForMeeting={handleGoingForMeeting}
-              isPunching={isPunching}
-              workTime={workTime}
-              totalBreakTime={totalBreakTime}
-              allTimeHours={allTimeHours}
-              recentAttendance={recentAttendance}
-              currentTime={currentTime}
-              isTimeSynced={isTimeSynced}
-              getISTNow={getISTNow}
-              punchCardRef={punchCardRef}
-              showStatsAndAttendanceOnly={true}
-            />
-
-            {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
-            {isHR && (
-              <HRView 
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              {/* 2. Show Employee Punch Card Box */}
+              <EmployeeView 
                 user={user} 
-                leaves={leaveRequests} 
-                applications={applications} 
-                assets={assets} 
-                showListsOnly={true}
-                activeFilter={hrActiveFilter}
-                setActiveFilter={setHrActiveFilter}
+                attendanceStatus={attendanceStatus} 
+                handlePunch={handlePunch} 
+                handleGoingForMeeting={handleGoingForMeeting}
+                isPunching={isPunching}
+                workTime={workTime}
+                totalBreakTime={totalBreakTime}
+                allTimeHours={allTimeHours}
+                recentAttendance={recentAttendance}
+                currentTime={currentTime}
+                isTimeSynced={isTimeSynced}
+                getISTNow={getISTNow}
+                punchCardRef={punchCardRef}
+                showPunchCardOnly={true}
               />
-            )}
 
-            {/* 5. Show Upcoming Approved Leaves Card */}
-            <UpcomingApprovedLeavesCard leaves={leaveRequests} />
-          </div>
+              {/* 3. Show Employee stats and Recent Attendance table */}
+              <EmployeeView 
+                user={user} 
+                attendanceStatus={attendanceStatus} 
+                handlePunch={handlePunch} 
+                handleGoingForMeeting={handleGoingForMeeting}
+                isPunching={isPunching}
+                workTime={workTime}
+                totalBreakTime={totalBreakTime}
+                allTimeHours={allTimeHours}
+                recentAttendance={recentAttendance}
+                currentTime={currentTime}
+                isTimeSynced={isTimeSynced}
+                getISTNow={getISTNow}
+                punchCardRef={punchCardRef}
+                showStatsAndAttendanceOnly={true}
+              />
 
-          <div className="lg:col-span-1">
-            <EventsSidebar user={user} leaves={leaveRequests} />
+              {/* 4. If HR, show HR Lists (Recent Leave Requests, Upcoming Interviews) */}
+              {isHR && (
+                <HRView 
+                  user={user} 
+                  leaves={leaveRequests} 
+                  applications={applications} 
+                  assets={assets} 
+                  showListsOnly={true}
+                  activeFilter={hrActiveFilter}
+                  setActiveFilter={setHrActiveFilter}
+                />
+              )}
+
+              {/* 5. Show Upcoming Approved Leaves Card */}
+              <UpcomingApprovedLeavesCard leaves={leaveRequests} />
+            </div>
+
+            <div className="lg:col-span-1">
+              <EventsSidebar user={user} leaves={leaveRequests} />
+            </div>
           </div>
         </div>
       )}

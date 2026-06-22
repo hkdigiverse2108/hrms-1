@@ -100,6 +100,180 @@ async function spawnDetachedWithRetry(exePath, args = [], attempts = 6) {
   throw lastError;
 }
 
+// Downloads an installer .exe and runs it silently (NSIS /S), then quits the app.
+// Shared by the manual "start-update" IPC handler and the automatic background checker.
+async function performSilentInstall(downloadUrl) {
+  log(`[Update] Starting silent install from: ${downloadUrl}`);
+  const http = require('http');
+  const https = require('https');
+
+  let absoluteUrl = downloadUrl;
+  if (downloadUrl.startsWith('/')) {
+    const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+    absoluteUrl = backendUrl + downloadUrl;
+  }
+
+  const tempPath = path.join(app.getPath('temp'), `HRMS_Setup_Update_${Date.now()}.exe`);
+
+  try {
+    await new Promise((resolve, reject) => {
+      function downloadFile(url, dest) {
+        const protocol = url.startsWith('https') ? https : http;
+        const file = fs.createWriteStream(dest);
+        let settled = false;
+
+        const fail = (err) => {
+          if (settled) return;
+          settled = true;
+          file.destroy();
+          fs.unlink(dest, () => {});
+          reject(err);
+        };
+
+        protocol.get(url, (response) => {
+          if (response.statusCode === 301 || response.statusCode === 302) {
+            settled = true;
+            response.resume();
+            file.destroy();
+            fs.unlink(dest, () => {});
+            const redirectUrl = new URL(response.headers.location, url).toString();
+            downloadFile(redirectUrl, dest);
+            return;
+          }
+
+          if (response.statusCode !== 200) {
+            response.resume();
+            fail(new Error(`Failed to download: Server returned ${response.statusCode}`));
+            return;
+          }
+
+          const totalSize = parseInt(response.headers['content-length'], 10);
+          let downloadedSize = 0;
+
+          response.on('data', (chunk) => {
+            downloadedSize += chunk.length;
+            if (totalSize > 0) {
+              const progress = Math.round((downloadedSize / totalSize) * 100);
+              if (mainWindow) {
+                mainWindow.webContents.send('update-progress', progress);
+              }
+            }
+          });
+          response.on('error', fail);
+
+          file.on('finish', () => {
+            if (settled) return;
+            settled = true;
+            file.close((err) => {
+              if (err) {
+                reject(err);
+                return;
+              }
+              resolve();
+            });
+          });
+          file.on('error', fail);
+          response.pipe(file);
+        }).on('error', fail);
+      }
+
+      downloadFile(absoluteUrl, tempPath);
+    });
+
+    log(`[Update] Download complete. Spawning installer silently: ${tempPath}`);
+
+    // Give the user a brief, non-blocking heads-up before the app restarts.
+    // This does NOT wait for any click — it just avoids the app vanishing with zero warning.
+    try {
+      if (tray && process.platform === 'win32') {
+        tray.displayBalloon({
+          title: 'HRMS is updating',
+          content: 'A new version was found. Installing now in the background — the app will restart shortly.'
+        });
+      }
+    } catch (e) {
+      // Balloon notifications are best-effort only.
+    }
+
+    // /S = fully silent NSIS install, no UI, no prompts.
+    await spawnDetachedWithRetry(tempPath, ['/S']);
+
+    killSubprocesses();
+    isQuitting = true;
+    app.quit();
+
+    return { success: true };
+  } catch (err) {
+    log(`[Update] Error during silent install: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+}
+
+function fetchJson(url) {
+  const http = require('http');
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    const protocol = url.startsWith('https') ? https : http;
+    protocol.get(url, (response) => {
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error(`Request failed: ${response.statusCode}`));
+        return;
+      }
+      let raw = '';
+      response.on('data', (chunk) => { raw += chunk; });
+      response.on('end', () => {
+        try {
+          resolve(JSON.parse(raw));
+        } catch (err) {
+          reject(err);
+        }
+      });
+      response.on('error', reject);
+    }).on('error', reject);
+  });
+}
+
+function isNewerVersion(remote, local) {
+  const r = String(remote).split('.').map(Number);
+  const l = String(local).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((r[i] || 0) > (l[i] || 0)) return true;
+    if ((r[i] || 0) < (l[i] || 0)) return false;
+  }
+  return false;
+}
+
+let isAutoUpdating = false;
+
+// Checks the server for a newer release and, if found, downloads and installs it
+// silently in the background — no modal, no click required from the employee.
+async function checkForUpdatesInBackground() {
+  if (isAutoUpdating) return;
+  if (!app.isPackaged) {
+    // Don't try to self-update a dev build running from source.
+    return;
+  }
+
+  try {
+    const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+    const data = await fetchJson(`${backendUrl}/desktop/version`);
+    const remoteVersion = data && data.version;
+    const localVersion = app.getVersion();
+
+    if (remoteVersion && data.downloadUrl && isNewerVersion(remoteVersion, localVersion)) {
+      log(`[Auto-Update] New version found: ${remoteVersion} (current: ${localVersion}). Installing silently...`);
+      isAutoUpdating = true;
+      await performSilentInstall(data.downloadUrl);
+      // If performSilentInstall succeeded, the app has already quit by this point.
+      isAutoUpdating = false;
+    }
+  } catch (err) {
+    log(`[Auto-Update] Background update check failed: ${err.message}`);
+    isAutoUpdating = false;
+  }
+}
+
 // Log file for diagnosing issues in packaged app
 const logPath = path.join(app.getPath('userData'), 'hrms-desktop.log');
 function log(message) {
@@ -677,101 +851,9 @@ function createWindow() {
   });
 
   ipcMain.handle('start-update', async (event, downloadUrl) => {
-    log(`[Update] Requested download from: ${downloadUrl}`);
-    const http = require('http');
-    const https = require('https');
-    
-    // Resolve absolute URL if downloadUrl is relative
-    let absoluteUrl = downloadUrl;
-    if (downloadUrl.startsWith('/')) {
-      const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
-      absoluteUrl = backendUrl + downloadUrl;
-    }
-    
-    const tempPath = path.join(app.getPath('temp'), `HRMS_Setup_Update_${Date.now()}.exe`);
-    
-    try {
-      await new Promise((resolve, reject) => {
-        function downloadFile(url, dest) {
-          const protocol = url.startsWith('https') ? https : http;
-          const file = fs.createWriteStream(dest);
-          let settled = false;
-
-          const fail = (err) => {
-            if (settled) return;
-            settled = true;
-            file.destroy();
-            fs.unlink(dest, () => {});
-            reject(err);
-          };
-          
-          protocol.get(url, (response) => {
-            if (response.statusCode === 301 || response.statusCode === 302) {
-              // Follow redirect
-              settled = true;
-              response.resume();
-              file.destroy();
-              fs.unlink(dest, () => {});
-              const redirectUrl = new URL(response.headers.location, url).toString();
-              downloadFile(redirectUrl, dest);
-              return;
-            }
-            
-            if (response.statusCode !== 200) {
-              response.resume();
-              fail(new Error(`Failed to download: Server returned ${response.statusCode}`));
-              return;
-            }
-            
-            const totalSize = parseInt(response.headers['content-length'], 10);
-            let downloadedSize = 0;
-            
-            response.on('data', (chunk) => {
-              downloadedSize += chunk.length;
-              
-              if (totalSize > 0) {
-                const progress = Math.round((downloadedSize / totalSize) * 100);
-                if (mainWindow) {
-                  mainWindow.webContents.send('update-progress', progress);
-                }
-              }
-            });
-            response.on('error', fail);
-            
-            file.on('finish', () => {
-              if (settled) return;
-              settled = true;
-              file.close((err) => {
-                if (err) {
-                  reject(err);
-                  return;
-                }
-                resolve();
-              });
-            });
-            file.on('error', fail);
-            response.pipe(file);
-          }).on('error', fail);
-        }
-        
-        downloadFile(absoluteUrl, tempPath);
-      });
-      
-      log(`[Update] Download complete. Spawning installer: ${tempPath}`);
-      
-      // Execute the installer after Windows has released the downloaded file handle.
-      await spawnDetachedWithRetry(tempPath, ['/S']);
-      
-      // Close sub-processes and quit app
-      killSubprocesses();
-      isQuitting = true;
-      app.quit();
-      
-      return { success: true };
-    } catch (err) {
-      log(`[Update] Error during update execution: ${err.message}`);
-      return { success: false, error: err.message };
-    }
+    // Manual "Update Now" click from the renderer reuses the same silent-install logic
+    // that the automatic background checker uses.
+    return performSilentInstall(downloadUrl);
   });
 
   // Load the resolved frontend URL
@@ -879,6 +961,17 @@ app.on('ready', async () => {
   setupTray();
   setupAutoLaunch();
   createWindow();
+
+  // Background silent auto-update: first check shortly after startup (let the app
+  // finish booting first), then keep checking periodically. No UI prompt involved —
+  // a newer release on the server is downloaded and installed silently via NSIS /S.
+  setTimeout(() => {
+    checkForUpdatesInBackground();
+  }, 20000); // 20s after startup
+
+  setInterval(() => {
+    checkForUpdatesInBackground();
+  }, 30 * 60 * 1000); // then every 30 minutes
 });
 
 app.on('before-quit', () => {

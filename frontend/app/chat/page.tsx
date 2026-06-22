@@ -4463,6 +4463,17 @@ export default function ChatPage() {
             </Popover>
           </div>
 
+          {contextMenu.msg.isMe && (
+            <button 
+              type="button"
+              onClick={() => { setMsgInfoData(contextMenu.msg); setContextMenu(null); }}
+              className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+            >
+              <Info className="w-4 h-4 text-slate-400" />
+              Message Info
+            </button>
+          )}
+
           <button 
             type="button"
             onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); }}
