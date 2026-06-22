@@ -30,6 +30,7 @@ import {
   UserPlus,
   Hash,
   ChevronLeft,
+  ArrowLeft,
   Pencil,
   Trash2,
   X,
@@ -64,7 +65,8 @@ import {
   Square,
   Crop,
   Type,
-  PenTool
+  PenTool,
+  MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -315,6 +317,9 @@ export default function ChatPage() {
   const [showGroupMembers, setShowGroupMembers] = useState(false);
   const [globalSavedMessages, setGlobalSavedMessages] = useState<any[]>([]);
   const [showRightSidebar, setShowRightSidebar] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<'info' | 'files'>('info');
+  const [sidebarContactUser, setSidebarContactUser] = useState<any | null>(null);
+  const [activeTagIndex, setActiveTagIndex] = useState(0);
   const [chatFiles, setChatFiles] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
@@ -328,8 +333,86 @@ export default function ChatPage() {
   const [isWsConnected, setIsWsConnected] = useState(false);
   const selectedChatRef = useRef<any>(null);
   const [msgInfoData, setMsgInfoData] = useState<any>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [tagPickerLeft, setTagPickerLeft] = useState<number>(0);
+
+  // Load drafts from localStorage on mount
+  useEffect(() => {
+    const savedDrafts = localStorage.getItem("chatDrafts");
+    if (savedDrafts) {
+      try {
+        setDrafts(JSON.parse(savedDrafts));
+      } catch (e) {
+        console.error("Error parsing saved drafts:", e);
+      }
+    }
+  }, []);
+
+
+  const inputOverlayRef = useRef<HTMLDivElement>(null);
 
   const isSelectedChatOnline = selectedChat?.type === 'personal' && (onlineUsers.has(selectedChat.id) || onlineUsers.has(selectedChat.employeeId));
+
+  const groupMembersList = useMemo(() => {
+    if (!selectedChat) return [];
+    if (selectedChat.type === 'general' || selectedChat.id?.startsWith("gen-") || selectedChat.id === "general") {
+      return employees.map(emp => emp.id || emp._id).filter(Boolean);
+    }
+    return selectedChat.members || [];
+  }, [selectedChat, employees]);
+
+  const renderInputHighlight = (text: string) => {
+    if (!text) return "";
+    
+    // If tag picker is open, find the active '@' that triggered it
+    if (showTagPicker) {
+      const activeAtIdx = text.lastIndexOf("@");
+      if (activeAtIdx !== -1 && activeAtIdx >= text.length - 25) {
+        const before = text.substring(0, activeAtIdx);
+        const after = text.substring(activeAtIdx + 1);
+        return (
+          <>
+            {renderHighlightParts(before)}
+            <span id="active-mention-marker" className="text-[#0ea5e9]">@</span>
+            {renderHighlightParts(after)}
+          </>
+        );
+      }
+    }
+
+    return renderHighlightParts(text);
+  };
+
+  const renderHighlightParts = (text: string) => {
+    if (!text) return "";
+    const namePatterns = employees.map(emp => {
+      const name = emp.name || `${emp.firstName} ${emp.lastName}`;
+      return name.trim();
+    }).filter(Boolean)
+      .sort((a, b) => b.length - a.length)
+      .map(name => name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+
+    // Strict regex matching: only match actual employee names, no fallback.
+    const mentionRegex = namePatterns.length > 0
+      ? new RegExp(`(@(?:${namePatterns.join('|')})\\b)`, 'gi')
+      : /(?!)/g;
+
+    const parts = text.split(mentionRegex);
+    return parts.map((part, idx) => {
+      if (part.startsWith("@")) {
+        const nameOnly = part.substring(1).trim();
+        const matched = employees.some(emp => {
+          const empName = (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`).trim();
+          return empName.toLowerCase() === nameOnly.toLowerCase();
+        });
+        if (matched) {
+          return <span key={idx} className="text-[#0ea5e9]">{part}</span>;
+        }
+      }
+      return <span key={idx}>{part}</span>;
+    });
+  };
+
 
   const renderCheckmarks = (msg: any, isImageOverlay: boolean = false) => {
     if (!msg.isMe) return null;
@@ -460,6 +543,35 @@ export default function ChatPage() {
   const [showTagPicker, setShowTagPicker] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState("");
 
+  // Dynamically position mention tag picker above '@' character
+  useEffect(() => {
+    if (showTagPicker) {
+      const timer = setTimeout(() => {
+        const marker = document.getElementById("active-mention-marker");
+        const container = messageInputRef.current?.parentElement;
+        if (marker && container) {
+          const markerRect = marker.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          let leftOffset = markerRect.left - containerRect.left;
+          
+          // Constrain the leftOffset so the box doesn't go off screen
+          const pickerWidth = 256; // w-64 is 256px
+          const maxLeft = containerRect.width - pickerWidth - 8;
+          if (leftOffset > maxLeft) {
+            leftOffset = maxLeft;
+          }
+          if (leftOffset < 0) {
+            leftOffset = 0;
+          }
+          
+          setTagPickerLeft(leftOffset);
+        }
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [showTagPicker, message]);
+
+
   const filteredEmployees = useMemo(() => {
     const q = tagSearchQuery.toLowerCase().trim();
     if (!q) return employees;
@@ -470,9 +582,29 @@ export default function ChatPage() {
     });
   }, [employees, tagSearchQuery]);
 
+  useEffect(() => {
+    setActiveTagIndex(0);
+  }, [tagSearchQuery]);
+
   const handleInputChange = (val: string) => {
     setMessage(val);
     handleTyping();
+
+    if (selectedChat) {
+      const chatId = selectedChat.id || selectedChat.employeeId;
+      if (chatId) {
+        setDrafts(prev => {
+          const updated = { ...prev };
+          if (val.trim()) {
+            updated[chatId] = val;
+          } else {
+            delete updated[chatId];
+          }
+          localStorage.setItem("chatDrafts", JSON.stringify(updated));
+          return updated;
+        });
+      }
+    }
 
     // Only trigger mention if @ is at the start or preceded by a space
     const atMatch = val.match(/(^|\s)@([^\s]*)$/);
@@ -485,19 +617,50 @@ export default function ChatPage() {
     setShowTagPicker(false);
   };
 
+
   const handleTagSelect = (emp: any) => {
     const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
     const formattedTag = `@${empName} `;
     
+    let newMsg = message;
     const lastAtIdx = message.lastIndexOf("@");
     if (lastAtIdx !== -1 && lastAtIdx >= message.length - 25) {
-      setMessage(message.slice(0, lastAtIdx) + formattedTag);
+      newMsg = message.slice(0, lastAtIdx) + formattedTag;
     } else {
-      setMessage(prev => prev + formattedTag);
+      newMsg = message + formattedTag;
     }
+    setMessage(newMsg);
+
+    // Save draft
+    if (selectedChat) {
+      const chatId = selectedChat.id || selectedChat.employeeId;
+      if (chatId) {
+        setDrafts(prev => {
+          const updated = { ...prev, [chatId]: newMsg };
+          localStorage.setItem("chatDrafts", JSON.stringify(updated));
+          return updated;
+        });
+      }
+    }
+
     setShowTagPicker(false);
     setTagSearchQuery("");
+
+    // Refocus, place caret at the end, and adjust auto-resized height
+    setTimeout(() => {
+      if (messageInputRef.current) {
+        messageInputRef.current.focus();
+        const len = newMsg.length;
+        messageInputRef.current.setSelectionRange(len, len);
+        messageInputRef.current.style.height = 'auto';
+        messageInputRef.current.style.height = Math.min(messageInputRef.current.scrollHeight, 120) + 'px';
+        if (inputOverlayRef.current) {
+          inputOverlayRef.current.scrollTop = messageInputRef.current.scrollTop;
+        }
+      }
+    }, 10);
   };
+
 
   useEffect(() => {
     const savedMuted = localStorage.getItem("mutedChats");
@@ -907,7 +1070,47 @@ export default function ChatPage() {
       return;
     }
 
+    // Save draft for current chat if any text is typed
+    if (selectedChat && currentId) {
+      setDrafts(prev => {
+        const updated = { ...prev };
+        if (message.trim()) {
+          updated[currentId] = message;
+        } else {
+          delete updated[currentId];
+        }
+        localStorage.setItem("chatDrafts", JSON.stringify(updated));
+        return updated;
+      });
+    }
+
     setSelectedChat(chat);
+    setSidebarContactUser(null);  // Clear single member detail override on chat switch
+    
+    // Automatically switch active tab on left sidebar
+    if (chat.type === 'personal') {
+      setActiveTab('Personal');
+    } else if (chat.type === 'group') {
+      setActiveTab('Groups');
+    } else if (chat.type === 'general' || chat.id?.startsWith("gen-") || chat.id === "general") {
+      setActiveTab('General');
+    }
+
+    // Load draft for newly selected chat
+    const nextDraft = drafts[newId] || "";
+    setMessage(nextDraft);
+
+    // Auto-resize input height for loaded draft
+    setTimeout(() => {
+      if (messageInputRef.current) {
+        messageInputRef.current.style.height = 'auto';
+        messageInputRef.current.style.height = Math.min(messageInputRef.current.scrollHeight, 120) + 'px';
+        if (inputOverlayRef.current) {
+          inputOverlayRef.current.scrollTop = messageInputRef.current.scrollTop;
+        }
+      }
+    }, 50);
+
     setCurrentMessages([]);  // Clear stale messages immediately on chat switch
     setFirstUnreadId(null);
     shouldScrollToBottom.current = true;
@@ -915,6 +1118,31 @@ export default function ChatPage() {
     if (chatId) {
       markAsSeen(chatId);
     }
+  };
+
+
+  const openSidebarForMember = (memberId: string) => {
+    const emp = employees.find(e => e.id === memberId || e.employeeId === memberId);
+    if (!emp) return;
+    setSidebarContactUser(emp);
+    setSidebarTab('info');
+    setShowRightSidebar(true);
+  };
+
+  const openPersonalChatWithEmployeeId = (empId: string) => {
+    if (empId === user?.id) return;
+    const emp = employees.find(e => e.id === empId);
+    if (!emp) return;
+    const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+    handleSelectChat({
+      id: emp.id || emp.employeeId,
+      name: empName,
+      status: onlineUsers.has(emp.id || emp.employeeId) ? "Online" : "Offline",
+      avatar: emp.profilePhoto 
+        ? (emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`)
+        : null,
+      type: "personal"
+    });
   };
 
   // Auto-focus message input when a chat is opened
@@ -1290,6 +1518,17 @@ export default function ChatPage() {
     }
     // Clear input fields immediately so the user gets instant feedback
     setMessage("");
+    if (selectedChat) {
+      const chatId = selectedChat.id || selectedChat.employeeId;
+      if (chatId) {
+        setDrafts(prev => {
+          const updated = { ...prev };
+          delete updated[chatId];
+          localStorage.setItem("chatDrafts", JSON.stringify(updated));
+          return updated;
+        });
+      }
+    }
     setReplyingTo(null);
     stopTyping();
     const capturedFile = pendingFile;
@@ -1396,29 +1635,37 @@ export default function ChatPage() {
       .sort((a, b) => b.length - a.length)
       .map(name => name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
 
+    // Strict regex matching: only match actual employee names, no fallback.
     const mentionRegex = namePatterns.length > 0
-      ? new RegExp(`(^|\\s)(@(?:${namePatterns.join('|')})\\b|@\\w+)`, 'gi')
-      : /(^|\s)(@\w+)/g;
+      ? new RegExp(`(^|\\s)(@(?:${namePatterns.join('|')})\\b)`, 'gi')
+      : /(?!)/g;
 
     const parts = text.split(mentionRegex);
     const withMentions = parts.map((part, i) => {
       if (!part) return null;
       
       if (part.startsWith("@")) {
-        const name = part.substring(1);
-        const isMe = (() => {
-          const firstName = user?.firstName?.toLowerCase() || "";
-          const lastName = user?.lastName?.toLowerCase() || "";
-          const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
-          const strippedFullName = fullName.replace(/\s+/g, "");
-          const mentionName = name.toLowerCase();
-          return (
-            (firstName && firstName === mentionName) ||
-            (lastName && lastName === mentionName) ||
-            (fullName && fullName.includes(mentionName)) ||
-            (strippedFullName && strippedFullName === mentionName)
-          );
-        })();
+        const name = part.substring(1).trim();
+        const matchedEmp = employees.find(emp => {
+          const empName = (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`).trim();
+          return empName.toLowerCase() === name.toLowerCase();
+        });
+
+        const isMe = matchedEmp 
+          ? (matchedEmp.id === user?.id || matchedEmp.employeeId === user?.id)
+          : (() => {
+              const firstName = user?.firstName?.toLowerCase() || "";
+              const lastName = user?.lastName?.toLowerCase() || "";
+              const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
+              const strippedFullName = fullName.replace(/\s+/g, "");
+              const mentionName = name.toLowerCase();
+              return (
+                (firstName && firstName === mentionName) ||
+                (lastName && lastName === mentionName) ||
+                (fullName && fullName.includes(mentionName)) ||
+                (strippedFullName && strippedFullName === mentionName)
+              );
+            })();
 
         // Two unified color palettes: Orange/Amber for 'You', Blue/Cyan for 'Others'
         let tagColorClass = "";
@@ -1430,9 +1677,19 @@ export default function ChatPage() {
           tagColorClass = isMe ? "text-[#d97706] font-extrabold" : "text-[#0ea5e9] font-extrabold";
         }
 
+        const handleClick = () => {
+          if (matchedEmp) {
+            const empId = matchedEmp.id || matchedEmp.employeeId;
+            if (empId) {
+              openPersonalChatWithEmployeeId(empId);
+            }
+          }
+        };
+
         return (
           <span 
             key={`mention-${i}`} 
+            onClick={handleClick}
             className={cn(
               "text-[13px] transition-all cursor-pointer inline-block mr-1 font-bold hover:underline",
               tagColorClass
@@ -2308,7 +2565,14 @@ export default function ChatPage() {
                             <span className="text-[10px] shrink-0">{employees.find(e => e.id === chat.id)?.statusEmoji}</span>
                           )}
                           <p className="text-[12px] text-muted-foreground truncate">
-                            {employees.find(e => e.id === chat.id)?.customStatus || chat.lastMessage}
+                            {drafts[chat.id] ? (
+                              <>
+                                <span className="text-[#00a884] font-bold">Draft: </span>
+                                <span>{drafts[chat.id]}</span>
+                              </>
+                            ) : (
+                              employees.find(e => e.id === chat.id)?.customStatus || chat.lastMessage
+                            )}
                           </p>
                         </div>
                       </div>
@@ -2375,7 +2639,14 @@ export default function ChatPage() {
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
-                          {group.lastMessage || "No messages yet"}
+                          {drafts[group.id] ? (
+                            <>
+                              <span className="text-[#00a884] font-bold">Draft: </span>
+                              <span>{drafts[group.id]}</span>
+                            </>
+                          ) : (
+                            group.lastMessage || "No messages yet"
+                          )}
                         </p>
                         {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
                           <DropdownMenu>
@@ -2463,7 +2734,14 @@ export default function ChatPage() {
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
-                          {channel.lastMessage || channel.description}
+                          {drafts[channel.id] ? (
+                            <>
+                              <span className="text-[#00a884] font-bold">Draft: </span>
+                              <span>{drafts[channel.id]}</span>
+                            </>
+                          ) : (
+                            channel.lastMessage || channel.description
+                          )}
                         </p>
                         {(user?.role === "Admin" || user?.role === "HR") && (
                           <DropdownMenu>
@@ -2702,7 +2980,8 @@ export default function ChatPage() {
           </div>
         )}
         {selectedChat ? (
-          pendingFile ? (
+          <div className="flex-1 flex flex-row overflow-hidden relative">
+            {pendingFile ? (
             <div className="absolute inset-0 z-45 bg-white flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
               {/* Top Bar */}
               <div className="h-14 px-6 bg-white border-b border-slate-100 flex items-center justify-between text-slate-800 shrink-0 z-50">
@@ -2787,9 +3066,9 @@ export default function ChatPage() {
                 </button>
               </div>
             </div>
-          ) : !showRightSidebar ? (
-          <>
-            {/* Chat Header */}
+          ) : (
+            <div className="flex-1 flex flex-col min-w-0 bg-white relative">
+              {/* Chat Header */}
             <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
               <div className="flex items-center gap-4">
                 <Button 
@@ -2806,7 +3085,17 @@ export default function ChatPage() {
                     <h2 className="font-bold text-slate-800 text-lg">{selectedChat.name.toLowerCase()}</h2>
                   </div>
                 ) : (
-                  <>
+                  <div 
+                    className="flex items-center gap-3.5 cursor-pointer select-none"
+                    onClick={() => {
+                      if (showRightSidebar && sidebarTab === 'info') {
+                        setShowRightSidebar(false);
+                      } else {
+                        setSidebarTab('info');
+                        setShowRightSidebar(true);
+                      }
+                    }}
+                  >
                     <div className="relative shrink-0">
                       <Avatar className="w-11 h-11 border border-border">
                         {selectedChat.avatar ? (
@@ -2822,18 +3111,26 @@ export default function ChatPage() {
                       )}
                     </div>
                     <div>
-                      <h2 className="font-bold text-slate-800">{selectedChat.name}</h2>
+                      <h2 className="font-bold text-slate-800 hover:underline">{selectedChat.name}</h2>
                       {typingUsers.length > 0 ? (
                         <p className="text-[11px] font-bold text-brand-teal animate-pulse">
                           {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
                         </p>
-                      ) : selectedChat.type === 'group' ? (
+                      ) : (selectedChat.type === 'group' || selectedChat.type === 'general') ? (
                         <div 
-                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-full pr-2 transition-colors py-0.5"
-                          onClick={() => setShowGroupMembers(true)}
+                          className="flex items-center gap-2 pr-2 py-0.5 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (showRightSidebar && sidebarTab === 'info') {
+                              setShowRightSidebar(false);
+                            } else {
+                              setSidebarTab('info');
+                              setShowRightSidebar(true);
+                            }
+                          }}
                         >
                           <div className="flex -space-x-2 overflow-hidden">
-                            {selectedChat.members?.slice(0, 3).map((memberId: string) => {
+                            {groupMembersList.slice(0, 3).map((memberId: string) => {
                               const member = employees.find((e: any) => e.id === memberId);
                               return (
                                 <Avatar key={memberId} className="w-5 h-5 border-2 border-white ring-1 ring-border shrink-0">
@@ -2846,7 +3143,7 @@ export default function ChatPage() {
                             })}
                           </div>
                           <p className="text-[11px] font-bold text-emerald-600">
-                            {selectedChat.members?.length > 3 ? `+${selectedChat.members.length - 3} others` : `${selectedChat.members?.length || 0} Members`}
+                            {groupMembersList.length > 3 ? `+${groupMembersList.length - 3} others` : `${groupMembersList.length} Members`}
                           </p>
                         </div>
                       ) : (
@@ -2855,7 +3152,7 @@ export default function ChatPage() {
                         </p>
                       )}
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
 
@@ -2918,8 +3215,15 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className={cn("text-muted-foreground h-9 w-9 rounded-full hover:bg-gray-100", showRightSidebar && "text-brand-teal bg-brand-teal/5")}
-                  onClick={() => setShowRightSidebar(!showRightSidebar)}
+                  className={cn("text-muted-foreground h-9 w-9 rounded-full hover:bg-gray-100", showRightSidebar && sidebarTab === 'files' && "text-brand-teal bg-brand-teal/5")}
+                  onClick={() => {
+                    if (showRightSidebar && sidebarTab === 'files') {
+                      setShowRightSidebar(false);
+                    } else {
+                      setSidebarTab('files');
+                      setShowRightSidebar(true);
+                    }
+                  }}
                 >
                   <FileIcon className="w-4 h-4" />
                 </Button>
@@ -3042,7 +3346,15 @@ export default function ChatPage() {
                         isConsecutive ? (
                           <div className="w-8 h-8 shrink-0 mt-1" />
                         ) : (
-                          <Avatar className="w-8 h-8 border border-border shrink-0 mt-1 animate-in fade-in duration-200" title={displayName}>
+                          <Avatar 
+                            className="w-8 h-8 border border-border shrink-0 mt-1 animate-in fade-in duration-200 cursor-pointer hover:opacity-85 transition-opacity" 
+                            title={displayName}
+                            onClick={() => {
+                              if (isGroup && msg.senderId) {
+                                openSidebarForMember(msg.senderId);
+                              }
+                            }}
+                          >
                             {avatarSrc && <AvatarImage src={avatarSrc} />}
                             <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
                               {avatarFallback}
@@ -3088,8 +3400,13 @@ export default function ChatPage() {
                               {/* Group chat sender display name */}
                               {isGroup && !msg.isMe && !isConsecutive && (
                                 <span 
-                                  className="block text-[12.8px] font-bold mb-1 select-none" 
+                                  className="block text-[12.8px] font-bold mb-1 select-none cursor-pointer hover:underline" 
                                   style={{ color: getSenderColor(displayName) }}
+                                  onClick={() => {
+                                    if (msg.senderId) {
+                                      openSidebarForMember(msg.senderId);
+                                    }
+                                  }}
                                 >
                                   {displayName}
                                 </span>
@@ -3567,83 +3884,152 @@ export default function ChatPage() {
                       </div>
 
                       {/* Growing Textarea in the middle */}
-                      <Textarea 
-                        ref={messageInputRef}
-                        value={message}
-                        onChange={(e) => {
-                          handleInputChange(e.target.value);
-                          // Auto-resize textarea
-                          e.target.style.height = 'auto';
-                          e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage();
-                            // Reset textarea height after sending
-                            if (messageInputRef.current) {
-                              messageInputRef.current.style.height = 'auto';
+                      <div className="flex-1 relative">
+                        {showTagPicker && filteredEmployees.length > 0 && (
+                          <div 
+                            style={{ left: `${tagPickerLeft}px` }}
+                            className="absolute bottom-full mb-2 p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 max-h-64 overflow-y-auto z-[100] transition-all duration-75"
+                          >
+                            <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1.5 border-b border-slate-50 mb-1">
+                              Tag Colleague
+                            </div>
+                            <div className="space-y-0.5">
+                              {filteredEmployees.map((emp, idx) => {
+                                const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                                const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                                const isActive = idx === activeTagIndex;
+                                return (
+                                  <button
+                                    key={emp.id}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault(); // Keep focus on textarea
+                                      handleTagSelect(emp);
+                                    }}
+                                    className={cn(
+                                      "w-full flex items-center gap-2.5 p-2 rounded-xl text-left transition-all",
+                                      isActive ? "bg-brand-teal/10 font-bold" : "hover:bg-slate-50"
+                                    )}
+                                  >
+                                    <Avatar className="w-7 h-7 shrink-0">
+                                      <AvatarImage src={getAvatarUrl(emp.profilePhoto)} />
+                                      <AvatarFallback className="bg-brand-teal/10 text-brand-teal font-bold text-[10px]">{initials}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-bold text-slate-700 truncate">{empName}</p>
+                                      <p className="text-[9px] text-slate-400 font-medium truncate uppercase">{emp.designation || 'Employee'}</p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        <div 
+                          ref={inputOverlayRef}
+                          style={{
+                            fontFamily: 'inherit',
+                            fontSize: '15px',
+                            lineHeight: '20px',
+                            padding: '6px 8px',
+                            margin: '0',
+                            border: 'none',
+                            letterSpacing: 'normal',
+                            color: '#111b21',
+                          }}
+                          className="absolute inset-0 pointer-events-none whitespace-pre-wrap break-words [word-break:break-word] overflow-hidden select-none bg-transparent"
+                        >
+                          {renderInputHighlight(message)}
+                        </div>
+                        <Textarea 
+                          ref={messageInputRef}
+                          value={message}
+                          onChange={(e) => {
+                            handleInputChange(e.target.value);
+                            // Auto-resize textarea
+                            e.target.style.height = 'auto';
+                            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                            if (inputOverlayRef.current) {
+                              inputOverlayRef.current.scrollTop = e.target.scrollTop;
                             }
-                          }
-                        }}
-                        onPaste={(e) => {
-                          const items = e.clipboardData?.items;
-                          if (items) {
-                            for (let i = 0; i < items.length; i++) {
-                              if (items[i].type.indexOf('image') !== -1) {
-                                const file = items[i].getAsFile();
-                                if (file) {
-                                  setPendingFile(file);
-                                  e.preventDefault();
-                                  break;
+                          }}
+                          onScroll={(e: any) => {
+                            if (inputOverlayRef.current) {
+                              inputOverlayRef.current.scrollTop = e.target.scrollTop;
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (showTagPicker && filteredEmployees.length > 0) {
+                              if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setActiveTagIndex(prev => (prev + 1) % filteredEmployees.length);
+                                return;
+                              }
+                              if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setActiveTagIndex(prev => (prev - 1 + filteredEmployees.length) % filteredEmployees.length);
+                                return;
+                              }
+                              if (e.key === 'Enter' || e.key === 'Tab') {
+                                e.preventDefault();
+                                const selectedEmp = filteredEmployees[activeTagIndex];
+                                if (selectedEmp) {
+                                  handleTagSelect(selectedEmp);
+                                }
+                                return;
+                              }
+                              if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setShowTagPicker(false);
+                                return;
+                              }
+                            }
+
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendMessage();
+                              // Reset textarea height after sending
+                              if (messageInputRef.current) {
+                                messageInputRef.current.style.height = 'auto';
+                              }
+                            }
+                          }}
+                          onPaste={(e) => {
+                            const items = e.clipboardData?.items;
+                            if (items) {
+                              for (let i = 0; i < items.length; i++) {
+                                if (items[i].type.indexOf('image') !== -1) {
+                                  const file = items[i].getAsFile();
+                                  if (file) {
+                                    setPendingFile(file);
+                                    e.preventDefault();
+                                    break;
+                                  }
                                 }
                               }
                             }
-                          }
-                        }}
-                        placeholder="Type a message"
-                        rows={1}
-                        className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-[15px] placeholder:text-[#8696a0] text-[#111b21] min-h-[24px] max-h-[120px] py-1.5 px-2 resize-none overflow-y-auto outline-none focus:outline-none"
-                      />
+                          }}
+                          placeholder="Type a message"
+                          rows={1}
+                          spellCheck={false}
+                          style={{
+                            fontFamily: 'inherit',
+                            fontSize: '15px',
+                            lineHeight: '20px',
+                            padding: '6px 8px',
+                            margin: '0',
+                            border: 'none',
+                            letterSpacing: 'normal',
+                            color: 'transparent',
+                            WebkitTextFillColor: 'transparent',
+                            caretColor: '#111b21',
+                          }}
+                          className="w-full bg-transparent text-transparent caret-[#111b21] border-none focus-visible:ring-0 shadow-none min-h-[24px] max-h-[120px] resize-none overflow-y-auto outline-none focus:outline-none relative z-10 whitespace-pre-wrap break-words [word-break:break-word] selection:bg-[#0ea5e9]/20"
+                        />
+                      </div>
 
-                      {/* Right side actions: Tag + Poll + Send/Mic */}
+                      {/* Right side actions: Poll + Send/Mic */}
                       <div className="flex items-center shrink-0">
-                        {/* Tagging / Mention Popover (Hidden Trigger) */}
-                        <div className="relative">
-                          {showTagPicker && filteredEmployees.length > 0 && (
-                            <div className="absolute bottom-full right-0 p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 mb-4 max-h-64 overflow-y-auto z-[100]">
-                              <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1.5 border-b border-slate-50 mb-1">
-                                Tag Colleague
-                              </div>
-                              <div className="space-y-0.5">
-                                  {filteredEmployees.map((emp) => {
-                                    const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
-                                    const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
-                                    return (
-                                      <button
-                                        key={emp.id}
-                                        type="button"
-                                        onMouseDown={(e) => {
-                                          e.preventDefault(); // Keep focus on textarea
-                                          handleTagSelect(emp);
-                                        }}
-                                        className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-50 rounded-xl text-left transition-all"
-                                      >
-                                        <Avatar className="w-7 h-7 shrink-0">
-                                          <AvatarImage src={getAvatarUrl(emp.profilePhoto)} />
-                                          <AvatarFallback className="bg-brand-teal/10 text-brand-teal font-bold text-[10px]">{initials}</AvatarFallback>
-                                        </Avatar>
-                                        <div className="min-w-0">
-                                          <p className="text-xs font-bold text-slate-700 truncate">{empName}</p>
-                                          <p className="text-[9px] text-slate-400 font-medium truncate uppercase">{emp.designation || 'Employee'}</p>
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                            </div>
-                          )}
-                        </div>
 
                         {/* Poll Button */}
                         {selectedChat?.type !== 'personal' && (
@@ -3689,8 +4075,321 @@ export default function ChatPage() {
               </form>
             </div>
           </div>
-        </>
-          ) : null
+          </div>
+            )}
+            {/* Right Sidebar - Shared Files Repository / Contact Info */}
+            {selectedChat && showRightSidebar && (
+          <div className="w-[380px] border-l border-border bg-white flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 shrink-0">
+            <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
+              {sidebarContactUser ? (
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 rounded-full text-slate-500 hover:text-slate-700 -ml-2" 
+                    onClick={() => setSidebarContactUser(null)}
+                    title="Back"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </Button>
+                  <h3 className="font-bold text-slate-800 text-base">Contact info</h3>
+                </div>
+              ) : (
+                <h3 className="font-bold text-slate-800 text-base">
+                  {sidebarTab === 'files' ? 'Shared Files' : (selectedChat.type === 'group' || selectedChat.type === 'general') ? 'Group info' : 'Contact info'}
+                </h3>
+              )}
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 rounded-full text-slate-400 hover:text-slate-600" 
+                onClick={() => {
+                  setShowRightSidebar(false);
+                  setSidebarContactUser(null);
+                }}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto bg-slate-50/50">
+              {sidebarTab === 'files' ? (
+                <div className="p-4 space-y-6 bg-white min-h-full">
+                  {chatFiles.length > 0 ? (
+                    Object.entries(
+                      chatFiles.reduce((groups: any, file: any) => {
+                        const date = dayjs(file.timestamp).format("MMMM YYYY");
+                        if (!groups[date]) groups[date] = [];
+                        groups[date].push(file);
+                        return groups;
+                      }, {})
+                    ).map(([date, files]: [string, any]) => (
+                      <div key={date}>
+                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">{date}</h4>
+                        <div className="space-y-2">
+                          {files.map((file: any) => (
+                            <div 
+                              key={file.id} 
+                              className="bg-white border border-border p-3 rounded-2xl hover:shadow-md transition-all group/file cursor-pointer"
+                              onClick={() => {
+                                if (/\.(jpg|jpeg|png|gif|webp)$/i.test(file.attachmentName || "")) {
+                                  setPreviewImageMsgId(file.id);
+                                } else {
+                                  handleDownload(file.attachmentUrl, file.attachmentName);
+                                }
+                              }}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-brand-teal/5 flex items-center justify-center shrink-0 border border-brand-teal/10">
+                                  <FileIcon className="w-5 h-5 text-brand-teal" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[12px] font-bold text-slate-800 truncate mb-0.5">{file.attachmentName || "Document"}</p>
+                                  <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">
+                                    {dayjs(file.timestamp).format("MMM DD")} • Shared by {file.senderId === user?.id ? "You" : (employees.find((e: any) => e.id === file.senderId)?.name || "Member")}
+                                  </p>
+                                </div>
+                                <div className="opacity-0 group-hover/file:opacity-100 transition-opacity">
+                                  <Download className="w-4 h-4 text-brand-teal" />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-20 px-6">
+                      <div className="w-16 h-16 bg-white border-2 border-dashed border-border rounded-full flex items-center justify-center mx-auto mb-4">
+                        <FileIcon className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-500 mb-1">No shared files yet</p>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">Shared documents, images, and other media will appear here for easy access.</p>
+                    </div>
+                  )}
+                </div>
+              ) : sidebarContactUser ? (
+                <div className="space-y-4">
+                  {/* Avatar + Basic Details Card for Overridden Contact Info */}
+                  <div className="bg-white p-6 border-b border-slate-200/60 flex flex-col items-center">
+                    <Avatar className="w-32 h-32 border-2 border-slate-100 shadow-sm">
+                      {sidebarContactUser.profilePhoto ? (
+                        <AvatarImage src={getAvatarUrl(sidebarContactUser.profilePhoto)} />
+                      ) : (
+                        <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-3xl uppercase">
+                          {(sidebarContactUser.name || sidebarContactUser.firstName || "U")[0]}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    
+                    <h4 className="text-lg font-bold text-slate-800 mt-4 text-center">
+                      {sidebarContactUser.name || `${sidebarContactUser.firstName || ''} ${sidebarContactUser.lastName || ''}`.trim()}
+                    </h4>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1 text-center">
+                      {sidebarContactUser.designation || 'Employee'}
+                    </p>
+                    <span className="mt-2.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-teal/5 text-brand-teal">
+                      {sidebarContactUser.department || 'Staff'}
+                    </span>
+                    
+                    <div className="w-full mt-6">
+                      <Button 
+                        onClick={() => {
+                          const empId = sidebarContactUser.id || sidebarContactUser.employeeId || sidebarContactUser._id;
+                          if (empId) {
+                            openPersonalChatWithEmployeeId(String(empId));
+                            setShowRightSidebar(false);
+                            setSidebarContactUser(null);
+                          }
+                        }}
+                        className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold rounded-xl h-10 flex items-center justify-center gap-2 shadow-xs"
+                      >
+                        <MessageSquare className="w-4 h-4" /> Message
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Detailed Information Section for Overridden Contact Info */}
+                  <div className="bg-white p-6 border-y border-slate-200/60 space-y-4">
+                    <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Email address</span>
+                      <span className="text-sm font-semibold text-slate-700 break-all">{sidebarContactUser.email || '-'}</span>
+                    </div>
+                    <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Company Role</span>
+                      <span className="text-sm font-semibold text-slate-700 capitalize">{sidebarContactUser.role || 'Employee'}</span>
+                    </div>
+                    {sidebarContactUser.joinDate && (
+                      <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Joined Date</span>
+                        <span className="text-sm font-semibold text-slate-700">
+                          {dayjs(sidebarContactUser.joinDate).format("DD MMMM YYYY")}
+                        </span>
+                      </div>
+                    )}
+                    <div className="pb-3 last:border-0 last:pb-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Status</span>
+                      <span className={cn(
+                        "inline-flex items-center gap-1.5 text-xs font-bold",
+                        onlineUsers.has(String(sidebarContactUser.id || sidebarContactUser.employeeId || sidebarContactUser._id)) ? "text-emerald-600" : "text-slate-400"
+                      )}>
+                        <span className={cn("w-2 h-2 rounded-full", onlineUsers.has(String(sidebarContactUser.id || sidebarContactUser.employeeId || sidebarContactUser._id)) ? "bg-emerald-500" : "bg-slate-300")} />
+                        {onlineUsers.has(String(sidebarContactUser.id || sidebarContactUser.employeeId || sidebarContactUser._id)) ? "Online" : "Offline"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Avatar + Basic Details Card */}
+                  <div className="bg-white p-6 border-b border-slate-200/60 flex flex-col items-center">
+                    <Avatar className="w-32 h-32 border-2 border-slate-100 shadow-sm">
+                      {selectedChat.avatar ? (
+                        <AvatarImage src={getAvatarUrl(selectedChat.avatar)} />
+                      ) : (
+                        <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-3xl uppercase">
+                          {selectedChat.name[0]}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    
+                    <h4 className="text-lg font-bold text-slate-800 mt-4 text-center">{selectedChat.name}</h4>
+                    {selectedChat.type === 'personal' ? (
+                      (() => {
+                        const emp = employees.find(e => String(e.id) === String(selectedChat.id) || String(e.employeeId) === String(selectedChat.id));
+                        return (
+                          <>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1 text-center">
+                              {emp?.designation || 'Employee'}
+                            </p>
+                            <span className="mt-2.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-teal/5 text-brand-teal">
+                              {emp?.department || 'Staff'}
+                            </span>
+                          </>
+                        );
+                      })()
+                    ) : (
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1 text-center">
+                        Group Chat • {groupMembersList.length} Members
+                      </p>
+                    )}
+                    
+                    {selectedChat.type === 'personal' && (
+                      <div className="w-full mt-6">
+                        <Button 
+                          onClick={() => {
+                            setShowRightSidebar(false);
+                            messageInputRef.current?.focus();
+                          }}
+                          className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold rounded-xl h-10 flex items-center justify-center gap-2 shadow-xs"
+                        >
+                          <MessageSquare className="w-4 h-4" /> Message
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Detailed Information Section */}
+                  {selectedChat.type === 'personal' ? (
+                    (() => {
+                      const emp = employees.find(e => String(e.id) === String(selectedChat.id) || String(e.employeeId) === String(selectedChat.id));
+                      return (
+                        <div className="bg-white p-6 border-y border-slate-200/60 space-y-4">
+                          <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Email address</span>
+                            <span className="text-sm font-semibold text-slate-700 break-all">{emp?.email || '-'}</span>
+                          </div>
+                          <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Company Role</span>
+                            <span className="text-sm font-semibold text-slate-700 capitalize">{emp?.role || 'Employee'}</span>
+                          </div>
+                          {emp?.joinDate && (
+                            <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Joined Date</span>
+                              <span className="text-sm font-semibold text-slate-700">
+                                {dayjs(emp.joinDate).format("DD MMMM YYYY")}
+                              </span>
+                            </div>
+                          )}
+                          <div className="pb-3 last:border-0 last:pb-0">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Status</span>
+                            <span className={cn(
+                              "inline-flex items-center gap-1.5 text-xs font-bold",
+                              isSelectedChatOnline ? "text-emerald-600" : "text-slate-400"
+                            )}>
+                              <span className={cn("w-2 h-2 rounded-full", isSelectedChatOnline ? "bg-emerald-500" : "bg-slate-300")} />
+                              {isSelectedChatOnline ? "Online" : "Offline"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div className="bg-white border-y border-slate-200/60">
+                      {selectedChat.description && (
+                        <div className="p-6 border-b border-slate-100">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Description</span>
+                          <p className="text-sm text-slate-600 leading-relaxed font-medium">{selectedChat.description}</p>
+                        </div>
+                      )}
+                      
+                      <div className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Members ({groupMembersList.length})
+                          </span>
+                        </div>
+                        <div className="space-y-3">
+                          {groupMembersList.map((memberId: string) => {
+                            const emp = employees.find((e: any) => e.id === memberId);
+                            if (!emp) return null;
+                            const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+                            const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                            const isMe = memberId === user?.id;
+                            
+                            return (
+                              <div 
+                                key={memberId} 
+                                onClick={() => {
+                                  if (!isMe) {
+                                    openSidebarForMember(memberId);
+                                  }
+                                }}
+                                className={cn(
+                                  "flex items-center gap-3 p-2 rounded-xl transition-all",
+                                  isMe ? "" : "hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-100"
+                                )}
+                              >
+                                <Avatar className="w-9 h-9 border border-slate-100 shadow-2xs">
+                                  <AvatarImage src={getAvatarUrl(emp.profilePhoto)} />
+                                  <AvatarFallback className="bg-brand-teal/10 text-brand-teal font-extrabold text-xs">{initials}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-slate-700 truncate">{empName}</span>
+                                    {isMe && (
+                                      <span className="text-[9px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded-full select-none">
+                                        You
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block mt-0.5 truncate">
+                                    {emp.designation || 'Employee'}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+          </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-4">
             <div className="w-20 h-20 rounded-full bg-brand-teal/10 flex items-center justify-center">
@@ -3699,76 +4398,6 @@ export default function ChatPage() {
             <div>
               <h3 className="text-lg font-bold text-foreground">Select a chat to start messaging</h3>
               <p className="text-muted-foreground max-w-sm mx-auto">Choose a conversation from the left sidebar to see messages and start chatting with your colleagues.</p>
-            </div>
-          </div>
-        )}
-
-        {/* Right Sidebar - Shared Files Repository */}
-        {selectedChat && showRightSidebar && (
-          <div className="flex-1 w-full bg-white flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
-            <div className="h-[88px] border-b border-border px-6 flex items-center gap-4 bg-white shrink-0">
-              <Button variant="ghost" size="sm" className="h-8 rounded-full text-brand-teal hover:text-brand-teal-light hover:bg-brand-teal/10" onClick={() => setShowRightSidebar(false)}>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back to Chat
-              </Button>
-              <h3 className="font-bold text-slate-800">Shared Files Repository</h3>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <div className="p-4 space-y-6">
-                {chatFiles.length > 0 ? (
-                  // Group files by date
-                  Object.entries(
-                    chatFiles.reduce((groups: any, file: any) => {
-                      const date = dayjs(file.timestamp).format("MMMM YYYY");
-                      if (!groups[date]) groups[date] = [];
-                      groups[date].push(file);
-                      return groups;
-                    }, {})
-                  ).map(([date, files]: [string, any]) => (
-                    <div key={date}>
-                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">{date}</h4>
-                      <div className="space-y-2">
-                        {files.map((file: any) => (
-                          <div 
-                            key={file.id} 
-                            className="bg-white border border-border p-3 rounded-2xl hover:shadow-md transition-all group/file cursor-pointer"
-                            onClick={() => {
-                              if (/\.(jpg|jpeg|png|gif|webp)$/i.test(file.attachmentName || "")) {
-                                setPreviewImageMsgId(file.id);
-                              } else {
-                                handleDownload(file.attachmentUrl, file.attachmentName);
-                              }
-                            }}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-brand-teal/5 flex items-center justify-center shrink-0 border border-brand-teal/10">
-                                <FileIcon className="w-5 h-5 text-brand-teal" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[12px] font-bold text-slate-800 truncate mb-0.5">{file.attachmentName || "Document"}</p>
-                                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">
-                                  {dayjs(file.timestamp).format("MMM DD")} • Shared by {file.senderId === user?.id ? "You" : (employees.find((e: any) => e.id === file.senderId)?.name || "Member")}
-                                </p>
-                              </div>
-                              <div className="opacity-0 group-hover/file:opacity-100 transition-opacity">
-                                <Download className="w-4 h-4 text-brand-teal" />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-20 px-6">
-                    <div className="w-16 h-16 bg-white border-2 border-dashed border-border rounded-full flex items-center justify-center mx-auto mb-4">
-                      <FileIcon className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                    <p className="text-sm font-bold text-slate-500 mb-1">No shared files yet</p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">Shared documents, images, and other media will appear here for easy access.</p>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         )}
@@ -4463,7 +5092,7 @@ export default function ChatPage() {
             </Popover>
           </div>
 
-          {contextMenu.msg.isMe && (
+          {contextMenu.msg.isMe && selectedChat?.type !== 'personal' && (
             <button 
               type="button"
               onClick={() => { setMsgInfoData(contextMenu.msg); setContextMenu(null); }}
