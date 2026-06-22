@@ -99,7 +99,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
     }
     if (isAdmin || checkPermission('marketing', 'canView')) {
-      workManagementChildren.push(getItem(<Link href="/work-management/marketing-reports">Marketing Reports</Link>, "/work-management/marketing-reports"));
+      workManagementChildren.push(getItem(<Link href="/work-management/digital-marketing">Digital Marketing</Link>, "/work-management/digital-marketing"));
     }
     if (isAdmin || checkPermission('creative', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/smm">SMM</Link>, "/work-management/smm"));

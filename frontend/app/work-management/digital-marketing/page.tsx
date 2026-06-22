@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Search, Loader2, ArrowUpDown, ChevronDown, Check, Trash2, Edit2, Play, Users, BarChart3, Clock, CheckCircle2, MoreVertical, Plus, Info, TrendingUp, Power, FileText, History, ClipboardList, Calendar as CalendarIcon, Download, Filter, MoreHorizontal } from "lucide-react";
+import { Search, Loader2, ArrowUpDown, ChevronDown, Check, Trash2, Edit2, Play, Users, BarChart3, Clock, CheckCircle2, MoreVertical, Plus, Info, TrendingUp, Power, FileText, History, ClipboardList, Calendar as CalendarIcon, Download, Filter, MoreHorizontal, GripVertical } from "lucide-react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 import { 
   Table, 
@@ -101,6 +103,7 @@ export default function MarketingReportsPage() {
 
   // Client filtering
   const [clients, setClients] = useState<any[]>([]);
+  const [selectedClientForCampaigns, setSelectedClientForCampaigns] = useState<string | null>(null);
   const [selectedClientFilter, setSelectedClientFilter] = useState("all");
   // Pagination State
   const [dailyPage, setDailyPage] = useState(1);
@@ -138,9 +141,11 @@ export default function MarketingReportsPage() {
     }
   };
   const [newCampaignName, setNewCampaignName] = useState<{ [key: string]: string }>({});
+  const [newCampaignMetric, setNewCampaignMetric] = useState<{ [key: string]: string }>({});
 
   const handleAddCampaign = async (clientId: string) => {
     const name = newCampaignName[clientId];
+    const metric = newCampaignMetric[clientId] || "CPL";
     if (!name || !name.trim()) return;
     const client = clients.find(c => c.id === clientId);
     if (!client) return;
@@ -150,7 +155,7 @@ export default function MarketingReportsPage() {
       toast.error("Campaign already exists");
       return;
     }
-    const updatedCampaigns = [...currentCampaigns, { name: name.trim(), isActive: true }];
+    const updatedCampaigns = [...currentCampaigns, { name: name.trim(), isActive: true, metric }];
     try {
       const res = await fetch(`${API_URL}/clients/${clientId}`, {
         method: "PUT",
@@ -160,6 +165,7 @@ export default function MarketingReportsPage() {
       if (res.ok) {
         toast.success("Campaign added");
         setNewCampaignName(prev => ({...prev, [clientId]: ""}));
+        setNewCampaignMetric(prev => ({...prev, [clientId]: "CPL"}));
         fetchClients();
       } else {
         toast.error("Failed to add campaign");
@@ -303,7 +309,7 @@ export default function MarketingReportsPage() {
       const res = await fetch(`${API_URL}/clients`);
       if (res.ok) {
         const data = await res.json();
-        setClients(data.filter((c: any) => c.department === "Marketing"));
+        setClients(data.filter((c: any) => c.department === "Marketing" || c.department === "Digital Marketing"));
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -494,6 +500,45 @@ export default function MarketingReportsPage() {
     setMonthlyPage(1);
   }, [searchQuery, selectedClientFilter, dateFilter, monthFilter]);
 
+  const handleDragEndDaily = (result: any) => {
+    if (!result.destination) return;
+    const sourceId = result.draggableId;
+    const sourceIndex = dailyReports.findIndex(r => String(r.id) === String(sourceId));
+    
+    // Using filteredDaily since it represents the visual list before pagination
+    // Wait, destination.index is relative to the droppable container, which contains paginated items
+    // and also maybe Quick Add row? The Quick Add row is NOT a Draggable. Droppable might just count draggables.
+    const destId = paginatedDaily[result.destination.index]?.id;
+    let destIndex = dailyReports.findIndex(r => String(r.id) === String(destId));
+    
+    if (destIndex === -1) destIndex = dailyReports.length;
+
+    if (sourceIndex !== -1 && destIndex !== -1) {
+      const newReports = Array.from(dailyReports);
+      const [moved] = newReports.splice(sourceIndex, 1);
+      newReports.splice(destIndex, 0, moved);
+      setDailyReports(newReports);
+    }
+  };
+
+  const handleDragEndMonthly = (result: any) => {
+    if (!result.destination) return;
+    const sourceId = result.draggableId;
+    const sourceIndex = monthlyReports.findIndex(r => String(r.id) === String(sourceId));
+    
+    const destId = paginatedMonthly[result.destination.index]?.id;
+    let destIndex = monthlyReports.findIndex(r => String(r.id) === String(destId));
+    
+    if (destIndex === -1) destIndex = monthlyReports.length;
+
+    if (sourceIndex !== -1 && destIndex !== -1) {
+      const newReports = Array.from(monthlyReports);
+      const [moved] = newReports.splice(sourceIndex, 1);
+      newReports.splice(destIndex, 0, moved);
+      setMonthlyReports(newReports);
+    }
+  };
+
   if (permissionsLoading || !canViewMarketing) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -540,6 +585,13 @@ export default function MarketingReportsPage() {
   const paginatedDaily = filteredDaily.slice((dailyPage - 1) * dailyItemsPerPage, dailyPage * dailyItemsPerPage);
   const paginatedMonthly = filteredMonthly.slice((monthlyPage - 1) * monthlyItemsPerPage, monthlyPage * monthlyItemsPerPage);
 
+  const groupedPaginatedDaily = paginatedDaily.reduce((acc: Record<string, any[]>, curr) => {
+    const cName = curr.clientName || "Unknown";
+    if (!acc[cName]) acc[cName] = [];
+    acc[cName].push(curr);
+    return acc;
+  }, {});
+
   const dailyTotals = filteredDaily.reduce((acc, curr) => ({
     reach: acc.reach + (curr.reach || 0),
     impression: acc.impression + (curr.impression || 0),
@@ -547,6 +599,19 @@ export default function MarketingReportsPage() {
     followers: acc.followers + (curr.followers || 0),
     spend: acc.spend + (curr.spend || 0)
   }), { reach: 0, impression: 0, leads: 0, followers: 0, spend: 0 });
+
+  const dailyClientTotals = filteredDaily.reduce((acc: Record<string, any>, curr) => {
+    const clientName = curr.clientName || "Unknown";
+    if (!acc[clientName]) {
+      acc[clientName] = { reach: 0, impression: 0, leads: 0, followers: 0, spend: 0 };
+    }
+    acc[clientName].reach += (curr.reach || 0);
+    acc[clientName].impression += (curr.impression || 0);
+    acc[clientName].leads += (curr.leads || 0);
+    acc[clientName].followers += (curr.followers || 0);
+    acc[clientName].spend += (curr.spend || 0);
+    return acc;
+  }, {});
 
   const monthlyTotals = filteredMonthly.reduce((acc, curr) => ({
     totalSpend: acc.totalSpend + (curr.totalSpend || 0),
@@ -678,8 +743,8 @@ export default function MarketingReportsPage() {
         </div>
 
         {activeTab !== 'clients' && (
-        <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-xl border shadow-sm mb-6">
-          <div className="flex-1 min-w-[200px] space-y-1.5">
+        <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border shadow-sm mb-6">
+          <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
             <Label className="text-xs text-slate-500">Search Campaign or Client</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -691,10 +756,10 @@ export default function MarketingReportsPage() {
               />
             </div>
           </div>
-            <div className="flex-1 min-w-[150px] space-y-1.5">
+            <div className="w-[200px] space-y-1.5">
               <Label className="text-xs text-slate-500">Filter by Client</Label>
               <Select value={selectedClientFilter} onValueChange={setSelectedClientFilter}>
-                <SelectTrigger className="h-9">
+                <SelectTrigger className="h-9 w-full">
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-slate-400" />
                     <SelectValue placeholder="All Clients" />
@@ -708,24 +773,28 @@ export default function MarketingReportsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1 min-w-[150px] space-y-1.5">
-              <Label className="text-xs text-slate-500">Filter by Date</Label>
-              <Input type="date" className="h-9" value={dateFilter} onChange={e => handleDateFilterChange(e.target.value)} />
-            </div>
-            <div className="flex-1 min-w-[150px] space-y-1.5">
-              <Label className="text-xs text-slate-500">Filter by Month</Label>
-              <Select value={monthFilter} onValueChange={handleMonthFilterChange}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Select Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Months</SelectItem>
-                  {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {activeTab === 'daily' && (
+              <div className="w-[150px] space-y-1.5">
+                <Label className="text-xs text-slate-500">Filter by Date</Label>
+                <Input type="date" className="h-9 w-full" value={dateFilter} onChange={e => handleDateFilterChange(e.target.value)} />
+              </div>
+            )}
+            {activeTab === 'monthly' && (
+              <div className="w-[150px] space-y-1.5">
+                <Label className="text-xs text-slate-500">Filter by Month</Label>
+                <Select value={monthFilter} onValueChange={handleMonthFilterChange}>
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue placeholder="Select Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Months</SelectItem>
+                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex items-end h-9 pt-6">
               {(selectedClientFilter !== "all" || dateFilter !== getLocalDateString() || searchQuery !== "" || monthFilter !== getLocalMonthString()) && (
                 <Button 
@@ -747,113 +816,201 @@ export default function MarketingReportsPage() {
         )}
 
         <TabsContent value="clients" className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0">
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-800">Client Campaigns</h2>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input 
-                  placeholder="Search clients..." 
-                  className="pl-10 h-9" 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex min-h-0">
+            
+            {/* Left Column: Client List */}
+            <div className="w-1/3 min-w-[280px] max-w-[350px] border-r border-slate-200 flex flex-col bg-slate-50/50">
+              <div className="p-4 border-b border-slate-200 bg-white">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input 
+                    placeholder="Search clients..." 
+                    className="pl-10 h-9 bg-slate-50 border-transparent focus:bg-white focus:border-brand-teal/30 focus:ring-brand-teal/20" 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="overflow-auto flex-1 custom-scrollbar p-3 space-y-2">
+                {(() => {
+                  const filteredClients = clients.filter(c => c.companyName.toLowerCase().includes(searchQuery.toLowerCase()));
+                  if (filteredClients.length === 0) {
+                    return <div className="text-center py-8 text-sm text-slate-400 italic">No clients found</div>;
+                  }
+                  // Auto-select first client if none selected
+                  if (!selectedClientForCampaigns && filteredClients.length > 0) {
+                    setTimeout(() => setSelectedClientForCampaigns(filteredClients[0].id), 0);
+                  }
+                  
+                  return filteredClients.map(client => {
+                    const isSelected = selectedClientForCampaigns === client.id;
+                    const activeCount = client.campaigns?.filter((c: any) => typeof c === 'string' ? true : c.isActive).length || 0;
+                    
+                    return (
+                      <div 
+                        key={client.id}
+                        onClick={() => setSelectedClientForCampaigns(client.id)}
+                        className={`p-3 rounded-lg cursor-pointer transition-all duration-200 border ${isSelected ? 'bg-white border-brand-teal shadow-sm ring-1 ring-brand-teal/20' : 'bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm'}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-brand-teal text-white shadow-md shadow-brand-teal/20' : 'bg-brand-teal/10 text-brand-teal'}`}>
+                            <Users className="w-4 h-4" />
+                          </div>
+                          <div className="overflow-hidden">
+                            <div className={`font-semibold truncate ${isSelected ? 'text-brand-teal' : 'text-slate-700'}`}>{client.companyName}</div>
+                            <div className="text-xs text-slate-500 mt-0.5">{activeCount} active campaign(s)</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
-            <div className="overflow-auto flex-1 custom-scrollbar grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-max">
-              {clients.filter(c => c.companyName.toLowerCase().includes(searchQuery.toLowerCase())).map(client => (
-                <div 
-                  key={client.id} 
-                  className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col gap-4 h-fit cursor-pointer hover:shadow-md hover:border-brand-teal/30 transition-all duration-200 group relative"
-                  onClick={() => handleViewClientReports(client.id)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal shrink-0">
-                        <Users className="w-5 h-5" />
+
+            {/* Right Column: Campaigns for Selected Client */}
+            <div className="flex-1 flex flex-col bg-white overflow-hidden">
+              {(() => {
+                const activeClient = clients.find(c => c.id === selectedClientForCampaigns);
+                if (!activeClient) {
+                  return (
+                    <div className="flex-1 flex items-center justify-center flex-col gap-3 text-slate-400 bg-slate-50/30">
+                      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
+                        <Users className="w-8 h-8 text-slate-300" />
                       </div>
+                      <p>Select a client to view their campaigns</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
                       <div>
-                        <div className="font-semibold text-slate-800 text-base">{client.companyName}</div>
-                        <div className="text-sm text-slate-500">{client.campaigns?.filter((c: any) => typeof c === 'string' ? true : c.isActive).length || 0} active campaign(s)</div>
-                      </div>
-                    </div>
-                    <div className="text-xs font-medium text-brand-teal flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      View Reports <TrendingUp className="w-3 h-3" />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2 mt-2">
-                    {client.campaigns?.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {client.campaigns.map((campRaw: any) => {
-                          const campName = typeof campRaw === 'string' ? campRaw : campRaw.name;
-                          const isActive = typeof campRaw === 'string' ? true : campRaw.isActive;
-                          return (
-                          <div key={campName} className={`flex items-center gap-1.5 border px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${isActive ? 'bg-white border-slate-200 text-slate-700 hover:border-slate-300' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
-                            <span className={`truncate max-w-[140px] ${!isActive && 'line-through decoration-slate-300'}`} title={campName}>{campName}</span>
-                            {canEditMarketing && (
-                              <div className="flex items-center gap-0.5 ml-1">
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleToggleCampaignStatus(client.id, campName); }} 
-                                  className={`p-1 rounded transition-colors ${isActive ? 'text-slate-400 hover:text-amber-500 hover:bg-amber-50' : 'text-slate-300 hover:text-emerald-500 hover:bg-emerald-50'}`}
-                                  title={isActive ? "Deactivate Campaign" : "Activate Campaign"}
-                                >
-                                  <Power className="w-3 h-3" />
-                                </button>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleRemoveCampaign(client.id, campName); }} 
-                                  className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1 rounded transition-colors"
-                                  title="Remove Campaign"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )})}
-                      </div>
-                    ) : (
-                      <div className="w-full py-5 border border-dashed border-slate-200 rounded-lg flex items-center justify-center">
-                        <span className="text-sm text-slate-400 italic">No campaigns added yet</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {canAddMarketing && (
-                    <div className="flex items-center gap-2 mt-auto pt-4 border-t border-slate-50" onClick={e => e.stopPropagation()}>
-                      <div className="relative flex-1">
-                        <Plus className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <Input 
-                          placeholder="Add new campaign..." 
-                          className="h-10 text-sm pl-9 bg-slate-50/50 border-slate-200 focus-visible:ring-brand-teal/30"
-                          value={newCampaignName[client.id] || ""}
-                          onChange={(e) => setNewCampaignName(prev => ({...prev, [client.id]: e.target.value}))}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleAddCampaign(client.id);
-                          }}
-                        />
+                        <h2 className="text-xl font-bold text-slate-800">{activeClient.companyName}</h2>
+                        <p className="text-sm text-slate-500 mt-1">Manage digital marketing campaigns</p>
                       </div>
                       <Button 
-                        size="sm" 
-                        className="h-10 px-4 bg-slate-400 hover:bg-slate-500 text-white transition-colors" 
-                        onClick={() => handleAddCampaign(client.id)}
+                        variant="outline" 
+                        size="sm"
+                        className="text-brand-teal border-brand-teal hover:bg-brand-teal/5"
+                        onClick={() => handleViewClientReports(activeClient.id)}
                       >
-                        Add
+                        <TrendingUp className="w-4 h-4 mr-2" />
+                        View Reports
                       </Button>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    <div className="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-50/30">
+                      <div className="max-w-3xl space-y-6">
+                        
+                        {/* Campaigns List */}
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+                          <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-brand-teal"></span>
+                            Active & Inactive Campaigns
+                          </h3>
+                          
+                          {activeClient.campaigns?.length ? (
+                            <div className="space-y-2">
+                              {activeClient.campaigns.map((campRaw: any) => {
+                                const campName = typeof campRaw === 'string' ? campRaw : campRaw.name;
+                                const isActive = typeof campRaw === 'string' ? true : campRaw.isActive;
+                                return (
+                                  <div key={campName} className={`group flex items-center justify-between p-3.5 rounded-xl border transition-all ${isActive ? 'bg-white border-slate-200 hover:border-brand-teal/30 hover:shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+                                    <div className="flex items-center gap-3.5">
+                                      <div className={`w-2.5 h-2.5 rounded-full ${isActive ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'bg-slate-300'}`}></div>
+                                      <span className={`font-medium ${!isActive ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{campName}</span>
+                                      <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-slate-100 text-slate-500 border border-slate-200">{typeof campRaw === 'object' && campRaw.metric ? campRaw.metric : 'CPL'}</span>
+                                    </div>
+                                    
+                                    {canEditMarketing && (
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-xs font-medium ${isActive ? 'text-brand-teal' : 'text-slate-400'}`}>
+                                            {isActive ? 'Active' : 'Inactive'}
+                                          </span>
+                                          <Switch 
+                                            checked={isActive} 
+                                            onCheckedChange={() => handleToggleCampaignStatus(activeClient.id, campName)} 
+                                            className={isActive ? "data-[state=checked]:bg-brand-teal" : ""}
+                                          />
+                                        </div>
+                                        <button 
+                                          onClick={() => handleRemoveCampaign(activeClient.id, campName)} 
+                                          className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                          title="Remove Campaign"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="py-10 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                              <span className="text-sm text-slate-400">No campaigns found for this client.</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Add New Campaign */}
+                        {canAddMarketing && (
+                          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+                            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                              <Plus className="w-4 h-4 text-brand-teal" />
+                              Add New Campaign
+                            </h3>
+                            <div className="flex items-center gap-3">
+                              <div className="relative flex-1 flex gap-2">
+                                <Input 
+                                  placeholder="Enter campaign name..." 
+                                  className="h-11 flex-1 bg-slate-50 border-slate-200 focus:bg-white focus:border-brand-teal focus:ring-brand-teal/20 transition-all rounded-lg"
+                                  value={newCampaignName[activeClient.id] || ""}
+                                  onChange={(e) => setNewCampaignName(prev => ({...prev, [activeClient.id]: e.target.value}))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleAddCampaign(activeClient.id);
+                                  }}
+                                />
+                                <Select value={newCampaignMetric[activeClient.id] || "CPL"} onValueChange={(val) => setNewCampaignMetric(prev => ({...prev, [activeClient.id]: val}))}>
+                                  <SelectTrigger className="w-24 h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-brand-teal focus:ring-brand-teal/20"><SelectValue placeholder="Metric" /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="CPL">CPL</SelectItem>
+                                    <SelectItem value="CPR">CPR</SelectItem>
+                                    <SelectItem value="CPC">CPC</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Button 
+                                className="h-11 px-6 rounded-lg bg-brand-teal hover:bg-teal-700 text-white font-medium shadow-md shadow-brand-teal/20" 
+                                onClick={() => handleAddCampaign(activeClient.id)}
+                              >
+                                Create Campaign
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
+            
           </div>
         </TabsContent>
 
         <TabsContent value="daily" className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0">
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
             <div className="overflow-auto flex-1 custom-scrollbar">
+            <DragDropContext onDragEnd={handleDragEndDaily}>
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
+                  <TableHead className="w-12 text-center font-bold text-slate-700"></TableHead>
                   <TableHead className="w-12 text-center font-bold text-slate-700">S.N</TableHead>
                   <TableHead className="font-bold text-slate-700">Date</TableHead>
                   <TableHead className="font-bold text-slate-700">Client</TableHead>
@@ -863,15 +1020,17 @@ export default function MarketingReportsPage() {
                   <TableHead className="text-center font-bold text-slate-700">Leads</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Followers</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Spend (₹)</TableHead>
-                  <TableHead className="text-center font-bold text-slate-700">CPL (₹)</TableHead>
+                  <TableHead className="text-center font-bold text-slate-700">Cost Metric (₹)</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Remarks</TableHead>
                   <TableHead className="text-center font-bold text-slate-700">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <Droppable droppableId="daily-reports">
+                {(provided) => (
+              <TableBody ref={provided.innerRef} {...provided.droppableProps}>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-20">
+                    <TableCell colSpan={13} className="text-center py-20">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
                       <p className="mt-2 text-slate-500">Loading daily reports...</p>
                     </TableCell>
@@ -881,6 +1040,7 @@ export default function MarketingReportsPage() {
                     {/* Integrated Quick Add Row */}
                     {canAddMarketing && (
                       <TableRow className="bg-brand-teal/5 border-b-2 border-brand-teal/10">
+                        <TableCell></TableCell>
                         <TableCell className="text-center font-bold text-brand-teal">+</TableCell>
                         <TableCell className="p-1">
                           <Input type="date" className="h-8 text-[10px] bg-white" value={dailyFormData.date} onChange={e => setDailyFormData({...dailyFormData, date: e.target.value})} />
@@ -941,16 +1101,41 @@ export default function MarketingReportsPage() {
 
                     {filteredDaily.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={12} className="text-center py-20 text-slate-400 italic">
+                        <TableCell colSpan={13} className="text-center py-20 text-slate-400 italic">
                           No daily reports found.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      paginatedDaily.map((report, idx) => {
-                        const globalIdx = (dailyPage - 1) * dailyItemsPerPage + idx + 1;
-                        return (
-                          <TableRow key={report.id} className="hover:bg-slate-50/50">
-                              <TableCell className="text-center text-slate-400">{globalIdx}</TableCell>
+                      (() => {
+                        let globalDragIndex = 0;
+                        return Object.entries(groupedPaginatedDaily).map(([clientName, reports]: [string, any[]]) => {
+                          const groupTotals = reports.reduce((acc: any, curr: any) => ({
+                            reach: acc.reach + (curr.reach || 0),
+                            impression: acc.impression + (curr.impression || 0),
+                            leads: acc.leads + (curr.leads || 0),
+                            followers: acc.followers + (curr.followers || 0),
+                            spend: acc.spend + (curr.spend || 0)
+                          }), { reach: 0, impression: 0, leads: 0, followers: 0, spend: 0 });
+
+                          return (
+                            <React.Fragment key={clientName}>
+                              {reports.map((report: any) => {
+                                const dragIndex = globalDragIndex++;
+                                const globalIdx = filteredDaily.findIndex(r => String(r.id) === String(report.id)) + 1;
+                                return (
+                                  <Draggable key={String(report.id)} draggableId={String(report.id)} index={dragIndex}>
+                                    {(provided) => (
+                                      <TableRow 
+                                        ref={provided.innerRef} 
+                                        {...provided.draggableProps} 
+                                        className="hover:bg-slate-50/50"
+                                      >
+                                        <TableCell className="text-center w-8">
+                                          <div {...provided.dragHandleProps} className="cursor-grab hover:text-brand-teal text-slate-400">
+                                            <GripVertical className="w-4 h-4 mx-auto" />
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-center text-slate-400">{globalIdx}</TableCell>
                           
                           <TableCell 
                             className={`font-medium ${canEditMarketing ? 'cursor-text hover:bg-slate-50' : ''}`}
@@ -1190,17 +1375,36 @@ export default function MarketingReportsPage() {
                               )}
                             </div>
                           </TableCell>
-                            </TableRow>
-                        );
-                      })
-                    )}
+                        </TableRow>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+                      {/* Subtotal row for the group */}
+                      <TableRow className="bg-slate-50/80 font-medium">
+                        <TableCell colSpan={5} className="text-right text-slate-600">Total</TableCell>
+                        <TableCell className="text-center text-slate-600">{groupTotals.reach.toLocaleString()}</TableCell>
+                        <TableCell className="text-center text-slate-600">{groupTotals.impression.toLocaleString()}</TableCell>
+                        <TableCell className="text-center text-slate-600">{groupTotals.leads.toLocaleString()}</TableCell>
+                        <TableCell className="text-center text-slate-600">{groupTotals.followers.toLocaleString()}</TableCell>
+                        <TableCell className="text-center text-brand-teal">₹{groupTotals.spend.toLocaleString()}</TableCell>
+                        <TableCell colSpan={3}></TableCell>
+                      </TableRow>
+                    </React.Fragment>
+                  );
+                });
+              })()
+            )}
                   </>
                 )}
+                {provided.placeholder}
               </TableBody>
+              )}
+              </Droppable>
               {filteredDaily.length > 0 && (
                 <tfoot className="bg-slate-50 border-t-2">
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-right font-bold text-slate-900">Total</TableCell>
+                  <TableRow className="border-t-[3px] border-slate-300">
+                    <TableCell colSpan={5} className="text-right font-bold text-slate-900">Grand Total</TableCell>
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.reach.toLocaleString()}</TableCell>
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.impression.toLocaleString()}</TableCell>
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.leads.toLocaleString()}</TableCell>
@@ -1211,6 +1415,7 @@ export default function MarketingReportsPage() {
                 </tfoot>
               )}
               </Table>
+            </DragDropContext>
             </div>
             <TablePagination
               totalItems={filteredDaily.length}
@@ -1226,9 +1431,11 @@ export default function MarketingReportsPage() {
         <TabsContent value="monthly" className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0">
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
             <div className="overflow-auto flex-1 custom-scrollbar">
+            <DragDropContext onDragEnd={handleDragEndMonthly}>
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
+                  <TableHead className="w-12 text-center font-bold text-slate-700"></TableHead>
                   <TableHead className="w-12 text-center font-bold text-slate-700">S.N</TableHead>
                   <TableHead className="font-bold text-slate-700">Client Name</TableHead>
                   <TableHead className="font-bold text-slate-700 text-center">Month</TableHead>
@@ -1243,10 +1450,12 @@ export default function MarketingReportsPage() {
                   <TableHead className="text-center font-bold text-slate-700">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <Droppable droppableId="monthly-reports">
+                {(provided) => (
+              <TableBody ref={provided.innerRef} {...provided.droppableProps}>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-20">
+                    <TableCell colSpan={13} className="text-center py-20">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
                       <p className="mt-2 text-slate-500">Loading monthly reports...</p>
                     </TableCell>
@@ -1256,6 +1465,7 @@ export default function MarketingReportsPage() {
                     {/* Integrated Quick Add Row Monthly */}
                     {canAddMarketing && (
                       <TableRow className="bg-brand-teal/5 border-b-2 border-brand-teal/10">
+                        <TableCell></TableCell>
                         <TableCell className="text-center font-bold text-brand-teal">+</TableCell>
                         <TableCell className="p-1">
                           <Select value={monthlyFormData.clientId} onValueChange={v => {
@@ -1314,14 +1524,25 @@ export default function MarketingReportsPage() {
 
                     {filteredMonthly.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={12} className="text-center py-20 text-slate-400 italic">
+                        <TableCell colSpan={13} className="text-center py-20 text-slate-400 italic">
                           No monthly reports found.
                         </TableCell>
                       </TableRow>
                     ) : (
                       paginatedMonthly.map((report, idx) => (
-                    <TableRow key={report.id} className="hover:bg-slate-50/50">
-                      <TableCell className="text-center text-slate-400">{(monthlyPage - 1) * monthlyItemsPerPage + idx + 1}</TableCell>
+                        <Draggable key={String(report.id)} draggableId={String(report.id)} index={idx}>
+                          {(provided) => (
+                            <TableRow 
+                              ref={provided.innerRef} 
+                              {...provided.draggableProps} 
+                              className="hover:bg-slate-50/50"
+                            >
+                              <TableCell className="text-center w-8">
+                                <div {...provided.dragHandleProps} className="cursor-grab hover:text-brand-teal text-slate-400">
+                                  <GripVertical className="w-4 h-4 mx-auto" />
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center text-slate-400">{(monthlyPage - 1) * monthlyItemsPerPage + idx + 1}</TableCell>
 
                       {/* Client Name Field */}
                       <TableCell 
@@ -1573,14 +1794,20 @@ export default function MarketingReportsPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                    )))}
-                </>
+                          )}
+                        </Draggable>
+                      ))
+                    )}
+                  </>
                 )}
+                {provided.placeholder}
               </TableBody>
+              )}
+              </Droppable>
             {filteredMonthly.length > 0 && (
               <tfoot className="bg-slate-50 border-t-2">
                 <TableRow>
-                  <TableCell colSpan={3} className="text-right font-bold text-slate-900">Total</TableCell>
+                  <TableCell colSpan={4} className="text-right font-bold text-slate-900">Total</TableCell>
                   <TableCell className="text-center font-bold text-slate-900">₹{monthlyTotals.totalSpend.toLocaleString()}</TableCell>
                   <TableCell className="text-center font-bold text-slate-900">{monthlyTotals.totalLeads.toLocaleString()}</TableCell>
                   <TableCell className="text-center font-bold text-slate-900">{monthlyTotals.totalSales.toLocaleString()}</TableCell>
@@ -1591,6 +1818,7 @@ export default function MarketingReportsPage() {
               </tfoot>
             )}
             </Table>
+            </DragDropContext>
             </div>
             <TablePagination
               totalItems={filteredMonthly.length}
@@ -1655,7 +1883,7 @@ export default function MarketingReportsPage() {
                 <Input type="number" step="0.01" value={dailyFormData.spend} onChange={e => setDailyFormData({...dailyFormData, spend: parseFloat(e.target.value) || 0})} />
               </div>
               <div className="space-y-2">
-                <Label>CPL (₹)</Label>
+                <Label>Cost Metric (CPL/CPR/CPC) (₹)</Label>
                 <Input type="number" step="0.01" value={dailyFormData.cpl} onChange={e => setDailyFormData({...dailyFormData, cpl: parseFloat(e.target.value) || 0})} />
               </div>
             </div>
