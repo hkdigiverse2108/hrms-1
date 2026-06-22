@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Search, Loader2, ArrowUpDown, ChevronDown, Check, Trash2, Edit2, Play, Users, BarChart3, Clock, CheckCircle2, MoreVertical, Plus, Info, TrendingUp, Power, FileText, History, ClipboardList, Calendar as CalendarIcon, Download, Filter, MoreHorizontal, GripVertical } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Search, Loader2, ArrowUpDown, ChevronDown, Check, Trash2, Edit2, Play, Users, BarChart3, Clock, CheckCircle2, MoreVertical, Plus, Info, TrendingUp, Power, FileText, History, ClipboardList, Calendar as CalendarIcon, Download, Filter, MoreHorizontal, GripVertical, X } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,14 @@ export default function MarketingReportsPage() {
     return localDate.toISOString().split('T')[0];
   };
 
+  const getYesterdayDateString = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const offset = d.getTimezoneOffset();
+    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().split('T')[0];
+  };
+
   const getLocalMonthString = () => {
     return new Date().toLocaleString('default', { month: 'long' });
   };
@@ -111,7 +119,7 @@ export default function MarketingReportsPage() {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [monthlyItemsPerPage, setMonthlyItemsPerPage] = useState(10);
 
-  const [dateFilter, setDateFilter] = useState(getLocalDateString());
+  const [dateFilter, setDateFilter] = useState(getYesterdayDateString());
   const [monthFilter, setMonthFilter] = useState(getLocalMonthString());
 
   const handleDateFilterChange = (val: string) => {
@@ -265,7 +273,7 @@ export default function MarketingReportsPage() {
 
   // Form States
   const [dailyFormData, setDailyFormData] = useState({
-    date: getLocalDateString(),
+    date: "",
     campaignName: "",
     clientId: "",
     reach: 0,
@@ -297,6 +305,86 @@ export default function MarketingReportsPage() {
       router.push("/");
     }
   }, [router, permissionsLoading, canViewMarketing]);
+
+  const hasGeneratedForDateRef = useRef<string>("");
+  const fetchedDateRef = useRef<string>("");
+
+  useEffect(() => {
+    if (activeTab !== "daily" || !dateFilter || clients.length === 0 || loading) return;
+    
+    // Do not auto-generate for future dates
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+    if (dateFilter > todayStr) return;
+
+    if (fetchedDateRef.current !== dateFilter) return; // Wait until data for this date is fetched
+
+    if (hasGeneratedForDateRef.current === dateFilter) return;
+
+    hasGeneratedForDateRef.current = dateFilter;
+
+    const checkAndGenerate = async () => {
+      const missingCampaigns: any[] = [];
+      clients.forEach(client => {
+        if (client.status === "active" || client.status === "Active") {
+          const campaigns = client.campaigns || [];
+          campaigns.forEach((camp: any) => {
+            const campName = typeof camp === 'string' ? camp : camp.name;
+            const isActive = typeof camp === 'string' ? true : camp.isActive;
+            if (isActive && campName) {
+              const exists = dailyReports.some(r => r.clientId === client.id && r.campaignName === campName && normalizeDate(r.date) === dateFilter);
+              const alreadyMissing = missingCampaigns.some(c => c.clientId === client.id && c.campaignName === campName);
+              if (!exists && !alreadyMissing) {
+                missingCampaigns.push({
+                  clientId: client.id,
+                  clientName: client.companyName || "",
+                  date: dateFilter,
+                  campaignName: campName,
+                  reach: 0,
+                  impression: 0,
+                  leads: 0,
+                  followers: 0,
+                  spend: 0,
+                  cpl: 0,
+                  remarks: ""
+                });
+              }
+            }
+          });
+        }
+      });
+
+      if (missingCampaigns.length > 0) {
+        try {
+          const promises = missingCampaigns.map(campaign => 
+            fetch(`${API_URL}/marketing/reports/daily`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(campaign)
+            }).then(res => res.ok ? res.json() : null)
+          );
+          const results = await Promise.all(promises);
+          const newReports = results.filter(r => r !== null);
+          if (newReports.length > 0) {
+            setDailyReports(prev => {
+              const existingIds = new Set(prev.map((r: any) => String(r.id)));
+              const uniqueNew = newReports.filter((r: any) => !existingIds.has(String(r.id)));
+              return [...prev, ...uniqueNew];
+            });
+          }
+        } catch(err) {
+          console.error("Failed to auto-generate", err);
+        }
+      }
+    };
+
+    checkAndGenerate();
+  }, [activeTab, dateFilter, clients, dailyReports, loading]);
+
+
 
   useEffect(() => {
     if (permissionsLoading || !canViewMarketing) return;
@@ -331,7 +419,17 @@ export default function MarketingReportsPage() {
       const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        if (activeTab === "daily") setDailyReports(data);
+        if (activeTab === "daily") {
+          const seen = new Set();
+          const uniqueData = data.filter((r: any) => {
+            const key = `${normalizeDate(r.date)}-${r.clientId}-${r.campaignName}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setDailyReports(uniqueData);
+          fetchedDateRef.current = dateFilter; // Mark that data for this date has been fetched
+        }
         else setMonthlyReports(data);
       }
     } catch (err) {
@@ -376,7 +474,7 @@ export default function MarketingReportsPage() {
         setIsDailyModalOpen(false);
         setEditingReport(null);
         setDailyFormData({
-          date: getLocalDateString(),
+          date: "",
           campaignName: "",
           clientId: "",
           reach: 0,
@@ -564,7 +662,48 @@ export default function MarketingReportsPage() {
     }
   };
 
+  const getTodayStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const filteredDaily = dailyReports.filter(r => {
+    const isEmpty = !r.reach && !r.impression && !r.leads && !r.followers && !r.spend && !r.cpl && (!r.remarks || r.remarks.trim() === "");
+    let isCurrentlyActive = true;
+    const client = clients.find(c => String(c.id) === String(r.clientId));
+    if (client) {
+      const camp = (client.campaigns || []).find((c: any) => 
+        (typeof c === 'string' ? c : c.name) === r.campaignName
+      );
+      if (camp) {
+        isCurrentlyActive = typeof camp === 'string' ? true : camp.isActive;
+      } else {
+        isCurrentlyActive = false;
+      }
+      if (client.status !== 'active' && client.status !== 'Active') {
+        isCurrentlyActive = false;
+      }
+    }
+
+    const reportDate = normalizeDate(r.date);
+    const todayStr = getTodayStr();
+    
+    // Hide future dates completely
+    if (reportDate > todayStr) {
+      return false;
+    }
+
+    const isZeroOrEmpty = (val: any) => !val || val === 0 || val === "0" || String(val).trim() === "";
+    const isTrulyEmpty = isZeroOrEmpty(r.reach) && isZeroOrEmpty(r.impression) && isZeroOrEmpty(r.leads) && isZeroOrEmpty(r.followers) && isZeroOrEmpty(r.spend) && isZeroOrEmpty(r.cpl) && isZeroOrEmpty(r.remarks);
+
+    // Hide inactive rows for today or future dates, regardless of whether they are empty
+    if (!isCurrentlyActive && reportDate >= todayStr) {
+      return false;
+    }
+
     const matchesSearch = r.campaignName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (r.clientName && r.clientName.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesClient = selectedClientFilter === "all" || r.clientId === selectedClientFilter;
@@ -795,19 +934,20 @@ export default function MarketingReportsPage() {
                 </Select>
               </div>
             )}
-            <div className="flex items-end h-9 pt-6">
-              {(selectedClientFilter !== "all" || dateFilter !== getLocalDateString() || searchQuery !== "" || monthFilter !== getLocalMonthString()) && (
+            <div className="flex self-end pb-[1px]">
+              {(selectedClientFilter !== "all" || dateFilter !== getYesterdayDateString() || searchQuery !== "" || monthFilter !== getLocalMonthString()) && (
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="text-xs text-slate-500 hover:text-rose-600"
+                  className="h-9 px-2 text-xs font-medium text-rose-500 hover:text-rose-700 hover:bg-rose-50 ml-2"
                   onClick={() => {
                     setSelectedClientFilter("all");
-                    setDateFilter(getLocalDateString());
+                    setDateFilter(getYesterdayDateString());
                     setMonthFilter(getLocalMonthString());
                     setSearchQuery("");
                   }}
                 >
+                  <X className="w-3.5 h-3.5 mr-1" />
                   Clear Filters
                 </Button>
               )}
@@ -1037,67 +1177,7 @@ export default function MarketingReportsPage() {
                   </TableRow>
                 ) : (
                   <>
-                    {/* Integrated Quick Add Row */}
-                    {canAddMarketing && (
-                      <TableRow className="bg-brand-teal/5 border-b-2 border-brand-teal/10">
-                        <TableCell></TableCell>
-                        <TableCell className="text-center font-bold text-brand-teal">+</TableCell>
-                        <TableCell className="p-1">
-                          <Input type="date" className="h-8 text-[10px] bg-white" value={dailyFormData.date} onChange={e => setDailyFormData({...dailyFormData, date: e.target.value})} />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Select value={dailyFormData.clientId} onValueChange={v => setDailyFormData({...dailyFormData, clientId: v})}>
-                            <SelectTrigger className="h-8 text-[10px] bg-white"><SelectValue placeholder="Client" /></SelectTrigger>
-                            <SelectContent>
-                              {clients.map(client => (
-                                <SelectItem key={client.id} value={client.id}>{client.companyName}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Select 
-                            value={dailyFormData.campaignName} 
-                            onValueChange={v => setDailyFormData({...dailyFormData, campaignName: v})}
-                            disabled={!dailyFormData.clientId}
-                          >
-                            <SelectTrigger className="h-8 text-[10px] bg-white"><SelectValue placeholder="Campaign" /></SelectTrigger>
-                            <SelectContent>
-                              {dailyFormData.clientId ? clients.find(c => c.id === dailyFormData.clientId)?.campaigns?.filter((c: any) => (typeof c === 'string' ? true : c.isActive)).map((c: any) => {
-                                const name = typeof c === 'string' ? c : c.name;
-                                return <SelectItem key={name} value={name}>{name}</SelectItem>
-                              }) : null}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.reach || ""} onChange={e => setDailyFormData({...dailyFormData, reach: parseInt(e.target.value) || 0})} />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.impression || ""} onChange={e => setDailyFormData({...dailyFormData, impression: parseInt(e.target.value) || 0})} />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.leads || ""} onChange={e => setDailyFormData({...dailyFormData, leads: parseInt(e.target.value) || 0})} />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.followers || ""} onChange={e => setDailyFormData({...dailyFormData, followers: parseInt(e.target.value) || 0})} />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Input type="number" placeholder="0" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.spend || ""} onChange={e => setDailyFormData({...dailyFormData, spend: parseFloat(e.target.value) || 0})} />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Input type="number" step="0.01" placeholder="0.00" className="h-8 text-[10px] text-center bg-white" value={dailyFormData.cpl || ""} onChange={e => setDailyFormData({...dailyFormData, cpl: parseFloat(e.target.value) || 0})} />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Input placeholder="Remarks..." className="h-8 text-[10px] bg-white" value={dailyFormData.remarks || ""} onChange={e => setDailyFormData({...dailyFormData, remarks: e.target.value})} />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <Button onClick={handleDailySubmit} size="sm" className="h-8 w-full bg-brand-teal hover:bg-brand-teal-light text-white text-[10px]">
-                            <Plus className="w-3 h-3 mr-1" /> Add
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )}
+                    {/* Integrated Quick Add Row Removed as per user request */}
 
                     {filteredDaily.length === 0 ? (
                       <TableRow>

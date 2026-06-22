@@ -3594,6 +3594,70 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
         reports.append(doc)
     return reports
 
+async def generate_missing_daily_reports_for_yesterday(db):
+    from datetime import datetime, timedelta
+    
+    # Check the last 3 days to cover weekends and holidays
+    dates_to_check = [
+        (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
+        (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d"),
+        (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d"),
+    ]
+    
+    cursor = db.clients.find({"status": {"$in": ["active", "Active"]}})
+    clients = await cursor.to_list(length=1000)
+    
+    generated_count = 0
+    
+    for client in clients:
+        campaigns = client.get("campaigns", [])
+        if not campaigns:
+            continue
+            
+        for camp in campaigns:
+            if isinstance(camp, str):
+                camp_name = camp
+                is_active = True
+                metric = "CPL"
+            elif isinstance(camp, dict):
+                camp_name = camp.get("name")
+                is_active = camp.get("isActive", True)
+                metric = camp.get("metric", "CPL")
+            else:
+                continue
+                
+            if not is_active or not camp_name:
+                continue
+                
+            client_id_str = str(client.get("_id"))
+            
+            for check_date in dates_to_check:
+                query = {
+                    "clientId": client_id_str,
+                    "campaignName": camp_name,
+                    "date": check_date
+                }
+                
+                existing = await db.marketing_daily_reports.find_one(query)
+                if not existing:
+                    new_report = {
+                        "clientId": client_id_str,
+                        "clientName": client.get("companyName", ""),
+                        "date": check_date,
+                        "campaignName": camp_name,
+                        "reach": 0,
+                        "impression": 0,
+                        "leads": 0,
+                        "followers": 0,
+                        "spend": 0,
+                        "cpl": 0,
+                        "remarks": ""
+                    }
+                    await db.marketing_daily_reports.insert_one(new_report)
+                    generated_count += 1
+                
+    return {"generatedCount": generated_count, "datesChecked": dates_to_check}
+
 async def update_marketing_daily_report(db, report_id: str, report: schemas.MarketingDailyReportUpdate):
     update_data = report.dict(exclude_unset=True)
     performedBy = update_data.pop("performedBy", "Unknown")
