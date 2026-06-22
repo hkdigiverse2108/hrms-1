@@ -2542,8 +2542,14 @@ async def delete_leave_request(db, leave_id: str):
     return result.deleted_count > 0
 
 # Client CRUD
-async def get_clients(db, skip: int = 0, limit: int = 100):
-    cursor = db.clients.find().skip(skip).limit(limit)
+async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = None):
+    query = {}
+    if user_info:
+        role = str(user_info.get("role", "")).lower()
+        if role not in ["admin", "manager"]:
+            query["assignedEmployeeId"] = user_info.get("sub")
+            
+    cursor = db.clients.find(query).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -3576,8 +3582,17 @@ async def create_marketing_daily_report(db, report: schemas.MarketingDailyReport
     report_dict["id"] = str(result.inserted_id)
     return report_dict
 
-async def get_marketing_daily_reports(db, client_id: str = None, date: str = None):
+async def get_marketing_daily_reports(db, client_id: str = None, date: str = None, user_info: dict = None):
     query = {}
+    if user_info:
+        role = str(user_info.get("role", "")).lower()
+        if role not in ["admin", "manager"]:
+            allowed_clients = await db.clients.find({"assignedEmployeeId": user_info.get("sub")}).to_list(length=None)
+            allowed_client_ids = [str(c["_id"]) for c in allowed_clients]
+            if client_id and client_id not in allowed_client_ids:
+                return []
+            if not client_id:
+                query["clientId"] = {"$in": allowed_client_ids}
     if client_id:
         query["clientId"] = client_id
     if date:
@@ -3696,7 +3711,15 @@ async def create_marketing_monthly_report(db, report: schemas.MarketingMonthlyRe
     report_dict["id"] = str(result.inserted_id)
     return report_dict
 
-async def get_marketing_monthly_reports(db, client_id: str = None, month: str = None):
+async def get_marketing_monthly_reports(db, client_id: str = None, month: str = None, user_info: dict = None):
+    allowed_client_ids = None
+    if user_info:
+        role = str(user_info.get("role", "")).lower()
+        if role not in ["admin", "manager"]:
+            allowed_clients = await db.clients.find({"assignedEmployeeId": user_info.get("sub")}).to_list(length=None)
+            allowed_client_ids = [str(c["_id"]) for c in allowed_clients]
+            if client_id and client_id not in allowed_client_ids:
+                return []
     MONTH_MAP = {
         "January": "01", "February": "02", "March": "03", "April": "04",
         "May": "05", "June": "06", "July": "07", "August": "08",
@@ -3706,6 +3729,8 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: str = 
     match_query = {}
     if client_id:
         match_query["clientId"] = client_id
+    elif allowed_client_ids is not None:
+        match_query["clientId"] = {"$in": allowed_client_ids}
     
     if month and month != "all":
         month_num = MONTH_MAP.get(month)

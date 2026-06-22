@@ -47,6 +47,7 @@ export default function ClientsPage() {
   const canDeleteClients = isAdmin || checkPermission('clients', 'canDelete');
 
   const [clients, setClients] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,6 +77,7 @@ export default function ClientsPage() {
       return;
     }
     
+    fetchEmployees();
     fetchClients();
   }, [user, router, permissionsLoading, canViewClients]);
 
@@ -83,6 +85,19 @@ export default function ClientsPage() {
   useEffect(() => {
     setDepartments(["Development", "Creative", "Digital Marketing"]);
   }, [clients]);
+
+  
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch(`${API_URL}/employees`);
+      if (res.ok) {
+        const data = await res.json();
+        setEmployees(data);
+      }
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+    }
+  };
 
   const fetchClients = async () => {
     setIsLoading(true);
@@ -137,7 +152,8 @@ export default function ClientsPage() {
 
       if (res.ok) {
         setModalOpen(false);
-        fetchClients();
+        fetchEmployees();
+    fetchClients();
         setEditingClient(null);
       } else {
         const error = await res.json();
@@ -165,7 +181,8 @@ export default function ClientsPage() {
         method: "DELETE",
       });
       if (res.ok) {
-        fetchClients();
+        fetchEmployees();
+    fetchClients();
       }
     } catch (err) {
       console.error("Error deleting client:", err);
@@ -192,17 +209,37 @@ export default function ClientsPage() {
 
   const handleInlineUpdate = async (clientId: string, field: string, value: any) => {
     try {
+      let payload: any = { 
+        [field]: value,
+        performedBy: user?.id,
+        userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+      };
+      
+      let newName = "";
+      if (field === 'assignedEmployeeId') {
+        const emp = employees.find(e => e.id === value);
+        if (emp) {
+            newName = `${emp.firstName} ${emp.lastName}`;
+            payload.assignedEmployeeName = newName;
+        }
+      }
+
       const res = await fetch(`${API_URL}/clients/${clientId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          [field]: value,
-          performedBy: user?.id,
-          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
-        setClients(prev => prev.map(c => c.id === clientId ? { ...c, [field]: value } : c));
+        setClients(prev => prev.map(c => {
+            if (c.id === clientId) {
+                const updated = { ...c, [field]: value };
+                if (field === 'assignedEmployeeId' && newName) {
+                    updated.assignedEmployeeName = newName;
+                }
+                return updated;
+            }
+            return c;
+        }));
       }
     } catch (err) {
       console.error("Error updating client field:", err);
@@ -328,7 +365,7 @@ export default function ClientsPage() {
                           <TableHead className="text-center font-bold text-slate-700">Daily Budget</TableHead>
                           <TableHead className="min-w-[200px] text-left font-bold text-slate-700">Remarks</TableHead>
                           <TableHead className="text-center font-bold text-slate-700">Active/Inactive</TableHead>
-                          <TableHead className="min-w-[150px] text-left font-bold text-slate-700">Responsibility</TableHead>
+                          <TableHead className="min-w-[200px] text-left font-bold text-slate-700">Assigned Employee</TableHead>
                           <TableHead className="text-center font-bold text-slate-700">Daily Followup</TableHead>
                         </>
                       ) : (
@@ -370,7 +407,7 @@ export default function ClientsPage() {
                           { key: 'dailyBudget', type: 'number', align: 'center' },
                           { key: 'remarks', type: 'text', align: 'left' },
                           { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
-                          { key: 'responsibility', type: 'text', align: 'left' },
+                          { key: 'assignedEmployeeId', labelKey: 'assignedEmployeeName', type: 'select', options: employees.map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), align: 'left' },
                           { key: 'dailyFollowup', type: 'select', options: ['Yes', 'No'], align: 'center' },
                         ] : [
                           { key: 'companyName', type: 'text', font: 'bold', align: 'left' },
@@ -388,7 +425,7 @@ export default function ClientsPage() {
                           { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
                         ]).map(col => (
                           <TableCell 
-                            key={col.key} 
+                            key={col.key as string} 
                             className={`${col.type !== 'readonly' && canEditClients ? 'cursor-text hover:bg-slate-50' : ''}`}
                             onClick={() => col.type !== 'readonly' && canEditClients && setInlineEditing({ id: client.id, field: col.key })}
                           >
@@ -402,7 +439,14 @@ export default function ClientsPage() {
                                     onBlur={(e) => handleInlineUpdate(client.id, col.key, e.target.value)}
                                     onChange={(e) => handleInlineUpdate(client.id, col.key, e.target.value)}
                                   >
-                                    {col.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                                    {col.options?.filter((o: any) => {
+                                      if (col.key !== 'assignedEmployeeId' || !client.department) return true;
+                                      if (typeof o !== 'object' || o === null) return true;
+                                      const emp = employees.find(e => e.id === o.value);
+                                      if (!emp) return true;
+                                      const selectedDepts = client.department.split(',').map((d: string) => d.trim().toLowerCase()).filter(Boolean);
+                                      return selectedDepts.includes(emp.department?.toLowerCase() || '');
+                                    }).map((o: any) => typeof o === 'object' && o !== null ? <option key={o.value} value={o.value}>{o.label}</option> : <option key={o as string} value={o as string}>{o as string}</option>)}
                                   </select>
                                 </div>
                               ) : (
@@ -418,6 +462,9 @@ export default function ClientsPage() {
                             ) : (
                               <div className={`text-[12px] ${col.font === 'bold' ? 'font-bold' : ''} ${col.align === 'center' ? 'text-center' : 'text-left'}`}>
                                 {col.type === 'select' ? (
+                                  col.key === 'assignedEmployeeId' ? (
+                                    <span className="font-medium text-slate-700">{client.assignedEmployeeName || "Unassigned"}</span>
+                                  ) : (
                                   <Badge variant={
                                     client[col.key] === "Yes" || client[col.key] === "active" 
                                       ? "success" 
@@ -427,6 +474,7 @@ export default function ClientsPage() {
                                   }>
                                     {client[col.key] === "on-hold" ? "On Hold" : client[col.key] || (col.key === 'status' ? 'active' : 'No')}
                                   </Badge>
+                                  )
                                 ) : col.key === 'phone' ? (
                                   <div className="flex flex-col">
                                     <span>{client[col.key] || "-"}</span>
