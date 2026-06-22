@@ -5348,6 +5348,25 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
             import re
             from datetime import datetime
             
+            rec_date = doc.get('date')
+            date_vals = [rec_date] if rec_date else []
+            if rec_date:
+                if isinstance(rec_date, str):
+                    date_only_str = rec_date.split(' ')[0]
+                    try:
+                        dt_naive = datetime.strptime(date_only_str, "%Y-%m-%d")
+                        dt_aware = dt_naive.replace(tzinfo=IST)
+                        date_vals.extend([dt_naive, dt_aware])
+                    except Exception as parse_err:
+                        print(f"Error parsing date string {rec_date}: {parse_err}")
+                elif hasattr(rec_date, 'year'):
+                    try:
+                        dt_naive = datetime(rec_date.year, rec_date.month, rec_date.day)
+                        dt_aware = dt_naive.replace(tzinfo=IST)
+                        date_vals.extend([dt_naive, dt_aware])
+                    except Exception as parse_err:
+                        print(f"Error converting date object {rec_date}: {parse_err}")
+
             recovery_type = doc.get('recovery_type')
             start_time = doc.get('start_time')
             end_time = doc.get('end_time')
@@ -5362,7 +5381,7 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     
                 search_query = {
                     '$or': query_or,
-                    'date': doc['date']
+                    'date': {'$in': date_vals} if date_vals else doc.get('date')
                 }
                 print(f"DEBUG: Searching attendance records for recovery: {doc['date']}")
                 cursor = db.attendance.find(search_query)
@@ -5516,7 +5535,7 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     
                 search_query = {
                     '$or': query_or,
-                    'date': doc['date']
+                    'date': {'$in': date_vals} if date_vals else doc.get('date')
                 }
                 print(f"DEBUG: Searching all attendance records for date: {doc['date']}")
                 cursor = db.attendance.find(search_query)
