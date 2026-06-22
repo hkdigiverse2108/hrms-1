@@ -98,6 +98,7 @@ const PERMISSION_GROUPS = [
     name: 'System',
     icon: Settings,
     modules: [
+      { moduleName: 'access-control', displayName: 'Access Control', tabUrl: '/employees/permissions' },
       { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
     ]
   },
