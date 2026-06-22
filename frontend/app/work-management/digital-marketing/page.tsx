@@ -327,34 +327,49 @@ export default function MarketingReportsPage() {
     hasGeneratedForDateRef.current = dateFilter;
 
     const checkAndGenerate = async () => {
+      const datesToCheck = [dateFilter];
+      const dFilterObj = new Date(dateFilter);
+      const today = new Date();
+      // Also check past 2 days to ensure weekends are covered
+      if (Math.abs(today.getTime() - dFilterObj.getTime()) < 5 * 24 * 60 * 60 * 1000) {
+        for (let i = 1; i <= 2; i++) {
+          const pastD = new Date(today);
+          pastD.setDate(today.getDate() - i);
+          const pastStr = pastD.toISOString().split('T')[0];
+          if (!datesToCheck.includes(pastStr)) datesToCheck.push(pastStr);
+        }
+      }
+
       const missingCampaigns: any[] = [];
-      clients.forEach(client => {
-        if (client.status === "active" || client.status === "Active") {
+      datesToCheck.forEach(checkDate => {
+        clients.forEach(client => {
+          if (client.status === "active" || client.status === "Active") {
           const campaigns = client.campaigns || [];
           campaigns.forEach((camp: any) => {
             const campName = typeof camp === 'string' ? camp : camp.name;
             const isActive = typeof camp === 'string' ? true : camp.isActive;
-            if (isActive && campName) {
-              const exists = dailyReports.some(r => r.clientId === client.id && r.campaignName === campName && normalizeDate(r.date) === dateFilter);
-              const alreadyMissing = missingCampaigns.some(c => c.clientId === client.id && c.campaignName === campName);
-              if (!exists && !alreadyMissing) {
-                missingCampaigns.push({
-                  clientId: client.id,
-                  clientName: client.companyName || "",
-                  date: dateFilter,
-                  campaignName: campName,
-                  reach: 0,
-                  impression: 0,
-                  leads: 0,
-                  followers: 0,
-                  spend: 0,
-                  cpl: 0,
-                  remarks: ""
-                });
+              if (isActive && campName) {
+                const exists = dailyReports.some(r => r.clientId === client.id && r.campaignName === campName && normalizeDate(r.date) === checkDate);
+                const alreadyMissing = missingCampaigns.some(c => c.clientId === client.id && c.campaignName === campName && c.date === checkDate);
+                if (!exists && !alreadyMissing) {
+                  missingCampaigns.push({
+                    clientId: client.id,
+                    clientName: client.companyName || "",
+                    date: checkDate,
+                    campaignName: campName,
+                    reach: 0,
+                    impression: 0,
+                    leads: 0,
+                    followers: 0,
+                    spend: 0,
+                    cpl: 0,
+                    remarks: ""
+                  });
+                }
               }
-            }
-          });
-        }
+            });
+          }
+        });
       });
 
       if (missingCampaigns.length > 0) {
@@ -411,26 +426,59 @@ export default function MarketingReportsPage() {
       const params = new URLSearchParams();
       if (selectedClientFilter !== "all") params.append("client_id", selectedClientFilter);
       if (activeTab === "daily") {
-        if (dateFilter) params.append("date", dateFilter);
-      } else {
-        if (monthFilter !== "all") params.append("month", monthFilter);
-      }
-      
-      const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (activeTab === "daily") {
+        if (!dateFilter) {
+          const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
+          if (res.ok) {
+            const data = await res.json();
+            const seen = new Set();
+            const uniqueData = data.filter((r: any) => {
+              const key = `${normalizeDate(r.date)}-${r.clientId}-${r.campaignName}`;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
+            setDailyReports(uniqueData);
+            fetchedDateRef.current = "";
+          }
+        } else {
+          let datesToFetch = [dateFilter];
+          const dFilterObj = new Date(dateFilter);
+          const today = new Date();
+          if (Math.abs(today.getTime() - dFilterObj.getTime()) < 5 * 24 * 60 * 60 * 1000) {
+            for (let i = 1; i <= 2; i++) {
+              const pastD = new Date(today);
+              pastD.setDate(today.getDate() - i);
+              const pastStr = pastD.toISOString().split('T')[0];
+              if (!datesToFetch.includes(pastStr)) datesToFetch.push(pastStr);
+            }
+          }
+
+          const promises = datesToFetch.map(d => {
+            const p = new URLSearchParams(params);
+            p.append("date", d);
+            return fetch(`${API_URL}${endpoint}?${p.toString()}`).then(res => res.ok ? res.json() : []);
+          });
+
+          const results = await Promise.all(promises);
+          const allData = results.flat();
+          
           const seen = new Set();
-          const uniqueData = data.filter((r: any) => {
+          const uniqueData = allData.filter((r: any) => {
             const key = `${normalizeDate(r.date)}-${r.clientId}-${r.campaignName}`;
             if (seen.has(key)) return false;
             seen.add(key);
             return true;
           });
           setDailyReports(uniqueData);
-          fetchedDateRef.current = dateFilter; // Mark that data for this date has been fetched
+          fetchedDateRef.current = dateFilter;
         }
-        else setMonthlyReports(data);
+      } else {
+        if (monthFilter !== "all") params.append("month", monthFilter);
+        const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          setMonthlyReports(data);
+        }
       }
     } catch (err) {
       console.error("Error fetching marketing reports:", err);
@@ -645,17 +693,27 @@ export default function MarketingReportsPage() {
     );
   }
 
-  const fetchLogs = async (report: any, type: "daily" | "monthly") => {
+  const fetchLogs = async (report: any, type: "daily" | "monthly" | "client") => {
     setIsLoadingLogs(true);
     setLogsOpen(true);
     setActiveReport({ ...report, type });
     try {
-      const param = type === "daily" ? `dailyReportId=${report.id}` : `monthlyReportId=${report.id}`;
+      let param = "";
+      if (type === "daily") param = `dailyReportId=${report.id}`;
+      else if (type === "monthly") param = `monthlyReportId=${report.id}`;
+      else param = `clientId=${report.id}`;
+      
+      console.log(`Fetching logs from: ${API_URL}/task-logs?${param}`);
+      
       const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         setReportLogs(await res.json());
+      } else {
+        toast.error(`Failed to load logs: ${res.status}`);
+        console.error("Logs fetch failed:", res.status, res.statusText);
       }
     } catch (err) {
+      toast.error("Network error while fetching logs");
       console.error("Error fetching report logs:", err);
     } finally {
       setIsLoadingLogs(false);
@@ -707,7 +765,26 @@ export default function MarketingReportsPage() {
     const matchesSearch = r.campaignName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (r.clientName && r.clientName.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesClient = selectedClientFilter === "all" || r.clientId === selectedClientFilter;
-    const matchesDate = !dateFilter || normalizeDate(r.date) === dateFilter;
+    
+    // Only show pending rows if they are from exactly the previous day, OR 2 days ago if it's a weekend
+    let isPendingRow = false;
+    if (dateFilter && isCurrentlyActive && isTrulyEmpty) {
+      const selectedDateObj = new Date(dateFilter);
+      const isSelectedSunday = selectedDateObj.getDay() === 0; // 0 is Sunday
+      
+      // Only combine days if the selected date is a Sunday
+      if (isSelectedSunday) {
+        const d1 = new Date(selectedDateObj);
+        d1.setDate(d1.getDate() - 1);
+        const d1Str = d1.toISOString().split("T")[0];
+
+        if (reportDate === d1Str) {
+          isPendingRow = true;
+        }
+      }
+    }
+
+    const matchesDate = !dateFilter || reportDate === dateFilter || isPendingRow;
     const matchesMonth = monthFilter === "all" || (r.date && normalizeDate(r.date).split("-")[1] === monthMap[monthFilter]);
     return matchesSearch && matchesClient && matchesDate && matchesMonth;
   });
@@ -764,8 +841,8 @@ export default function MarketingReportsPage() {
       <ActivityLogDialog 
         open={logsOpen}
         onOpenChange={setLogsOpen}
-        title="Report Activity History"
-        subtitle={activeReport ? (activeReport.type === 'daily' ? activeReport.campaignName : activeReport.clientName) : undefined}
+        title={activeReport?.type === 'client' ? "Client Activity History" : "Report Activity History"}
+        subtitle={activeReport ? (activeReport.type === 'daily' ? activeReport.campaignName : activeReport.type === 'client' ? activeReport.companyName : activeReport.clientName) : undefined}
         logs={reportLogs}
         isLoading={isLoadingLogs}
       />
@@ -1030,15 +1107,26 @@ export default function MarketingReportsPage() {
                         <h2 className="text-xl font-bold text-slate-800">{activeClient.companyName}</h2>
                         <p className="text-sm text-slate-500 mt-1">Manage digital marketing campaigns</p>
                       </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="text-brand-teal border-brand-teal hover:bg-brand-teal/5"
-                        onClick={() => handleViewClientReports(activeClient.id)}
-                      >
-                        <TrendingUp className="w-4 h-4 mr-2" />
-                        View Reports
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                          onClick={() => fetchLogs({ id: activeClient.id, companyName: activeClient.companyName }, "client")}
+                        >
+                          <History className="w-4 h-4 mr-2" />
+                          View Logs
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="text-brand-teal border-brand-teal hover:bg-brand-teal/5"
+                          onClick={() => handleViewClientReports(activeClient.id)}
+                        >
+                          <TrendingUp className="w-4 h-4 mr-2" />
+                          View Reports
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-50/30">
@@ -1482,8 +1570,8 @@ export default function MarketingReportsPage() {
               )}
               </Droppable>
               {filteredDaily.length > 0 && (
-                <tfoot className="bg-slate-50 border-t-2">
-                  <TableRow className="border-t-[3px] border-slate-300">
+                <tfoot className="sticky bottom-0 z-20 bg-brand-teal/10 border-t-2 border-brand-teal/20 backdrop-blur-md shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                  <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={5} className="text-right font-bold text-slate-900">Grand Total</TableCell>
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.reach.toLocaleString()}</TableCell>
                     <TableCell className="text-center font-bold text-slate-900">{dailyTotals.impression.toLocaleString()}</TableCell>
@@ -1885,8 +1973,8 @@ export default function MarketingReportsPage() {
               )}
               </Droppable>
             {filteredMonthly.length > 0 && (
-              <tfoot className="bg-slate-50 border-t-2">
-                <TableRow>
+              <tfoot className="sticky bottom-0 z-20 bg-brand-teal/10 border-t-2 border-brand-teal/20 backdrop-blur-md shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={4} className="text-right font-bold text-slate-900">Total</TableCell>
                   <TableCell className="text-center font-bold text-slate-900">₹{monthlyTotals.totalSpend.toLocaleString()}</TableCell>
                   <TableCell className="text-center font-bold text-slate-900">{monthlyTotals.totalLeads.toLocaleString()}</TableCell>
