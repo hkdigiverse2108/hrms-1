@@ -3594,6 +3594,71 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
         reports.append(doc)
     return reports
 
+async def generate_missing_daily_reports_for_yesterday(db):
+    from datetime import datetime, timedelta
+    
+    # Check the last 3 days to cover weekends and holidays
+    dates_to_check = [
+        (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
+        (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d"),
+        (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d"),
+    ]
+    
+    cursor = db.clients.find({"status": {"$in": ["active", "Active"]}})
+    clients = await cursor.to_list(length=1000)
+    
+    generated_count = 0
+    
+    for client in clients:
+        campaigns = client.get("campaigns", [])
+        if not campaigns:
+            continue
+            
+        for camp in campaigns:
+            if isinstance(camp, str):
+                camp_name = camp
+                is_active = True
+                metric = "CPL"
+            elif isinstance(camp, dict):
+                camp_name = camp.get("name")
+                is_active = camp.get("isActive", True)
+                metric = camp.get("metric", "CPL")
+            else:
+                continue
+                
+            if not is_active or not camp_name:
+                continue
+                
+            client_id_str = str(client.get("_id"))
+            
+            for check_date in dates_to_check:
+                query = {
+                    "clientId": client_id_str,
+                    "campaignName": camp_name,
+                    "date": check_date
+                }
+                
+                existing = await db.marketing_daily_reports.find_one(query)
+                if not existing:
+                    new_report = {
+                        "clientId": client_id_str,
+                        "clientName": client.get("companyName", ""),
+                        "date": check_date,
+                        "campaignName": camp_name,
+                        "reach": 0,
+                        "impression": 0,
+                        "leads": 0,
+                        "followers": 0,
+                        "spend": 0,
+                        "cpl": 0,
+                        "revenue": 0,
+                        "remarks": ""
+                    }
+                    await db.marketing_daily_reports.insert_one(new_report)
+                    generated_count += 1
+                
+    return {"generatedCount": generated_count, "datesChecked": dates_to_check}
+
 async def update_marketing_daily_report(db, report_id: str, report: schemas.MarketingDailyReportUpdate):
     update_data = report.dict(exclude_unset=True)
     performedBy = update_data.pop("performedBy", "Unknown")
@@ -3632,18 +3697,105 @@ async def create_marketing_monthly_report(db, report: schemas.MarketingMonthlyRe
     return report_dict
 
 async def get_marketing_monthly_reports(db, client_id: str = None, month: str = None):
-    query = {}
+    MONTH_MAP = {
+        "January": "01", "February": "02", "March": "03", "April": "04",
+        "May": "05", "June": "06", "July": "07", "August": "08",
+        "September": "09", "October": "10", "November": "11", "December": "12"
+    }
+    
+    match_query = {}
     if client_id:
-        query["clientId"] = client_id
-    if month:
-        query["month"] = month
+        match_query["clientId"] = client_id
+    
+    if month and month != "all":
+        month_num = MONTH_MAP.get(month)
+        if month_num:
+            year = datetime.now().year
+            # Create start and end datetime for the month
+            start_dt = datetime(year, int(month_num), 1)
+            if int(month_num) == 12:
+                end_dt = datetime(year + 1, 1, 1)
+            else:
+                end_dt = datetime(year, int(month_num) + 1, 1)
+            
+            regex_pattern = f"^{year}-{month_num}-"
+            match_query["$or"] = [
+                {"date": {"$regex": regex_pattern}},
+                {"date": {"$gte": start_dt, "$lt": end_dt}}
+            ]
+        else:
+            # Fallback if month is something else
+            match_query["month"] = month
+            
+    pipeline = [
+        {"$match": match_query},
+        {"$group": {
+            "_id": "$clientId",
+            "clientName": {"$first": "$clientName"},
+            "totalSpend": {"$sum": "$spend"},
+            "totalLeads": {"$sum": "$leads"},
+            "totalRevenue": {"$sum": "$revenue"}
+        }}
+    ]
+    
+    aggregated = await db.marketing_daily_reports.aggregate(pipeline).to_list(length=1000)
+    
+    # Fetch manual conclusions from existing marketing_monthly_reports collection
+    monthly_query = {}
+    if client_id:
+        monthly_query["clientId"] = client_id
+    if month and month != "all":
+        monthly_query["month"] = month
         
-    cursor = db.marketing_monthly_reports.find(query)
-    reports = []
-    async for doc in cursor:
-        doc["id"] = str(doc["_id"])
-        reports.append(doc)
-    return reports
+    manual_reports_cursor = db.marketing_monthly_reports.find(monthly_query)
+    manual_reports = {doc.get("clientId"): doc async for doc in manual_reports_cursor}
+    
+    results = []
+    for agg in aggregated:
+        cid = agg["_id"]
+        manual = manual_reports.get(cid, {})
+        
+        spend = float(agg.get("totalSpend") or 0)
+        leads = int(agg.get("totalLeads") or 0)
+        revenue = float(agg.get("totalRevenue") or 0)
+        
+        cpr = spend / leads if leads > 0 else 0
+        roas = revenue / spend if spend > 0 else 0
+        
+        report = {
+            "id": str(manual.get("_id")) if manual.get("_id") else f"agg-{cid}-{month or 'all'}",
+            "clientId": cid,
+            "clientName": agg.get("clientName") or manual.get("clientName", "Unknown"),
+            "month": month or "All",
+            "totalSpend": spend,
+            "totalLeads": leads,
+            "totalSales": 0,
+            "totalRevenue": revenue,
+            "avgCPR": cpr,
+            "avgCPP": 0,
+            "overallROAS": roas,
+            "conclusion": manual.get("conclusion") or ""
+        }
+        results.append(report)
+        
+    # Add any manual reports that didn't have daily reports for this month
+    agg_client_ids = {agg["_id"] for agg in aggregated}
+    for cid, manual in manual_reports.items():
+        if cid not in agg_client_ids:
+            doc = manual.copy()
+            doc["id"] = str(doc.pop("_id"))
+            # Ensure fields exist so UI doesn't break
+            doc["totalSpend"] = float(doc.get("totalSpend") or 0)
+            doc["totalLeads"] = int(doc.get("totalLeads") or 0)
+            doc["totalSales"] = int(doc.get("totalSales") or 0)
+            doc["totalRevenue"] = float(doc.get("totalRevenue") or 0)
+            doc["avgCPR"] = float(doc.get("avgCPR") or 0)
+            doc["avgCPP"] = float(doc.get("avgCPP") or 0)
+            doc["overallROAS"] = float(doc.get("overallROAS") or 0)
+            doc["conclusion"] = doc.get("conclusion") or ""
+            results.append(doc)
+            
+    return results
 
 async def update_marketing_monthly_report(db, report_id: str, report: schemas.MarketingMonthlyReportUpdate):
     update_data = report.dict(exclude_unset=True)
@@ -3651,6 +3803,51 @@ async def update_marketing_monthly_report(db, report_id: str, report: schemas.Ma
     userName = update_data.pop("userName", "Unknown User")
     
     if not update_data:
+        return None
+        
+    if report_id.startswith("agg-"):
+        # This is an aggregated report that doesn't have a manual DB entry yet.
+        # We need to upsert it based on clientId and month.
+        parts = report_id.split("-", 2)
+        if len(parts) >= 3:
+            client_id = parts[1]
+            month = parts[2]
+            
+            # Make sure we have the required fields to create the doc if it doesn't exist
+            if "clientId" not in update_data:
+                update_data["clientId"] = client_id
+            if "month" not in update_data:
+                update_data["month"] = month
+                
+            # If clientName is missing, try to fetch it
+            if "clientName" not in update_data:
+                client = await db.clients.find_one({"_id": ObjectId(client_id)}) if ObjectId.is_valid(client_id) else None
+                update_data["clientName"] = client.get("companyName", "Unknown") if client else "Unknown"
+
+            # Fill missing defaults so Pydantic doesn't throw 500
+            for k in ["totalSpend", "avgCPR", "avgCPP", "totalRevenue", "overallROAS"]:
+                if k not in update_data: update_data[k] = 0.0
+            for k in ["totalLeads", "totalSales"]:
+                if k not in update_data: update_data[k] = 0
+            
+            result = await db.marketing_monthly_reports.update_one(
+                {"clientId": client_id, "month": month},
+                {"$set": update_data},
+                upsert=True
+            )
+            
+            doc = await db.marketing_monthly_reports.find_one({"clientId": client_id, "month": month})
+            if doc:
+                doc["id"] = str(doc.pop("_id"))
+                
+                # Log details
+                log_details = f"Monthly Report created/updated with conclusion"
+                await log_activity(db, "Updated", performedBy, userName, log_details, monthlyReportId=doc["id"])
+                
+                return doc
+        return None
+
+    if not ObjectId.is_valid(report_id):
         return None
         
     old_report = await db.marketing_monthly_reports.find_one({"_id": ObjectId(report_id)})

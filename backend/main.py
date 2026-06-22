@@ -1269,6 +1269,10 @@ async def delete_task_log(log_id: str, db=Depends(get_db)):
     return {"message": "Log deleted successfully"}
 
 # Marketing Reports Endpoints
+@app.post("/marketing/reports/daily/generate-yesterday")
+async def generate_yesterday_marketing_reports(db=Depends(get_db)):
+    return await crud.generate_missing_daily_reports_for_yesterday(db)
+
 @app.post("/marketing/reports/daily", response_model=schemas.MarketingDailyReport)
 async def create_marketing_daily_report(report: schemas.MarketingDailyReportCreate, db=Depends(get_db)):
     return await crud.create_marketing_daily_report(db, report)

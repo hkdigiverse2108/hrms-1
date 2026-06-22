@@ -1378,6 +1378,7 @@ class MarketingDailyReportBase(BaseModel):
     followers: int = 0
     spend: float = 0
     cpl: float = 0
+    revenue: float = 0
     remarks: Optional[str] = None
 
 class MarketingDailyReportCreate(MarketingDailyReportBase):
@@ -1395,6 +1396,7 @@ class MarketingDailyReportUpdate(BaseModel):
     followers: Optional[int] = None
     spend: Optional[float] = None
     cpl: Optional[float] = None
+    revenue: Optional[float] = None
     remarks: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
@@ -2093,6 +2095,7 @@ class OtherWorkBase(BaseModel):
     assignerName: str
     deadline: str
     status: str = "Pending"
+    taskType: Optional[str] = "other-work"
     logs: Optional[List[dict]] = None
 
 class OtherWorkCreate(OtherWorkBase):

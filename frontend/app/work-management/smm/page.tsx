@@ -50,13 +50,13 @@ import { WhatsAppSmmDialog } from "@/components/hrms/WhatsAppSmmDialog";
 import { WhatsAppIcon } from "@/components/hrms/WhatsAppIcon";
 import { SmmMeetingDialog } from "@/components/hrms/SmmMeetingDialog";
 import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
+import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 import { FeedbackReviewsEmbedded } from "@/components/hrms/FeedbackReviewsEmbedded";
 import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 
 const SearchableEmployeeSelect = ({ value, onChange, placeholder, employees }: { value: string, onChange: (val: string) => void, placeholder: string, employees: any[] }) => {
   const [open, setOpen] = useState(false);
@@ -881,10 +881,6 @@ export default function CreativeClientsPage() {
         </div>
 
         <OtherWorkDialog />
-        <Button onClick={() => router.push('/feedback-builder/common')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto shrink-0">
-          <Plus className="w-4 h-4" />
-          Create Feedback Form
-        </Button>
         <Button onClick={() => router.push('/work-management/smm/common/feedback')} className="h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 gap-2 w-full md:w-auto shrink-0 border border-slate-200">
           <ClipboardList className="w-4 h-4" />
           View Common Forms
