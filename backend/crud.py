@@ -2547,7 +2547,15 @@ async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = N
     if user_info:
         role = str(user_info.get("role", "")).lower()
         if role not in ["admin", "manager"]:
-            query["assignedEmployeeId"] = user_info.get("sub")
+            user_id = user_info.get("sub")
+            # Fetch user's projects to get associated clients
+            user_projects = await get_projects(db, userId=user_id, role=role, skip=0, limit=10000)
+            project_client_ids = [str(p.get("clientId")) for p in user_projects if p.get("clientId")]
+            
+            query["$or"] = [
+                {"assignedEmployeeId": user_id},
+                {"_id": {"$in": [ObjectId(cid) for cid in project_client_ids if ObjectId.is_valid(cid)]}}
+            ]
             
     cursor = db.clients.find(query).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
@@ -2840,46 +2848,41 @@ async def delete_client(db, client_id: str):
 # Project CRUD
 async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if role and role.lower() not in ["admin"] and userId:
         # Fetch user to get department
         user = await get_employee(db, userId)
         if user:
             dept = user.get("department")
             
-            if role.lower() == "team leader":
-                # TL sees projects where they are TL OR projects in their department
-                query["$or"] = [
-                    {"teamLeaderId": userId},
-                    {"department": dept}
-                ]
-            else:
-                # Employee sees projects where they have tasks
-                task_cursor = db.wm_tasks.find({"assignedToId": userId})
-                task_list = await task_cursor.to_list(length=1000)
-                project_ids = list(set([t.get("projectId") for t in task_list if t.get("projectId")]))
+            # Everyone else (Team Leader, Employee, etc) sees projects where they have tasks or are assigned
+
+            task_cursor = db.wm_tasks.find({"assignedToId": userId})
+            task_list = await task_cursor.to_list(length=1000)
+            project_ids = list(set([t.get("projectId") for t in task_list if t.get("projectId")]))
+            
+            or_conditions = [
+                {"teamLeaderId": userId},
+                {"assignedEmployeeId": userId},
+                {"assignedScriptwriterId": userId},
+                {"assignedReelEditorId": userId},
+                {"assignedPostDesignerId": userId},
+                {"assignedShooterId": userId},
+                {"assignedApproverId": userId},
+                {"assignedPosterId": userId}
+            ]
+            if project_ids:
+                project_ids_as_obj = []
+                for pid in project_ids:
+                    try:
+                        project_ids_as_obj.append(ObjectId(pid))
+                    except Exception:
+                        pass
                 
-                or_conditions = [
-                    {"teamLeaderId": userId},
-                    {"assignedScriptwriterId": userId},
-                    {"assignedReelEditorId": userId},
-                    {"assignedPostDesignerId": userId},
-                    {"assignedShooterId": userId},
-                    {"assignedApproverId": userId},
-                    {"assignedPosterId": userId}
-                ]
-                if project_ids:
-                    project_ids_as_obj = []
-                    for pid in project_ids:
-                        try:
-                            project_ids_as_obj.append(ObjectId(pid))
-                        except Exception:
-                            pass
-                    
-                    if project_ids_as_obj:
-                        or_conditions.append({"_id": {"$in": project_ids_as_obj}})
-                    or_conditions.append({"id": {"$in": project_ids}}) # fallback for string IDs
-                
-                query["$or"] = or_conditions
+                if project_ids_as_obj:
+                    or_conditions.append({"_id": {"$in": project_ids_as_obj}})
+                or_conditions.append({"id": {"$in": project_ids}}) # fallback for string IDs
+            
+            query["$or"] = or_conditions
 
     cursor = db.projects.find(query).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
@@ -3128,6 +3131,7 @@ async def delete_task(db, task_id: str):
     return True
 
 # Work Management Task CRUD
+async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
     if role and role.lower() not in ["admin", "hr"] and userId:
         user = await get_employee(db, userId)
@@ -3586,14 +3590,29 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
     query = {}
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin", "manager"]:
-            allowed_clients = await db.clients.find({"assignedEmployeeId": user_info.get("sub")}).to_list(length=None)
+        if role not in ["admin"]:
+            user_id = user_info.get("sub")
+            # Get allowed clients
+            allowed_clients = await db.clients.find({"assignedEmployeeId": user_id}).to_list(length=None)
             allowed_client_ids = [str(c["_id"]) for c in allowed_clients]
-            if client_id and client_id not in allowed_client_ids:
-                return []
-            if not client_id:
-                query["clientId"] = {"$in": allowed_client_ids}
-    if client_id:
+            
+            # Get allowed projects using existing get_projects logic
+            allowed_projects = await get_projects(db, userId=user_id, role=role, limit=10000)
+            allowed_project_ids = [str(p.get("id", p.get("_id"))) for p in allowed_projects]
+            project_client_ids = [str(p.get("clientId")) for p in allowed_projects if p.get("clientId")]
+            all_allowed_clients = list(set(allowed_client_ids + project_client_ids))
+            
+            query["$or"] = [
+                {"projectId": {"$in": allowed_project_ids}},
+                {"clientId": {"$in": all_allowed_clients}}
+            ]
+            
+            if client_id:
+                if client_id not in all_allowed_clients:
+                    return []
+                query["clientId"] = client_id
+                query.pop("$or", None)
+    if client_id and "clientId" not in query:
         query["clientId"] = client_id
     if date:
         try:
@@ -3657,9 +3676,19 @@ async def generate_missing_daily_reports_for_yesterday(db):
                 
                 existing = await db.marketing_daily_reports.find_one(query)
                 if not existing:
+                    # Find a Digital Marketing project for this client
+                    project = await db.projects.find_one({
+                        "clientId": client_id_str,
+                        "department": "Digital Marketing"
+                    })
+                    project_id = str(project.get("_id")) if project else None
+                    project_title = project.get("title") if project else None
+
                     new_report = {
                         "clientId": client_id_str,
                         "clientName": client.get("companyName", ""),
+                        "projectId": project_id,
+                        "projectName": project_title,
                         "date": check_date,
                         "campaignName": camp_name,
                         "reach": 0,
@@ -3714,25 +3743,45 @@ async def create_marketing_monthly_report(db, report: schemas.MarketingMonthlyRe
     return report_dict
 
 async def get_marketing_monthly_reports(db, client_id: str = None, month: str = None, user_info: dict = None):
-    allowed_client_ids = None
+    match_query = {}
+    allowed_project_ids = []
+    all_allowed_clients = []
+    is_restricted = False
+    
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin", "manager"]:
-            allowed_clients = await db.clients.find({"assignedEmployeeId": user_info.get("sub")}).to_list(length=None)
+        if role not in ["admin"]:
+            is_restricted = True
+            user_id = user_info.get("sub")
+            # Get allowed clients
+            allowed_clients = await db.clients.find({"assignedEmployeeId": user_id}).to_list(length=None)
             allowed_client_ids = [str(c["_id"]) for c in allowed_clients]
-            if client_id and client_id not in allowed_client_ids:
-                return []
+            
+            # Get allowed projects
+            allowed_projects = await get_projects(db, userId=user_id, role=role, limit=10000)
+            allowed_project_ids = [str(p.get("id", p.get("_id"))) for p in allowed_projects]
+            project_client_ids = [str(p.get("clientId")) for p in allowed_projects if p.get("clientId")]
+            all_allowed_clients = list(set(allowed_client_ids + project_client_ids))
+            
+            match_query["$or"] = [
+                {"projectId": {"$in": allowed_project_ids}},
+                {"clientId": {"$in": all_allowed_clients}}
+            ]
+            
+            if client_id:
+                if client_id not in all_allowed_clients:
+                    return []
+                match_query["clientId"] = client_id
+                match_query.pop("$or", None)
+    
+    if client_id and "clientId" not in match_query:
+        match_query["clientId"] = client_id
+    
     MONTH_MAP = {
         "January": "01", "February": "02", "March": "03", "April": "04",
         "May": "05", "June": "06", "July": "07", "August": "08",
         "September": "09", "October": "10", "November": "11", "December": "12"
     }
-    
-    match_query = {}
-    if client_id:
-        match_query["clientId"] = client_id
-    elif allowed_client_ids is not None:
-        match_query["clientId"] = {"$in": allowed_client_ids}
     
     if month and month != "all":
         month_num = MONTH_MAP.get(month)
@@ -3746,10 +3795,14 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: str = 
                 end_dt = datetime(year, int(month_num) + 1, 1)
             
             regex_pattern = f"^{year}-{month_num}-"
-            match_query["$or"] = [
+            date_or = [
                 {"date": {"$regex": regex_pattern}},
                 {"date": {"$gte": start_dt, "$lt": end_dt}}
             ]
+            if "$or" in match_query:
+                match_query["$and"] = [{"$or": match_query.pop("$or")}, {"$or": date_or}]
+            else:
+                match_query["$or"] = date_or
         else:
             # Fallback if month is something else
             match_query["month"] = month
@@ -3769,8 +3822,16 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: str = 
     
     # Fetch manual conclusions from existing marketing_monthly_reports collection
     monthly_query = {}
+    if is_restricted:
+        monthly_query["$or"] = [
+            {"projectId": {"$in": allowed_project_ids}},
+            {"clientId": {"$in": all_allowed_clients}}
+        ]
+        
     if client_id:
         monthly_query["clientId"] = client_id
+        monthly_query.pop("$or", None)
+        
     if month and month != "all":
         monthly_query["month"] = month
         
