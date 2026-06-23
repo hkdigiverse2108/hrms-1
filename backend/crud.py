@@ -2708,6 +2708,21 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
         except Exception:
             query_client_id = client_id
 
+        if "campaigns" in update_data:
+            old_campaigns = old_client.get("campaigns", [])
+            new_campaigns = update_data["campaigns"]
+            if new_campaigns is None:
+                new_campaigns = []
+            
+            old_names = set(c.get("name", "") if isinstance(c, dict) else str(c) for c in old_campaigns)
+            new_names = set(c.get("name", "") if isinstance(c, dict) else str(c) for c in new_campaigns)
+            
+            removed_campaigns = old_names - new_names
+            for camp_name in removed_campaigns:
+                if camp_name:
+                    await archive_and_delete_many(db, "marketing_daily_reports", {"clientId": query_client_id, "campaignName": camp_name})
+                    await archive_and_delete_many(db, "marketing_monthly_reports", {"clientId": query_client_id, "campaignName": camp_name})
+
         if update_data.get("status") == "on-hold":
             await db.projects.update_many(
                 {"clientId": query_client_id},
