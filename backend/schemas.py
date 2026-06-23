@@ -1453,7 +1453,9 @@ class MarketingMonthlyReportUpdate(BaseModel):
     avgCPP: Optional[float] = None
     totalRevenue: Optional[float] = None
     overallROAS: Optional[float] = None
-    conclusion: Optional[str] = None
+    employeeConclusion: Optional[str] = None
+    adminConclusion: Optional[str] = None
+    clientConclusion: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 

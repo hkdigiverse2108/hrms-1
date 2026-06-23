@@ -4045,6 +4045,11 @@ async def sync_monthly_marketing_reports(db, date_str: str = None):
                     {"$set": update_data}
                 )
             else:
+                # Check if the client is on-hold before adding a new row
+                client = await db.clients.find_one({"_id": ObjectId(c_id)})
+                if client and client.get("status") == "on-hold":
+                    continue
+                
                 new_report = {
                     "clientId": c_id,
                     "clientName": agg["clientName"],
@@ -4056,7 +4061,9 @@ async def sync_monthly_marketing_reports(db, date_str: str = None):
                     "avgCPP": 0.0,
                     "totalRevenue": round(total_revenue, 2),
                     "overallROAS": overall_roas,
-                    "conclusion": ""
+                    "employeeConclusion": "",
+                    "adminConclusion": "",
+                    "clientConclusion": ""
                 }
                 await db.marketing_monthly_reports.insert_one(new_report)
                 
