@@ -1407,6 +1407,7 @@ class MarketingDailyReportBase(BaseModel):
     revenue: float = 0
     remarks: Optional[str] = None
     campaignOptimization: bool = False
+    leadsFileUrl: Optional[str] = None
 
 class MarketingDailyReportCreate(MarketingDailyReportBase):
     clientId: Optional[str] = None
@@ -1430,6 +1431,7 @@ class MarketingDailyReportUpdate(BaseModel):
     revenue: Optional[float] = None
     remarks: Optional[str] = None
     campaignOptimization: Optional[bool] = None
+    leadsFileUrl: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 

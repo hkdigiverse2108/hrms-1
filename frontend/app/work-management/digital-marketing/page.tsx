@@ -28,6 +28,8 @@ import {
   MoreHorizontal,
   GripVertical,
   X,
+  Upload,
+  FileSpreadsheet,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -913,6 +915,68 @@ export default function MarketingReportsPage() {
       toast.error("Failed to save");
     }
     setInlineEditing(null);
+  };
+
+  const handleUploadLeads = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    id: string,
+    type: "daily" | "monthly"
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size should be smaller than 10 MB");
+      e.target.value = ''; // Reset input
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const uploadRes = await fetch(`${API_URL}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        toast.error("Failed to upload file");
+        return;
+      }
+
+      const { url } = await uploadRes.json();
+      await handleInlineUpdate(id, "leadsFileUrl", url, type);
+      toast.success("Leads file uploaded successfully");
+    } catch (err) {
+      toast.error("An error occurred during upload");
+    }
+  };
+
+  const handleDownloadLeads = (fileUrl: string) => {
+    const isExternal = fileUrl.startsWith('http');
+    const fullUrl = isExternal ? fileUrl : `${API_URL}${fileUrl.replace('/api', '')}`;
+    
+    let originalName = 'leads_file';
+    try {
+      const parts = fileUrl.split('/');
+      const fileNameWithUuid = parts[parts.length - 1];
+      const nameParts = fileNameWithUuid.split('_');
+      if (nameParts.length > 1 && nameParts[0].length === 32) {
+        originalName = nameParts.slice(1).join('_');
+      } else {
+        originalName = fileNameWithUuid;
+      }
+    } catch (e) {
+      // fallback
+    }
+
+    const link = document.createElement('a');
+    link.href = fullUrl;
+    link.download = originalName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const startEditingRow = (report: any) => {
@@ -2504,6 +2568,34 @@ export default function MarketingReportsPage() {
                                                           >
                                                             <History className="w-4 h-4" />
                                                           </Button>
+
+                                                          <input 
+                                                            type="file" 
+                                                            className="hidden" 
+                                                            id={`upload-leads-${report.id}`} 
+                                                            accept=".xlsx,.xls,.csv"
+                                                            onChange={(e) => handleUploadLeads(e, report.id, "daily")}
+                                                          />
+                                                          <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                                            title="Upload Leads"
+                                                            onClick={() => document.getElementById(`upload-leads-${report.id}`)?.click()}
+                                                          >
+                                                            <Upload className="w-4 h-4" />
+                                                          </Button>
+                                                          {report.leadsFileUrl && (
+                                                            <Button
+                                                              variant="ghost"
+                                                              size="icon"
+                                                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                              title="Download Leads"
+                                                              onClick={() => handleDownloadLeads(report.leadsFileUrl)}
+                                                            >
+                                                              <FileSpreadsheet className="w-4 h-4" />
+                                                            </Button>
+                                                          )}
 
                                                           {canDeleteMarketing && (
                                                             <Button
