@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -179,6 +180,49 @@ export default function MarketingReportsPage() {
 
   const [activeTab, setActiveTab] = useState("daily");
   const [dailyReports, setDailyReports] = useState<any[]>([]);
+  const [projectRemarks, setProjectRemarks] = useState<any[]>([]);
+  const [editingRemarks, setEditingRemarks] = useState<string[]>([]);
+
+  const handleUpdateProjectRemark = async (projectId: string, dateStr: string, remark: string) => {
+    try {
+      const res = await fetch(`${API_URL}/marketing/project-remarks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          date: dateStr,
+          remark
+        })
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setProjectRemarks(prev => {
+          const filtered = prev.filter(p => !(p.projectId === projectId && p.date === dateStr));
+          return [...filtered, { ...saved, isDirty: false }];
+        });
+        
+        // Save detailed task log
+        await fetch(`${API_URL}/task-logs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "Daily Follow-up Completed",
+            details: `For Date: ${dateStr} - Remark: ${remark}`,
+            projectId: projectId,
+            performedBy: user?.id || user?._id,
+            userName: user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown User",
+          })
+        });
+
+        toast.success("Daily follow-up saved");
+      } else {
+        toast.error("Failed to save follow-up");
+      }
+    } catch (err) {
+      console.error("Failed to update remark:", err);
+      toast.error("An error occurred while saving follow-up");
+    }
+  };
   const [monthlyReports, setMonthlyReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -633,7 +677,10 @@ export default function MarketingReportsPage() {
           params.append("end_date", endStr);
         }
         
-        const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
+        const [res, remarksRes] = await Promise.all([
+          fetch(`${API_URL}${endpoint}?${params.toString()}`),
+          fetch(`${API_URL}/marketing/project-remarks?${params.toString()}`)
+        ]);
         if (res.ok) {
           const data = await res.json();
           const seen = new Set();
@@ -644,6 +691,10 @@ export default function MarketingReportsPage() {
             return true;
           });
           setDailyReports(uniqueData);
+          if (remarksRes.ok) {
+            const rData = await remarksRes.json();
+            setProjectRemarks(rData);
+          }
           if (dateRange?.from) {
             const startStr = format(dateRange.from, "yyyy-MM-dd");
             const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
@@ -953,7 +1004,7 @@ export default function MarketingReportsPage() {
 
   const fetchLogs = async (
     report: any,
-    type: "daily" | "monthly" | "client",
+    type: "daily" | "monthly" | "client" | "project-remark",
   ) => {
     setIsLoadingLogs(true);
     setLogsOpen(true);
@@ -962,6 +1013,7 @@ export default function MarketingReportsPage() {
       let param = "";
       if (type === "daily") param = `dailyReportId=${report.id}`;
       else if (type === "monthly") param = `monthlyReportId=${report.id}`;
+      else if (type === "project-remark") param = `projectId=${report.id}`;
       else {
         const clientProjs = projects.filter((p: any) => p.clientId === report.id);
         if (clientProjs.length > 0) {
@@ -972,19 +1024,24 @@ export default function MarketingReportsPage() {
           return;
         }
       }
-
       console.log(`Fetching logs from: ${API_URL}/task-logs?${param}`);
 
       const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
-        setReportLogs(await res.json());
+        const data = await res.json();
+        if (type === "project-remark") {
+          setReportLogs(data.filter((d: any) => d.action === "Daily Follow-up Completed"));
+        } else {
+          setReportLogs(data);
+        }
       } else {
         toast.error(`Failed to load logs: ${res.status}`);
-        console.error("Logs fetch failed:", res.status, res.statusText);
+        setReportLogs([]);
       }
     } catch (err) {
+      console.error("Fetch logs error:", err);
       toast.error("Network error while fetching logs");
-      console.error("Error fetching report logs:", err);
+      setReportLogs([]);
     } finally {
       setIsLoadingLogs(false);
     }
@@ -1879,9 +1936,6 @@ export default function MarketingReportsPage() {
                         Cost Metric (₹)
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
-                        Optimization
-                      </TableHead>
-                      <TableHead className="text-center font-bold text-slate-700">
                         Remarks
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
@@ -2331,35 +2385,7 @@ export default function MarketingReportsPage() {
                                                     )}
                                                   </TableCell>
 
-                                                  <TableCell
-                                                    className={`text-center ${canEditMarketing ? "cursor-pointer hover:bg-slate-50" : ""}`}
-                                                    onClick={() =>
-                                                      startEditingRow(report)
-                                                    }
-                                                  >
-                                                    {editingRowId ===
-                                                    report.id ? (
-                                                      <Select
-                                                        value={editFormData.campaignOptimization ? "yes" : "no"}
-                                                        onValueChange={(val) =>
-                                                          setEditFormData({
-                                                            ...editFormData,
-                                                            campaignOptimization: val === "yes",
-                                                          })
-                                                        }
-                                                      >
-                                                        <SelectTrigger className="h-8 text-xs">
-                                                          <SelectValue placeholder="Select" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                          <SelectItem value="yes">Yes</SelectItem>
-                                                          <SelectItem value="no">No</SelectItem>
-                                                        </SelectContent>
-                                                      </Select>
-                                                    ) : (
-                                                      report.campaignOptimization ? "Yes" : "No"
-                                                    )}
-                                                  </TableCell>
+
 
                                                   <TableCell
                                                     className={`text-center ${canEditMarketing ? "cursor-text hover:bg-slate-50" : ""}`}
@@ -2369,20 +2395,24 @@ export default function MarketingReportsPage() {
                                                   >
                                                     {editingRowId ===
                                                     report.id ? (
-                                                      <Input
-                                                        className="h-8 text-xs text-center outline-none"
-                                                        value={
-                                                          editFormData.remarks ||
-                                                          ""
-                                                        }
-                                                        onChange={(e) =>
+                                                      <Select
+                                                        value={editFormData.remarks || ""}
+                                                        onValueChange={(val) =>
                                                           setEditFormData({
                                                             ...editFormData,
-                                                            remarks:
-                                                              e.target.value,
+                                                            remarks: val,
                                                           })
                                                         }
-                                                      />
+                                                      >
+                                                        <SelectTrigger className="h-8 text-xs">
+                                                          <SelectValue placeholder="Select" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                          <SelectItem value="Positive">Positive</SelectItem>
+                                                          <SelectItem value="Neutral">Neutral</SelectItem>
+                                                          <SelectItem value="Negative">Negative</SelectItem>
+                                                        </SelectContent>
+                                                      </Select>
                                                     ) : (
                                                       report.remarks || "-"
                                                     )}
@@ -2507,7 +2537,88 @@ export default function MarketingReportsPage() {
                                               maximumFractionDigits: 2,
                                             })}
                                           </TableCell>
-                                          <TableCell colSpan={3}></TableCell>
+                                          <TableCell>
+                                            <div className="flex items-center gap-1">
+                                              {(() => {
+                                                const targetDate = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+                                                const targetProjectId = reports[0]?.projectId || reports[0]?.clientId || "unknown";
+                                                const remarkObj = projectRemarks.find(pr => pr.projectId === targetProjectId && pr.date === targetDate);
+                                                const remarkText = remarkObj?.remark || "";
+                                                const isEditing = editingRemarks.includes(`${targetProjectId}_${targetDate}`);
+                                                const showInput = !remarkObj || isEditing || remarkObj.isDirty || !remarkText;
+
+                                                if (!showInput) {
+                                                  return (
+                                                    <div 
+                                                      className="text-xs text-slate-700 cursor-text hover:bg-slate-50 px-2 py-1.5 rounded border border-transparent hover:border-slate-200 transition-colors w-[150px] truncate"
+                                                      onClick={() => setEditingRemarks(prev => [...prev, `${targetProjectId}_${targetDate}`])}
+                                                      title={remarkText}
+                                                    >
+                                                      {remarkText}
+                                                    </div>
+                                                  );
+                                                }
+
+                                                return (
+                                                  <>
+                                                    <Input
+                                                      placeholder="Daily follow-up / remark"
+                                                      className="w-[150px] h-8 text-xs bg-white/50 focus:bg-white"
+                                                      value={remarkText}
+                                                      onChange={(e) => {
+                                                        const newVal = e.target.value;
+                                                        setProjectRemarks(prev => {
+                                                          const filtered = prev.filter(p => !(p.projectId === targetProjectId && p.date === targetDate));
+                                                          return [...filtered, { projectId: targetProjectId, date: targetDate, remark: newVal, isDirty: true }];
+                                                        });
+                                                      }}
+                                                      autoFocus={isEditing}
+                                                      onBlur={() => {
+                                                        if (!remarkObj?.isDirty) {
+                                                          setEditingRemarks(prev => prev.filter(id => id !== `${targetProjectId}_${targetDate}`));
+                                                        }
+                                                      }}
+                                                    />
+                                                    {remarkObj?.isDirty && (
+                                                      <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 shrink-0"
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                        onClick={() => {
+                                                          handleUpdateProjectRemark(
+                                                            targetProjectId,
+                                                            targetDate,
+                                                            remarkText
+                                                          );
+                                                          setEditingRemarks(prev => prev.filter(id => id !== `${targetProjectId}_${targetDate}`));
+                                                        }}
+                                                      >
+                                                        <Check className="w-4 h-4" />
+                                                      </Button>
+                                                    )}
+                                                  </>
+                                                );
+                                              })()}
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-center">
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                              onClick={() => {
+                                                const targetProjectId = reports[0]?.projectId || reports[0]?.clientId || "unknown";
+                                                fetchLogs(
+                                                  { id: targetProjectId, type: "project" },
+                                                  "project-remark"
+                                                );
+                                              }}
+                                            >
+                                              <History className="w-4 h-4" />
+                                            </Button>
+                                          </TableCell>
+                                          <TableCell></TableCell>
                                         </TableRow>
                                       </React.Fragment>
                                     );
@@ -3036,38 +3147,27 @@ export default function MarketingReportsPage() {
                   }
                 />
               </div>
+
               <div className="space-y-2">
-                <Label>Optimization</Label>
+                <Label>Remarks</Label>
                 <Select
-                  value={dailyFormData.campaignOptimization ? "yes" : "no"}
+                  value={dailyFormData.remarks || ""}
                   onValueChange={(val) =>
                     setDailyFormData({
                       ...dailyFormData,
-                      campaignOptimization: val === "yes",
+                      remarks: val,
                     })
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select" />
+                    <SelectValue placeholder="Select remark" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
+                    <SelectItem value="Positive">Positive</SelectItem>
+                    <SelectItem value="Neutral">Neutral</SelectItem>
+                    <SelectItem value="Negative">Negative</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Remarks</Label>
-                <Input
-                  placeholder="e.g. High impression campaign"
-                  value={dailyFormData.remarks || ""}
-                  onChange={(e) =>
-                    setDailyFormData({
-                      ...dailyFormData,
-                      remarks: e.target.value,
-                    })
-                  }
-                />
               </div>
             </div>
             <DialogFooter>
