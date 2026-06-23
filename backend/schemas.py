@@ -1027,6 +1027,7 @@ class ProjectBase(BaseModel):
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
     status: Optional[str] = "planning"
+    statusHistory: Optional[List[dict]] = []
     priority: Optional[str] = "medium"
     budget: Optional[float] = 0
     followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'

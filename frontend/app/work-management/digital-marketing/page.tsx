@@ -36,7 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { startOfToday, subDays, format, isSameDay } from "date-fns";
+import { startOfToday, subDays, format, isSameDay, differenceInDays, parseISO, isAfter, startOfDay } from "date-fns";
 import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 import {
   Table,
@@ -89,6 +89,54 @@ const monthMap: { [key: string]: string } = {
 const normalizeDate = (dateStr: string) => {
   if (!dateStr) return "";
   return dateStr.split(" ")[0].split("T")[0];
+};
+
+const calculateProjectDays = (project: any) => {
+  if (!project.startDate) return { active: 0, onHold: 0 };
+  
+  const startDate = parseISO(project.startDate);
+  const today = startOfDay(new Date());
+  
+  if (!project.statusHistory || project.statusHistory.length === 0) {
+    const totalDays = Math.max(0, differenceInDays(today, startDate));
+    if (project.status === "on-hold") {
+      return { active: 0, onHold: totalDays };
+    }
+    return { active: totalDays, onHold: 0 };
+  }
+
+  let activeDays = 0;
+  let onHoldDays = 0;
+  
+  const history = [...project.statusHistory].sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  
+  let lastTime = startDate;
+  let lastStatus = "in-progress";
+
+  for (const log of history) {
+    const logTime = startOfDay(parseISO(log.timestamp));
+    if (isAfter(logTime, lastTime)) {
+      const days = differenceInDays(logTime, lastTime);
+      if (lastStatus === "on-hold") {
+        onHoldDays += days;
+      } else {
+        activeDays += days;
+      }
+      lastTime = logTime;
+    }
+    lastStatus = log.status;
+  }
+  
+  if (isAfter(today, lastTime)) {
+    const days = differenceInDays(today, lastTime);
+    if (lastStatus === "on-hold") {
+      onHoldDays += days;
+    } else {
+      activeDays += days;
+    }
+  }
+
+  return { active: Math.max(0, activeDays), onHold: Math.max(0, onHoldDays) };
 };
 
 export default function MarketingReportsPage() {
@@ -1499,9 +1547,20 @@ export default function MarketingReportsPage() {
                             >
                               {client.companyName}
                             </div>
-                            {projectNames && (
-                              <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[160px]" title={projectNames}>
-                                Project: {projectNames}
+                            {clientProjects.length > 0 && (
+                              <div className="mt-1 space-y-1">
+                                {clientProjects.map((p: any) => {
+                                  const days = calculateProjectDays(p);
+                                  return (
+                                    <div key={p.id} className="text-[10px] text-slate-500 truncate max-w-[160px]" title={`${p.title} (${days.active}d active)`}>
+                                      <span className="font-medium">{p.title}</span>: 
+                                      <span className="text-emerald-600 font-medium ml-1">{days.active}d active</span>
+                                      {days.onHold > 0 || p.status === 'on-hold' ? (
+                                        <span className="text-amber-600 font-medium ml-1">({days.onHold}d hold)</span>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                             <div className="text-xs text-slate-500 mt-0.5">
