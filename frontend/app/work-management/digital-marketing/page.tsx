@@ -90,7 +90,7 @@ const normalizeDate = (dateStr: string) => {
 
 export default function MarketingReportsPage() {
   const { confirm } = useConfirm();
-  const { user } = useUser();
+  const { user, isLoading: userLoading } = useUser();
   const router = useRouter();
   const {
     checkPermission,
@@ -151,6 +151,7 @@ export default function MarketingReportsPage() {
 
   // Client filtering
   const [clients, setClients] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [selectedClientForCampaigns, setSelectedClientForCampaigns] = useState<
     string | null
   >(null);
@@ -351,9 +352,10 @@ export default function MarketingReportsPage() {
     setViewClientReports(clientId);
     setLoadingClientReports(true);
     try {
+      const userParams = user ? `&userId=${user.id}&role=${user.role}` : "";
       const [dailyRes, monthlyRes] = await Promise.all([
-        fetch(`${API_URL}/marketing/reports/daily?client_id=${clientId}`),
-        fetch(`${API_URL}/marketing/reports/monthly?client_id=${clientId}`),
+        fetch(`${API_URL}/marketing/reports/daily?client_id=${clientId}${userParams}`),
+        fetch(`${API_URL}/marketing/reports/monthly?client_id=${clientId}${userParams}`),
       ]);
       const daily = await dailyRes.json();
       const monthly = await monthlyRes.json();
@@ -373,6 +375,8 @@ export default function MarketingReportsPage() {
   const [dailyFormData, setDailyFormData] = useState({
     date: "",
     campaignName: "",
+    projectId: "",
+    projectName: "",
     clientId: "",
     reach: 0,
     impression: 0,
@@ -384,6 +388,8 @@ export default function MarketingReportsPage() {
   });
 
   const [monthlyFormData, setMonthlyFormData] = useState({
+    projectId: "",
+    projectName: "",
     clientId: "",
     clientName: "",
     month: getLocalMonthString(),
@@ -398,9 +404,10 @@ export default function MarketingReportsPage() {
   });
 
   useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canViewMarketing) {
-      router.push("/");
+    if (!permissionsLoading && !canViewMarketing) {
+      setTimeout(() => {
+        router.push("/");
+      }, 0);
     }
   }, [router, permissionsLoading, canViewMarketing]);
 
@@ -464,7 +471,12 @@ export default function MarketingReportsPage() {
                     c.date === checkDate,
                 );
                 if (!exists && !alreadyMissing) {
+                  // Try to find an associated project for this client
+                  const project = projects.find(p => p.clientId === client.id);
+                  
                   missingCampaigns.push({
+                    projectId: project ? project.id : "",
+                    projectName: project ? project.title : "",
                     clientId: client.id,
                     clientName: client.companyName || "",
                     date: checkDate,
@@ -514,9 +526,10 @@ export default function MarketingReportsPage() {
   }, [activeTab, dateFilter, clients, dailyReports, loading]);
 
   useEffect(() => {
-    if (permissionsLoading || !canViewMarketing) return;
+    if (permissionsLoading || userLoading || !canViewMarketing) return;
     fetchData();
     fetchClients();
+    fetchProjects();
   }, [
     activeTab,
     selectedClientFilter,
@@ -525,11 +538,15 @@ export default function MarketingReportsPage() {
     monthFilter,
     permissionsLoading,
     canViewMarketing,
+    userLoading,
+    user?.id,
+    user?.role,
   ]);
 
   const fetchClients = async () => {
     try {
-      const res = await fetch(`${API_URL}/clients`);
+      const userParams = user ? `?userId=${user.id}&role=${user.role}` : "";
+      const res = await fetch(`${API_URL}/clients${userParams}`);
       if (res.ok) {
         const data = await res.json();
         setClients(
@@ -545,6 +562,23 @@ export default function MarketingReportsPage() {
     }
   };
 
+  const fetchProjects = async () => {
+    try {
+      const userParams = user ? `?userId=${user.id}&role=${user.role}` : "";
+      const res = await fetch(`${API_URL}/projects${userParams}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(
+          data.filter(
+            (p: any) => p.department === "Digital Marketing"
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -555,6 +589,10 @@ export default function MarketingReportsPage() {
       const params = new URLSearchParams();
       if (selectedClientFilter !== "all")
         params.append("client_id", selectedClientFilter);
+      if (user) {
+        params.append("userId", user.id);
+        params.append("role", user.role);
+      }
       if (activeTab === "daily") {
         if (dateFilterType === "last_7_days" || dateFilterType === "last_month") {
           const d = new Date();
@@ -690,6 +728,8 @@ export default function MarketingReportsPage() {
         setDailyFormData({
           date: "",
           campaignName: "",
+          projectId: "",
+          projectName: "",
           clientId: "",
           reach: 0,
           impression: 0,
@@ -1009,7 +1049,9 @@ export default function MarketingReportsPage() {
     }
 
     const matchesSearch =
-      r.campaignName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.campaignName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.projectName &&
+        r.projectName.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (r.clientName &&
         r.clientName.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesClient =
@@ -1038,12 +1080,18 @@ export default function MarketingReportsPage() {
     const matchesMonth =
       monthFilter === "all" ||
       (r.date && normalizeDate(r.date).split("-")[1] === monthMap[monthFilter]);
-    return matchesSearch && matchesClient && matchesDate && matchesMonth;
+      
+    const isDMProject = r.projectId 
+      ? projects.some(p => p.id === r.projectId) 
+      : true;
+
+    return matchesSearch && matchesClient && matchesDate && matchesMonth && isDMProject;
   });
 
   const filteredMonthly = monthlyReports.filter((r) => {
     const matchesSearch =
-      r.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.projectName && r.projectName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (r.clientName && r.clientName.toLowerCase().includes(searchQuery.toLowerCase())) ||
       r.month.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClient =
       selectedClientFilter === "all" || r.clientId === selectedClientFilter;
@@ -1064,9 +1112,9 @@ export default function MarketingReportsPage() {
 
   const groupedPaginatedDaily = paginatedDaily.reduce(
     (acc: Record<string, any[]>, curr) => {
-      const cName = curr.clientName || "Unknown";
-      if (!acc[cName]) acc[cName] = [];
-      acc[cName].push(curr);
+      const pName = curr.projectName || curr.clientName || "Unknown";
+      if (!acc[pName]) acc[pName] = [];
+      acc[pName].push(curr);
       return acc;
     },
     {},
@@ -1171,6 +1219,9 @@ export default function MarketingReportsPage() {
                             Date
                           </TableHead>
                           <TableHead className="font-bold text-slate-700">
+                            Project
+                          </TableHead>
+                          <TableHead className="font-bold text-slate-700">
                             Campaign
                           </TableHead>
                           <TableHead className="text-center font-bold text-slate-700">
@@ -1191,7 +1242,7 @@ export default function MarketingReportsPage() {
                         {clientReportsData.daily.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={6}
+                              colSpan={7}
                               className="text-center py-8 text-slate-400 italic"
                             >
                               No daily reports found.
@@ -1201,6 +1252,7 @@ export default function MarketingReportsPage() {
                           clientReportsData.daily.map((r) => (
                             <TableRow key={r.id}>
                               <TableCell>{normalizeDate(r.date)}</TableCell>
+                              <TableCell>{r.projectName || "N/A"}</TableCell>
                               <TableCell>{r.campaignName}</TableCell>
                               <TableCell className="text-center">
                                 {r.reach}
@@ -1233,6 +1285,9 @@ export default function MarketingReportsPage() {
                           <TableHead className="font-bold text-slate-700">
                             Month
                           </TableHead>
+                          <TableHead className="font-bold text-slate-700">
+                            Project
+                          </TableHead>
                           <TableHead className="text-center font-bold text-slate-700">
                             Total Spend (₹)
                           </TableHead>
@@ -1251,7 +1306,7 @@ export default function MarketingReportsPage() {
                         {clientReportsData.monthly.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={5}
+                              colSpan={6}
                               className="text-center py-8 text-slate-400 italic"
                             >
                               No monthly reports found.
@@ -1262,6 +1317,9 @@ export default function MarketingReportsPage() {
                             <TableRow key={r.id}>
                               <TableCell className="font-medium">
                                 {r.month}
+                              </TableCell>
+                              <TableCell>
+                                {r.projectName || "N/A"}
                               </TableCell>
                               <TableCell className="text-center">
                                 {r.totalSpend}
@@ -1338,7 +1396,7 @@ export default function MarketingReportsPage() {
           <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border shadow-sm mb-6">
             <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
               <Label className="text-xs text-slate-500">
-                Search Campaign or Client
+                Search Campaign, Project or Client
               </Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1479,11 +1537,12 @@ export default function MarketingReportsPage() {
               </div>
               <div className="overflow-auto flex-1 custom-scrollbar p-3 space-y-2">
                 {(() => {
-                  const filteredClients = clients.filter((c) =>
-                    c.companyName
-                      .toLowerCase()
-                      .includes(searchQuery.toLowerCase()),
-                  );
+                  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role);
+                  const filteredClients = clients.filter((c) => {
+                    const matchesSearch = c.companyName.toLowerCase().includes(searchQuery.toLowerCase());
+                    const hasProject = isEmployee ? projects.some((p: any) => p.clientId === c.id) : true;
+                    return matchesSearch && hasProject;
+                  });
                   if (filteredClients.length === 0) {
                     return (
                       <div className="text-center py-8 text-sm text-slate-400 italic">
@@ -1510,6 +1569,9 @@ export default function MarketingReportsPage() {
                         typeof c === "string" ? true : c.isActive,
                       ).length || 0;
 
+                    const clientProjects = projects.filter((p: any) => p.clientId === client.id);
+                    const projectNames = clientProjects.map((p: any) => p.title).join(", ");
+
                     return (
                       <div
                         key={client.id}
@@ -1525,9 +1587,15 @@ export default function MarketingReportsPage() {
                           <div className="overflow-hidden">
                             <div
                               className={`font-semibold truncate ${isSelected ? "text-brand-teal" : "text-slate-700"}`}
+                              title={client.companyName}
                             >
                               {client.companyName}
                             </div>
+                            {projectNames && (
+                              <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[160px]" title={projectNames}>
+                                Project: {projectNames}
+                              </div>
+                            )}
                             <div className="text-xs text-slate-500 mt-0.5">
                               {activeCount} active campaign(s)
                             </div>
@@ -1557,6 +1625,9 @@ export default function MarketingReportsPage() {
                   );
                 }
 
+                const activeClientProjects = projects.filter((p: any) => p.clientId === activeClient.id);
+                const activeProjectNames = activeClientProjects.map((p: any) => p.title).join(", ");
+
                 return (
                   <>
                     <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
@@ -1565,7 +1636,7 @@ export default function MarketingReportsPage() {
                           {activeClient.companyName}
                         </h2>
                         <p className="text-sm text-slate-500 mt-1">
-                          Manage digital marketing campaigns
+                          Manage digital marketing campaigns {activeProjectNames ? `for ${activeProjectNames}` : ""}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1775,7 +1846,7 @@ export default function MarketingReportsPage() {
                         Date
                       </TableHead>
                       <TableHead className="font-bold text-slate-700">
-                        Client
+                        Project
                       </TableHead>
                       <TableHead className="font-bold text-slate-700">
                         Campaign Name
@@ -1941,38 +2012,32 @@ export default function MarketingReportsPage() {
                                                     report.id ? (
                                                       <Select
                                                         onValueChange={(v) => {
-                                                          const client =
-                                                            clients.find(
-                                                              (c) => c.id === v,
-                                                            );
-                                                          setEditFormData({
-                                                            ...editFormData,
-                                                            clientId: v,
-                                                            clientName:
-                                                              client?.companyName,
-                                                          });
+                                                          const project = projects.find(p => p.id === v);
+                                                          if (project) {
+                                                            setEditFormData({
+                                                              ...editFormData,
+                                                              projectId: project.id,
+                                                              projectName: project.title,
+                                                              clientId: project.clientId,
+                                                              clientName: project.clientName,
+                                                            });
+                                                          }
                                                         }}
-                                                        value={
-                                                          editFormData.clientId ||
-                                                          ""
-                                                        }
+                                                        value={editFormData.projectId || ""}
                                                       >
                                                         <SelectTrigger className="h-8 text-xs">
-                                                          <SelectValue placeholder="Select Client" />
+                                                          <SelectValue placeholder="Select Project" />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                          {clients.map((c) => (
-                                                            <SelectItem
-                                                              key={c.id}
-                                                              value={c.id}
-                                                            >
-                                                              {c.companyName}
+                                                          {projects.map((p) => (
+                                                            <SelectItem key={p.id} value={p.id}>
+                                                              {p.title} {p.clientName ? `(${p.clientName})` : ''}
                                                             </SelectItem>
                                                           ))}
                                                         </SelectContent>
                                                       </Select>
                                                     ) : (
-                                                      report.clientName || "N/A"
+                                                      report.projectName || "N/A"
                                                     )}
                                                   </TableCell>
 
@@ -2481,7 +2546,7 @@ export default function MarketingReportsPage() {
                         S.N
                       </TableHead>
                       <TableHead className="font-bold text-slate-700">
-                        Client Name
+                        Project Name
                       </TableHead>
                       <TableHead className="font-bold text-slate-700 text-center">
                         Month
@@ -2567,7 +2632,7 @@ export default function MarketingReportsPage() {
                                       </TableCell>
 
                                       <TableCell className="font-medium text-slate-800">
-                                        {report.clientName || "Unknown"}
+                                        {report.projectName || report.clientName || "Unknown"}
                                       </TableCell>
 
                                       {/* Month Field */}
@@ -2771,20 +2836,29 @@ export default function MarketingReportsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Client Name</Label>
+                <Label>Project Name</Label>
                 <Select
-                  value={dailyFormData.clientId}
-                  onValueChange={(v) =>
-                    setDailyFormData({ ...dailyFormData, clientId: v })
-                  }
+                  value={dailyFormData.projectId}
+                  onValueChange={(v) => {
+                    const project = projects.find(p => p.id === v);
+                    if (project) {
+                      setDailyFormData({
+                        ...dailyFormData,
+                        projectId: project.id,
+                        projectName: project.title,
+                        clientId: project.clientId,
+                        clientName: project.clientName,
+                      });
+                    }
+                  }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select Client" />
+                    <SelectValue placeholder="Select Project" />
                   </SelectTrigger>
                   <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.companyName}
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.title} {project.clientName ? `(${project.clientName})` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2924,25 +2998,29 @@ export default function MarketingReportsPage() {
           <form onSubmit={handleMonthlySubmit} className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Client Name</Label>
+                <Label>Project Name</Label>
                 <Select
-                  value={monthlyFormData.clientId}
+                  value={monthlyFormData.projectId}
                   onValueChange={(v) => {
-                    const client = clients.find((c) => c.id === v);
-                    setMonthlyFormData({
-                      ...monthlyFormData,
-                      clientId: v,
-                      clientName: client?.companyName || "",
-                    });
+                    const project = projects.find(p => p.id === v);
+                    if (project) {
+                      setMonthlyFormData({
+                        ...monthlyFormData,
+                        projectId: project.id,
+                        projectName: project.title,
+                        clientId: project.clientId,
+                        clientName: project.clientName || "",
+                      });
+                    }
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select Client" />
+                    <SelectValue placeholder="Select Project" />
                   </SelectTrigger>
                   <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.companyName}
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.title} {project.clientName ? `(${project.clientName})` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>

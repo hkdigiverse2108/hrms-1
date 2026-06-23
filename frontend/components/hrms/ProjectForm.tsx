@@ -29,6 +29,8 @@ export interface ProjectFormData {
   graphicsRequired?: string;
   postRequired?: string;
   reelRequired?: string;
+  assignedEmployeeId?: string;
+  assignedEmployeeName?: string;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -65,6 +67,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
   });
   const [clients, setClients] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
   const [isLoadingMeta, setIsLoadingMeta] = useState(true);
 
   // Static departments as requested by user earlier
@@ -83,9 +86,10 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
       
       if (cRes.ok) setClients(await cRes.json());
       if (eRes.ok) {
-        const allEmployees = await eRes.json();
+        const allEmployeesData = await eRes.json();
+        setAllEmployees(allEmployeesData);
         // Only show employees who have the role of "Team Leader" or "Admin"
-        setEmployees(allEmployees.filter((emp: any) => emp.role === "Team Leader" || emp.role === "Admin"));
+        setEmployees(allEmployeesData.filter((emp: any) => emp.role === "Team Leader" || emp.role === "Admin"));
       }
     } catch (err) {
       console.error("Error fetching project metadata:", err);
@@ -113,7 +117,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
               <Input
                 id="title"
                 placeholder="e.g. Website Redesign"
-                value={formData.title}
+                value={formData.title || ""}
                 onChange={(e) => handleChange("title", e.target.value)}
                 required
               />
@@ -129,7 +133,9 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
                   <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Client"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {clients.map((client) => (
+                  {clients
+                    .filter(client => !formData.department || client.department === formData.department)
+                    .map((client) => (
                     <SelectItem key={client.id} value={client.id}>
                       {client.companyName}
                     </SelectItem>
@@ -139,7 +145,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 md:grid-cols-${formData.department === "Digital Marketing" ? '3' : '2'} gap-4`}>
             <div className="space-y-2">
               <Label htmlFor="department">Department</Label>
               <Select 
@@ -176,6 +182,35 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
                 </SelectContent>
               </Select>
             </div>
+            {formData.department === "Digital Marketing" && (
+              <div className="space-y-2">
+                <Label htmlFor="assignedEmployeeId">Assign Employee</Label>
+                <Select 
+                  value={formData.assignedEmployeeId || ""} 
+                  onValueChange={(v) => {
+                    const emp = allEmployees.find(e => e.id === v);
+                    setFormData((prev) => ({ 
+                      ...prev, 
+                      assignedEmployeeId: v,
+                      assignedEmployeeName: emp ? `${emp.firstName} ${emp.lastName}` : ""
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="w-full bg-white">
+                    <SelectValue placeholder="Select Employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allEmployees
+                      .filter(emp => emp.department === "Digital Marketing" || emp.department === "Marketing")
+                      .map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName} {emp.role ? `(${emp.role})` : ""}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -184,7 +219,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
               id="description"
               className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               placeholder="Brief project overview..."
-              value={formData.description}
+              value={formData.description || ""}
               onChange={(e) => handleChange("description", e.target.value)}
             />
           </div>
@@ -195,7 +230,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
           <Input
             id="startDate"
             type="date"
-            value={formData.startDate}
+            value={formData.startDate || ""}
             onChange={(e) => handleChange("startDate", e.target.value)}
             required
           />
@@ -205,7 +240,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
           <Input
             id="endDate"
             type="date"
-            value={formData.endDate}
+            value={formData.endDate || ""}
             onChange={(e) => handleChange("endDate", e.target.value)}
           />
         </div>
@@ -251,7 +286,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             id="budget"
             type="number"
             placeholder="0"
-            value={formData.budget}
+            value={formData.budget || ""}
             onChange={(e) => handleChange("budget", e.target.value)}
           />
         </div>
@@ -357,6 +392,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
           </div>
         </div>
       )}
+
 
         </div>
       </ScrollArea>

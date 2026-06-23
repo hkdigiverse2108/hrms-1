@@ -1022,6 +1022,8 @@ class ProjectBase(BaseModel):
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
     status: Optional[str] = "planning"
@@ -1070,6 +1072,8 @@ class ProjectUpdate(BaseModel):
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     startDate: Optional[RobustDate] = None
     endDate: Optional[RobustDate] = None
     status: Optional[str] = None
@@ -1388,10 +1392,14 @@ class MarketingDailyReportBase(BaseModel):
 class MarketingDailyReportCreate(MarketingDailyReportBase):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
 
 class MarketingDailyReportUpdate(BaseModel):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     date: Optional[RobustDate] = None
     campaignName: Optional[str] = None
     reach: Optional[int] = None
@@ -1409,6 +1417,8 @@ class MarketingDailyReport(MarketingDailyReportBase):
     id: str
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -1426,10 +1436,14 @@ class MarketingMonthlyReportBase(BaseModel):
 
 class MarketingMonthlyReportCreate(MarketingMonthlyReportBase):
     clientId: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
 
 class MarketingMonthlyReportUpdate(BaseModel):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     month: Optional[str] = None
     totalSpend: Optional[float] = None
     totalLeads: Optional[int] = None
@@ -1445,6 +1459,8 @@ class MarketingMonthlyReportUpdate(BaseModel):
 class MarketingMonthlyReport(MarketingMonthlyReportBase):
     id: str
     clientId: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     class Config:
         from_attributes = True
 

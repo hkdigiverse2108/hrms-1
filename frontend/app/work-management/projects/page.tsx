@@ -45,9 +45,10 @@ export default function ProjectsPage() {
   const [selectedPriority, setSelectedPriority] = useState("all");
 
   useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canViewProjects) {
-      router.push("/");
+    if (!permissionsLoading && !canViewProjects) {
+      setTimeout(() => {
+        router.push("/");
+      }, 0);
     }
   }, [router, permissionsLoading, canViewProjects]);
   
@@ -427,7 +428,7 @@ export default function ProjectsPage() {
               <SelectItem value="all">All Departments</SelectItem>
               <SelectItem value="Development">Development</SelectItem>
               <SelectItem value="Creative">Creative</SelectItem>
-              <SelectItem value="Marketing">Marketing</SelectItem>
+              <SelectItem value="Digital Marketing">Digital Marketing</SelectItem>
             </SelectContent>
           </Select>
 
