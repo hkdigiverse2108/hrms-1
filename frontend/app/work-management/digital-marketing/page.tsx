@@ -36,7 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { startOfToday, subDays, format, isSameDay } from "date-fns";
+import { startOfToday, subDays, format, isSameDay, differenceInDays, parseISO, isAfter, startOfDay } from "date-fns";
 import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 import {
   Table,
@@ -89,6 +89,54 @@ const monthMap: { [key: string]: string } = {
 const normalizeDate = (dateStr: string) => {
   if (!dateStr) return "";
   return dateStr.split(" ")[0].split("T")[0];
+};
+
+const calculateProjectDays = (project: any) => {
+  if (!project.startDate) return { active: 0, onHold: 0 };
+  
+  const startDate = parseISO(project.startDate);
+  const today = startOfDay(new Date());
+  
+  if (!project.statusHistory || project.statusHistory.length === 0) {
+    const totalDays = Math.max(0, differenceInDays(today, startDate));
+    if (project.status === "on-hold") {
+      return { active: 0, onHold: totalDays };
+    }
+    return { active: totalDays, onHold: 0 };
+  }
+
+  let activeDays = 0;
+  let onHoldDays = 0;
+  
+  const history = [...project.statusHistory].sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  
+  let lastTime = startDate;
+  let lastStatus = "in-progress";
+
+  for (const log of history) {
+    const logTime = startOfDay(parseISO(log.timestamp));
+    if (isAfter(logTime, lastTime)) {
+      const days = differenceInDays(logTime, lastTime);
+      if (lastStatus === "on-hold") {
+        onHoldDays += days;
+      } else {
+        activeDays += days;
+      }
+      lastTime = logTime;
+    }
+    lastStatus = log.status;
+  }
+  
+  if (isAfter(today, lastTime)) {
+    const days = differenceInDays(today, lastTime);
+    if (lastStatus === "on-hold") {
+      onHoldDays += days;
+    } else {
+      activeDays += days;
+    }
+  }
+
+  return { active: Math.max(0, activeDays), onHold: Math.max(0, onHoldDays) };
 };
 
 export default function MarketingReportsPage() {
@@ -158,6 +206,8 @@ export default function MarketingReportsPage() {
   const [selectedClientForCampaigns, setSelectedClientForCampaigns] = useState<
     string | null
   >(null);
+
+  const isActiveClientOnHold = clients?.find((c: any) => c.id === selectedClientForCampaigns)?.status === "on-hold";
   const [selectedClientFilter, setSelectedClientFilter] = useState("all");
   // Pagination State
   const [dailyPage, setDailyPage] = useState(1);
@@ -367,7 +417,9 @@ export default function MarketingReportsPage() {
     avgCPP: 0,
     totalRevenue: 0,
     overallROAS: 0,
-    conclusion: "",
+    employeeConclusion: "",
+    adminConclusion: "",
+    clientConclusion: "",
   });
 
   useEffect(() => {
@@ -763,8 +815,17 @@ export default function MarketingReportsPage() {
     type: "daily" | "monthly",
   ) => {
     if (type === "monthly" && !isAdmin) {
-      toast.error("You do not have permission to edit monthly reports");
-      return;
+      if (field === "employeeConclusion") {
+        const report = clientReportsData.monthly.find((r: any) => r.id === id);
+        const isAssigned = report && projects.some((p: any) => p.clientId === report.clientId && p.assignedEmployeeId === user?.id);
+        if (!isAssigned) {
+          toast.error("You do not have permission to edit this conclusion");
+          return;
+        }
+      } else {
+        toast.error("You do not have permission to edit monthly reports");
+        return;
+      }
     }
     if (type === "daily" && !canEditMarketing) {
       toast.error("You do not have permission to edit reports");
@@ -1500,9 +1561,20 @@ export default function MarketingReportsPage() {
                             >
                               {client.companyName}
                             </div>
-                            {projectNames && (
-                              <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[160px]" title={projectNames}>
-                                Project: {projectNames}
+                            {clientProjects.length > 0 && (
+                              <div className="mt-1 space-y-1">
+                                {clientProjects.map((p: any) => {
+                                  const days = calculateProjectDays(p);
+                                  return (
+                                    <div key={p.id} className="text-[10px] text-slate-500 truncate max-w-[160px]" title={`${p.title} (${days.active}d active)`}>
+                                      <span className="font-medium">{p.title}</span>: 
+                                      <span className="text-emerald-600 font-medium ml-1">{days.active}d active</span>
+                                      {days.onHold > 0 || p.status === 'on-hold' ? (
+                                        <span className="text-amber-600 font-medium ml-1">({days.onHold}d hold)</span>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                             <div className="text-xs text-slate-500 mt-0.5">
@@ -1722,6 +1794,8 @@ export default function MarketingReportsPage() {
                                 onClick={() =>
                                   handleAddCampaign(activeClient.id)
                                 }
+                                disabled={isActiveClientOnHold}
+                                title={isActiveClientOnHold ? "Cannot add campaigns to on-hold clients" : ""}
                               >
                                 Create Campaign
                               </Button>
@@ -2508,8 +2582,14 @@ export default function MarketingReportsPage() {
                       <TableHead className="text-center font-bold text-slate-700">
                         Overall ROAS
                       </TableHead>
-                      <TableHead className="text-center font-bold text-slate-700">
-                        Conclusion
+                      <TableHead className="text-center font-bold text-slate-700 min-w-[150px]">
+                        Employee POV
+                      </TableHead>
+                      <TableHead className="text-center font-bold text-slate-700 min-w-[150px]">
+                        Admin POV
+                      </TableHead>
+                      <TableHead className="text-center font-bold text-slate-700 min-w-[150px]">
+                        Client POV
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
                         Actions
@@ -2625,47 +2705,55 @@ export default function MarketingReportsPage() {
                                         </span>
                                       </TableCell>
 
-                                      {/* Conclusion Field */}
-                                      <TableCell
-                                        className={`text-sm text-slate-500 italic max-w-[200px] truncate ${isAdmin ? "cursor-text hover:bg-slate-50" : ""}`}
-                                        onClick={() => {
-                                          if (isAdmin) {
-                                            setInlineEditing({
-                                              id: report.id,
-                                              field: "conclusion",
-                                            });
-                                          }
-                                        }}
-                                      >
-                                        {inlineEditing?.id === report.id &&
-                                        inlineEditing?.field ===
-                                          "conclusion" ? (
-                                          <Input
-                                            autoFocus
-                                            className="h-8 text-xs outline-none"
-                                            defaultValue={report.conclusion}
-                                            onBlur={(e) =>
-                                              handleInlineUpdate(
-                                                report.id,
-                                                "conclusion",
-                                                e.target.value,
-                                                "monthly",
-                                              )
+                                      {/* Conclusion Fields */}
+                                      {['employeeConclusion', 'adminConclusion', 'clientConclusion'].map((povField) => {
+                                        const isEmpPOV = povField === 'employeeConclusion';
+                                        const isAssignedEmp = isEmployee && projects.some((p: any) => p.clientId === report.clientId && p.assignedEmployeeId === user?.id);
+                                        const canEditThisPOV = isAdmin || (isEmpPOV && isAssignedEmp);
+
+                                        return (
+                                        <TableCell
+                                          key={povField}
+                                          className={`text-sm text-slate-500 italic max-w-[200px] truncate ${canEditThisPOV ? "cursor-text hover:bg-slate-50" : ""}`}
+                                          onClick={() => {
+                                            if (canEditThisPOV) {
+                                              setInlineEditing({
+                                                id: report.id,
+                                                field: povField,
+                                              });
                                             }
-                                            onKeyDown={(e) =>
-                                              e.key === "Enter" &&
-                                              handleInlineUpdate(
-                                                report.id,
-                                                "conclusion",
-                                                e.currentTarget.value,
-                                                "monthly",
-                                              )
-                                            }
-                                          />
-                                        ) : (
-                                          report.conclusion || "-"
-                                        )}
-                                      </TableCell>
+                                          }}
+                                        >
+                                          {inlineEditing?.id === report.id &&
+                                          inlineEditing?.field === povField ? (
+                                            <Input
+                                              autoFocus
+                                              className="h-8 text-xs outline-none"
+                                              defaultValue={report[povField as keyof typeof report] as string}
+                                              onBlur={(e) =>
+                                                handleInlineUpdate(
+                                                  report.id,
+                                                  povField,
+                                                  e.target.value,
+                                                  "monthly",
+                                                )
+                                              }
+                                              onKeyDown={(e) =>
+                                                e.key === "Enter" &&
+                                                handleInlineUpdate(
+                                                  report.id,
+                                                  povField,
+                                                  e.currentTarget.value,
+                                                  "monthly",
+                                                )
+                                              }
+                                            />
+                                          ) : (
+                                            (report[povField as keyof typeof report] as string) || "-"
+                                          )}
+                                        </TableCell>
+                                        );
+                                      })}
 
                                       <TableCell className="text-center">
                                         <div className="flex justify-center gap-1">
@@ -3102,18 +3190,46 @@ export default function MarketingReportsPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Conclusion</Label>
-              <Input
-                placeholder="e.g. Good performance, highly profitable"
-                value={monthlyFormData.conclusion || ""}
-                onChange={(e) =>
-                  setMonthlyFormData({
-                    ...monthlyFormData,
-                    conclusion: e.target.value,
-                  })
-                }
-              />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Employee POV</Label>
+                <Input
+                  placeholder="e.g. Completed requested tasks efficiently."
+                  value={monthlyFormData.employeeConclusion || ""}
+                  onChange={(e) =>
+                    setMonthlyFormData({
+                      ...monthlyFormData,
+                      employeeConclusion: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Admin POV</Label>
+                <Input
+                  placeholder="e.g. Budget utilized properly."
+                  value={monthlyFormData.adminConclusion || ""}
+                  onChange={(e) =>
+                    setMonthlyFormData({
+                      ...monthlyFormData,
+                      adminConclusion: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Client POV</Label>
+                <Input
+                  placeholder="e.g. Happy with the overall performance."
+                  value={monthlyFormData.clientConclusion || ""}
+                  onChange={(e) =>
+                    setMonthlyFormData({
+                      ...monthlyFormData,
+                      clientConclusion: e.target.value,
+                    })
+                  }
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button type="submit" className="bg-brand-teal text-white w-full">

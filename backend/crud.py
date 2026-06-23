@@ -2702,15 +2702,27 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
             else:
                 update_data["nextFollowupDate"] = None
                 
+        try:
+            client_id_obj = ObjectId(client_id)
+            query_client_id = {"$in": [client_id, client_id_obj]}
+        except Exception:
+            query_client_id = client_id
+
         if update_data.get("status") == "on-hold":
             await db.projects.update_many(
-                {"clientId": client_id},
-                {"$set": {"status": "on-hold"}}
+                {"clientId": query_client_id},
+                {
+                    "$set": {"status": "on-hold"},
+                    "$push": {"statusHistory": {"status": "on-hold", "timestamp": get_now().isoformat()}}
+                }
             )
         elif update_data.get("status") == "active":
             await db.projects.update_many(
-                {"clientId": client_id},
-                {"$set": {"status": "in-progress"}}
+                {"clientId": query_client_id},
+                {
+                    "$set": {"status": "in-progress"},
+                    "$push": {"statusHistory": {"status": "in-progress", "timestamp": get_now().isoformat()}}
+                }
             )
             
         await db.clients.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
@@ -2903,6 +2915,9 @@ async def create_project(db, project: schemas.ProjectCreate):
         if employee:
             project_dict["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
             
+    if "statusHistory" not in project_dict or not project_dict["statusHistory"]:
+        project_dict["statusHistory"] = [{"status": project_dict.get("status", "planning"), "timestamp": get_now().isoformat()}]
+            
     result = await db.projects.insert_one(project_dict)
     projectId = str(result.inserted_id)
     
@@ -2948,7 +2963,11 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
             next_date = await calculate_next_followup_date(db, base_date, merged_config)
             update_data["nextFollowupDate"] = next_date
 
-        await db.projects.update_one({"_id": ObjectId(project_id)}, {"$set": update_data})
+        update_query = {"$set": update_data}
+        if "status" in update_data and old_project.get("status") != update_data["status"]:
+            update_query["$push"] = {"statusHistory": {"status": update_data["status"], "timestamp": get_now().isoformat()}}
+
+        await db.projects.update_one({"_id": ObjectId(project_id)}, update_query)
         
         details = []
         if "status" in update_data and old_project.get("status") != update_data["status"]:
@@ -4031,6 +4050,11 @@ async def sync_monthly_marketing_reports(db, date_str: str = None):
                     {"$set": update_data}
                 )
             else:
+                # Check if the client is on-hold before adding a new row
+                client = await db.clients.find_one({"_id": ObjectId(c_id)})
+                if client and client.get("status") == "on-hold":
+                    continue
+                
                 new_report = {
                     "clientId": c_id,
                     "clientName": agg["clientName"],
@@ -4042,7 +4066,9 @@ async def sync_monthly_marketing_reports(db, date_str: str = None):
                     "avgCPP": 0.0,
                     "totalRevenue": round(total_revenue, 2),
                     "overallROAS": overall_roas,
-                    "conclusion": ""
+                    "employeeConclusion": "",
+                    "adminConclusion": "",
+                    "clientConclusion": ""
                 }
                 await db.marketing_monthly_reports.insert_one(new_report)
                 

@@ -1027,6 +1027,7 @@ class ProjectBase(BaseModel):
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
     status: Optional[str] = "planning"
+    statusHistory: Optional[List[dict]] = []
     priority: Optional[str] = "medium"
     budget: Optional[float] = 0
     followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
@@ -1454,7 +1455,9 @@ class MarketingMonthlyReportUpdate(BaseModel):
     avgCPP: Optional[float] = None
     totalRevenue: Optional[float] = None
     overallROAS: Optional[float] = None
-    conclusion: Optional[str] = None
+    employeeConclusion: Optional[str] = None
+    adminConclusion: Optional[str] = None
+    clientConclusion: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
