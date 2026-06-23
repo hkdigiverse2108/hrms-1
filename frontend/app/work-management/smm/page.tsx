@@ -242,7 +242,12 @@ export default function CreativeClientsPage() {
     setIsLoadingFollowupHistory(true);
     try {
       const proj = clientProjects[client.id];
-      const param = proj ? `projectId=${proj.id}` : `clientId=${client.id}`;
+      if (!proj) {
+        setFollowupHistoryLogs([]);
+        setIsLoadingFollowupHistory(false);
+        return;
+      }
+      const param = `projectId=${proj.id}`;
       const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         const data = await res.json();
@@ -344,7 +349,12 @@ export default function CreativeClientsPage() {
     setActiveClient(client);
     try {
       const proj = clientProjects[client.id];
-      const param = proj ? `projectId=${proj.id}` : `clientId=${client.id}`;
+      if (!proj) {
+        setClientLogs([]);
+        setIsLoadingLogs(false);
+        return;
+      }
+      const param = `projectId=${proj.id}`;
       const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         setClientLogs(await res.json());

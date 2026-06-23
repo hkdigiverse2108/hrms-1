@@ -963,7 +963,13 @@ export default function MarketingReportsPage() {
       else if (type === "monthly") param = `monthlyReportId=${report.id}`;
       else {
         const clientProjs = projects.filter((p: any) => p.clientId === report.id);
-        param = clientProjs.length > 0 ? `projectId=${clientProjs[0].id}` : `clientId=${report.id}`;
+        if (clientProjs.length > 0) {
+          param = `projectId=${clientProjs[0].id}`;
+        } else {
+          setReportLogs([]);
+          setIsLoadingLogs(false);
+          return;
+        }
       }
 
       console.log(`Fetching logs from: ${API_URL}/task-logs?${param}`);
