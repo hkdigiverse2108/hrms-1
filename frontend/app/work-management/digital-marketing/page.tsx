@@ -149,6 +149,8 @@ export default function MarketingReportsPage() {
     loading: permissionsLoading,
   } = usePermissions();
 
+  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role);
+
   const getLocalDateString = () => {
     const d = new Date();
     const offset = d.getTimezoneOffset();
@@ -1522,7 +1524,6 @@ export default function MarketingReportsPage() {
               </div>
               <div className="overflow-auto flex-1 custom-scrollbar p-3 space-y-2">
                 {(() => {
-                  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role);
                   const filteredClients = clients.filter((c) => {
                     const matchesSearch = c.companyName.toLowerCase().includes(searchQuery.toLowerCase());
                     const hasProject = isEmployee ? projects.some((p: any) => p.clientId === c.id) : true;
