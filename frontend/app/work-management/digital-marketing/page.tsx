@@ -18,6 +18,7 @@ import {
   Plus,
   Info,
   TrendingUp,
+  Activity,
   Power,
   FileText,
   History,
@@ -81,6 +82,18 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/context/ConfirmContext";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from "recharts";
 
 const monthMap: { [key: string]: string } = {
   January: "01",
@@ -236,6 +249,65 @@ export default function MarketingReportsPage() {
   };
   const [monthlyReports, setMonthlyReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(startOfToday(), 1),
+    to: subDays(startOfToday(), 1)
+  });
+
+  const analysisStats = React.useMemo(() => {
+    let filtered = dailyReports;
+    if (dateRange?.from) {
+      filtered = filtered.filter(r => new Date(r.date) >= dateRange.from!);
+    }
+    if (dateRange?.to) {
+      filtered = filtered.filter(r => new Date(r.date) <= dateRange.to!);
+    }
+
+    let totalSpend = 0;
+    let totalLeads = 0;
+    let totalRevenue = 0;
+    
+    const dailyDataMap: Record<string, any> = {};
+    const employeeDataMap: Record<string, any> = {};
+    const projectDataMap: Record<string, any> = {};
+
+    filtered.forEach(r => {
+      const spend = Number(r.spend) || 0;
+      const leads = Number(r.leads) || 0;
+      const revenue = Number(r.revenue) || 0;
+      
+      totalSpend += spend;
+      totalLeads += leads;
+      totalRevenue += revenue;
+
+      const d = r.date;
+      if(!dailyDataMap[d]) dailyDataMap[d] = { date: d, spend: 0, leads: 0, revenue: 0 };
+      dailyDataMap[d].spend += spend;
+      dailyDataMap[d].leads += leads;
+      dailyDataMap[d].revenue += revenue;
+
+      const emp = r.userName || 'Unknown User';
+      if(!employeeDataMap[emp]) employeeDataMap[emp] = { name: emp, spend: 0, leads: 0, revenue: 0 };
+      employeeDataMap[emp].spend += spend;
+      employeeDataMap[emp].leads += leads;
+      employeeDataMap[emp].revenue += revenue;
+
+      const proj = r.projectName || 'Unknown Project';
+      if(!projectDataMap[proj]) projectDataMap[proj] = { name: proj, spend: 0, leads: 0, revenue: 0 };
+      projectDataMap[proj].spend += spend;
+      projectDataMap[proj].leads += leads;
+      projectDataMap[proj].revenue += revenue;
+    });
+
+    const dailyTrends = Object.values(dailyDataMap).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const employeeStats = Object.values(employeeDataMap).sort((a,b) => b.revenue - a.revenue);
+    const projectStats = Object.values(projectDataMap).sort((a,b) => b.revenue - a.revenue);
+
+    return {
+      totalSpend, totalLeads, totalRevenue, roas: totalSpend > 0 ? (totalRevenue / totalSpend) : 0,
+      dailyTrends, employeeStats, projectStats
+    };
+  }, [dailyReports, dateRange]);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modals
@@ -273,10 +345,6 @@ export default function MarketingReportsPage() {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [monthlyItemsPerPage, setMonthlyItemsPerPage] = useState(10);
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(startOfToday(), 1),
-    to: subDays(startOfToday(), 1)
-  });
   const [monthFilter, setMonthFilter] = useState<string[]>([getLocalMonthString()]);
 
   const handleMonthFilterChange = (val: string) => {
@@ -756,6 +824,8 @@ export default function MarketingReportsPage() {
         body: JSON.stringify({
           ...dailyFormData,
           clientName: client?.companyName || "",
+          performedBy: user?.id,
+          userName: user?.name || user?.firstName || "Unknown User",
         }),
       });
 
@@ -1573,10 +1643,18 @@ export default function MarketingReportsPage() {
             >
               Creative Tasks
             </TabsTrigger>
+            {user?.role?.toLowerCase() === 'admin' && (
+              <TabsTrigger
+                value="analysis"
+                className="px-6 py-2 rounded-md transition-all"
+              >
+                Analysis
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
-        {activeTab !== "clients" && activeTab !== "tasks" && (
+        {activeTab !== "clients" && activeTab !== "tasks" && activeTab !== "analysis" && (
           <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border shadow-sm mb-6">
             <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
               <Label className="text-xs text-slate-500">
@@ -3171,6 +3249,119 @@ export default function MarketingReportsPage() {
         <TabsContent value="tasks" className="flex-1 overflow-hidden mt-0">
           <PendingWorkEmbedded type="all" defaultTaskType="digital-marketing" />
         </TabsContent>
+        {user?.role?.toLowerCase() === 'admin' && (
+          <TabsContent value="analysis" className="flex-1 overflow-y-auto mt-0 px-1 pb-10">
+            <div className="space-y-6">
+              {/* Date Filter */}
+              <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <h3 className="font-bold text-slate-800 text-lg">Marketing Analysis Dashboard</h3>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-slate-500">Date Range:</span>
+                  <DateRangePicker
+                    value={dateRange}
+                    onChange={setDateRange}
+                    className="w-[280px]"
+                  />
+                </div>
+              </div>
+
+              {/* Top Aggregate Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-1 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <TrendingUp className="w-12 h-12 text-blue-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider z-10">Total Spend</span>
+                  <span className="text-3xl font-bold text-slate-800 z-10">₹{analysisStats.totalSpend.toLocaleString()}</span>
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-1 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <Users className="w-12 h-12 text-brand-teal" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider z-10">Total Leads</span>
+                  <span className="text-3xl font-bold text-slate-800 z-10">{analysisStats.totalLeads.toLocaleString()}</span>
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-1 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <BarChart3 className="w-12 h-12 text-emerald-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider z-10">Total Revenue</span>
+                  <span className="text-3xl font-bold text-slate-800 z-10">₹{analysisStats.totalRevenue.toLocaleString()}</span>
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-1 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <BarChart3 className="w-12 h-12 text-indigo-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider z-10">Overall ROAS</span>
+                  <span className="text-3xl font-bold text-slate-800 z-10">{analysisStats.roas.toFixed(2)}x</span>
+                </div>
+              </div>
+
+              {/* Charts Grid */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                
+                {/* Company Trend */}
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm col-span-1 xl:col-span-2">
+                  <h4 className="font-bold text-slate-800 mb-4">Company Trends (Daily)</h4>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={analysisStats.dailyTrends} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="date" tick={{fontSize: 12, fill: '#64748b'}} tickMargin={10} minTickGap={30} />
+                        <YAxis yAxisId="left" tick={{fontSize: 12, fill: '#64748b'}} />
+                        <YAxis yAxisId="right" orientation="right" tick={{fontSize: 12, fill: '#64748b'}} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                        <Line yAxisId="left" type="monotone" dataKey="spend" name="Spend (₹)" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                        <Line yAxisId="left" type="monotone" dataKey="revenue" name="Revenue (₹)" stroke="#10b981" strokeWidth={2} dot={false} />
+                        <Line yAxisId="right" type="monotone" dataKey="leads" name="Leads" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Employee Wise */}
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                  <h4 className="font-bold text-slate-800 mb-4">Employee Performance</h4>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analysisStats.employeeStats} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" tick={{fontSize: 12, fill: '#64748b'}} tickMargin={10} />
+                        <YAxis tick={{fontSize: 12, fill: '#64748b'}} />
+                        <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                        <Bar dataKey="revenue" name="Revenue (₹)" fill="#10b981" radius={[4,4,0,0]} />
+                        <Bar dataKey="spend" name="Spend (₹)" fill="#3b82f6" radius={[4,4,0,0]} />
+                        <Bar dataKey="leads" name="Leads" fill="#0ea5e9" radius={[4,4,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Project Wise */}
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                  <h4 className="font-bold text-slate-800 mb-4">Project Performance</h4>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analysisStats.projectStats} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" tick={{fontSize: 12, fill: '#64748b'}} tickMargin={10} />
+                        <YAxis tick={{fontSize: 12, fill: '#64748b'}} />
+                        <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                        <Bar dataKey="revenue" name="Revenue (₹)" fill="#8b5cf6" radius={[4,4,0,0]} />
+                        <Bar dataKey="spend" name="Spend (₹)" fill="#f59e0b" radius={[4,4,0,0]} />
+                        <Bar dataKey="leads" name="Leads" fill="#f43f5e" radius={[4,4,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Daily Report Modal */}

@@ -1415,6 +1415,8 @@ class MarketingDailyReportCreate(MarketingDailyReportBase):
     clientName: Optional[str] = None
     projectId: Optional[str] = None
     projectName: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class MarketingDailyReportUpdate(BaseModel):
     clientId: Optional[str] = None
@@ -1443,6 +1445,8 @@ class MarketingDailyReport(MarketingDailyReportBase):
     clientName: Optional[str] = None
     projectId: Optional[str] = None
     projectName: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
     class Config:
         from_attributes = True
 
