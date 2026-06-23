@@ -104,10 +104,14 @@ export function ActivityLogDialog({
           if (fromMatch && toMatch) {
             try {
               const extractCampsObj = (s: string) => {
-                const matches = [...s.matchAll(/'name':\s*'([^']+)',\s*'isActive':\s*(True|False)/g)];
+                const dicts = [...s.matchAll(/\{([^{}]+)\}/g)];
                 const obj: Record<string, boolean> = {};
-                matches.forEach(m => {
-                  obj[m[1]] = m[2] === 'True';
+                dicts.forEach(m => {
+                  const nameMatch = m[1].match(/'name':\s*'([^']+)'/);
+                  const isActiveMatch = m[1].match(/'isActive':\s*(True|False)/);
+                  if (nameMatch && isActiveMatch) {
+                    obj[nameMatch[1]] = isActiveMatch[1] === 'True';
+                  }
                 });
                 return obj;
               };

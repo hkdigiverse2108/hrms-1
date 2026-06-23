@@ -182,7 +182,7 @@ export default function MarketingReportsPage() {
   const [projectRemarks, setProjectRemarks] = useState<any[]>([]);
   const [editingRemarks, setEditingRemarks] = useState<string[]>([]);
 
-  const handleUpdateProjectRemark = async (projectId: string, dateStr: string, remark: string) => {
+  const handleUpdateProjectRemark = async (projectId: string, dateStr: string, remark: string, clientId?: string) => {
     try {
       const res = await fetch(`${API_URL}/marketing/project-remarks`, {
         method: "POST",
@@ -190,7 +190,8 @@ export default function MarketingReportsPage() {
         body: JSON.stringify({
           projectId,
           date: dateStr,
-          remark
+          remark,
+          clientId
         })
       });
       if (res.ok) {
@@ -208,6 +209,7 @@ export default function MarketingReportsPage() {
             action: "Daily Follow-up Completed",
             details: `For Date: ${dateStr} - Remark: ${remark}`,
             projectId: projectId,
+            clientId: clientId,
             performedBy: user?.id || user?._id,
             userName: user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown User",
           })
@@ -2588,7 +2590,8 @@ export default function MarketingReportsPage() {
                                                           handleUpdateProjectRemark(
                                                             targetProjectId,
                                                             targetDate,
-                                                            remarkText
+                                                            remarkText,
+                                                            reports[0]?.clientId
                                                           );
                                                           setEditingRemarks(prev => prev.filter(id => id !== `${targetProjectId}_${targetDate}`));
                                                         }}

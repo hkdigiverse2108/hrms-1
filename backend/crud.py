@@ -3748,7 +3748,9 @@ async def update_marketing_daily_report(db, report_id: str, report: schemas.Mark
     
     if changes:
         log_details = f"Daily Report updated: " + ", ".join(changes)
-        await log_activity(db, "Updated", performedBy, userName, log_details, dailyReportId=report_id)
+        client_id = old_report.get("clientId")
+        project_id = old_report.get("projectId")
+        await log_activity(db, "Updated", performedBy, userName, log_details, dailyReportId=report_id, clientId=client_id, projectId=project_id)
         
     doc = await db.marketing_daily_reports.find_one({"_id": ObjectId(report_id)})
     if doc:
