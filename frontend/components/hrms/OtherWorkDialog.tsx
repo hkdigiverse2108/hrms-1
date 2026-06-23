@@ -83,12 +83,12 @@ export function OtherWorkDialog({ source = "other-work" }: { source?: string }) 
       <DialogTrigger asChild>
         <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm h-10 px-4 rounded-lg flex items-center transition-all">
           <Plus className="w-4 h-4 mr-2" />
-          Assign Other Work
+          Assign Creative Work
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold text-slate-800">Assign Other Work</DialogTitle>
+          <DialogTitle className="text-xl font-bold text-slate-800">Assign Creative Work</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="space-y-2">

@@ -12,7 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { API_URL } from '@/lib/config';
 import { toast } from 'sonner';
 
-export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work" }) {
+export function PendingWorkEmbedded({ 
+  type = "pending-work",
+  defaultTaskType = "all"
+}: { 
+  type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work",
+  defaultTaskType?: string
+}) {
   const router = useRouter();
   
   const [entries, setEntries] = useState<any[]>([]);
@@ -23,7 +29,7 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
 
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterStage, setFilterStage] = useState<string>('all');
-  const [filterTaskType, setFilterTaskType] = useState<string>('all');
+  const [filterTaskType, setFilterTaskType] = useState<string>(defaultTaskType);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState<string>('');
 
@@ -233,7 +239,13 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
 
     // Apply Date Filter
     if (filterDate) {
-      filteredTasks = filteredTasks.filter(t => t.deadline === filterDate);
+      filteredTasks = filteredTasks.filter(t => {
+        if (t.isOtherWork) {
+           const assignDateStr = t.created_at ? t.created_at.split('T')[0] : t.deadline;
+           return assignDateStr === filterDate || t.deadline === filterDate;
+        }
+        return t.deadline === filterDate;
+      });
     }
 
     // Apply Type Filter
@@ -244,10 +256,15 @@ export function PendingWorkEmbedded({ type = "pending-work" }: { type?: "pending
         if (t.isOtherWork) {
           if (type === 'completed-work') return t.status === 'Approved';
           if (type === 'pending-work') return t.status === 'Pending' || t.status === 'Ready for Review';
+          
           const deadlineDate = new Date(t.deadline);
           deadlineDate.setHours(0, 0, 0, 0);
-          if (type === 'todays-work') return deadlineDate <= today && t.status === 'Pending';
-          if (type === 'upcoming-work') return deadlineDate > today && t.status === 'Pending';
+          
+          const assignDate = t.created_at ? new Date(t.created_at) : deadlineDate;
+          assignDate.setHours(0, 0, 0, 0);
+
+          if (type === 'todays-work') return (assignDate <= today || deadlineDate <= today) && t.status === 'Pending';
+          if (type === 'upcoming-work') return deadlineDate > today && assignDate > today && t.status === 'Pending';
           return true;
         }
 
