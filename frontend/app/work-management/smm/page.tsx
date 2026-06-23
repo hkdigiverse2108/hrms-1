@@ -241,7 +241,9 @@ export default function CreativeClientsPage() {
   const fetchFollowupHistory = async (client: any) => {
     setIsLoadingFollowupHistory(true);
     try {
-      const res = await fetch(`${API_URL}/task-logs?clientId=${client.id}`);
+      const proj = clientProjects[client.id];
+      const param = proj ? `projectId=${proj.id}` : `clientId=${client.id}`;
+      const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         const data = await res.json();
         setFollowupHistoryLogs(data.filter((l: any) => l.action === "Follow-up Completed"));
@@ -257,6 +259,7 @@ export default function CreativeClientsPage() {
     if (!followupConfigClient || !newRemarkText.trim()) return;
     setIsAddingRemark(true);
     try {
+      const proj = clientProjects[followupConfigClient.id];
       const res = await fetch(`${API_URL}/task-logs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -264,6 +267,7 @@ export default function CreativeClientsPage() {
           action: "Follow-up Completed",
           details: `Remark: ${newRemarkText}`,
           clientId: followupConfigClient.id,
+          projectId: proj?.id,
           performedBy: user?.id,
           userName: user?.name || `${user?.firstName} ${user?.lastName}`,
         })
@@ -339,7 +343,9 @@ export default function CreativeClientsPage() {
     setLogsOpen(true);
     setActiveClient(client);
     try {
-      const res = await fetch(`${API_URL}/task-logs?clientId=${client.id}`);
+      const proj = clientProjects[client.id];
+      const param = proj ? `projectId=${proj.id}` : `clientId=${client.id}`;
+      const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         setClientLogs(await res.json());
       }
@@ -517,6 +523,7 @@ export default function CreativeClientsPage() {
   const handleFollowupCompleteWithRemark = async () => {
     if (!followupRemarkClient) return;
     try {
+      const proj = clientProjects[followupRemarkClient.id];
       if (followupRemarkText.trim()) {
         await fetch(`${API_URL}/task-logs`, {
           method: "POST",
@@ -525,6 +532,7 @@ export default function CreativeClientsPage() {
             action: "Follow-up Completed",
             details: `Remark: ${followupRemarkText}`,
             clientId: followupRemarkClient.id,
+            projectId: proj?.id,
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`,
           })
@@ -682,6 +690,7 @@ export default function CreativeClientsPage() {
       if (res.ok) {
         toast.success("Payment marked as done");
         
+        const proj = clientProjects[client.id];
         await fetch(`${API_URL}/task-logs`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -689,6 +698,7 @@ export default function CreativeClientsPage() {
             action: "Payment Logged",
             details: `Payment recorded on ${today}.`,
             clientId: client.id,
+            projectId: proj?.id,
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`,
           })

@@ -959,7 +959,10 @@ export default function MarketingReportsPage() {
       let param = "";
       if (type === "daily") param = `dailyReportId=${report.id}`;
       else if (type === "monthly") param = `monthlyReportId=${report.id}`;
-      else param = `clientId=${report.id}`;
+      else {
+        const clientProjs = projects.filter((p: any) => p.clientId === report.id);
+        param = clientProjs.length > 0 ? `projectId=${clientProjs[0].id}` : `clientId=${report.id}`;
+      }
 
       console.log(`Fetching logs from: ${API_URL}/task-logs?${param}`);
 
