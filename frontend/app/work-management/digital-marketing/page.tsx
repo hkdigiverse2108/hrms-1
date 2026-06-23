@@ -982,6 +982,17 @@ export default function MarketingReportsPage() {
     document.body.removeChild(link);
   };
 
+  const getTodayStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const isZeroOrEmpty = (val: any) =>
+    !val || val === 0 || val === "0" || String(val).trim() === "";
+
   const startEditingRow = (report: any) => {
     if (!canEditMarketing) return;
     setEditingRowId(report.id);
@@ -990,6 +1001,37 @@ export default function MarketingReportsPage() {
 
   const saveRowEdit = async (id: string, type: "daily" | "monthly") => {
     if (!canEditMarketing) return;
+
+    if (type === "daily") {
+      const report = dailyReports.find(r => r.id === id);
+      if (report) {
+        const isTrulyEmpty =
+          isZeroOrEmpty(report.reach) &&
+          isZeroOrEmpty(report.impression) &&
+          isZeroOrEmpty(report.leads) &&
+          isZeroOrEmpty(report.revenue) &&
+          isZeroOrEmpty(report.followers) &&
+          isZeroOrEmpty(report.spend) &&
+          isZeroOrEmpty(report.cpl) &&
+          isZeroOrEmpty(report.remarks);
+        const isDue = isTrulyEmpty && normalizeDate(report.date) < getTodayStr();
+
+        if (isDue) {
+          const savingEmpty =
+            isZeroOrEmpty(editFormData.reach) &&
+            isZeroOrEmpty(editFormData.impression) &&
+            isZeroOrEmpty(editFormData.leads) &&
+            isZeroOrEmpty(editFormData.spend) &&
+            isZeroOrEmpty(editFormData.cpl);
+            
+          if (savingEmpty && (!editFormData.reason || editFormData.reason.trim() === '')) {
+            toast.error("Please provide a reason before saving an empty report.");
+            return;
+          }
+        }
+      }
+    }
+
     setIsSavingRow(true);
     try {
       const res = await fetch(`${API_URL}/marketing/reports/${type}/${id}`, {
@@ -1121,13 +1163,7 @@ export default function MarketingReportsPage() {
     }
   };
 
-  const getTodayStr = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
+
 
   const filteredDaily = dailyReports.filter((r) => {
     const isEmpty =
@@ -1162,8 +1198,7 @@ export default function MarketingReportsPage() {
       return false;
     }
 
-    const isZeroOrEmpty = (val: any) =>
-      !val || val === 0 || val === "0" || String(val).trim() === "";
+
     const isTrulyEmpty =
       isZeroOrEmpty(r.reach) &&
       isZeroOrEmpty(r.impression) &&
@@ -2120,11 +2155,23 @@ export default function MarketingReportsPage() {
                                               draggableId={String(report.id)}
                                               index={dragIndex}
                                             >
-                                              {(provided) => (
+                                              {(provided) => {
+                                                const isTrulyEmpty =
+                                                  isZeroOrEmpty(report.reach) &&
+                                                  isZeroOrEmpty(report.impression) &&
+                                                  isZeroOrEmpty(report.leads) &&
+                                                  isZeroOrEmpty(report.revenue) &&
+                                                  isZeroOrEmpty(report.followers) &&
+                                                  isZeroOrEmpty(report.spend) &&
+                                                  isZeroOrEmpty(report.cpl) &&
+                                                  isZeroOrEmpty(report.remarks);
+                                                const isDue = isTrulyEmpty && normalizeDate(report.date) < getTodayStr();
+                                                
+                                                return (
                                                 <TableRow
                                                   ref={provided.innerRef}
                                                   {...provided.draggableProps}
-                                                  className="hover:bg-slate-50/50"
+                                                  className={isDue ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-slate-50/50"}
                                                 >
                                                   <TableCell className="text-center w-8">
                                                     <div
@@ -2519,10 +2566,23 @@ export default function MarketingReportsPage() {
                                                   </TableCell>
 
                                                   <TableCell className="text-center">
-                                                    <div className="flex justify-center gap-1">
+                                                    <div className="flex justify-center items-center gap-1">
                                                       {editingRowId ===
                                                       report.id ? (
                                                         <>
+                                                          {isDue && (
+                                                            <Input
+                                                              placeholder="Reason for zero metrics..."
+                                                              className="h-6 text-[10px] w-28 border-red-300 focus-visible:ring-red-300"
+                                                              value={editFormData.reason || ""}
+                                                              onChange={(e) =>
+                                                                setEditFormData({
+                                                                  ...editFormData,
+                                                                  reason: e.target.value,
+                                                                })
+                                                              }
+                                                            />
+                                                          )}
                                                           <Button
                                                             size="icon"
                                                             variant="ghost"
@@ -2558,6 +2618,14 @@ export default function MarketingReportsPage() {
                                                         </>
                                                       ) : (
                                                         <>
+                                                          {isDue && report.reason && (
+                                                            <span className="text-[10px] text-red-600 font-medium max-w-[80px] truncate mr-1" title={report.reason}>
+                                                              {report.reason}
+                                                            </span>
+                                                          )}
+                                                          {isDue && !report.reason && (
+                                                            <Badge variant="outline" className="text-[9px] bg-red-100 text-red-600 border-red-200 px-1 py-0 shadow-none mr-1">DUE</Badge>
+                                                          )}
                                                           <Button
                                                             variant="ghost"
                                                             size="icon"
@@ -2620,7 +2688,8 @@ export default function MarketingReportsPage() {
                                                     </div>
                                                   </TableCell>
                                                 </TableRow>
-                                              )}
+                                                );
+                                              }}
                                             </Draggable>
                                           );
                                         })}

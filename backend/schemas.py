@@ -1406,6 +1406,7 @@ class MarketingDailyReportBase(BaseModel):
     cpl: float = 0
     revenue: float = 0
     remarks: Optional[str] = None
+    reason: Optional[str] = None
     campaignOptimization: bool = False
     leadsFileUrl: Optional[str] = None
 
@@ -1430,6 +1431,7 @@ class MarketingDailyReportUpdate(BaseModel):
     cpl: Optional[float] = None
     revenue: Optional[float] = None
     remarks: Optional[str] = None
+    reason: Optional[str] = None
     campaignOptimization: Optional[bool] = None
     leadsFileUrl: Optional[str] = None
     performedBy: Optional[str] = None

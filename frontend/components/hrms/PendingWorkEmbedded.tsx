@@ -193,7 +193,7 @@ export function PendingWorkEmbedded({
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
           tasks.push({
             ...ow,
-            clientDisplayName: `Assigned by ${ow.assignerName}`,
+            clientDisplayName: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Other Work',
             clientId: 'other-work',
             stage: ow.status,
             deadline: ow.deadline,
@@ -418,12 +418,20 @@ export function PendingWorkEmbedded({
                       </Badge>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-800">{item.taskName}</span>
-                        {item.monthYear && (
-                          <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                            {item.monthYear}
-                          </span>
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-800">{item.taskName}</span>
+                          {item.monthYear && (
+                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                              {item.monthYear}
+                            </span>
+                          )}
+                        </div>
+                        {item.isOtherWork && (item.assignerName || item.assigneeName) && (
+                          <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            {item.assignerName && <div>Assigned by: <span className="font-medium text-slate-700">{item.assignerName}</span></div>}
+                            {item.assigneeName && <div>Assigned to: <span className="font-medium text-slate-700">{item.assigneeName}</span></div>}
+                          </div>
                         )}
                       </div>
                     </td>
