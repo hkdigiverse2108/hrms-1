@@ -3582,7 +3582,7 @@ async def create_marketing_daily_report(db, report: schemas.MarketingDailyReport
     report_dict["id"] = str(result.inserted_id)
     return report_dict
 
-async def get_marketing_daily_reports(db, client_id: str = None, date: str = None, user_info: dict = None):
+async def get_marketing_daily_reports(db, client_id: str = None, date: str = None, start_date: str = None, end_date: str = None, user_info: dict = None):
     query = {}
     if user_info:
         role = str(user_info.get("role", "")).lower()
@@ -3602,6 +3602,8 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
             query["date"] = {"$in": [date, parsed_date, dt_val]}
         except Exception:
             query["date"] = date
+    elif start_date and end_date:
+        query["date"] = {"$gte": start_date, "$lte": end_date}
     cursor = db.marketing_daily_reports.find(query).sort("date", -1)
     reports = []
     async for doc in cursor:

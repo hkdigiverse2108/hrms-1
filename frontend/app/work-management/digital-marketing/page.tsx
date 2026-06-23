@@ -161,8 +161,25 @@ export default function MarketingReportsPage() {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [monthlyItemsPerPage, setMonthlyItemsPerPage] = useState(10);
 
+  const [dateFilterType, setDateFilterType] = useState("yesterday"); // today, yesterday, last_7_days, last_month, custom
+  const [customDateFilter, setCustomDateFilter] = useState(getYesterdayDateString());
   const [dateFilter, setDateFilter] = useState(getYesterdayDateString());
   const [monthFilter, setMonthFilter] = useState(getLocalMonthString());
+
+  const handleDateFilterTypeChange = (val: string) => {
+    setDateFilterType(val);
+    if (val === "today") setDateFilter(getLocalDateString());
+    else if (val === "yesterday") setDateFilter(getYesterdayDateString());
+    else if (val === "custom") setDateFilter(customDateFilter);
+    else setDateFilter(""); // disables auto-generate check for range filters
+  };
+
+  const handleCustomDateChange = (val: string) => {
+    setCustomDateFilter(val);
+    if (dateFilterType === "custom") {
+      handleDateFilterChange(val);
+    }
+  };
 
   const handleDateFilterChange = (val: string) => {
     setDateFilter(val);
@@ -504,6 +521,7 @@ export default function MarketingReportsPage() {
     activeTab,
     selectedClientFilter,
     dateFilter,
+    dateFilterType,
     monthFilter,
     permissionsLoading,
     canViewMarketing,
@@ -538,7 +556,38 @@ export default function MarketingReportsPage() {
       if (selectedClientFilter !== "all")
         params.append("client_id", selectedClientFilter);
       if (activeTab === "daily") {
-        if (!dateFilter) {
+        if (dateFilterType === "last_7_days" || dateFilterType === "last_month") {
+          const d = new Date();
+          const today = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+          let end = today.toISOString().split("T")[0];
+          let start = "";
+          if (dateFilterType === "last_7_days") {
+            const startD = new Date(today);
+            startD.setDate(today.getDate() - 6);
+            start = startD.toISOString().split("T")[0];
+          } else if (dateFilterType === "last_month") {
+            const startD = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            const endD = new Date(today.getFullYear(), today.getMonth(), 0);
+            start = new Date(startD.getTime() - startD.getTimezoneOffset() * 60000).toISOString().split("T")[0];
+            end = new Date(endD.getTime() - endD.getTimezoneOffset() * 60000).toISOString().split("T")[0];
+          }
+          params.append("start_date", start);
+          params.append("end_date", end);
+          
+          const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
+          if (res.ok) {
+            const data = await res.json();
+            const seen = new Set();
+            const uniqueData = data.filter((r: any) => {
+              const key = `${normalizeDate(r.date)}-${r.clientId}-${r.campaignName}`;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
+            setDailyReports(uniqueData);
+            fetchedDateRef.current = "";
+          }
+        } else if (!dateFilter) {
           const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
           if (res.ok) {
             const data = await res.json();
@@ -1324,14 +1373,28 @@ export default function MarketingReportsPage() {
               </Select>
             </div>
             {activeTab === "daily" && (
-              <div className="w-[150px] space-y-1.5">
+              <div className="w-[150px] space-y-1.5 flex flex-col gap-1.5">
                 <Label className="text-xs text-slate-500">Filter by Date</Label>
-                <Input
-                  type="date"
-                  className="h-9 w-full"
-                  value={dateFilter}
-                  onChange={(e) => handleDateFilterChange(e.target.value)}
-                />
+                <Select value={dateFilterType} onValueChange={handleDateFilterTypeChange}>
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue placeholder="Date Range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="yesterday">Yesterday</SelectItem>
+                    <SelectItem value="last_7_days">Last 7 Days</SelectItem>
+                    <SelectItem value="last_month">Last Month</SelectItem>
+                    <SelectItem value="custom">Custom Date</SelectItem>
+                  </SelectContent>
+                </Select>
+                {dateFilterType === "custom" && (
+                  <Input
+                    type="date"
+                    className="h-9 w-full mt-2"
+                    value={customDateFilter}
+                    onChange={(e) => handleCustomDateChange(e.target.value)}
+                  />
+                )}
               </div>
             )}
             {activeTab === "monthly" && (
@@ -1381,6 +1444,8 @@ export default function MarketingReportsPage() {
                   className="h-9 px-2 text-xs font-medium text-rose-500 hover:text-rose-700 hover:bg-rose-50 ml-2"
                   onClick={() => {
                     setSelectedClientFilter("all");
+                    setDateFilterType("yesterday");
+                    setCustomDateFilter(getYesterdayDateString());
                     setDateFilter(getYesterdayDateString());
                     setMonthFilter(getLocalMonthString());
                     setSearchQuery("");

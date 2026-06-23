@@ -1278,8 +1278,8 @@ async def create_marketing_daily_report(report: schemas.MarketingDailyReportCrea
     return await crud.create_marketing_daily_report(db, report)
 
 @app.get("/marketing/reports/daily", response_model=List[schemas.MarketingDailyReport])
-async def get_marketing_daily_reports(client_id: str = None, date: str = None, db=Depends(get_db), token_payload: dict = Depends(auth.require_auth)):
-    return await crud.get_marketing_daily_reports(db, client_id, date, user_info=token_payload)
+async def get_marketing_daily_reports(client_id: str = None, date: str = None, start_date: str = None, end_date: str = None, db=Depends(get_db), token_payload: dict = Depends(auth.require_auth)):
+    return await crud.get_marketing_daily_reports(db, client_id, date, start_date, end_date, user_info=token_payload)
 
 @app.put("/marketing/reports/daily/{report_id}", response_model=schemas.MarketingDailyReport)
 async def update_marketing_daily_report(report_id: str, report: schemas.MarketingDailyReportUpdate, db=Depends(get_db)):
