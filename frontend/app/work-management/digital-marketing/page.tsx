@@ -39,6 +39,7 @@ import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { startOfToday, subDays, format, isSameDay, differenceInDays, parseISO, isAfter, startOfDay } from "date-fns";
 import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
+import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
 import {
   Table,
   TableBody,
@@ -1464,10 +1465,16 @@ export default function MarketingReportsPage() {
             >
               Clients
             </TabsTrigger>
+            <TabsTrigger
+              value="tasks"
+              className="px-6 py-2 rounded-md transition-all"
+            >
+              Creative Tasks
+            </TabsTrigger>
           </TabsList>
         </div>
 
-        {activeTab !== "clients" && (
+        {activeTab !== "clients" && activeTab !== "tasks" && (
           <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border shadow-sm mb-6">
             <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
               <Label className="text-xs text-slate-500">
@@ -2996,6 +3003,9 @@ export default function MarketingReportsPage() {
               itemName="monthly reports"
             />
           </div>
+        </TabsContent>
+        <TabsContent value="tasks" className="flex-1 overflow-hidden mt-0">
+          <PendingWorkEmbedded type="all" defaultTaskType="digital-marketing" />
         </TabsContent>
       </Tabs>
 

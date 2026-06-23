@@ -90,7 +90,7 @@ def run_app():
     # Ensure standard env vars are set
     os.environ["HOST"] = app_host
     os.environ["UVICORN_HOST"] = app_host
-    os.environ["NODE_OPTIONS"] = "--max-old-space-size=2048"
+    os.environ["NODE_OPTIONS"] = "--max-old-space-size=8192"
 
     print("=" * 60)
     print(f"  HRMS Application Launcher (Like Sahjanand)")

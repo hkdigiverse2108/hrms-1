@@ -16,7 +16,7 @@ export function PendingWorkEmbedded({
   type = "pending-work",
   defaultTaskType = "all"
 }: { 
-  type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work",
+  type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work" | "all",
   defaultTaskType?: string
 }) {
   const router = useRouter();
@@ -189,8 +189,8 @@ export function PendingWorkEmbedded({
       else if (ow.status === 'Ready for Review') canSee = isAssigner || isAssignee;
       else if (ow.status === 'Approved') canSee = isAssignee || isAssigner; // Show in completed
 
-      if (!isEmployeeOrIntern || canSee) {
-        if (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved') {
+      if (!isEmployeeOrIntern || canSee || type === 'all') {
+        if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
           tasks.push({
             ...ow,
             clientDisplayName: `Assigned by ${ow.assignerName}`,
@@ -248,8 +248,7 @@ export function PendingWorkEmbedded({
       });
     }
 
-    // Apply Type Filter
-    if (type) {
+    if (type && type !== 'all') {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       filteredTasks = filteredTasks.filter(t => {
@@ -298,7 +297,7 @@ export function PendingWorkEmbedded({
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <ClipboardList className="w-5 h-5 text-brand-teal" />
           <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : 'Pending Work'}
+            {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : type === 'all' ? 'All Tasks' : 'Pending Work'}
           </h2>
         </div>
         
