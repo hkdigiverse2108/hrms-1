@@ -1378,6 +1378,23 @@ class SystemSettings(SystemSettingsBase):
         from_attributes = True
 
 # Marketing Report Schemas
+class ProjectDailyRemarkBase(BaseModel):
+    projectId: str
+    clientId: Optional[str] = None
+    date: RobustDate
+    remark: Optional[str] = None
+
+class ProjectDailyRemarkCreate(ProjectDailyRemarkBase):
+    pass
+
+class ProjectDailyRemarkUpdate(BaseModel):
+    remark: Optional[str] = None
+
+class ProjectDailyRemark(ProjectDailyRemarkBase):
+    id: str
+    class Config:
+        from_attributes = True
+
 class MarketingDailyReportBase(BaseModel):
     date: RobustDate
     campaignName: str

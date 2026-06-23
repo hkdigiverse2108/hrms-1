@@ -1329,8 +1329,33 @@ async def update_marketing_daily_report(report_id: str, report: schemas.Marketin
 async def delete_marketing_daily_report(report_id: str, db=Depends(get_db)):
     success = await crud.delete_marketing_daily_report(db, report_id)
     if not success:
+        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Daily report not found")
     return {"message": "Daily report deleted"}
+
+@app.post("/marketing/project-remarks", response_model=schemas.ProjectDailyRemark)
+async def upsert_project_daily_remark(remark: schemas.ProjectDailyRemarkCreate, db=Depends(get_db)):
+    doc = remark.model_dump(mode='json')
+    result = await db.marketing_project_daily_remarks.update_one(
+        {"projectId": remark.projectId, "date": str(remark.date)},
+        {"$set": doc},
+        upsert=True
+    )
+    saved = await db.marketing_project_daily_remarks.find_one({"projectId": remark.projectId, "date": str(remark.date)})
+    return crud.fix_id(saved)
+
+@app.get("/marketing/project-remarks", response_model=List[schemas.ProjectDailyRemark])
+async def get_project_daily_remarks(clientId: Optional[str] = None, startDate: Optional[str] = None, endDate: Optional[str] = None, db=Depends(get_db)):
+    query = {}
+    if clientId:
+        query["clientId"] = clientId
+    if startDate and endDate:
+        query["date"] = {"$gte": startDate, "$lte": endDate}
+    elif startDate:
+        query["date"] = startDate
+        
+    remarks = await db.marketing_project_daily_remarks.find(query).to_list(1000)
+    return [crud.fix_id(r) for r in remarks]
 
 @app.post("/marketing/reports/monthly", response_model=schemas.MarketingMonthlyReport)
 async def create_marketing_monthly_report(report: schemas.MarketingMonthlyReportCreate, db=Depends(get_db)):
