@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -90,3 +91,71 @@ export const exportToPDF = (data: any[], fileName: string) => {
 
 // Keep exportToCSV as an alias to exportToPDF for complete backward compatibility
 export const exportToCSV = exportToPDF;
+
+export const exportToExcel = (data: any[], fileName: string) => {
+  if (!data || data.length === 0) {
+    toast.error("No data available to export.");
+    return;
+  }
+
+  try {
+    // Extract column keys
+    const headers = Object.keys(data[0]);
+
+    // Format headers for premium display
+    const displayHeaders = headers.map((h) =>
+      h
+        .replace(/([A-Z])/g, " $1") // Insert space before capitals
+        .replace(/^./, (str) => str.toUpperCase()) // Capitalize first letter
+        .replace(/[-_]/g, " ") // Replace hyphens and underscores with spaces
+        .trim()
+    );
+
+    // Create worksheet data
+    const wsData = [displayHeaders];
+    data.forEach((row) => {
+      wsData.push(
+        headers.map((h) => {
+          const val = row[h];
+          if (val !== null && val !== undefined) {
+            if (typeof val === "object") {
+              try {
+                return JSON.stringify(val);
+              } catch {
+                return String(val);
+              }
+            }
+            return val; // Allow native types for Excel
+          }
+          return "";
+        })
+      );
+    });
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Auto-size columns based on content length
+    const colWidths = displayHeaders.map((header, i) => {
+      let maxLen = header.length;
+      wsData.forEach((row) => {
+        const cellValue = row[i] ? String(row[i]) : "";
+        if (cellValue.length > maxLen) {
+          maxLen = cellValue.length;
+        }
+      });
+      return { wch: Math.min(maxLen + 2, 50) }; // cap at 50 chars
+    });
+    ws["!cols"] = colWidths;
+
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+
+    // Write file and trigger download
+    XLSX.writeFile(wb, `${fileName}.xlsx`);
+    toast.success("Excel report downloaded successfully.");
+  } catch (error) {
+    console.error("Excel generation failed:", error);
+    toast.error("Failed to generate Excel. Please try again.");
+  }
+};
