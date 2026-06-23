@@ -3901,6 +3901,9 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: str = 
             "avgCPR": cpr,
             "avgCPP": 0,
             "overallROAS": roas,
+            "employeeConclusion": manual.get("employeeConclusion") or "",
+            "adminConclusion": manual.get("adminConclusion") or "",
+            "clientConclusion": manual.get("clientConclusion") or "",
             "conclusion": manual.get("conclusion") or ""
         }
         results.append(report)
@@ -3919,6 +3922,9 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: str = 
             doc["avgCPR"] = float(doc.get("avgCPR") or 0)
             doc["avgCPP"] = float(doc.get("avgCPP") or 0)
             doc["overallROAS"] = float(doc.get("overallROAS") or 0)
+            doc["employeeConclusion"] = doc.get("employeeConclusion") or ""
+            doc["adminConclusion"] = doc.get("adminConclusion") or ""
+            doc["clientConclusion"] = doc.get("clientConclusion") or ""
             doc["conclusion"] = doc.get("conclusion") or ""
             results.append(doc)
             

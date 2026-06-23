@@ -2921,3 +2921,5 @@ if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8001)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
     uvicorn.run(app, host="127.0.0.1", port=port)
+
+# Trigger reload

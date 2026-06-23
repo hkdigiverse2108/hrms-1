@@ -33,6 +33,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -2601,7 +2602,7 @@ export default function MarketingReportsPage() {
                         Total Leads
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
-                        Avg CPR
+                        Avg CP
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
                         Total Revenue
@@ -2709,7 +2710,7 @@ export default function MarketingReportsPage() {
                                         ).toLocaleString()}
                                       </TableCell>
 
-                                      {/* Avg CPR Field */}
+                                      {/* Avg CP Field */}
                                       <TableCell className="text-center">
                                         ₹
                                         {(Number(report.avgCPR) || 0).toFixed(
@@ -2758,9 +2759,10 @@ export default function MarketingReportsPage() {
                                         >
                                           {inlineEditing?.id === report.id &&
                                           inlineEditing?.field === povField ? (
-                                            <Input
+                                            <Textarea
                                               autoFocus
-                                              className="h-8 text-xs outline-none"
+                                              id={`inline-edit-${report.id}-${povField}`}
+                                              className="min-h-[80px] text-xs outline-none"
                                               defaultValue={report[povField as keyof typeof report] as string}
                                               onBlur={(e) =>
                                                 handleInlineUpdate(
@@ -2770,15 +2772,19 @@ export default function MarketingReportsPage() {
                                                   "monthly",
                                                 )
                                               }
-                                              onKeyDown={(e) =>
-                                                e.key === "Enter" &&
-                                                handleInlineUpdate(
-                                                  report.id,
-                                                  povField,
-                                                  e.currentTarget.value,
-                                                  "monthly",
-                                                )
-                                              }
+                                              onKeyDown={(e) => {
+                                                // Allow native Enter to create new lines
+                                                // Save on Ctrl+Enter as a shortcut, or just rely on Blur
+                                                if (e.key === "Enter" && e.ctrlKey) {
+                                                  e.preventDefault();
+                                                  handleInlineUpdate(
+                                                    report.id,
+                                                    povField,
+                                                    e.currentTarget.value,
+                                                    "monthly",
+                                                  );
+                                                }
+                                              }}
                                             />
                                           ) : (
                                             (report[povField as keyof typeof report] as string) || "-"
@@ -2789,16 +2795,36 @@ export default function MarketingReportsPage() {
 
                                       <TableCell className="text-center">
                                         <div className="flex justify-center gap-1">
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-                                            onClick={() =>
-                                              fetchLogs(report, "monthly")
-                                            }
-                                          >
-                                            <History className="w-4 h-4" />
-                                          </Button>
+                                          {inlineEditing?.id === report.id ? (
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-8 w-8 text-emerald-600 hover:bg-emerald-50"
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                              }}
+                                              onClick={() => {
+                                                const povField = inlineEditing.field;
+                                                const input = document.getElementById(`inline-edit-${report.id}-${povField}`) as HTMLInputElement;
+                                                if (input) {
+                                                  handleInlineUpdate(report.id, povField, input.value, "monthly");
+                                                }
+                                              }}
+                                            >
+                                              <Check className="w-4 h-4" />
+                                            </Button>
+                                          ) : (
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                              onClick={() =>
+                                                fetchLogs(report, "monthly")
+                                              }
+                                            >
+                                              <History className="w-4 h-4" />
+                                            </Button>
+                                          )}
                                         </div>
                                       </TableCell>
                                     </TableRow>
@@ -3169,7 +3195,7 @@ export default function MarketingReportsPage() {
             </div>
             <div className="grid grid-cols-4 gap-4">
               <div className="space-y-2">
-                <Label>Avg CPR</Label>
+                <Label>Avg CP</Label>
                 <Input
                   type="number"
                   value={monthlyFormData.avgCPR}
