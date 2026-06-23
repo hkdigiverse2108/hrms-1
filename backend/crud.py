@@ -3897,8 +3897,91 @@ async def update_marketing_monthly_report(db, report_id: str, report: schemas.Ma
     return None
 
 async def delete_marketing_monthly_report(db, report_id: str):
-    result = await db.marketing_monthly_reports.delete_one({"_id": ObjectId(report_id)})
-    return result.deleted_count > 0
+    res = await db.marketing_monthly_reports.delete_one({"_id": ObjectId(report_id)})
+    if res.deleted_count > 0:
+        await log_activity(db, "Deleted", "Admin", "N/A", f"Marketing Monthly Report was deleted.", monthlyReportId=report_id)
+    return res.deleted_count > 0
+
+async def sync_monthly_marketing_reports(db, date_str: str = None):
+    try:
+        if not date_str:
+            now = get_now()
+            date_str = now.strftime("%Y-%m-%d")
+        else:
+            now = datetime.strptime(date_str, "%Y-%m-%d")
+
+        year_month = now.strftime("%Y-%m") # e.g. "2026-06"
+        month_name = now.strftime("%B")    # e.g. "June"
+        
+        cursor = db.marketing_daily_reports.find({"date": {"$regex": f"^{year_month}"}})
+        daily_reports = await cursor.to_list(length=10000)
+        
+        client_aggregates = {}
+        for r in daily_reports:
+            c_id = str(r.get("clientId"))
+            if not c_id or c_id == "None": continue
+            if c_id not in client_aggregates:
+                client_aggregates[c_id] = {
+                    "clientName": r.get("clientName", "Unknown"),
+                    "totalSpend": 0.0,
+                    "totalLeads": 0,
+                    "totalRevenue": 0.0
+                }
+            
+            try:
+                client_aggregates[c_id]["totalSpend"] += float(r.get("spend") or 0)
+                client_aggregates[c_id]["totalLeads"] += int(r.get("leads") or 0)
+                client_aggregates[c_id]["totalRevenue"] += float(r.get("revenue") or 0)
+            except Exception:
+                pass
+                
+        for c_id, agg in client_aggregates.items():
+            total_spend = agg["totalSpend"]
+            total_leads = agg["totalLeads"]
+            total_revenue = agg["totalRevenue"]
+            
+            avg_cpr = round(total_spend / total_leads, 2) if total_leads > 0 else 0.0
+            overall_roas = round(total_revenue / total_spend, 2) if total_spend > 0 else 0.0
+            
+            existing = await db.marketing_monthly_reports.find_one({
+                "clientId": c_id,
+                "month": month_name
+            })
+            
+            if existing:
+                total_sales = existing.get("totalSales", 0)
+                avg_cpp = round(total_spend / total_sales, 2) if total_sales > 0 else 0.0
+                
+                update_data = {
+                    "totalSpend": round(total_spend, 2),
+                    "totalLeads": total_leads,
+                    "totalRevenue": round(total_revenue, 2),
+                    "avgCPR": avg_cpr,
+                    "avgCPP": avg_cpp,
+                    "overallROAS": overall_roas
+                }
+                await db.marketing_monthly_reports.update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": update_data}
+                )
+            else:
+                new_report = {
+                    "clientId": c_id,
+                    "clientName": agg["clientName"],
+                    "month": month_name,
+                    "totalSpend": round(total_spend, 2),
+                    "totalLeads": total_leads,
+                    "totalSales": 0,
+                    "avgCPR": avg_cpr,
+                    "avgCPP": 0.0,
+                    "totalRevenue": round(total_revenue, 2),
+                    "overallROAS": overall_roas,
+                    "conclusion": ""
+                }
+                await db.marketing_monthly_reports.insert_one(new_report)
+                
+    except Exception as e:
+        print(f"Error syncing monthly marketing reports: {e}", flush=True)
 
 # Penalty Type CRUD
 async def get_penalty_types(db, skip: int = 0, limit: int = 100):

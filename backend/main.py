@@ -171,6 +171,38 @@ async def feedback_reminder_task():
             
         await asyncio.sleep(300) # Sleep for 5 minutes
 
+async def monthly_report_scheduler_task():
+    from database import db
+    import crud
+    from datetime import timedelta
+    
+    print("[Monthly Report Scheduler] Task started.", flush=True)
+    await asyncio.sleep(20) # wait for startup
+    
+    while True:
+        try:
+            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+            
+            # Run every night at 23:45
+            if now.hour == 23 and now.minute >= 45:
+                await crud.sync_monthly_marketing_reports(db)
+                print(f"[Monthly Report Scheduler] Synced reports for {now.strftime('%B %Y')}", flush=True)
+                await asyncio.sleep(7200) # Sleep for 2 hours to avoid running multiple times
+                continue
+                
+            # On the 1st of the month, run a final sync for the previous month shortly after midnight
+            if now.day == 1 and now.hour == 0 and now.minute >= 5:
+                prev_day = now - timedelta(days=1)
+                await crud.sync_monthly_marketing_reports(db, date_str=prev_day.strftime("%Y-%m-%d"))
+                print(f"[Monthly Report Scheduler] Final sync for previous month: {prev_day.strftime('%B %Y')}", flush=True)
+                await asyncio.sleep(7200) # Sleep for 2 hours
+                continue
+                
+        except Exception as e:
+            print(f"[Monthly Report Scheduler] Error: {e}", flush=True)
+            
+        await asyncio.sleep(300) # Sleep for 5 minutes
+
 @asynccontextmanager
 async def lifespan(app):
     # --- Startup ---
@@ -376,6 +408,7 @@ async def lifespan(app):
 
     reminder_task = asyncio.create_task(content_calendar_reminder_task())
     feedback_task = asyncio.create_task(feedback_reminder_task())
+    monthly_report_task = asyncio.create_task(monthly_report_scheduler_task())
     yield
     # --- Shutdown ---
     try:
@@ -389,6 +422,8 @@ async def lifespan(app):
             reminder_task.cancel()
         if not feedback_task.done():
             feedback_task.cancel()
+        if not monthly_report_task.done():
+            monthly_report_task.cancel()
     except Exception:
         pass
     # Reload trigger: 1
