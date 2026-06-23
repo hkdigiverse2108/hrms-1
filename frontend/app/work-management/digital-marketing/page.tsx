@@ -2338,20 +2338,24 @@ export default function MarketingReportsPage() {
                                                   >
                                                     {editingRowId ===
                                                     report.id ? (
-                                                      <Input
-                                                        className="h-8 text-xs text-center outline-none"
-                                                        value={
-                                                          editFormData.remarks ||
-                                                          ""
-                                                        }
-                                                        onChange={(e) =>
+                                                      <Select
+                                                        value={editFormData.remarks || ""}
+                                                        onValueChange={(val) =>
                                                           setEditFormData({
                                                             ...editFormData,
-                                                            remarks:
-                                                              e.target.value,
+                                                            remarks: val,
                                                           })
                                                         }
-                                                      />
+                                                      >
+                                                        <SelectTrigger className="h-8 text-xs">
+                                                          <SelectValue placeholder="Select" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                          <SelectItem value="Positive">Positive</SelectItem>
+                                                          <SelectItem value="Neutral">Neutral</SelectItem>
+                                                          <SelectItem value="Negative">Negative</SelectItem>
+                                                        </SelectContent>
+                                                      </Select>
                                                     ) : (
                                                       report.remarks || "-"
                                                     )}
@@ -2983,16 +2987,24 @@ export default function MarketingReportsPage() {
 
               <div className="space-y-2">
                 <Label>Remarks</Label>
-                <Input
-                  placeholder="e.g. High impression campaign"
+                <Select
                   value={dailyFormData.remarks || ""}
-                  onChange={(e) =>
+                  onValueChange={(val) =>
                     setDailyFormData({
                       ...dailyFormData,
-                      remarks: e.target.value,
+                      remarks: val,
                     })
                   }
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select remark" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Positive">Positive</SelectItem>
+                    <SelectItem value="Neutral">Neutral</SelectItem>
+                    <SelectItem value="Negative">Negative</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter>
