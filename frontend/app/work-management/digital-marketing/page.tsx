@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -1878,9 +1879,6 @@ export default function MarketingReportsPage() {
                         Cost Metric (₹)
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
-                        Optimization
-                      </TableHead>
-                      <TableHead className="text-center font-bold text-slate-700">
                         Remarks
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
@@ -2330,35 +2328,7 @@ export default function MarketingReportsPage() {
                                                     )}
                                                   </TableCell>
 
-                                                  <TableCell
-                                                    className={`text-center ${canEditMarketing ? "cursor-pointer hover:bg-slate-50" : ""}`}
-                                                    onClick={() =>
-                                                      startEditingRow(report)
-                                                    }
-                                                  >
-                                                    {editingRowId ===
-                                                    report.id ? (
-                                                      <Select
-                                                        value={editFormData.campaignOptimization ? "yes" : "no"}
-                                                        onValueChange={(val) =>
-                                                          setEditFormData({
-                                                            ...editFormData,
-                                                            campaignOptimization: val === "yes",
-                                                          })
-                                                        }
-                                                      >
-                                                        <SelectTrigger className="h-8 text-xs">
-                                                          <SelectValue placeholder="Select" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                          <SelectItem value="yes">Yes</SelectItem>
-                                                          <SelectItem value="no">No</SelectItem>
-                                                        </SelectContent>
-                                                      </Select>
-                                                    ) : (
-                                                      report.campaignOptimization ? "Yes" : "No"
-                                                    )}
-                                                  </TableCell>
+
 
                                                   <TableCell
                                                     className={`text-center ${canEditMarketing ? "cursor-text hover:bg-slate-50" : ""}`}
@@ -3010,26 +2980,7 @@ export default function MarketingReportsPage() {
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Optimization</Label>
-                <Select
-                  value={dailyFormData.campaignOptimization ? "yes" : "no"}
-                  onValueChange={(val) =>
-                    setDailyFormData({
-                      ...dailyFormData,
-                      campaignOptimization: val === "yes",
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+
               <div className="space-y-2">
                 <Label>Remarks</Label>
                 <Input
