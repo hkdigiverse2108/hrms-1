@@ -566,7 +566,6 @@ export default function MarketingReportsPage() {
       const params = new URLSearchParams();
       if (selectedClientFilter !== "all")
         params.append("client_id", selectedClientFilter);
-
       if (user) {
         params.append("userId", user.id);
         params.append("role", user.role);
