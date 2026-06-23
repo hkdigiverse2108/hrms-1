@@ -1240,7 +1240,14 @@ export default function MarketingReportsPage() {
                           clientReportsData.daily.map((r) => (
                             <TableRow key={r.id}>
                               <TableCell>{normalizeDate(r.date)}</TableCell>
-                              <TableCell>{r.projectName || "N/A"}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col items-start gap-1">
+                                  <span>{r.projectName || "N/A"}</span>
+                                  {projects.find((p: any) => p.id === r.projectId)?.status === 'on-hold' && (
+                                    <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                                  )}
+                                </div>
+                              </TableCell>
                               <TableCell>{r.campaignName}</TableCell>
                               <TableCell className="text-center">
                                 {r.reach}
@@ -1307,7 +1314,12 @@ export default function MarketingReportsPage() {
                                 {r.month}
                               </TableCell>
                               <TableCell>
-                                {r.projectName || "N/A"}
+                                <div className="flex flex-col items-start gap-1">
+                                  <span>{r.projectName || r.clientName || "N/A"}</span>
+                                  {projects.find((p: any) => (p.id === r.projectId || p.clientId === r.clientId))?.status === 'on-hold' && (
+                                    <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                                  )}
+                                </div>
                               </TableCell>
                               <TableCell className="text-center">
                                 {r.totalSpend}
@@ -2023,7 +2035,12 @@ export default function MarketingReportsPage() {
                                                         </SelectContent>
                                                       </Select>
                                                     ) : (
-                                                      report.projectName || "N/A"
+                                                      <div className="flex flex-col items-start gap-1">
+                                                        <span>{report.projectName || "N/A"}</span>
+                                                        {projects.find((p: any) => p.id === report.projectId)?.status === 'on-hold' && (
+                                                          <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                                                        )}
+                                                      </div>
                                                     )}
                                                   </TableCell>
 
@@ -2654,7 +2671,12 @@ export default function MarketingReportsPage() {
                                       </TableCell>
 
                                       <TableCell className="font-medium text-slate-800">
-                                        {report.projectName || report.clientName || "Unknown"}
+                                        <div className="flex flex-col items-start gap-1">
+                                          <span>{report.projectName || report.clientName || "Unknown"}</span>
+                                          {projects.find((p: any) => (p.id === report.projectId || p.clientId === report.clientId))?.status === 'on-hold' && (
+                                            <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                                          )}
+                                        </div>
                                       </TableCell>
 
                                       {/* Month Field */}

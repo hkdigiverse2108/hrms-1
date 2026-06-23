@@ -1072,9 +1072,14 @@ export default function CreativeClientsPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-slate-700 text-sm font-medium">
-                        {clientProjects[client.id]?.title || <span className="text-slate-400 italic font-normal">No active project</span>}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className="text-slate-700 text-sm font-medium">
+                          {clientProjects[client.id]?.title || <span className="text-slate-400 italic font-normal">No active project</span>}
+                        </span>
+                        {clientProjects[client.id]?.status?.toLowerCase() === "on-hold" && (
+                          <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-slate-700">
