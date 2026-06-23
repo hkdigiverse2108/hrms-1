@@ -241,7 +241,14 @@ export default function CreativeClientsPage() {
   const fetchFollowupHistory = async (client: any) => {
     setIsLoadingFollowupHistory(true);
     try {
-      const res = await fetch(`${API_URL}/task-logs?clientId=${client.id}`);
+      const proj = clientProjects[client.id];
+      if (!proj) {
+        setFollowupHistoryLogs([]);
+        setIsLoadingFollowupHistory(false);
+        return;
+      }
+      const param = `projectId=${proj.id}`;
+      const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         const data = await res.json();
         setFollowupHistoryLogs(data.filter((l: any) => l.action === "Follow-up Completed"));
@@ -257,6 +264,7 @@ export default function CreativeClientsPage() {
     if (!followupConfigClient || !newRemarkText.trim()) return;
     setIsAddingRemark(true);
     try {
+      const proj = clientProjects[followupConfigClient.id];
       const res = await fetch(`${API_URL}/task-logs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -264,6 +272,7 @@ export default function CreativeClientsPage() {
           action: "Follow-up Completed",
           details: `Remark: ${newRemarkText}`,
           clientId: followupConfigClient.id,
+          projectId: proj?.id,
           performedBy: user?.id,
           userName: user?.name || `${user?.firstName} ${user?.lastName}`,
         })
@@ -339,7 +348,14 @@ export default function CreativeClientsPage() {
     setLogsOpen(true);
     setActiveClient(client);
     try {
-      const res = await fetch(`${API_URL}/task-logs?clientId=${client.id}`);
+      const proj = clientProjects[client.id];
+      if (!proj) {
+        setClientLogs([]);
+        setIsLoadingLogs(false);
+        return;
+      }
+      const param = `projectId=${proj.id}`;
+      const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         setClientLogs(await res.json());
       }
@@ -517,6 +533,7 @@ export default function CreativeClientsPage() {
   const handleFollowupCompleteWithRemark = async () => {
     if (!followupRemarkClient) return;
     try {
+      const proj = clientProjects[followupRemarkClient.id];
       if (followupRemarkText.trim()) {
         await fetch(`${API_URL}/task-logs`, {
           method: "POST",
@@ -525,6 +542,7 @@ export default function CreativeClientsPage() {
             action: "Follow-up Completed",
             details: `Remark: ${followupRemarkText}`,
             clientId: followupRemarkClient.id,
+            projectId: proj?.id,
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`,
           })
@@ -682,6 +700,7 @@ export default function CreativeClientsPage() {
       if (res.ok) {
         toast.success("Payment marked as done");
         
+        const proj = clientProjects[client.id];
         await fetch(`${API_URL}/task-logs`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -689,6 +708,7 @@ export default function CreativeClientsPage() {
             action: "Payment Logged",
             details: `Payment recorded on ${today}.`,
             clientId: client.id,
+            projectId: proj?.id,
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`,
           })
@@ -1086,9 +1106,14 @@ export default function CreativeClientsPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-slate-700 text-sm font-medium">
-                        {clientProjects[client.id]?.title || <span className="text-slate-400 italic font-normal">No active project</span>}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className="text-slate-700 text-sm font-medium">
+                          {clientProjects[client.id]?.title || <span className="text-slate-400 italic font-normal">No active project</span>}
+                        </span>
+                        {clientProjects[client.id]?.status?.toLowerCase() === "on-hold" && (
+                          <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-slate-700">

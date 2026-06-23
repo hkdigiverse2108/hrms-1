@@ -149,6 +149,8 @@ export default function MarketingReportsPage() {
     loading: permissionsLoading,
   } = usePermissions();
 
+  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role);
+
   const getLocalDateString = () => {
     const d = new Date();
     const offset = d.getTimezoneOffset();
@@ -959,7 +961,16 @@ export default function MarketingReportsPage() {
       let param = "";
       if (type === "daily") param = `dailyReportId=${report.id}`;
       else if (type === "monthly") param = `monthlyReportId=${report.id}`;
-      else param = `clientId=${report.id}`;
+      else {
+        const clientProjs = projects.filter((p: any) => p.clientId === report.id);
+        if (clientProjs.length > 0) {
+          param = `projectId=${clientProjs[0].id}`;
+        } else {
+          setReportLogs([]);
+          setIsLoadingLogs(false);
+          return;
+        }
+      }
 
       console.log(`Fetching logs from: ${API_URL}/task-logs?${param}`);
 
@@ -1240,7 +1251,14 @@ export default function MarketingReportsPage() {
                           clientReportsData.daily.map((r) => (
                             <TableRow key={r.id}>
                               <TableCell>{normalizeDate(r.date)}</TableCell>
-                              <TableCell>{r.projectName || "N/A"}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col items-start gap-1">
+                                  <span>{r.projectName || "N/A"}</span>
+                                  {projects.find((p: any) => p.id === r.projectId)?.status === 'on-hold' && (
+                                    <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                                  )}
+                                </div>
+                              </TableCell>
                               <TableCell>{r.campaignName}</TableCell>
                               <TableCell className="text-center">
                                 {r.reach}
@@ -1307,7 +1325,12 @@ export default function MarketingReportsPage() {
                                 {r.month}
                               </TableCell>
                               <TableCell>
-                                {r.projectName || "N/A"}
+                                <div className="flex flex-col items-start gap-1">
+                                  <span>{r.projectName || r.clientName || "N/A"}</span>
+                                  {projects.find((p: any) => (p.id === r.projectId || p.clientId === r.clientId))?.status === 'on-hold' && (
+                                    <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                                  )}
+                                </div>
                               </TableCell>
                               <TableCell className="text-center">
                                 {r.totalSpend}
@@ -1507,7 +1530,6 @@ export default function MarketingReportsPage() {
               </div>
               <div className="overflow-auto flex-1 custom-scrollbar p-3 space-y-2">
                 {(() => {
-                  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role);
                   const filteredClients = clients.filter((c) => {
                     const matchesSearch = c.companyName.toLowerCase().includes(searchQuery.toLowerCase());
                     const hasProject = isEmployee ? projects.some((p: any) => p.clientId === c.id) : true;
@@ -2023,7 +2045,12 @@ export default function MarketingReportsPage() {
                                                         </SelectContent>
                                                       </Select>
                                                     ) : (
-                                                      report.projectName || "N/A"
+                                                      <div className="flex flex-col items-start gap-1">
+                                                        <span>{report.projectName || "N/A"}</span>
+                                                        {projects.find((p: any) => p.id === report.projectId)?.status === 'on-hold' && (
+                                                          <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                                                        )}
+                                                      </div>
                                                     )}
                                                   </TableCell>
 
@@ -2654,7 +2681,12 @@ export default function MarketingReportsPage() {
                                       </TableCell>
 
                                       <TableCell className="font-medium text-slate-800">
-                                        {report.projectName || report.clientName || "Unknown"}
+                                        <div className="flex flex-col items-start gap-1">
+                                          <span>{report.projectName || report.clientName || "Unknown"}</span>
+                                          {projects.find((p: any) => (p.id === report.projectId || p.clientId === report.clientId))?.status === 'on-hold' && (
+                                            <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                                          )}
+                                        </div>
                                       </TableCell>
 
                                       {/* Month Field */}
