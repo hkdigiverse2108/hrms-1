@@ -450,6 +450,7 @@ export default function MarketingReportsPage() {
     projectId: "",
     projectName: "",
     clientId: "",
+    clientName: "",
     reach: 0,
     impression: 0,
     leads: 0,
@@ -767,6 +768,7 @@ export default function MarketingReportsPage() {
           projectId: "",
           projectName: "",
           clientId: "",
+          clientName: "",
           reach: 0,
           impression: 0,
           leads: 0,
@@ -774,6 +776,7 @@ export default function MarketingReportsPage() {
           spend: 0,
           cpl: 0,
           remarks: "",
+          campaignOptimization: false,
         });
         toast.success(
           editingReport

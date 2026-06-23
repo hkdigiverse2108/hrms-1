@@ -1362,7 +1362,7 @@ export default function CreativeClientsPage() {
           <ClientForm
             initialData={editingClient || undefined}
             onSubmit={handleSubmit}
-            isLoading={isSubmitting}
+            isSubmitting={isSubmitting}
           />
         </DialogContent>
       </Dialog>
@@ -1371,7 +1371,8 @@ export default function CreativeClientsPage() {
       <ActivityLogDialog 
         open={logsOpen} 
         onOpenChange={setLogsOpen}
-        clientName={activeClient?.companyName || "Client"}
+        title="Client Activity Logs"
+        subtitle={activeClient?.companyName || "Client"}
         logs={clientLogs}
         isLoading={isLoadingLogs}
       />
