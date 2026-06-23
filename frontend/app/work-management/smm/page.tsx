@@ -958,6 +958,17 @@ export default function CreativeClientsPage() {
             Festival Post
           </button>
 
+          <button
+            onClick={() => setMasterFilter("digital-marketing")}
+            className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+              masterFilter === "digital-marketing" 
+                ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
+            }`}
+          >
+            Digital Marketing
+          </button>
+
           <Select 
             value={
               ["whatsapp-submitted", "whatsapp-pending", "greetings-sent", "greetings-pending"].includes(masterFilter) 
@@ -1017,8 +1028,11 @@ export default function CreativeClientsPage() {
           <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
           <p className="text-sm text-slate-500 font-medium">Fetching dashboard...</p>
         </div>
-      ) : ['pending-work', 'todays-work', 'upcoming-work', 'completed-work'].includes(masterFilter) ? (
-        <PendingWorkEmbedded type={masterFilter as "pending-work" | "todays-work" | "upcoming-work" | "completed-work"} />
+      ) : ['pending-work', 'todays-work', 'upcoming-work', 'completed-work', 'digital-marketing'].includes(masterFilter) ? (
+        <PendingWorkEmbedded 
+          type={masterFilter === 'digital-marketing' ? 'pending-work' : masterFilter as any} 
+          defaultTaskType={masterFilter === 'digital-marketing' ? 'digital-marketing' : 'all'}
+        />
       ) : masterFilter === 'reviews' ? (
         <FeedbackReviewsEmbedded />
       ) : filteredClients.length > 0 ? (
