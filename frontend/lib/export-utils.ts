@@ -13,13 +13,8 @@ export const exportToPDF = (data: any[], fileName: string) => {
     // Extract column keys
     const headers = Object.keys(data[0]);
 
-    // Format headers for premium display
-    const displayHeaders = headers.map(h => 
-      h.replace(/([A-Z])/g, ' $1') // Insert space before capitals
-       .replace(/^./, str => str.toUpperCase()) // Capitalize first letter
-       .replace(/[-_]/g, ' ') // Replace hyphens and underscores with spaces
-       .trim()
-    );
+    // Format headers for premium display (Use keys directly as they are pre-formatted by callers)
+    const displayHeaders = headers;
 
     // Generate title text
     const titleText = fileName
@@ -78,6 +73,21 @@ export const exportToPDF = (data: any[], fileName: string) => {
       },
       alternateRowStyles: {
         fillColor: [248, 250, 252] // slate-50
+      },
+      didParseCell: function(data) {
+        // Highlight Total and Grand Total rows
+        const rawValues = data.row.raw;
+        const isGrandTotal = rawValues.some((val: any) => typeof val === 'string' && val.toUpperCase().includes('GRAND TOTAL'));
+        const isTotal = !isGrandTotal && rawValues.some((val: any) => typeof val === 'string' && (val.endsWith(' Total') || val === 'Total'));
+
+        if (isGrandTotal) {
+          data.cell.styles.fillColor = [226, 232, 240]; // slate-200
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [15, 23, 42]; // slate-900
+        } else if (isTotal) {
+          data.cell.styles.fillColor = [241, 245, 249]; // slate-100
+          data.cell.styles.fontStyle = 'bold';
+        }
       }
     });
 
@@ -102,14 +112,8 @@ export const exportToExcel = (data: any[], fileName: string) => {
     // Extract column keys
     const headers = Object.keys(data[0]);
 
-    // Format headers for premium display
-    const displayHeaders = headers.map((h) =>
-      h
-        .replace(/([A-Z])/g, " $1") // Insert space before capitals
-        .replace(/^./, (str) => str.toUpperCase()) // Capitalize first letter
-        .replace(/[-_]/g, " ") // Replace hyphens and underscores with spaces
-        .trim()
-    );
+    // Format headers for premium display (Use keys directly as they are pre-formatted)
+    const displayHeaders = headers;
 
     // Create worksheet data
     const wsData = [displayHeaders];
