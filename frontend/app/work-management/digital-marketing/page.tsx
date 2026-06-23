@@ -55,6 +55,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -267,12 +274,10 @@ export default function MarketingReportsPage() {
     from: subDays(startOfToday(), 1),
     to: subDays(startOfToday(), 1)
   });
-  const [monthFilter, setMonthFilter] = useState(getLocalMonthString());
-
-
+  const [monthFilter, setMonthFilter] = useState<string[]>([getLocalMonthString()]);
 
   const handleMonthFilterChange = (val: string) => {
-    setMonthFilter(val);
+    setMonthFilter([val]);
   };
   const [newCampaignName, setNewCampaignName] = useState<{
     [key: string]: string;
@@ -705,7 +710,7 @@ export default function MarketingReportsPage() {
           }
         }
       } else {
-        if (monthFilter !== "all") params.append("month", monthFilter);
+        monthFilter.forEach(m => params.append("month", m));
         const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
         if (res.ok) {
           const data = await res.json();
@@ -1136,8 +1141,8 @@ export default function MarketingReportsPage() {
     }
 
     const matchesMonth =
-      monthFilter === "all" ||
-      (r.date && normalizeDate(r.date).split("-")[1] === monthMap[monthFilter]);
+      monthFilter.includes("all") ||
+      (r.date && monthFilter.some(m => normalizeDate(r.date).split("-")[1] === monthMap[m]));
       
     const isDMProject = r.projectId 
       ? projects.some(p => p.id === r.projectId) 
@@ -1154,7 +1159,7 @@ export default function MarketingReportsPage() {
     const matchesClient =
       selectedClientFilter === "all" || r.clientId === selectedClientFilter;
     const matchesMonth =
-      monthFilter === "all" || !monthFilter || r.month === monthFilter;
+      monthFilter.includes("all") || monthFilter.includes(r.month);
     return matchesSearch && matchesClient && matchesMonth;
   });
 
@@ -1514,50 +1519,70 @@ export default function MarketingReportsPage() {
                 <Label className="text-xs text-slate-500">
                   Filter by Month
                 </Label>
-                <Select
-                  value={monthFilter}
-                  onValueChange={handleMonthFilterChange}
-                >
-                  <SelectTrigger className="h-9 w-full">
-                    <SelectValue placeholder="Select Month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Months</SelectItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="h-9 w-full justify-start text-left font-normal truncate bg-white">
+                      {monthFilter.includes("all") || monthFilter.length === 0 
+                        ? "All Months" 
+                        : monthFilter.length === 1 
+                          ? monthFilter[0]
+                          : `${monthFilter.length} months`}
+                      <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[150px] max-h-[300px] overflow-y-auto">
+                    <DropdownMenuCheckboxItem
+                      checked={monthFilter.includes("all")}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setMonthFilter(["all"]);
+                        }
+                      }}
+                    >
+                      All Months
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuSeparator />
                     {[
-                      "January",
-                      "February",
-                      "March",
-                      "April",
-                      "May",
-                      "June",
-                      "July",
-                      "August",
-                      "September",
-                      "October",
-                      "November",
-                      "December",
+                      "January", "February", "March", "April", "May", "June",
+                      "July", "August", "September", "October", "November", "December",
                     ].map((m) => (
-                      <SelectItem key={m} value={m}>
+                      <DropdownMenuCheckboxItem
+                        key={m}
+                        checked={monthFilter.includes(m)}
+                        onCheckedChange={(checked) => {
+                          setMonthFilter(prev => {
+                            let next = prev.filter(x => x !== "all");
+                            if (checked) {
+                              next = [...next, m];
+                            } else {
+                              next = next.filter(x => x !== m);
+                            }
+                            if (next.length === 0) return ["all"];
+                            return next;
+                          });
+                        }}
+                        onSelect={(e) => e.preventDefault()}
+                      >
                         {m}
-                      </SelectItem>
+                      </DropdownMenuCheckboxItem>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
             <div className="flex self-end pb-[1px]">
               {(selectedClientFilter !== "all" ||
                 !(dateRange?.from && isSameDay(dateRange.from, subDays(startOfToday(), 1)) && dateRange?.to && isSameDay(dateRange.to, subDays(startOfToday(), 1))) ||
                 searchQuery !== "" ||
-                monthFilter !== getLocalMonthString()) && (
+                !(monthFilter.length === 1 && monthFilter[0] === getLocalMonthString())) && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-9 px-2 text-xs font-medium text-rose-500 hover:text-rose-700 hover:bg-rose-50 ml-2"
+                  className="h-9 px-3 text-xs text-brand-teal hover:text-brand-teal/80 hover:bg-brand-teal/5 bg-brand-teal/10 ml-2"
                   onClick={() => {
                     setSelectedClientFilter("all");
                     setDateRange({ from: subDays(startOfToday(), 1), to: subDays(startOfToday(), 1) });
-                    setMonthFilter(getLocalMonthString());
+                    setMonthFilter([getLocalMonthString()]);
                     setSearchQuery("");
                   }}
                 >

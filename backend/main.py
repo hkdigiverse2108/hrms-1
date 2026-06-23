@@ -1362,7 +1362,7 @@ async def create_marketing_monthly_report(report: schemas.MarketingMonthlyReport
     return await crud.create_marketing_monthly_report(db, report)
 
 @app.get("/marketing/reports/monthly", response_model=List[schemas.MarketingMonthlyReport])
-async def get_marketing_monthly_reports(client_id: str = None, month: str = None, userId: str = None, role: str = None, db=Depends(get_db)):
+async def get_marketing_monthly_reports(client_id: str = None, month: Optional[List[str]] = Query(None), userId: str = None, role: str = None, db=Depends(get_db)):
     user_info = {"sub": userId, "role": role} if userId else None
     return await crud.get_marketing_monthly_reports(db, client_id, month, user_info=user_info)
 

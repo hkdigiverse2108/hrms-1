@@ -32,7 +32,8 @@ const presets = [
   { label: "Last month", getValue: () => {
       const lastMonth = subMonths(startOfToday(), 1);
       return { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) };
-  }}
+  }},
+  { label: "Maximum", getValue: () => ({ from: new Date("2020-01-01"), to: startOfToday() }) }
 ];
 
 interface DateRangePickerProps {

@@ -3768,7 +3768,7 @@ async def create_marketing_monthly_report(db, report: schemas.MarketingMonthlyRe
     report_dict["id"] = str(result.inserted_id)
     return report_dict
 
-async def get_marketing_monthly_reports(db, client_id: str = None, month: str = None, user_info: dict = None):
+async def get_marketing_monthly_reports(db, client_id: str = None, month: list = None, user_info: dict = None):
     match_query = {}
     allowed_project_ids = []
     all_allowed_clients = []
@@ -3809,29 +3809,38 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: str = 
         "September": "09", "October": "10", "November": "11", "December": "12"
     }
     
-    if month and month != "all":
-        month_num = MONTH_MAP.get(month)
-        if month_num:
-            year = datetime.now().year
-            # Create start and end datetime for the month
-            start_dt = datetime(year, int(month_num), 1)
-            if int(month_num) == 12:
-                end_dt = datetime(year + 1, 1, 1)
-            else:
-                end_dt = datetime(year, int(month_num) + 1, 1)
+    if month:
+        # Handle case where month is a string or a list of strings
+        months_list = [month] if isinstance(month, str) else month
+        months_list = [m for m in months_list if m != "all"]
+        
+        if months_list:
+            all_date_ors = []
+            for m in months_list:
+                month_num = MONTH_MAP.get(m)
+                if month_num:
+                    year = datetime.now().year
+                    # Create start and end datetime for the month
+                    start_dt = datetime(year, int(month_num), 1)
+                    if int(month_num) == 12:
+                        end_dt = datetime(year + 1, 1, 1)
+                    else:
+                        end_dt = datetime(year, int(month_num) + 1, 1)
+                    
+                    regex_pattern = f"^{year}-{month_num}-"
+                    all_date_ors.extend([
+                        {"date": {"$regex": regex_pattern}},
+                        {"date": {"$gte": start_dt, "$lt": end_dt}},
+                        {"month": m}
+                    ])
+                else:
+                    # Fallback if month is something else
+                    all_date_ors.append({"month": m})
             
-            regex_pattern = f"^{year}-{month_num}-"
-            date_or = [
-                {"date": {"$regex": regex_pattern}},
-                {"date": {"$gte": start_dt, "$lt": end_dt}}
-            ]
             if "$or" in match_query:
-                match_query["$and"] = [{"$or": match_query.pop("$or")}, {"$or": date_or}]
+                match_query["$and"] = [{"$or": match_query.pop("$or")}, {"$or": all_date_ors}]
             else:
-                match_query["$or"] = date_or
-        else:
-            # Fallback if month is something else
-            match_query["month"] = month
+                match_query["$or"] = all_date_ors
             
     pipeline = [
         {"$match": match_query},
