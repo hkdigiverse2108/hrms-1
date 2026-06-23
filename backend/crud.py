@@ -3582,6 +3582,8 @@ async def update_system_settings(db, settings_update: schemas.SystemSettingsUpda
 # Marketing Reports CRUD
 async def create_marketing_daily_report(db, report: schemas.MarketingDailyReportCreate):
     report_dict = report.dict()
+    if "date" in report_dict and hasattr(report_dict["date"], "strftime"):
+        report_dict["date"] = report_dict["date"].strftime("%Y-%m-%d")
     result = await db.marketing_daily_reports.insert_one(report_dict)
     report_dict["id"] = str(result.inserted_id)
     return report_dict
@@ -3710,6 +3712,9 @@ async def update_marketing_daily_report(db, report_id: str, report: schemas.Mark
     performedBy = update_data.pop("performedBy", "Unknown")
     userName = update_data.pop("userName", "Unknown User")
     
+    if "date" in update_data and hasattr(update_data["date"], "strftime"):
+        update_data["date"] = update_data["date"].strftime("%Y-%m-%d")
+        
     if not update_data:
         return None
         
