@@ -401,6 +401,7 @@ export default function MarketingReportsPage() {
     spend: 0,
     cpl: 0,
     remarks: "",
+    campaignOptimization: false,
   });
 
   const [monthlyFormData, setMonthlyFormData] = useState({
@@ -1855,6 +1856,9 @@ export default function MarketingReportsPage() {
                         Cost Metric (₹)
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
+                        Optimization
+                      </TableHead>
+                      <TableHead className="text-center font-bold text-slate-700">
                         Remarks
                       </TableHead>
                       <TableHead className="text-center font-bold text-slate-700">
@@ -1871,7 +1875,7 @@ export default function MarketingReportsPage() {
                         {loading ? (
                           <TableRow>
                             <TableCell
-                              colSpan={14}
+                              colSpan={15}
                               className="text-center py-20"
                             >
                               <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
@@ -1887,7 +1891,7 @@ export default function MarketingReportsPage() {
                             {filteredDaily.length === 0 ? (
                               <TableRow>
                                 <TableCell
-                                  colSpan={14}
+                                  colSpan={15}
                                   className="text-center py-20 text-slate-400 italic"
                                 >
                                   No daily reports found.
@@ -2300,6 +2304,36 @@ export default function MarketingReportsPage() {
                                                   </TableCell>
 
                                                   <TableCell
+                                                    className={`text-center ${canEditMarketing ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                                                    onClick={() =>
+                                                      startEditingRow(report)
+                                                    }
+                                                  >
+                                                    {editingRowId ===
+                                                    report.id ? (
+                                                      <Select
+                                                        value={editFormData.campaignOptimization ? "yes" : "no"}
+                                                        onValueChange={(val) =>
+                                                          setEditFormData({
+                                                            ...editFormData,
+                                                            campaignOptimization: val === "yes",
+                                                          })
+                                                        }
+                                                      >
+                                                        <SelectTrigger className="h-8 text-xs">
+                                                          <SelectValue placeholder="Select" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                          <SelectItem value="yes">Yes</SelectItem>
+                                                          <SelectItem value="no">No</SelectItem>
+                                                        </SelectContent>
+                                                      </Select>
+                                                    ) : (
+                                                      report.campaignOptimization ? "Yes" : "No"
+                                                    )}
+                                                  </TableCell>
+
+                                                  <TableCell
                                                     className={`text-center ${canEditMarketing ? "cursor-text hover:bg-slate-50" : ""}`}
                                                     onClick={() =>
                                                       startEditingRow(report)
@@ -2445,7 +2479,7 @@ export default function MarketingReportsPage() {
                                               maximumFractionDigits: 2,
                                             })}
                                           </TableCell>
-                                          <TableCell colSpan={2}></TableCell>
+                                          <TableCell colSpan={3}></TableCell>
                                         </TableRow>
                                       </React.Fragment>
                                     );
@@ -2943,6 +2977,26 @@ export default function MarketingReportsPage() {
                     })
                   }
                 />
+              </div>
+              <div className="space-y-2">
+                <Label>Optimization</Label>
+                <Select
+                  value={dailyFormData.campaignOptimization ? "yes" : "no"}
+                  onValueChange={(val) =>
+                    setDailyFormData({
+                      ...dailyFormData,
+                      campaignOptimization: val === "yes",
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Remarks</Label>
