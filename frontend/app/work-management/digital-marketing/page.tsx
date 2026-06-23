@@ -641,7 +641,7 @@ export default function MarketingReportsPage() {
 
   const handleMonthlySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingReport ? !canEditMarketing : !canAddMarketing) {
+    if (!isAdmin) {
       toast.error("You do not have permission to perform this action");
       return;
     }
@@ -688,11 +688,13 @@ export default function MarketingReportsPage() {
   };
 
   const handleDelete = async (id: string, type: "daily" | "monthly") => {
-    if (type === "daily" || type === "monthly") {
-      if (!canDeleteMarketing) {
-        toast.error("You do not have permission to delete reports");
-        return;
-      }
+    if (type === "monthly") {
+      toast.error("Monthly reports cannot be deleted");
+      return;
+    }
+    if (type === "daily" && !canDeleteMarketing) {
+      toast.error("You do not have permission to delete reports");
+      return;
     }
     const isConfirmed = await confirm({
       title: "Confirm Action",
@@ -720,7 +722,11 @@ export default function MarketingReportsPage() {
     value: any,
     type: "daily" | "monthly",
   ) => {
-    if (!canEditMarketing) {
+    if (type === "monthly" && !isAdmin) {
+      toast.error("You do not have permission to edit monthly reports");
+      return;
+    }
+    if (type === "daily" && !canEditMarketing) {
       toast.error("You do not have permission to edit reports");
       return;
     }
@@ -2523,9 +2529,9 @@ export default function MarketingReportsPage() {
 
                                       {/* Conclusion Field */}
                                       <TableCell
-                                        className={`text-sm text-slate-500 italic max-w-[200px] truncate ${canEditMarketing ? "cursor-text hover:bg-slate-50" : ""}`}
+                                        className={`text-sm text-slate-500 italic max-w-[200px] truncate ${isAdmin ? "cursor-text hover:bg-slate-50" : ""}`}
                                         onClick={() => {
-                                          if (canEditMarketing) {
+                                          if (isAdmin) {
                                             setInlineEditing({
                                               id: report.id,
                                               field: "conclusion",
@@ -2575,22 +2581,6 @@ export default function MarketingReportsPage() {
                                           >
                                             <History className="w-4 h-4" />
                                           </Button>
-
-                                          {canDeleteMarketing && (
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                                              onClick={() =>
-                                                handleDelete(
-                                                  report.id,
-                                                  "monthly",
-                                                )
-                                              }
-                                            >
-                                              <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                          )}
                                         </div>
                                       </TableCell>
                                     </TableRow>
