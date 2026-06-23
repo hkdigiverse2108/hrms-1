@@ -34,6 +34,9 @@ import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { DateRange } from "react-day-picker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { startOfToday, subDays, format, isSameDay } from "date-fns";
 import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 import {
   Table,
@@ -161,53 +164,16 @@ export default function MarketingReportsPage() {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [monthlyItemsPerPage, setMonthlyItemsPerPage] = useState(10);
 
-  const [dateFilterType, setDateFilterType] = useState("yesterday"); // today, yesterday, last_7_days, last_month, custom
-  const [customDateFilter, setCustomDateFilter] = useState(getYesterdayDateString());
-  const [dateFilter, setDateFilter] = useState(getYesterdayDateString());
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(startOfToday(), 1),
+    to: subDays(startOfToday(), 1)
+  });
   const [monthFilter, setMonthFilter] = useState(getLocalMonthString());
 
-  const handleDateFilterTypeChange = (val: string) => {
-    setDateFilterType(val);
-    if (val === "today") setDateFilter(getLocalDateString());
-    else if (val === "yesterday") setDateFilter(getYesterdayDateString());
-    else if (val === "custom") setDateFilter(customDateFilter);
-    else setDateFilter(""); // disables auto-generate check for range filters
-  };
 
-  const handleCustomDateChange = (val: string) => {
-    setCustomDateFilter(val);
-    if (dateFilterType === "custom") {
-      handleDateFilterChange(val);
-    }
-  };
-
-  const handleDateFilterChange = (val: string) => {
-    setDateFilter(val);
-    if (val) {
-      const parts = val.split("-");
-      if (parts.length === 3) {
-        const monthNum = parts[1];
-        const monthName = Object.keys(monthMap).find(
-          (key) => monthMap[key] === monthNum,
-        );
-        if (monthName) {
-          setMonthFilter(monthName);
-        }
-      }
-    }
-  };
 
   const handleMonthFilterChange = (val: string) => {
     setMonthFilter(val);
-    if (val !== "all" && dateFilter) {
-      const parts = dateFilter.split("-");
-      if (parts.length === 3) {
-        const dateMonthNum = parts[1];
-        if (monthMap[val] !== dateMonthNum) {
-          setDateFilter("");
-        }
-      }
-    }
   };
   const [newCampaignName, setNewCampaignName] = useState<{
     [key: string]: string;
@@ -408,7 +374,7 @@ export default function MarketingReportsPage() {
   const fetchedDateRef = useRef<string>("");
 
   useEffect(() => {
-    if (activeTab !== "daily" || !dateFilter || clients.length === 0 || loading)
+    if (activeTab !== "daily" || !dateRange || clients.length === 0 || loading)
       return;
 
     // Do not auto-generate for future dates
@@ -417,29 +383,40 @@ export default function MarketingReportsPage() {
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     const todayStr = `${year}-${month}-${day}`;
-    if (dateFilter > todayStr) return;
+    const yesterdayDate = subDays(startOfToday(), 1);
+    const yesterdayStr = format(yesterdayDate, "yyyy-MM-dd");
 
-    if (fetchedDateRef.current !== dateFilter) return; // Wait until data for this date is fetched
+    // Check if yesterday is in the selected date range
+    let inRange = false;
+    if (dateRange?.from) {
+      const fromD = dateRange.from;
+      const toD = dateRange.to || dateRange.from;
+      if (yesterdayDate >= fromD && yesterdayDate <= toD) {
+        inRange = true;
+      }
+    }
 
-    if (hasGeneratedForDateRef.current === dateFilter) return;
+    if (!inRange) return;
 
-    hasGeneratedForDateRef.current = dateFilter;
+    const startStr = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
+    const endStr = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
+    const fetchKey = `${startStr}_${endStr}`;
+
+    if (fetchedDateRef.current !== fetchKey) return; // Wait until data for this range is fetched
+
+    if (hasGeneratedForDateRef.current === yesterdayStr) return;
+
+    hasGeneratedForDateRef.current = yesterdayStr;
 
     const checkAndGenerate = async () => {
-      const datesToCheck = [dateFilter];
-      const dFilterObj = new Date(dateFilter);
+      const datesToCheck = [yesterdayStr];
       const today = new Date();
       // Also check past 2 days to ensure weekends are covered
-      if (
-        Math.abs(today.getTime() - dFilterObj.getTime()) <
-        5 * 24 * 60 * 60 * 1000
-      ) {
-        for (let i = 1; i <= 2; i++) {
-          const pastD = new Date(today);
-          pastD.setDate(today.getDate() - i);
-          const pastStr = pastD.toISOString().split("T")[0];
-          if (!datesToCheck.includes(pastStr)) datesToCheck.push(pastStr);
-        }
+      for (let i = 2; i <= 3; i++) {
+        const pastD = new Date(today);
+        pastD.setDate(today.getDate() - i);
+        const pastStr = pastD.toISOString().split("T")[0];
+        if (!datesToCheck.includes(pastStr)) datesToCheck.push(pastStr);
       }
 
       const missingCampaigns: any[] = [];
@@ -511,7 +488,7 @@ export default function MarketingReportsPage() {
     };
 
     checkAndGenerate();
-  }, [activeTab, dateFilter, clients, dailyReports, loading]);
+  }, [activeTab, dateRange, clients, dailyReports, loading]);
 
   useEffect(() => {
     if (permissionsLoading || !canViewMarketing) return;
@@ -520,8 +497,7 @@ export default function MarketingReportsPage() {
   }, [
     activeTab,
     selectedClientFilter,
-    dateFilter,
-    dateFilterType,
+    dateRange,
     monthFilter,
     permissionsLoading,
     canViewMarketing,
@@ -555,88 +531,33 @@ export default function MarketingReportsPage() {
       const params = new URLSearchParams();
       if (selectedClientFilter !== "all")
         params.append("client_id", selectedClientFilter);
+
       if (activeTab === "daily") {
-        if (dateFilterType === "last_7_days" || dateFilterType === "last_month") {
-          const d = new Date();
-          const today = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-          let end = today.toISOString().split("T")[0];
-          let start = "";
-          if (dateFilterType === "last_7_days") {
-            const startD = new Date(today);
-            startD.setDate(today.getDate() - 6);
-            start = startD.toISOString().split("T")[0];
-          } else if (dateFilterType === "last_month") {
-            const startD = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-            const endD = new Date(today.getFullYear(), today.getMonth(), 0);
-            start = new Date(startD.getTime() - startD.getTimezoneOffset() * 60000).toISOString().split("T")[0];
-            end = new Date(endD.getTime() - endD.getTimezoneOffset() * 60000).toISOString().split("T")[0];
-          }
-          params.append("start_date", start);
-          params.append("end_date", end);
-          
-          const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
-          if (res.ok) {
-            const data = await res.json();
-            const seen = new Set();
-            const uniqueData = data.filter((r: any) => {
-              const key = `${normalizeDate(r.date)}-${r.clientId}-${r.campaignName}`;
-              if (seen.has(key)) return false;
-              seen.add(key);
-              return true;
-            });
-            setDailyReports(uniqueData);
-            fetchedDateRef.current = "";
-          }
-        } else if (!dateFilter) {
-          const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
-          if (res.ok) {
-            const data = await res.json();
-            const seen = new Set();
-            const uniqueData = data.filter((r: any) => {
-              const key = `${normalizeDate(r.date)}-${r.clientId}-${r.campaignName}`;
-              if (seen.has(key)) return false;
-              seen.add(key);
-              return true;
-            });
-            setDailyReports(uniqueData);
-            fetchedDateRef.current = "";
-          }
-        } else {
-          let datesToFetch = [dateFilter];
-          const dFilterObj = new Date(dateFilter);
-          const today = new Date();
-          if (
-            Math.abs(today.getTime() - dFilterObj.getTime()) <
-            5 * 24 * 60 * 60 * 1000
-          ) {
-            for (let i = 1; i <= 2; i++) {
-              const pastD = new Date(today);
-              pastD.setDate(today.getDate() - i);
-              const pastStr = pastD.toISOString().split("T")[0];
-              if (!datesToFetch.includes(pastStr)) datesToFetch.push(pastStr);
-            }
-          }
-
-          const promises = datesToFetch.map((d) => {
-            const p = new URLSearchParams(params);
-            p.append("date", d);
-            return fetch(`${API_URL}${endpoint}?${p.toString()}`).then((res) =>
-              res.ok ? res.json() : [],
-            );
-          });
-
-          const results = await Promise.all(promises);
-          const allData = results.flat();
-
+        if (dateRange?.from) {
+          const startStr = format(dateRange.from, "yyyy-MM-dd");
+          const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
+          params.append("start_date", startStr);
+          params.append("end_date", endStr);
+        }
+        
+        const res = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
           const seen = new Set();
-          const uniqueData = allData.filter((r: any) => {
+          const uniqueData = data.filter((r: any) => {
             const key = `${normalizeDate(r.date)}-${r.clientId}-${r.campaignName}`;
             if (seen.has(key)) return false;
             seen.add(key);
             return true;
           });
           setDailyReports(uniqueData);
-          fetchedDateRef.current = dateFilter;
+          if (dateRange?.from) {
+            const startStr = format(dateRange.from, "yyyy-MM-dd");
+            const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
+            fetchedDateRef.current = `${startStr}_${endStr}`;
+          } else {
+            fetchedDateRef.current = "";
+          }
         }
       } else {
         if (monthFilter !== "all") params.append("month", monthFilter);
@@ -863,7 +784,7 @@ export default function MarketingReportsPage() {
   useEffect(() => {
     setDailyPage(1);
     setMonthlyPage(1);
-  }, [searchQuery, selectedClientFilter, dateFilter, monthFilter]);
+  }, [searchQuery, selectedClientFilter, dateRange, monthFilter]);
 
   const handleDragEndDaily = (result: any) => {
     if (!result.destination) return;
@@ -1015,26 +936,26 @@ export default function MarketingReportsPage() {
     const matchesClient =
       selectedClientFilter === "all" || r.clientId === selectedClientFilter;
 
-    // Only show pending rows if they are from exactly the previous day, OR 2 days ago if it's a weekend
+    // Only show pending rows if they are from exactly the previous day
     let isPendingRow = false;
-    if (dateFilter && isCurrentlyActive && isTrulyEmpty) {
-      const selectedDateObj = new Date(dateFilter);
-      const isSelectedSunday = selectedDateObj.getDay() === 0; // 0 is Sunday
-
-      // Only combine days if the selected date is a Sunday
-      if (isSelectedSunday) {
-        const d1 = new Date(selectedDateObj);
-        d1.setDate(d1.getDate() - 1);
-        const d1Str = d1.toISOString().split("T")[0];
-
-        if (reportDate === d1Str) {
-          isPendingRow = true;
-        }
+    if (isCurrentlyActive && isTrulyEmpty) {
+      const yesterdayStr = format(subDays(startOfToday(), 1), "yyyy-MM-dd");
+      if (reportDate === yesterdayStr) {
+        isPendingRow = true;
       }
     }
 
-    const matchesDate =
-      !dateFilter || reportDate === dateFilter || isPendingRow;
+    let matchesDate = false;
+    if (dateRange?.from) {
+      const startStr = format(dateRange.from, "yyyy-MM-dd");
+      const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
+      if (reportDate >= startStr && reportDate <= endStr) {
+        matchesDate = true;
+      }
+    } else {
+      matchesDate = true;
+    }
+
     const matchesMonth =
       monthFilter === "all" ||
       (r.date && normalizeDate(r.date).split("-")[1] === monthMap[monthFilter]);
@@ -1373,28 +1294,12 @@ export default function MarketingReportsPage() {
               </Select>
             </div>
             {activeTab === "daily" && (
-              <div className="w-[150px] space-y-1.5 flex flex-col gap-1.5">
+              <div className="w-[300px] space-y-1.5 flex flex-col gap-1.5">
                 <Label className="text-xs text-slate-500">Filter by Date</Label>
-                <Select value={dateFilterType} onValueChange={handleDateFilterTypeChange}>
-                  <SelectTrigger className="h-9 w-full">
-                    <SelectValue placeholder="Date Range" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="yesterday">Yesterday</SelectItem>
-                    <SelectItem value="last_7_days">Last 7 Days</SelectItem>
-                    <SelectItem value="last_month">Last Month</SelectItem>
-                    <SelectItem value="custom">Custom Date</SelectItem>
-                  </SelectContent>
-                </Select>
-                {dateFilterType === "custom" && (
-                  <Input
-                    type="date"
-                    className="h-9 w-full mt-2"
-                    value={customDateFilter}
-                    onChange={(e) => handleCustomDateChange(e.target.value)}
-                  />
-                )}
+                <DateRangePicker 
+                  value={dateRange} 
+                  onChange={setDateRange} 
+                />
               </div>
             )}
             {activeTab === "monthly" && (
@@ -1435,7 +1340,7 @@ export default function MarketingReportsPage() {
             )}
             <div className="flex self-end pb-[1px]">
               {(selectedClientFilter !== "all" ||
-                dateFilter !== getYesterdayDateString() ||
+                !(dateRange?.from && isSameDay(dateRange.from, subDays(startOfToday(), 1)) && dateRange?.to && isSameDay(dateRange.to, subDays(startOfToday(), 1))) ||
                 searchQuery !== "" ||
                 monthFilter !== getLocalMonthString()) && (
                 <Button
@@ -1444,9 +1349,7 @@ export default function MarketingReportsPage() {
                   className="h-9 px-2 text-xs font-medium text-rose-500 hover:text-rose-700 hover:bg-rose-50 ml-2"
                   onClick={() => {
                     setSelectedClientFilter("all");
-                    setDateFilterType("yesterday");
-                    setCustomDateFilter(getYesterdayDateString());
-                    setDateFilter(getYesterdayDateString());
+                    setDateRange({ from: subDays(startOfToday(), 1), to: subDays(startOfToday(), 1) });
                     setMonthFilter(getLocalMonthString());
                     setSearchQuery("");
                   }}
