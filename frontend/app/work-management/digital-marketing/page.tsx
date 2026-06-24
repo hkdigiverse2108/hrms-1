@@ -2512,7 +2512,7 @@ export default function MarketingReportsPage() {
                                                     report.id ? (
                                                       <Input
                                                         type="number"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.reach ??
                                                           ""
@@ -2542,7 +2542,7 @@ export default function MarketingReportsPage() {
                                                     report.id ? (
                                                       <Input
                                                         type="number"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.impression ??
                                                           ""
@@ -2572,7 +2572,7 @@ export default function MarketingReportsPage() {
                                                     report.id ? (
                                                       <Input
                                                         type="number"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.leads ??
                                                           ""
@@ -2603,7 +2603,7 @@ export default function MarketingReportsPage() {
                                                       <Input
                                                         type="number"
                                                         step="0.01"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.revenue ??
                                                           ""
@@ -2633,7 +2633,7 @@ export default function MarketingReportsPage() {
                                                     report.id ? (
                                                       <Input
                                                         type="number"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.followers ??
                                                           ""
@@ -2664,7 +2664,7 @@ export default function MarketingReportsPage() {
                                                       <Input
                                                         type="number"
                                                         step="0.01"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.spend ??
                                                           ""
@@ -2695,7 +2695,7 @@ export default function MarketingReportsPage() {
                                                       <Input
                                                         type="number"
                                                         step="0.01"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.cpl ?? ""
                                                         }
