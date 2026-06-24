@@ -1076,6 +1076,15 @@ export default function MarketingReportsPage() {
     return `${year}-${month}-${day}`;
   };
 
+  const getYesterdayStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   const isZeroOrEmpty = (val: any) =>
     !val || val === 0 || val === "0" || String(val).trim() === "";
 
@@ -1100,7 +1109,7 @@ export default function MarketingReportsPage() {
           isZeroOrEmpty(report.spend) &&
           isZeroOrEmpty(report.cpl) &&
           isZeroOrEmpty(report.remarks);
-        const isDue = isTrulyEmpty && normalizeDate(report.date) < getTodayStr();
+        const isDue = isTrulyEmpty && normalizeDate(report.date) < getYesterdayStr();
 
         if (isDue) {
           const savingEmpty =
@@ -1309,17 +1318,22 @@ export default function MarketingReportsPage() {
     const matchesClient =
       selectedClientFilter === "all" || r.clientId === selectedClientFilter;
 
-    // Only show pending rows if they are from exactly the previous day
+    // Show pending and due rows regardless of date filter
     let isPendingRow = false;
+    let isDueRow = false;
     if (isCurrentlyActive && isTrulyEmpty) {
-      const yesterdayStr = format(subDays(startOfToday(), 1), "yyyy-MM-dd");
+      const yesterdayStr = getYesterdayStr();
       if (reportDate === yesterdayStr) {
         isPendingRow = true;
+      } else if (reportDate < yesterdayStr) {
+        isDueRow = true;
       }
     }
 
     let matchesDate = false;
-    if (dateRange?.from) {
+    if (isPendingRow || isDueRow) {
+      matchesDate = true;
+    } else if (dateRange?.from) {
       const startStr = format(dateRange.from, "yyyy-MM-dd");
       const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
       if (reportDate >= startStr && reportDate <= endStr) {
@@ -1330,7 +1344,7 @@ export default function MarketingReportsPage() {
     }
 
     const matchesMonth =
-      monthFilter.includes("all") ||
+      isPendingRow || isDueRow || monthFilter.includes("all") ||
       (r.date && monthFilter.some(m => normalizeDate(r.date).split("-")[1] === monthMap[m]));
       
     const isDMProject = r.projectId 
@@ -2451,7 +2465,7 @@ export default function MarketingReportsPage() {
                                                   isZeroOrEmpty(report.spend) &&
                                                   isZeroOrEmpty(report.cpl) &&
                                                   isZeroOrEmpty(report.remarks);
-                                                const isDue = isTrulyEmpty && normalizeDate(report.date) < getTodayStr();
+                                                const isDue = isTrulyEmpty && normalizeDate(report.date) < getYesterdayStr();
                                                 
                                                 return (
                                                 <TableRow
@@ -2471,139 +2485,21 @@ export default function MarketingReportsPage() {
                                                     {globalIdx}
                                                   </TableCell>
 
-                                                  <TableCell
-                                                    className={`font-medium ${canEditMarketing ? "cursor-text hover:bg-slate-50" : ""}`}
-                                                    onClick={() =>
-                                                      startEditingRow(report)
-                                                    }
-                                                  >
-                                                    {editingRowId ===
-                                                    report.id ? (
-                                                      <Input
-                                                        type="date"
-                                                        className="h-8 text-xs outline-none"
-                                                        value={normalizeDate(
-                                                          editFormData.date,
-                                                        )}
-                                                        onChange={(e) =>
-                                                          setEditFormData({
-                                                            ...editFormData,
-                                                            date: e.target
-                                                              .value,
-                                                          })
-                                                        }
-                                                      />
-                                                    ) : (
-                                                      normalizeDate(report.date)
-                                                    )}
+                                                  <TableCell className="font-medium text-slate-600">
+                                                    {normalizeDate(report.date)}
                                                   </TableCell>
 
-                                                  <TableCell
-                                                    className={`font-semibold text-slate-600 ${canEditMarketing ? "cursor-text hover:bg-slate-50" : ""}`}
-                                                    onClick={() =>
-                                                      startEditingRow(report)
-                                                    }
-                                                  >
-                                                    {editingRowId ===
-                                                    report.id ? (
-                                                      <Select
-                                                        onValueChange={(v) => {
-                                                          const project = projects.find(p => p.id === v);
-                                                          if (project) {
-                                                            setEditFormData({
-                                                              ...editFormData,
-                                                              projectId: project.id,
-                                                              projectName: project.title,
-                                                              clientId: project.clientId,
-                                                              clientName: project.clientName,
-                                                            });
-                                                          }
-                                                        }}
-                                                        value={editFormData.projectId || ""}
-                                                      >
-                                                        <SelectTrigger className="h-8 text-xs">
-                                                          <SelectValue placeholder="Select Project" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                          {projects.map((p) => (
-                                                            <SelectItem key={p.id} value={p.id}>
-                                                              {p.title} {p.clientName ? `(${p.clientName})` : ''}
-                                                            </SelectItem>
-                                                          ))}
-                                                        </SelectContent>
-                                                      </Select>
-                                                    ) : (
-                                                      <div className="flex flex-col items-start gap-1">
-                                                        <span>{report.projectName || "N/A"}</span>
-                                                        {projects.find((p: any) => p.id === report.projectId)?.status === 'on-hold' && (
-                                                          <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
-                                                        )}
-                                                      </div>
-                                                    )}
+                                                  <TableCell className="font-semibold text-slate-600">
+                                                    <div className="flex flex-col items-start gap-1">
+                                                      <span>{report.projectName || "N/A"}</span>
+                                                      {projects.find((p: any) => p.id === report.projectId)?.status === 'on-hold' && (
+                                                        <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                                                      )}
+                                                    </div>
                                                   </TableCell>
 
-                                                  <TableCell
-                                                    className={
-                                                      canEditMarketing
-                                                        ? "cursor-text hover:bg-slate-50"
-                                                        : ""
-                                                    }
-                                                    onClick={() =>
-                                                      startEditingRow(report)
-                                                    }
-                                                  >
-                                                    {editingRowId ===
-                                                    report.id ? (
-                                                      <Select
-                                                        onValueChange={(v) =>
-                                                          setEditFormData({
-                                                            ...editFormData,
-                                                            campaignName: v,
-                                                          })
-                                                        }
-                                                        value={
-                                                          editFormData.campaignName ||
-                                                          ""
-                                                        }
-                                                      >
-                                                        <SelectTrigger className="h-8 text-xs outline-none">
-                                                          <SelectValue placeholder="Select Campaign" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                          {clients
-                                                            .find(
-                                                              (c) =>
-                                                                c.id ===
-                                                                (editFormData.clientId ||
-                                                                  report.clientId),
-                                                            )
-                                                            ?.campaigns?.filter(
-                                                              (c: any) =>
-                                                                typeof c ===
-                                                                "string"
-                                                                  ? true
-                                                                  : c.isActive,
-                                                            )
-                                                            .map((c: any) => {
-                                                              const name =
-                                                                typeof c ===
-                                                                "string"
-                                                                  ? c
-                                                                  : c.name;
-                                                              return (
-                                                                <SelectItem
-                                                                  key={name}
-                                                                  value={name}
-                                                                >
-                                                                  {name}
-                                                                </SelectItem>
-                                                              );
-                                                            })}
-                                                        </SelectContent>
-                                                      </Select>
-                                                    ) : (
-                                                      report.campaignName
-                                                    )}
+                                                  <TableCell className="text-slate-600">
+                                                    {report.campaignName || "N/A"}
                                                   </TableCell>
 
                                                   <TableCell
