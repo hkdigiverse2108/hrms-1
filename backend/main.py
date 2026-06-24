@@ -1721,11 +1721,11 @@ async def chat_websocket_endpoint(websocket: WebSocket, user_id: str):
                             }
                             await ws_manager.send_personal_message(chat_id, "typing_status", personal_event_data)
     except WebSocketDisconnect:
-        await ws_manager.disconnect(user_id)
+        await ws_manager.disconnect(user_id, websocket)
     except Exception as e:
         import logging
         logging.getLogger("websocket").warning(f"WebSocket error for user {user_id}: {e}")
-        await ws_manager.disconnect(user_id)
+        await ws_manager.disconnect(user_id, websocket)
 
 # Employee Document Endpoints
 @app.post("/employee-documents", response_model=schemas.EmployeeDocument)
@@ -2418,7 +2418,28 @@ async def clear_active_session(db=Depends(get_db)):
     return {"message": "Session tracking stopped"}
 
 @app.get("/activity/last-active")
-async def get_last_active():
+async def get_last_active(employee_id: Optional[str] = None, db=Depends(get_db)):
+    if employee_id:
+        from datetime import datetime
+        import pytz
+        from database import db as mongo_db
+        IST = pytz.timezone('Asia/Kolkata')
+        today_str = datetime.now(IST).strftime("%Y-%m-%d")
+        
+        stat = await mongo_db.user_input_stats.find_one({"employeeId": employee_id, "date": today_str})
+        if stat and "lastActive" in stat:
+            last_active_dt = stat["lastActive"]
+            if last_active_dt:
+                # Convert naive datetime in UTC or localized datetime to timestamp
+                if last_active_dt.tzinfo is None:
+                    # Naive datetime in MongoDB is typically stored as UTC.
+                    # But if the app stored it as local naive or UTC naive, let's treat it as UTC first,
+                    # or localized. Let's make it aware.
+                    last_active_dt = last_active_dt.replace(tzinfo=pytz.UTC).astimezone(IST)
+                else:
+                    last_active_dt = last_active_dt.astimezone(IST)
+                return {"last_active": last_active_dt.timestamp()}
+                
     import input_tracker
     return {"last_active": input_tracker.get_last_global_activity_time()}
 
