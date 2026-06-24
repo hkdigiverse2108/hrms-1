@@ -978,16 +978,7 @@ export default function CreativeClientsPage() {
             Festival Post
           </button>
 
-          <button
-            onClick={() => setMasterFilter("digital-marketing")}
-            className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
-              masterFilter === "digital-marketing" 
-                ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
-                : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
-            }`}
-          >
-            Digital Marketing
-          </button>
+
 
           <Select 
             value={
