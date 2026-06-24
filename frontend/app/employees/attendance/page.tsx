@@ -503,15 +503,7 @@ export default function EmployeeAttendanceListPage() {
                     req.status === 'approved'
                   );
                   
-                  const isLate = (() => {
-                    if (recoveryReq) return false;
-                    if (!record.checkIn || record.checkIn === "--") return false;
-                    const officeStartTime = sysSettings?.officeStartTime || "09:30";
-                    const bufferMins = sysSettings?.lateBufferMins || 10;
-                    const [h, m] = record.checkIn.split(':').map(Number);
-                    const [sh, sm] = officeStartTime.split(':').map(Number);
-                    return (h * 60 + m) > (sh * 60 + sm + bufferMins);
-                  })();
+                  const isLate = record.isLate && !recoveryReq;
                   
                   if (isLate) l++;
                   else p++;
@@ -599,11 +591,7 @@ export default function EmployeeAttendanceListPage() {
           req.date === a.date && (req.employee_id === a.employeeId || req.employee_id === a.employeeId) && req.status === 'approved'
         );
         if (recoveryReq) return false;
-        const officeStartTime = sysSettings?.officeStartTime || "09:30";
-        const bufferMins = sysSettings?.lateBufferMins || 10;
-        const [h, m] = (a.checkIn || "00:00").split(':').map(Number);
-        const [sh, sm] = officeStartTime.split(':').map(Number);
-        return (h * 60 + m) > (sh * 60 + sm + bufferMins);
+        return a.isLate;
       }).length,
       absent: dayEmployees.filter(a => a.status === "Absent").length,
       records: filteredRecords
@@ -801,31 +789,25 @@ export default function EmployeeAttendanceListPage() {
                     
                     const recoveryReq = recoveryRequests.find(req => 
                       req.date === record.date && 
-                      (req.employee_id === record.employeeId || req.employee_id === record.employeeId) && 
+                      (req.employee_id === record.employeeId || req.employeeId === record.employeeId) && 
                       req.status === 'approved'
                     );
 
-                    const isLate = (() => {
-                      if (recoveryReq) return false;
-                      if (!record.checkIn || record.checkIn === "--") return false;
-                      const officeStartTime = sysSettings?.officeStartTime || "09:30";
-                      const bufferMins = sysSettings?.lateBufferMins || 10;
-                      
-                      const [h, m] = record.checkIn.split(':').map(Number);
-                      const [sh, sm] = officeStartTime.split(':').map(Number);
-                      
-                      const punchMins = h * 60 + m;
-                      const limitMins = sh * 60 + sm + bufferMins;
-                      
-                      return punchMins > limitMins;
+                    const isLate = record.isLate && !recoveryReq;
+                    
+                    const lateMinutes = (() => {
+                      if (!isLate || !checkIn.isValid()) return 0;
+                      const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
+                      const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
+                      return Math.max(0, checkIn.diff(dayjs(`${record.date} ${officeStartTime}`), 'minute'));
                     })();
                     
-                    const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${record.date} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
                     const lateStr = isLate || recoveryReq ? formatToHhMm(lateMinutes) : "-";
                     
                     const shiftDurationMinutes = (() => {
-                      const officeStartTime = sysSettings?.officeStartTime || "09:30";
-                      const officeEndTime = sysSettings?.officeEndTime || "18:30";
+                      const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
+                      const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
+                      const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
                       const [sh, sm] = officeStartTime.split(':').map(Number);
                       const [eh, em] = officeEndTime.split(':').map(Number);
                       return (eh * 60 + em) - (sh * 60 + sm);
@@ -890,8 +872,8 @@ export default function EmployeeAttendanceListPage() {
                             ) : "-"}
                         </td>
                         <td className="px-4 py-4 text-slate-700 font-medium whitespace-nowrap">{totalWorkingStr}</td>
-                        <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : undefined) : record.remarks}>
-                          {(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-") : record.remarks}
+                        <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${officeStartTime} AM)` : undefined) : record.remarks}>
+                          {(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${officeStartTime} AM)` : "-") : record.remarks}
                         </td>
                         <td className="px-4 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">

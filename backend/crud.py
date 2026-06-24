@@ -302,22 +302,22 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
     return fix_id(updated_doc)
 
 async def get_employees(db, skip: int = 0, limit: int = 100):
-    cursor = db.employees.find().skip(skip).limit(limit)
+    cursor = db.employees.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def get_attendance(db, skip: int = 0, limit: int = 100):
-    cursor = db.attendance.find().skip(skip).limit(limit)
+    cursor = db.attendance.find().sort([("date", -1), ("_id", -1)]).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def get_leave_requests(db, skip: int = 0, limit: int = 100):
-    cursor = db.leave_requests.find().skip(skip).limit(limit)
+    cursor = db.leave_requests.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def get_announcements(db, skip: int = 0, limit: int = 100):
-    cursor = db.announcements.find().skip(skip).limit(limit)
+    cursor = db.announcements.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -493,12 +493,12 @@ async def get_analytics_overview(db, months: int = 6):
     }
 
 async def get_payroll(db, skip: int = 0, limit: int = 100):
-    cursor = db.payroll.find().skip(skip).limit(limit)
+    cursor = db.payroll.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def get_salary_structures(db, skip: int = 0, limit: int = 100):
-    cursor = db.salary_structures.find().skip(skip).limit(limit)
+    cursor = db.salary_structures.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -553,7 +553,7 @@ async def get_bonus_deductions(db, month: str = None, year: int = None):
     query = {}
     if month: query["month"] = month
     if year: query["year"] = year
-    cursor = db.bonus_deductions.find(query)
+    cursor = db.bonus_deductions.find(query).sort("_id", -1)
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
 
@@ -584,7 +584,7 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
             {"date": {"$gte": start_dt_aware, "$lte": end_dt_aware}}
         ]
     
-    cursor = db.remarks.find(remark_query)
+    cursor = db.remarks.find(remark_query).sort("_id", -1)
     remarks = await cursor.to_list(length=1000)
     
     # 4. Merge remarks that are deductions
@@ -723,8 +723,9 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
             "date": r_date_str
         })
         
+    # Sort by date descending so newest are on top
+    adjustments.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     return adjustments
-
 async def create_bonus_deduction(db, item: schemas.BonusDeductionCreate):
     item_dict = item.dict()
     result = await db.bonus_deductions.insert_one(item_dict)
@@ -1123,8 +1124,15 @@ async def run_payroll_processing(db, month: str, year: int):
             
             if remark_type == "Late Punch-in":
                 if late_punch_deduction_enabled:
-                    penalty_total += per_day_gross
-                    deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{round(per_day_gross, 2)}")
+                    if per_day_gross > 0:
+                        penalty_total += per_day_gross
+                        deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{round(per_day_gross, 2)}")
+                    else:
+                        # Salary is 0, so deduct the penalty given in penalty_types for Late Punch-in
+                        p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
+                        if p_amount > 0:
+                            penalty_total += p_amount
+                            deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{p_amount}")
                 continue
 
             p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
@@ -1225,7 +1233,7 @@ async def create_employee(db, employee: schemas.EmployeeCreate):
 
 # Department CRUD
 async def get_departments(db, skip: int = 0, limit: int = 100):
-    cursor = db.departments.find().skip(skip).limit(limit)
+    cursor = db.departments.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     results = []
     for row in rows:
@@ -1272,7 +1280,7 @@ async def delete_department(db, department_id: str):
 
 # Designation CRUD
 async def get_designations(db, skip: int = 0, limit: int = 100):
-    cursor = db.designations.find().skip(skip).limit(limit)
+    cursor = db.designations.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -1299,7 +1307,7 @@ async def delete_designation(db, designation_id: str):
 
 # Generic CRUD Helpers
 async def get_items(db, collection_name: str, skip: int = 0, limit: int = 100):
-    cursor = db[collection_name].find().skip(skip).limit(limit)
+    cursor = db[collection_name].find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -1466,7 +1474,7 @@ async def update_intern(db, intern_id: str, update: schemas.InternUpdate): retur
 async def delete_intern(db, intern_id: str): return await delete_item(db, "interns", intern_id)
 
 async def get_assets(db, skip: int = 0, limit: int = 100):
-    cursor = db.assets.find().skip(skip).limit(limit)
+    cursor = db.assets.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     results = []
     for row in rows:
@@ -1604,7 +1612,7 @@ async def get_reviews(db, employee_id: str = None, skip: int = 0, limit: int = 1
     query = {}
     if employee_id:
         query["employeeId"] = employee_id
-    cursor = db.reviews.find(query).skip(skip).limit(limit)
+    cursor = db.reviews.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 async def create_review(db, review: schemas.ReviewCreate): 
@@ -2557,7 +2565,7 @@ async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = N
                 {"_id": {"$in": [ObjectId(cid) for cid in project_client_ids if ObjectId.is_valid(cid)]}}
             ]
             
-    cursor = db.clients.find(query).skip(skip).limit(limit)
+    cursor = db.clients.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -2896,7 +2904,7 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
             
             query["$or"] = or_conditions
 
-    cursor = db.projects.find(query).skip(skip).limit(limit)
+    cursor = db.projects.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -3039,7 +3047,7 @@ async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, lim
             {"assignedById": userId}
         ]
                 
-    cursor = db.tasks.find(query).skip(skip).limit(limit)
+    cursor = db.tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -3167,7 +3175,7 @@ async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, 
                 # Employee sees only their own tasks
                 query["assignedToId"] = userId
                 
-    cursor = db.wm_tasks.find(query).skip(skip).limit(limit)
+    cursor = db.wm_tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -3355,7 +3363,7 @@ async def log_task_activity(db, taskId: str, action: str, performedBy: str, user
 
 # Sales Lead CRUD
 async def get_leads(db, skip: int = 0, limit: int = 100):
-    cursor = db.leads.find().skip(skip).limit(limit)
+    cursor = db.leads.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -4088,7 +4096,7 @@ async def sync_monthly_marketing_reports(db, date_str: str = None):
 
 # Penalty Type CRUD
 async def get_penalty_types(db, skip: int = 0, limit: int = 100):
-    cursor = db.penalty_types.find().skip(skip).limit(limit)
+    cursor = db.penalty_types.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -5336,7 +5344,7 @@ async def save_user_permissions(db, employee_id: str, permissions_data: schemas.
 
 # Permission Presets CRUD
 async def get_permission_presets(db, skip: int = 0, limit: int = 100):
-    cursor = db.permission_presets.find().skip(skip).limit(limit)
+    cursor = db.permission_presets.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -5427,7 +5435,7 @@ async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
     return fix_id(doc)
 
 async def get_time_recoveries(db, skip: int = 0, limit: int = 100):
-    cursor = db.time_recovery.find().skip(skip).limit(limit)
+    cursor = db.time_recovery.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -6071,7 +6079,7 @@ async def resolve_referral_status(db, referral: dict) -> dict:
     return referral
 
 async def get_referrals(db, skip: int = 0, limit: int = 10000):
-    cursor = db.referrals.find().skip(skip).limit(limit)
+    cursor = db.referrals.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     referrals = [fix_id(row) for row in rows]
     
@@ -6084,7 +6092,7 @@ async def get_referrals(db, skip: int = 0, limit: int = 10000):
     return resolved_referrals
 
 async def get_employee_referrals(db, employee_id: str, skip: int = 0, limit: int = 10000):
-    cursor = db.referrals.find({"referredById": employee_id}).skip(skip).limit(limit)
+    cursor = db.referrals.find({"referredById": employee_id}).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     referrals = [fix_id(row) for row in rows]
     
@@ -6154,7 +6162,7 @@ async def create_document_template(db, template: schemas.DocumentTemplateCreate)
     return fix_id(doc)
 
 async def get_document_templates(db, skip: int = 0, limit: int = 100):
-    cursor = db.document_templates.find().skip(skip).limit(limit)
+    cursor = db.document_templates.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -6176,7 +6184,7 @@ async def delete_document_template(db, template_id: str):
     return result.deleted_count > 0
 # Asset Category CRUD
 async def get_asset_categories(db, skip: int = 0, limit: int = 100):
-    cursor = db.asset_categories.find({"is_user_created": True}).skip(skip).limit(limit)
+    cursor = db.asset_categories.find({"is_user_created": True}).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 

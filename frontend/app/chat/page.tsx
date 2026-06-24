@@ -356,9 +356,9 @@ export default function ChatPage() {
   const groupMembersList = useMemo(() => {
     if (!selectedChat) return [];
     if (selectedChat.type === 'general' || selectedChat.id?.startsWith("gen-") || selectedChat.id === "general") {
-      return employees.map(emp => emp.id || emp._id).filter(Boolean);
+      return Array.from(new Set(employees.map(emp => emp.id || emp._id).filter(Boolean)));
     }
-    return selectedChat.members || [];
+    return Array.from(new Set(selectedChat.members || []));
   }, [selectedChat, employees]);
 
   const renderInputHighlight = (text: string) => {
@@ -4413,7 +4413,7 @@ export default function ChatPage() {
                                     )}
                                   </div>
                                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block mt-0.5 truncate">
-                                    {emp.designation || 'Employee'}
+                                    {emp.designation || emp.role || 'Employee'}
                                   </span>
                                 </div>
                               </div>
@@ -4683,7 +4683,7 @@ export default function ChatPage() {
                   </Avatar>
                   <div className="flex-1">
                     <p className="text-sm font-bold text-slate-800">{member.name} {member.id === user?.id && "(You)"}</p>
-                    <p className="text-[11px] text-muted-foreground">{member.designation || "Team Member"}</p>
+                    <p className="text-[11px] text-muted-foreground">{member.designation || member.role || "Team Member"}</p>
                   </div>
                   {selectedChat.createdBy === memberId && (
                     <Badge variant="outline" className="text-[9px] h-5 border-brand-teal/20 text-brand-teal bg-brand-teal/5">
