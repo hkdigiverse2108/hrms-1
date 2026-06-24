@@ -222,7 +222,6 @@ export default function DashboardPage() {
     let interval: any;
     if (attendanceStatus?.isPunchedIn && attendanceStatus.record?.checkIn) {
       const parseTimeToDate = (timeStr: string, baseDate: Date) => {
-        const d = new Date(baseDate.getTime());
         const cleaned = timeStr.trim();
         let hours = 0, minutes = 0, seconds = 0;
         const ampmMatch = cleaned.match(/(\d+):(\d+):?(\d+)?\s*(AM|PM)/i);
@@ -239,8 +238,25 @@ export default function DashboardPage() {
           minutes = parts[1] ? parseInt(parts[1]) : 0;
           seconds = parts[2] ? parseInt(parts[2]) : 0;
         }
-        d.setHours(hours, minutes, seconds, 0);
-        return d;
+
+        // Format the baseDate into Year-Month-Day in Asia/Kolkata timezone
+        const formatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        });
+        const parts = formatter.formatToParts(baseDate);
+        const year = parts.find(p => p.type === "year")?.value;
+        const month = parts.find(p => p.type === "month")?.value;
+        const day = parts.find(p => p.type === "day")?.value;
+
+        const hh = hours.toString().padStart(2, '0');
+        const mm = minutes.toString().padStart(2, '0');
+        const ss = seconds.toString().padStart(2, '0');
+
+        const isoStr = `${year}-${month}-${day}T${hh}:${mm}:${ss}+05:30`;
+        return new Date(isoStr);
       };
 
       const runTimer = () => {
@@ -250,7 +266,8 @@ export default function DashboardPage() {
 
         const normalizeDate = (d: Date) => {
           if (d.getTime() > istNow.getTime() + 60000) {
-            d.setDate(d.getDate() - 1);
+            // Shift date back by 1 day timezone-safely
+            return new Date(d.getTime() - 24 * 60 * 60 * 1000);
           }
           return d;
         };

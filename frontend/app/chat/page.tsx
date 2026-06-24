@@ -486,6 +486,7 @@ export default function ChatPage() {
   // Listen for Escape key to close the active chat and click to close context menu
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (e.key === "Escape") {
         if (previewImageMsgId) {
           return;
@@ -3003,7 +3004,7 @@ export default function ChatPage() {
         )}
       >
         {isDragging && selectedChat && (
-          <div className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200 pointer-events-none">
             <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 border border-brand-teal/20 scale-100 transition-all">
               <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center animate-bounce">
                 <Paperclip className="w-8 h-8 text-brand-teal" />
@@ -3040,11 +3041,13 @@ export default function ChatPage() {
               <div className="flex-1 relative w-full flex items-center justify-center p-4 bg-[#f0f2f5]/40">
                 {pendingFile && (
                   pendingFile.type.startsWith("image/") ? (
-                    <img 
-                      src={pendingFileUrl} 
-                      alt={pendingFile.name}
-                      className="max-w-full max-h-[65vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
-                    />
+                    pendingFileUrl ? (
+                      <img 
+                        src={pendingFileUrl} 
+                        alt={pendingFile.name}
+                        className="max-w-full max-h-[65vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
+                      />
+                    ) : null
                   ) : (
                     <div className="bg-white p-8 rounded-2xl flex flex-col items-center gap-4 border border-slate-200 max-w-sm w-full text-slate-800 shadow-md animate-in zoom-in-95 duration-200">
                       <div className="w-20 h-20 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal">
