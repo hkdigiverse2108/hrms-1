@@ -486,17 +486,17 @@ export default function TaskManagementPage() {
           {isAdmin && (
             <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">
               <Button 
-                variant={!adminViewAllUsers ? "secondary" : "ghost"} 
+                variant="ghost" 
                 size="sm" 
-                className={`h-8 text-[12px] font-bold px-4 ${!adminViewAllUsers ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+                className={`h-8 text-[12px] font-bold px-4 ${!adminViewAllUsers ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
                 onClick={() => setAdminViewAllUsers(false)}
               >
                 My Tasks
               </Button>
               <Button 
-                variant={adminViewAllUsers ? "secondary" : "ghost"} 
+                variant="ghost" 
                 size="sm" 
-                className={`h-8 text-[12px] font-bold px-4 ${adminViewAllUsers ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+                className={`h-8 text-[12px] font-bold px-4 ${adminViewAllUsers ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
                 onClick={() => setAdminViewAllUsers(true)}
               >
                 All Users
