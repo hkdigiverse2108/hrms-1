@@ -40,7 +40,7 @@ export function EmployeeModal({
   const { data } = useApi()
   const departments = data?.departments || []
   const designations = data?.designations || []
-  const documentTypes = data?.documentTypes || []
+  const documentTypes = (data as any)?.documentTypes || []
 
   const initialData = {
     firstName: '',

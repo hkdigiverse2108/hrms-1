@@ -36,7 +36,7 @@ import {
 } from 'lucide-react'
 import { API_URL, getAvatarUrl } from '@/lib/config'
 import { useUserContext } from "@/context/UserContext";
-import { convertTo12Hour, convertTo24Hour } from "@/lib/utils";
+
 import { TIME_OPTIONS } from "@/lib/constants";
 
 // Utility helpers for time input conversions
