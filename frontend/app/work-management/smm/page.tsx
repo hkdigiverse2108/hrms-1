@@ -31,7 +31,8 @@ import {
   ChevronDown,
   ChevronsUpDown,
   Check,
-  MoreHorizontal
+  MoreHorizontal,
+  ChevronLeft
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -53,10 +54,11 @@ import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
 import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
 import { FeedbackReviewsEmbedded } from "@/components/hrms/FeedbackReviewsEmbedded";
 import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DailyProgressView } from "@/components/hrms/DailyProgressView";
 
 const SearchableEmployeeSelect = ({ value, onChange, placeholder, employees }: { value: string, onChange: (val: string) => void, placeholder: string, employees: any[] }) => {
   const [open, setOpen] = useState(false);
@@ -162,6 +164,7 @@ export default function CreativeClientsPage() {
   const router = useRouter();
   const { confirm } = useConfirm();
   const { user } = useUser();
+  const isAdmin = user?.role?.toLowerCase() === "admin";
   const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
   const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -174,6 +177,7 @@ export default function CreativeClientsPage() {
 
   // Advanced Filters
   const [creativeFilter, setCreativeFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("projects");
   
   // Creative Team Assignment
   const [creativeEmployees, setCreativeEmployees] = useState<any[]>([]);
@@ -845,7 +849,9 @@ export default function CreativeClientsPage() {
         description="Streamline client deliverables, track campaign progress, and centralize SMM communications."
       />
 
-      <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsContent value="projects" className="space-y-6 m-0">
+          <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
         <div className="relative flex-1 w-full flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -899,7 +905,15 @@ export default function CreativeClientsPage() {
             </PopoverContent>
           </Popover>
         </div>
-
+        {!isAdmin && (
+          <Button 
+            variant="default" 
+            className="h-10 shrink-0 gap-2 bg-brand-teal text-white hover:bg-brand-teal-light"
+            onClick={() => setActiveTab('progress')}
+          >
+            Daily Progress
+          </Button>
+        )}
         <OtherWorkDialog />
         <Button onClick={() => router.push('/work-management/smm/common/feedback')} className="h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 gap-2 w-full md:w-auto shrink-0 border border-slate-200">
           <ClipboardList className="w-4 h-4" />
@@ -1751,6 +1765,20 @@ export default function CreativeClientsPage() {
         client={reviewClient} 
         onSaved={fetchClients} 
       />
+        </TabsContent>
+        <TabsContent value="progress" className="m-0 space-y-4">
+          <div className="flex items-center">
+            <Button 
+              variant="ghost" 
+              className="gap-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+              onClick={() => setActiveTab('projects')}
+            >
+              <ChevronLeft className="w-4 h-4" /> Back to Projects & Clients
+            </Button>
+          </div>
+          <DailyProgressView defaultDepartment="Creative" />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -3893,11 +3893,19 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: list =
         cpr = spend / leads if leads > 0 else 0
         roas = revenue / spend if spend > 0 else 0
         
+        display_month = "All"
+        if isinstance(month, str):
+            display_month = month if month != "all" else "All"
+        elif isinstance(month, list) and month:
+            filtered_months = [m for m in month if m != "all"]
+            if filtered_months:
+                display_month = ", ".join(filtered_months)
+        
         report = {
-            "id": str(manual.get("_id")) if manual.get("_id") else f"agg-{cid}-{month or 'all'}",
+            "id": str(manual.get("_id")) if manual.get("_id") else f"agg-{cid}-{display_month}",
             "clientId": cid,
             "clientName": agg.get("clientName") or manual.get("clientName", "Unknown"),
-            "month": month or "All",
+            "month": display_month,
             "totalSpend": spend,
             "totalLeads": leads,
             "totalSales": 0,

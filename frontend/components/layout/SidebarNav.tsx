@@ -89,7 +89,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('tasks', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"));
     }
-    if (isAdmin || checkPermission('daily-progress', 'canView')) {
+    if (isAdmin) {
       workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
     }
     if (isAdmin || checkPermission('sales', 'canView')) {
