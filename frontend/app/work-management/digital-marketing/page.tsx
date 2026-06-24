@@ -31,6 +31,7 @@ import {
   X,
   Upload,
   FileSpreadsheet,
+  FileX,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -1042,6 +1043,23 @@ export default function MarketingReportsPage() {
     }
   };
 
+  const handleRemoveLeadsFile = async (id: string, fileUrl: string, type: "daily" | "monthly") => {
+    try {
+      if (fileUrl) {
+        const parts = fileUrl.split('/uploads/');
+        if (parts.length > 1) {
+          const filename = parts[1];
+          await fetch(`${API_URL}/upload/${filename}`, {
+            method: "DELETE",
+          });
+        }
+      }
+      await handleInlineUpdate(id, "leadsFileUrl", "", type);
+      toast.success("Leads file removed successfully");
+    } catch (err) {
+      toast.error("Failed to remove leads file");
+    }
+  };
   const handleDownloadLeads = (fileUrl: string) => {
     const isExternal = fileUrl.startsWith('http');
     const fullUrl = isExternal ? fileUrl : `${API_URL}${fileUrl.replace('/api', '')}`;
@@ -2839,15 +2857,30 @@ export default function MarketingReportsPage() {
                                                             <Upload className="w-4 h-4" />
                                                           </Button>
                                                           {report.leadsFileUrl && (
-                                                            <Button
-                                                              variant="ghost"
-                                                              size="icon"
-                                                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                                              title="Download Leads"
-                                                              onClick={() => handleDownloadLeads(report.leadsFileUrl)}
-                                                            >
-                                                              <FileSpreadsheet className="w-4 h-4" />
-                                                            </Button>
+                                                            <>
+                                                              <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                                title="Download Leads"
+                                                                onClick={() => handleDownloadLeads(report.leadsFileUrl)}
+                                                              >
+                                                                <FileSpreadsheet className="w-4 h-4" />
+                                                              </Button>
+                                                              <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                                title="Delete Leads File"
+                                                                onClick={() => {
+                                                                  if (window.confirm("Are you sure you want to delete this leads file?")) {
+                                                                    handleRemoveLeadsFile(report.id, report.leadsFileUrl, "daily");
+                                                                  }
+                                                                }}
+                                                              >
+                                                                <FileX className="w-4 h-4" />
+                                                              </Button>
+                                                            </>
                                                           )}
 
                                                           {canDeleteMarketing && (
