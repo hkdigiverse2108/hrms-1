@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { exportToPDF, exportToExcel } from "@/lib/export-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1417,6 +1418,150 @@ export default function MarketingReportsPage() {
     { totalSpend: 0, totalLeads: 0, totalSales: 0, totalRevenue: 0 },
   );
 
+  const getDailyExportData = () => {
+    let exportData: any[] = [];
+    let serialNumber = 1;
+
+    // Group by Client
+    const groupedByClient: Record<string, any[]> = {};
+    filteredDaily.forEach((r) => {
+      const clientName = clients.find((c: any) => String(c.id) === String(r.clientId))?.companyName || "Unknown";
+      if (!groupedByClient[clientName]) {
+        groupedByClient[clientName] = [];
+      }
+      groupedByClient[clientName].push(r);
+    });
+
+    Object.keys(groupedByClient).forEach((clientName) => {
+      const clientRows = groupedByClient[clientName];
+      let clientReach = 0;
+      let clientImpressions = 0;
+      let clientLeads = 0;
+      let clientSpend = 0;
+      let clientRevenue = 0;
+      let clientFollowers = 0;
+
+      clientRows.forEach((r) => {
+        exportData.push({
+          "S.N.": serialNumber++,
+          Date: normalizeDate(r.date),
+          Client: clientName,
+          Project: r.projectName || "N/A",
+          Campaign: r.campaignName,
+          Reach: r.reach || 0,
+          Impressions: r.impression || 0,
+          Leads: r.leads || 0,
+          Spend: r.spend || 0,
+          CPL: r.cpl || 0,
+          Revenue: r.revenue || 0,
+          Followers: r.followers || 0,
+          Remarks: r.remarks || "",
+          "Daily Follow-up": "",
+        });
+
+        clientReach += r.reach || 0;
+        clientImpressions += r.impression || 0;
+        clientLeads += r.leads || 0;
+        clientSpend += r.spend || 0;
+        clientRevenue += r.revenue || 0;
+        clientFollowers += r.followers || 0;
+      });
+
+      // Get group remark from the first row in the group
+      const targetDate = clientRows.length > 0 ? normalizeDate(clientRows[0].date) : "";
+      const targetProjectId = clientRows.length > 0 ? (clientRows[0].projectId || clientRows[0].clientId || "unknown") : "unknown";
+      const remarkObj = projectRemarks.find(pr => String(pr.projectId) === String(targetProjectId) && pr.date === targetDate);
+      const groupRemarkText = remarkObj?.remark || "";
+
+      // Add Subtotal Row
+      exportData.push({
+        "S.N.": "",
+        Date: "",
+        Client: `${clientName} Total`,
+        Project: "",
+        Campaign: "",
+        Reach: clientReach,
+        Impressions: clientImpressions,
+        Leads: clientLeads,
+        Spend: clientSpend,
+        CPL: clientLeads > 0 ? Number((clientSpend / clientLeads).toFixed(2)) : 0,
+        Revenue: clientRevenue,
+        Followers: clientFollowers,
+        Remarks: "",
+        "Daily Follow-up": groupRemarkText,
+      });
+    });
+
+    // Add Grand Total Row
+    exportData.push({
+      "S.N.": "",
+      Date: "",
+      Client: "GRAND TOTAL",
+      Project: "",
+      Campaign: "",
+      Reach: dailyTotals.reach,
+      Impressions: dailyTotals.impression,
+      Leads: dailyTotals.leads,
+      Spend: dailyTotals.spend,
+      CPL: dailyTotals.leads > 0 ? Number((dailyTotals.spend / dailyTotals.leads).toFixed(2)) : 0,
+      Revenue: dailyTotals.revenue,
+      Followers: dailyTotals.followers,
+      Remarks: "",
+      "Daily Follow-up": "",
+    });
+
+    return exportData;
+  };
+
+  const getMonthlyExportData = () => {
+    let exportData: any[] = [];
+    let serialNumber = 1;
+
+    filteredMonthly.forEach((r: any) => {
+      exportData.push({
+        "S.N.": serialNumber++,
+        "Project Name": getProjectNamesForReport(r),
+        Month: r.month,
+        "Total Spend": r.totalSpend || 0,
+        "Total Leads": r.totalLeads || 0,
+        "Avg CP": Number((r.avgCPR || 0).toFixed(2)),
+        "Total Revenue": r.totalRevenue || 0,
+        "Overall ROAS": `${Number((r.overallROAS || 0).toFixed(2))}x`,
+        "Employee POV": r.employeeConclusion || "-",
+        "Admin POV": r.adminConclusion || "-",
+        "Client POV": r.clientConclusion || "-",
+      });
+    });
+
+    // Add Grand Total Row
+    exportData.push({
+      "S.N.": "",
+      "Project Name": "Total",
+      Month: "",
+      "Total Spend": monthlyTotals.totalSpend,
+      "Total Leads": monthlyTotals.totalLeads,
+      "Avg CP": monthlyTotals.totalLeads > 0 ? Number((monthlyTotals.totalSpend / monthlyTotals.totalLeads).toFixed(2)) : 0,
+      "Total Revenue": monthlyTotals.totalRevenue,
+      "Overall ROAS": "",
+      "Employee POV": "",
+      "Admin POV": "",
+      "Client POV": "",
+    });
+
+    return exportData;
+  };
+
+  const getProjectNamesForReport = (report: any) => {
+    if (report.projectName && report.projectName !== "N/A") {
+      return report.projectName;
+    }
+    const clientProjs = projects.filter((p: any) => String(p.clientId) === String(report.clientId));
+    if (clientProjs.length > 0) {
+      return clientProjs.map((p: any) => p.title).join(", ");
+    }
+    return report.clientName || "Unknown";
+  };
+
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-100px)] overflow-hidden">
       <ActivityLogDialog
@@ -1772,7 +1917,55 @@ export default function MarketingReportsPage() {
                 </DropdownMenu>
               </div>
             )}
-            <div className="flex self-end pb-[1px]">
+            <div className="flex self-end pb-[1px] items-center gap-2 ml-auto">
+              {activeTab === "daily" && filteredDaily.length > 0 && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-brand-teal hover:bg-brand-teal/5"
+                    onClick={() => {
+                      exportToPDF(getDailyExportData(), `Daily_Marketing_Report_${getTodayStr()}`);
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-1.5" /> PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-[#107c41] hover:bg-[#107c41]/5"
+                    onClick={() => {
+                      exportToExcel(getDailyExportData(), `Daily_Marketing_Report_${getTodayStr()}`);
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-1.5" /> Excel
+                  </Button>
+                </>
+              )}
+              {activeTab === "monthly" && filteredMonthly.length > 0 && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-brand-teal hover:bg-brand-teal/5"
+                    onClick={() => {
+                      exportToPDF(getMonthlyExportData(), `Monthly_Marketing_Report_${monthFilter.includes("all") || monthFilter.length === 0 ? "All" : monthFilter.join("_")}`);
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-1.5" /> PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-[#107c41] hover:bg-[#107c41]/5"
+                    onClick={() => {
+                      exportToExcel(getMonthlyExportData(), `Monthly_Marketing_Report_${monthFilter.includes("all") || monthFilter.length === 0 ? "All" : monthFilter.join("_")}`);
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-1.5" /> Excel
+                  </Button>
+                </>
+              )}
               {(selectedClientFilter !== "all" ||
                 !(dateRange?.from && isSameDay(dateRange.from, subDays(startOfToday(), 1)) && dateRange?.to && isSameDay(dateRange.to, subDays(startOfToday(), 1))) ||
                 searchQuery !== "" ||
@@ -3085,7 +3278,7 @@ export default function MarketingReportsPage() {
 
                                       <TableCell className="font-medium text-slate-800">
                                         <div className="flex flex-col items-start gap-1">
-                                          <span>{report.projectName || report.clientName || "Unknown"}</span>
+                                          <span>{getProjectNamesForReport(report)}</span>
                                           {projects.find((p: any) => (p.id === report.projectId || p.clientId === report.clientId))?.status === 'on-hold' && (
                                             <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
                                           )}
