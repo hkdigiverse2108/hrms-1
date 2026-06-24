@@ -34,8 +34,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { API_URL } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-import { INDIAN_STATES } from "@/lib/constants";
+import { INDIAN_STATES, TIME_OPTIONS } from "@/lib/constants";
 
 
 export default function SettingsPage() {
@@ -351,30 +352,26 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-bold">Office Start Time</Label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="time" 
-                      className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
-                      value={settings?.officeStartTime || "09:30"}
-                      onChange={(e) => setSettings({...settings, officeStartTime: e.target.value})}
-                      disabled={isUpdating || !canEditSettings}
-                    />
-                    <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">AM</div>
-                  </div>
+                  <Select value={settings?.officeStartTime || "09:30"} onValueChange={(v) => setSettings({...settings, officeStartTime: v})} disabled={isUpdating || !canEditSettings}>
+                    <SelectTrigger className="flex-1 h-10 px-3 rounded-lg border border-border text-sm w-full">
+                      <SelectValue placeholder="Start Time" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[250px]">
+                      {TIME_OPTIONS.map(opt => <SelectItem key={`start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label className="text-sm font-bold">Office End Time</Label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="time" 
-                      className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
-                      value={settings?.officeEndTime || "18:30"}
-                      onChange={(e) => setSettings({...settings, officeEndTime: e.target.value})}
-                      disabled={isUpdating || !canEditSettings}
-                    />
-                    <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">PM</div>
-                  </div>
+                  <Select value={settings?.officeEndTime || "18:30"} onValueChange={(v) => setSettings({...settings, officeEndTime: v})} disabled={isUpdating || !canEditSettings}>
+                    <SelectTrigger className="flex-1 h-10 px-3 rounded-lg border border-border text-sm w-full">
+                      <SelectValue placeholder="End Time" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[250px]">
+                      {TIME_OPTIONS.map(opt => <SelectItem key={`end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 

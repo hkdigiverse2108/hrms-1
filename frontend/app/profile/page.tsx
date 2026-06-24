@@ -35,6 +35,9 @@ import {
   Save
 } from 'lucide-react'
 import { API_URL, getAvatarUrl } from '@/lib/config'
+import { useUserContext } from "@/context/UserContext";
+import { convertTo12Hour, convertTo24Hour } from "@/lib/utils";
+import { TIME_OPTIONS } from "@/lib/constants";
 
 // Utility helpers for time input conversions
 function convertTo24Hour(timeStr: string): string {
@@ -582,24 +585,24 @@ export default function ProfilePage() {
                     <ProfileField 
                       label="Start Time" 
                       id="startTime" 
-                      type="time" 
                       value={isEditing ? formData.startTime : (user.startTime ? convertTo12Hour(user.startTime) : '—')} 
                       isEditing={isEditing} 
                       onChange={(v) => handleFieldChange('startTime', v)} 
                       disabled={!isAdmin} 
                       icon={Clock} 
+                      options={TIME_OPTIONS.map(opt => ({ label: opt.label, value: opt.valueNoSec }))}
                       onEditInitiate={handleEditClick}
                       focusedField={focusedField}
                     />
                     <ProfileField 
                       label="End Time" 
                       id="endTime" 
-                      type="time" 
                       value={isEditing ? formData.endTime : (user.endTime ? convertTo12Hour(user.endTime) : '—')} 
                       isEditing={isEditing} 
                       onChange={(v) => handleFieldChange('endTime', v)} 
                       disabled={!isAdmin} 
                       icon={Clock} 
+                      options={TIME_OPTIONS.map(opt => ({ label: opt.label, value: opt.valueNoSec }))}
                       onEditInitiate={handleEditClick}
                       focusedField={focusedField}
                     />

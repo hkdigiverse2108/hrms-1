@@ -1,8 +1,18 @@
 "use client";
 
 import React from "react";
-import { Modal, Form, Input, Select, DatePicker, TimePicker, Button } from "antd";
+import { Modal, Form, Input, Select, DatePicker, Button } from "antd";
 import dayjs from "dayjs";
+
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hour = Math.floor(i / 4);
+  const minute = (i % 4) * 15;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+  const displayString = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  return { value: timeString, label: displayString };
+});
 
 const { TextArea } = Input;
 
@@ -39,8 +49,8 @@ export function AddEventModal({ isOpen, onClose, onSubmit }: AddEventModalProps)
         initialValues={{
           eventType: 'Meeting',
           date: dayjs('2022-02-16'),
-          startTime: dayjs('2022-02-16 10:00'),
-          endTime: dayjs('2022-02-16 11:00'),
+          startTime: '10:00',
+          endTime: '11:00',
         }}
       >
         <Form.Item 
@@ -76,14 +86,18 @@ export function AddEventModal({ isOpen, onClose, onSubmit }: AddEventModalProps)
             label={<span className="font-semibold text-slate-700">Start Time</span>} 
             name="startTime"
           >
-            <TimePicker className="w-full h-11 rounded-lg" format="hh:mm A" use12Hours />
+            <Select className="h-11 w-full rounded-lg custom-select">
+              {TIME_OPTIONS.map(opt => <Select.Option key={opt.value} value={opt.value}>{opt.label}</Select.Option>)}
+            </Select>
           </Form.Item>
 
           <Form.Item 
             label={<span className="font-semibold text-slate-700">End Time</span>} 
             name="endTime"
           >
-            <TimePicker className="w-full h-11 rounded-lg" format="hh:mm A" use12Hours />
+            <Select className="h-11 w-full rounded-lg custom-select">
+              {TIME_OPTIONS.map(opt => <Select.Option key={opt.value} value={opt.value}>{opt.label}</Select.Option>)}
+            </Select>
           </Form.Item>
         </div>
 

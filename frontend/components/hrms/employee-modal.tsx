@@ -20,6 +20,7 @@ import {
 import { useApi } from '@/hooks/useApi'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Building2, Landmark, Users2, Clock, ShieldCheck, CreditCard, UserCircle, FileText } from 'lucide-react'
+import { TIME_OPTIONS } from '@/lib/constants'
 
 interface EmployeeModalProps {
   open: boolean
@@ -427,22 +428,26 @@ export function EmployeeModal({
             <div className="flex items-center gap-4">
               <div className="flex-1 space-y-2">
                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">Start Time</Label>
-                <Input
-                  type="time"
-                  value={formData.workingHoursStart}
-                  onChange={(e) => setFormData({ ...formData, workingHoursStart: e.target.value })}
-                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
-                />
+                <Select value={formData.workingHoursStart} onValueChange={(v) => setFormData({ ...formData, workingHoursStart: v })}>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Start Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="pt-6 text-slate-400 font-bold">to</div>
               <div className="flex-1 space-y-2">
                 <Label className="text-xs font-bold text-slate-500 uppercase tracking-tight">End Time</Label>
-                <Input
-                  type="time"
-                  value={formData.workingHoursEnd}
-                  onChange={(e) => setFormData({ ...formData, workingHoursEnd: e.target.value })}
-                  className="bg-slate-50/50 border-slate-200 focus:bg-white transition-all"
-                />
+                <Select value={formData.workingHoursEnd} onValueChange={(v) => setFormData({ ...formData, workingHoursEnd: v })}>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="End Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>

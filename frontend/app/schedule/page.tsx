@@ -28,6 +28,16 @@ const EMPLOYEE_COLORS = [
   { bg: "#e4c441", bgLight: "rgba(228,196,65,0.18)", border: "#e4c441", text: "#b89e00" },
 ];
 
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hour = Math.floor(i / 4);
+  const minute = (i % 4) * 15;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+  const displayString = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  return { value: timeString, label: displayString };
+});
+
 type ViewMode = "day" | "week";
 
 export default function SchedulePage() {
@@ -765,36 +775,37 @@ export default function SchedulePage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Start Time</label>
-                    <TimePicker
-                      className="w-full h-10"
-                      format="h:mm a"
-                      use12Hours
-                      value={dayjs(`2000-01-01 ${form.startTime}`)}
-                      onChange={t => {
-                        if (!t) { setForm({ ...form, startTime: "" }); return; }
-                        const newStart = t.format("HH:mm");
-                        if (form.endTime && newStart >= form.endTime) {
-                          const newEnd = t.add(1, 'hour').format("HH:mm");
-                          setForm({ ...form, startTime: newStart, endTime: newEnd });
-                        } else {
-                          setForm({ ...form, startTime: newStart });
-                        }
-                      }}
-                      minuteStep={15}
-                      getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                    />
+                    <Select value={form.startTime} onValueChange={v => {
+                      if (!v) { setForm({ ...form, startTime: "" }); return; }
+                      if (form.endTime && v >= form.endTime) {
+                        const newEnd = dayjs(`2000-01-01 ${v}`).add(1, 'hour').format("HH:mm");
+                        setForm({ ...form, startTime: v, endTime: newEnd });
+                      } else {
+                        setForm({ ...form, startTime: v });
+                      }
+                    }}>
+                      <SelectTrigger className="w-full h-10">
+                        <SelectValue placeholder="Start Time" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[250px]">
+                        {TIME_OPTIONS.map(opt => (
+                          <SelectItem key={`start-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">End Time</label>
-                    <TimePicker
-                      className="w-full h-10"
-                      format="h:mm a"
-                      use12Hours
-                      value={dayjs(`2000-01-01 ${form.endTime}`)}
-                      onChange={t => setForm({ ...form, endTime: t ? t.format("HH:mm") : "" })}
-                      minuteStep={15}
-                      getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                    />
+                    <Select value={form.endTime} onValueChange={v => setForm({ ...form, endTime: v })}>
+                      <SelectTrigger className="w-full h-10">
+                        <SelectValue placeholder="End Time" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[250px]">
+                        {TIME_OPTIONS.map(opt => (
+                          <SelectItem key={`end-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="space-y-2">

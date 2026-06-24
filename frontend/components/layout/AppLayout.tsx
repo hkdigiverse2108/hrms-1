@@ -13,6 +13,7 @@ import { AccessDenied } from "@/components/common/AccessDenied";
 import { API_URL } from "@/lib/config";
 import dayjs from "dayjs";
 import { toast } from "sonner";
+import { TIME_OPTIONS } from "@/lib/constants";
 
 const { Content } = Layout;
 
@@ -792,8 +793,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <div style={{ display: "flex", gap: "12px" }}>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={{ fontSize: "13px", fontWeight: 700, color: "#475569" }}>Start Time</label>
-                  <input
-                    type="time"
+                  <select
                     value={recoveryForm.startTime}
                     onChange={(e) => setRecoveryForm({ ...recoveryForm, startTime: e.target.value })}
                     style={{
@@ -805,12 +805,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       width: "100%",
                       outline: "none"
                     }}
-                  />
+                  >
+                    {TIME_OPTIONS.map(opt => <option key={`start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</option>)}
+                  </select>
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={{ fontSize: "13px", fontWeight: 700, color: "#475569" }}>End Time</label>
-                  <input
-                    type="time"
+                  <select
                     value={recoveryForm.endTime}
                     onChange={(e) => setRecoveryForm({ ...recoveryForm, endTime: e.target.value })}
                     style={{
@@ -822,7 +823,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       width: "100%",
                       outline: "none"
                     }}
-                  />
+                  >
+                    {TIME_OPTIONS.map(opt => <option key={`end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</option>)}
+                  </select>
                 </div>
               </div>
 

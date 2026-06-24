@@ -40,6 +40,16 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useConfirm } from "@/context/ConfirmContext";
 
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hour = Math.floor(i / 4);
+  const minute = (i % 4) * 15;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:00`;
+  const displayString = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  return { value: timeString, label: displayString };
+});
+
 export default function EmployeeAttendanceListPage() {
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
@@ -1199,23 +1209,29 @@ export default function EmployeeAttendanceListPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check In</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={createForm.checkIn}
-                  onChange={(e) => setCreateForm({...createForm, checkIn: e.target.value})}
-                />
+                <Select value={createForm.checkIn} onValueChange={(v) => setCreateForm({...createForm, checkIn: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check In" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`create-checkin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check Out</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={createForm.checkOut}
-                  onChange={(e) => setCreateForm({...createForm, checkOut: e.target.value})}
-                />
+                <Select value={createForm.checkOut} onValueChange={(v) => setCreateForm({...createForm, checkOut: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check Out" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`create-checkout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">
@@ -1257,23 +1273,29 @@ export default function EmployeeAttendanceListPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check In</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={editForm.checkIn}
-                  onChange={(e) => setEditForm({...editForm, checkIn: e.target.value})}
-                />
+                <Select value={editForm.checkIn} onValueChange={(v) => setEditForm({...editForm, checkIn: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check In" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`edit-checkin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check Out</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={editForm.checkOut}
-                  onChange={(e) => setEditForm({...editForm, checkOut: e.target.value})}
-                />
+                <Select value={editForm.checkOut} onValueChange={(v) => setEditForm({...editForm, checkOut: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check Out" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`edit-checkout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">
