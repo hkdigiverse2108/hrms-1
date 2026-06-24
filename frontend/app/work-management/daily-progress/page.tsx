@@ -58,8 +58,23 @@ export default function DailyProgressPage() {
   const [reportLogs, setReportLogs] = useState<any[]>([])
   const [isLoadingLogs, setIsLoadingLogs] = useState(false)
   const [logFilter, setLogFilter] = useState<{reportId?: string, employeeName?: string}>({})
-  const [selectedDeptFilter, setSelectedDeptFilter] = useState('all')
+  const [activeDeptTab, setActiveDeptTab] = useState<string>('')
+  const [activeRoleTab, setActiveRoleTab] = useState<'Employees' | 'Team Leaders'>('Employees')
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all')
+
+  const availableDepartments = useMemo(() => {
+    if (!employees || employees.length === 0) return []
+    const depts = new Set(employees.map((e: any) => e.department).filter(Boolean))
+    return Array.from(depts).sort() as string[]
+  }, [employees])
+
+  useEffect(() => {
+    if (isAdmin && availableDepartments.length > 0 && !activeDeptTab) {
+      setActiveDeptTab(availableDepartments[0])
+    } else if (isTeamLeader && user?.department && !activeDeptTab) {
+      setActiveDeptTab(user.department)
+    }
+  }, [availableDepartments, isAdmin, isTeamLeader, user, activeDeptTab])
 
   const isAdmin = user?.role?.toLowerCase() === 'admin'
   const isTeamLeader = user?.role === 'Team Leader'
@@ -68,16 +83,23 @@ export default function DailyProgressPage() {
   const displayData = useMemo(() => {
     let filteredEmployees = [...employees]
     
-    // Role-based filtering of employees
-    if (isTeamLeader) {
-      filteredEmployees = filteredEmployees.filter(e => e.department === user?.department)
-    } else if (!isAdmin) {
-      filteredEmployees = filteredEmployees.filter(e => e.id === user?.id)
-    }
+    if (!isAdmin && !isTeamLeader) {
+       filteredEmployees = filteredEmployees.filter(e => e.id === user?.id)
+    } else {
+       const deptToFilter = isTeamLeader ? user?.department : activeDeptTab
+       if (deptToFilter) {
+         filteredEmployees = filteredEmployees.filter(e => e.department?.toLowerCase() === deptToFilter.toLowerCase())
+       }
 
-    // Filter by department (only for admin)
-    if (isAdmin && selectedDeptFilter !== 'all') {
-      filteredEmployees = filteredEmployees.filter(e => e.department?.toLowerCase() === selectedDeptFilter.toLowerCase())
+       if (isAdmin) {
+         if (activeRoleTab === 'Team Leaders') {
+           filteredEmployees = filteredEmployees.filter(e => e.role === 'Team Leader')
+         } else {
+           filteredEmployees = filteredEmployees.filter(e => e.role !== 'Team Leader' && e.role?.toLowerCase() !== 'admin')
+         }
+       } else if (isTeamLeader) {
+         filteredEmployees = filteredEmployees.filter(e => e.role !== 'Team Leader' && e.role?.toLowerCase() !== 'admin' && e.id !== user?.id)
+       }
     }
 
     const mapped = filteredEmployees.map(emp => {
@@ -94,13 +116,12 @@ export default function DailyProgressPage() {
       }
     })
 
-    // Filter by verification status
     if (selectedStatusFilter !== 'all') {
       return mapped.filter(item => item.status?.toLowerCase() === selectedStatusFilter.toLowerCase())
     }
 
     return mapped
-  }, [employees, allReports, selectedDate, user, isAdmin, isTeamLeader, selectedDeptFilter, selectedStatusFilter])
+  }, [employees, allReports, selectedDate, user, isAdmin, isTeamLeader, activeDeptTab, activeRoleTab, selectedStatusFilter])
 
   const handleStatusUpdate = async (emp: any, newStatus: string) => {
     setIsSubmitting(true)
@@ -341,6 +362,60 @@ export default function DailyProgressPage() {
         </div>
       </PageHeader>
 
+      {/* Department and Role Tabs */}
+      {(isAdmin || isTeamLeader) && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">
+            {isAdmin ? (
+              availableDepartments.map(dept => (
+                <button
+                  key={dept}
+                  onClick={() => setActiveDeptTab(dept)}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all whitespace-nowrap ${
+                    activeDeptTab === dept
+                      ? "bg-brand-teal text-white shadow-sm"
+                      : "text-slate-500 hover:text-slate-800 bg-slate-50 border border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  {dept}
+                </button>
+              ))
+            ) : (
+              <button
+                className="px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all whitespace-nowrap bg-brand-teal text-white shadow-sm"
+              >
+                {user?.department}
+              </button>
+            )}
+          </div>
+
+          {isAdmin && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">
+              <button
+                onClick={() => setActiveRoleTab('Employees')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all whitespace-nowrap ${
+                  activeRoleTab === 'Employees'
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-800 bg-slate-50 border border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                Employees
+              </button>
+              <button
+                onClick={() => setActiveRoleTab('Team Leaders')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all whitespace-nowrap ${
+                  activeRoleTab === 'Team Leaders'
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-800 bg-slate-50 border border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                Team Leaders
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <DataTable
           data={displayData}
@@ -350,19 +425,6 @@ export default function DailyProgressPage() {
           searchPlaceholder="Filter employees..."
           extraFilters={
             <div className="flex items-center gap-2">
-              {isAdmin && (
-                <Select value={selectedDeptFilter} onValueChange={setSelectedDeptFilter}>
-                  <SelectTrigger className="h-9 w-[150px] text-xs font-semibold bg-white border border-slate-200">
-                    <SelectValue placeholder="All Departments" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Departments</SelectItem>
-                    {Array.from(new Set(employees.map((e: any) => e.department).filter(Boolean))).map((dept: any) => (
-                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
               <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
                 <SelectTrigger className="h-9 w-[160px] text-xs font-semibold bg-white border border-slate-200">
                   <SelectValue placeholder="All Statuses" />
