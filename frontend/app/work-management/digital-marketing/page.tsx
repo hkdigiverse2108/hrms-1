@@ -1076,6 +1076,15 @@ export default function MarketingReportsPage() {
     return `${year}-${month}-${day}`;
   };
 
+  const getYesterdayStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   const isZeroOrEmpty = (val: any) =>
     !val || val === 0 || val === "0" || String(val).trim() === "";
 
@@ -1100,7 +1109,7 @@ export default function MarketingReportsPage() {
           isZeroOrEmpty(report.spend) &&
           isZeroOrEmpty(report.cpl) &&
           isZeroOrEmpty(report.remarks);
-        const isDue = isTrulyEmpty && normalizeDate(report.date) < getTodayStr();
+        const isDue = isTrulyEmpty && normalizeDate(report.date) < getYesterdayStr();
 
         if (isDue) {
           const savingEmpty =
@@ -1309,17 +1318,22 @@ export default function MarketingReportsPage() {
     const matchesClient =
       selectedClientFilter === "all" || r.clientId === selectedClientFilter;
 
-    // Only show pending rows if they are from exactly the previous day
+    // Show pending and due rows regardless of date filter
     let isPendingRow = false;
+    let isDueRow = false;
     if (isCurrentlyActive && isTrulyEmpty) {
-      const yesterdayStr = format(subDays(startOfToday(), 1), "yyyy-MM-dd");
+      const yesterdayStr = getYesterdayStr();
       if (reportDate === yesterdayStr) {
         isPendingRow = true;
+      } else if (reportDate < yesterdayStr) {
+        isDueRow = true;
       }
     }
 
     let matchesDate = false;
-    if (dateRange?.from) {
+    if (isPendingRow || isDueRow) {
+      matchesDate = true;
+    } else if (dateRange?.from) {
       const startStr = format(dateRange.from, "yyyy-MM-dd");
       const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
       if (reportDate >= startStr && reportDate <= endStr) {
@@ -1330,7 +1344,7 @@ export default function MarketingReportsPage() {
     }
 
     const matchesMonth =
-      monthFilter.includes("all") ||
+      isPendingRow || isDueRow || monthFilter.includes("all") ||
       (r.date && monthFilter.some(m => normalizeDate(r.date).split("-")[1] === monthMap[m]));
       
     const isDMProject = r.projectId 
@@ -2451,7 +2465,7 @@ export default function MarketingReportsPage() {
                                                   isZeroOrEmpty(report.spend) &&
                                                   isZeroOrEmpty(report.cpl) &&
                                                   isZeroOrEmpty(report.remarks);
-                                                const isDue = isTrulyEmpty && normalizeDate(report.date) < getTodayStr();
+                                                const isDue = isTrulyEmpty && normalizeDate(report.date) < getYesterdayStr();
                                                 
                                                 return (
                                                 <TableRow
