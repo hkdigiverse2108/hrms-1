@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, History, AlertTriangle, MoreHorizontal, X, FilePlus } from "lucide-react";
+import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { WMTaskForm, WMTaskFormData } from "@/components/hrms/WMTaskForm";
@@ -30,7 +30,9 @@ import { useConfirm } from "@/context/ConfirmContext";
 const STAGES = [
   { id: "todo", label: "To Do", color: "text-slate-700 bg-transparent", lineColor: "bg-slate-400" },
   { id: "in-progress", label: "In Progress", color: "text-blue-700 bg-transparent", lineColor: "bg-blue-500" },
-  { id: "review", label: "Review", color: "text-amber-700 bg-transparent", lineColor: "bg-amber-500" },
+  { id: "bugs", label: "Bugs", color: "text-red-700 bg-transparent", lineColor: "bg-red-500" },
+  { id: "onhold", label: "On Hold", color: "text-amber-700 bg-transparent", lineColor: "bg-amber-500" },
+  { id: "fix-bugs", label: "Fix Bugs", color: "text-orange-700 bg-transparent", lineColor: "bg-orange-500" },
   { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
 
@@ -731,13 +733,15 @@ export default function TasksPage() {
                                       "bg-white hover:bg-slate-50 shadow-sm hover:shadow-md border border-slate-200 hover:border-brand-teal/30"
                                     }`}>
                                       
-                                      <div className="flex items-start justify-between gap-3">
-                                        <h4 className="font-medium text-[14.5px] text-slate-800 leading-snug">
-                                          {task.title}
-                                        </h4>
+                                      <div className="flex items-start justify-between min-h-[24px]">
+                                        <div className="flex items-start gap-2">
+                                          <h4 className="font-medium text-[14.5px] text-slate-800 leading-snug flex-1 transition-all duration-200 pt-0.5">
+                                            {task.title}
+                                          </h4>
+                                        </div>
 
-                                        <div className="flex flex-col gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-slate-100 rounded-md text-slate-400 hover:text-brand-teal" title="View History"><History className="w-3.5 h-3.5" /></button>
+                                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity pl-2">
+                                          <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-brand-teal" title="View Logs"><History className="w-3.5 h-3.5" /></button>
                                           {canDeleteTask && (
                                             <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-400 hover:text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
                                           )}
@@ -791,19 +795,18 @@ export default function TasksPage() {
                                   </div>
                                 </div>
                               ) : (
-                                <button
-                                  onClick={() => {
-                                    setQuickAddStage(stage.id);
-                                    setQuickAddTitle("");
-                                  }}
-                                  className="flex items-center justify-between w-full p-2 mt-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 rounded-lg transition-colors group"
-                                >
-                                  <div className="flex items-center gap-2.5">
-                                    <Plus className="w-5 h-5 text-slate-400 group-hover:text-brand-teal transition-colors" />
-                                    <span className="text-[14.5px] font-medium">Add a card</span>
-                                  </div>
-                                  <FilePlus className="w-4 h-4 text-slate-400 group-hover:text-brand-teal transition-colors opacity-0 group-hover:opacity-100" />
-                                </button>
+                                  <button
+                                    onClick={() => {
+                                      setQuickAddStage(stage.id);
+                                      setQuickAddTitle("");
+                                    }}
+                                    className="flex items-center justify-between w-full p-2 mt-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 rounded-lg transition-colors group"
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <Plus className="w-5 h-5 text-slate-400 group-hover:text-brand-teal transition-colors" />
+                                      <span className="text-[14.5px] font-medium">Add a task</span>
+                                    </div>
+                                  </button>
                               )}
                             </div>
                           )}
