@@ -1450,6 +1450,9 @@ class MarketingDailyReport(MarketingDailyReportBase):
     class Config:
         from_attributes = True
 
+class BulkDeleteLeadsRequest(BaseModel):
+    ids: List[str]
+
 class MarketingMonthlyReportBase(BaseModel):
     clientName: str
     month: str

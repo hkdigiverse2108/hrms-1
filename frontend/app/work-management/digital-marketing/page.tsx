@@ -325,6 +325,7 @@ export default function MarketingReportsPage() {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>({});
   const [isSavingRow, setIsSavingRow] = useState(false);
+  const [selectedLeadsIds, setSelectedLeadsIds] = useState<string[]>([]);
 
   // Logs state
   const [logsOpen, setLogsOpen] = useState(false);
@@ -1010,7 +1011,8 @@ export default function MarketingReportsPage() {
   const handleUploadLeads = async (
     e: React.ChangeEvent<HTMLInputElement>,
     id: string,
-    type: "daily" | "monthly"
+    type: "daily" | "monthly",
+    oldFileUrl?: string
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1033,6 +1035,16 @@ export default function MarketingReportsPage() {
       if (!uploadRes.ok) {
         toast.error("Failed to upload file");
         return;
+      }
+
+      if (oldFileUrl) {
+        const parts = oldFileUrl.split('/uploads/');
+        if (parts.length > 1) {
+          const oldFilename = parts[1];
+          await fetch(`${API_URL}/upload/${oldFilename}`, {
+            method: "DELETE",
+          }).catch(() => {});
+        }
       }
 
       const { url } = await uploadRes.json();
@@ -1058,6 +1070,28 @@ export default function MarketingReportsPage() {
       toast.success("Leads file removed successfully");
     } catch (err) {
       toast.error("Failed to remove leads file");
+    }
+  };
+
+  const handleBulkDeleteLeadsFiles = async () => {
+    if (selectedLeadsIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete the leads files for ${selectedLeadsIds.length} selected reports?`)) return;
+
+    try {
+      const res = await fetch(`${API_URL}/marketing/reports/daily/bulk-delete-leads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedLeadsIds }),
+      });
+      if (res.ok) {
+        toast.success("Selected leads files deleted successfully");
+        setSelectedLeadsIds([]);
+        fetchDailyReports();
+      } else {
+        toast.error("Failed to bulk delete leads files");
+      }
+    } catch (error) {
+      toast.error("An error occurred during bulk deletion");
     }
   };
   const handleDownloadLeads = (fileUrl: string) => {
@@ -1950,6 +1984,17 @@ export default function MarketingReportsPage() {
               </div>
             )}
             <div className="flex self-end pb-[1px] items-center gap-2 ml-auto">
+              {activeTab === "daily" && selectedLeadsIds.length > 0 && canDeleteMarketing && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-9 px-3 text-xs font-medium"
+                  onClick={handleBulkDeleteLeadsFiles}
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  Delete {selectedLeadsIds.length} Leads Files
+                </Button>
+              )}
               {activeTab === "daily" && filteredDaily.length > 0 && (
                 <>
                   <Button
@@ -2355,6 +2400,27 @@ export default function MarketingReportsPage() {
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-50">
                       <TableHead className="w-12 text-center font-bold text-slate-700"></TableHead>
+                      <TableHead className="w-10 text-center font-bold text-slate-700">
+                        {filteredDaily.some((r: any) => r.leadsFileUrl) && (
+                          <input 
+                            type="checkbox" 
+                            className="cursor-pointer w-3.5 h-3.5 mt-1"
+                            title="Select all with leads files"
+                            checked={
+                              filteredDaily.filter((r: any) => r.leadsFileUrl).length > 0 &&
+                              filteredDaily.filter((r: any) => r.leadsFileUrl).every((r: any) => selectedLeadsIds.includes(r.id))
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const idsWithFiles = filteredDaily.filter((r: any) => r.leadsFileUrl).map((r: any) => r.id);
+                                setSelectedLeadsIds(idsWithFiles);
+                              } else {
+                                setSelectedLeadsIds([]);
+                              }
+                            }}
+                          />
+                        )}
+                      </TableHead>
                       <TableHead className="w-12 text-center font-bold text-slate-700">
                         S.N
                       </TableHead>
@@ -2421,7 +2487,7 @@ export default function MarketingReportsPage() {
                             {filteredDaily.length === 0 ? (
                               <TableRow>
                                 <TableCell
-                                  colSpan={15}
+                                  colSpan={16}
                                   className="text-center py-20 text-slate-400 italic"
                                 >
                                   No daily reports found.
@@ -2498,6 +2564,24 @@ export default function MarketingReportsPage() {
                                                     >
                                                       <GripVertical className="w-4 h-4 mx-auto" />
                                                     </div>
+                                                  </TableCell>
+                                                  <TableCell className="text-center w-10">
+                                                    {report.leadsFileUrl ? (
+                                                      <input 
+                                                        type="checkbox" 
+                                                        className="cursor-pointer w-3.5 h-3.5 mt-1"
+                                                        checked={selectedLeadsIds.includes(report.id)}
+                                                        onChange={(e) => {
+                                                          if (e.target.checked) {
+                                                            setSelectedLeadsIds([...selectedLeadsIds, report.id]);
+                                                          } else {
+                                                            setSelectedLeadsIds(selectedLeadsIds.filter((id: string) => id !== report.id));
+                                                          }
+                                                        }}
+                                                      />
+                                                    ) : (
+                                                      <span className="text-slate-300">-</span>
+                                                    )}
                                                   </TableCell>
                                                   <TableCell className="text-center text-slate-400">
                                                     {globalIdx}
@@ -2845,7 +2929,7 @@ export default function MarketingReportsPage() {
                                                             className="hidden" 
                                                             id={`upload-leads-${report.id}`} 
                                                             accept=".xlsx,.xls,.csv"
-                                                            onChange={(e) => handleUploadLeads(e, report.id, "daily")}
+                                                            onChange={(e) => handleUploadLeads(e, report.id, "daily", report.leadsFileUrl)}
                                                           />
                                                           <Button
                                                             variant="ghost"
@@ -2866,19 +2950,6 @@ export default function MarketingReportsPage() {
                                                                 onClick={() => handleDownloadLeads(report.leadsFileUrl)}
                                                               >
                                                                 <FileSpreadsheet className="w-4 h-4" />
-                                                              </Button>
-                                                              <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                                title="Delete Leads File"
-                                                                onClick={() => {
-                                                                  if (window.confirm("Are you sure you want to delete this leads file?")) {
-                                                                    handleRemoveLeadsFile(report.id, report.leadsFileUrl, "daily");
-                                                                  }
-                                                                }}
-                                                              >
-                                                                <FileX className="w-4 h-4" />
                                                               </Button>
                                                             </>
                                                           )}
