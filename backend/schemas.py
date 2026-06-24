@@ -281,6 +281,7 @@ class AttendanceBase(BaseModel):
     checkOut: Optional[str] = None
     status: str
     workHours: Optional[str] = None
+    accumulatedWorkSeconds: Optional[float] = None
     breaks: List[Break] = []
     punches: List[PunchLog] = []
     remarks: Optional[str] = None
@@ -300,6 +301,7 @@ class AttendanceUpdate(BaseModel):
     checkOut: Optional[str] = None
     status: Optional[str] = None
     workHours: Optional[str] = None
+    accumulatedWorkSeconds: Optional[float] = None
     punches: Optional[List[PunchLog]] = None
     remarks: Optional[str] = None
     isLate: Optional[bool] = None
