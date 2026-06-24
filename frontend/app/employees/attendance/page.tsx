@@ -776,6 +776,8 @@ export default function EmployeeAttendanceListPage() {
                     const totalWorkingStr = formatToHhMm(totalWorkingMinutes);
                     const productionStr = formatToHhMm(productionMinutes);
                     
+                    const isToday = dayjs(record.date).isSame(dayjs(), 'day');
+                    
                     const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
                     const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
                     const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
