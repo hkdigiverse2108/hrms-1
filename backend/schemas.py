@@ -800,6 +800,7 @@ class FeedbackForm(FeedbackFormCreate):
 class FeedbackResponseCreate(BaseModel):
     formId: str
     clientId: str
+    projectId: Optional[str] = None
     answers: Dict[str, Any]
 
 class FeedbackResponse(FeedbackResponseCreate):
@@ -856,6 +857,19 @@ class Notification(NotificationBase):
         from_attributes = True
 
 # Client Schemas
+def parse_campaigns(v: Any) -> List[Dict[str, Any]]:
+    if not v:
+        return []
+    res = []
+    for item in v:
+        if isinstance(item, str):
+            res.append({"name": item, "isActive": True})
+        elif isinstance(item, dict):
+            res.append(item)
+    return res
+
+RobustCampaigns = Annotated[List[Dict[str, Any]], BeforeValidator(parse_campaigns)]
+
 class ClientBase(BaseModel):
     name: str
     companyName: str
@@ -879,7 +893,8 @@ class ClientBase(BaseModel):
     salesFocused: Optional[str] = "No"
     dailyBudget: Optional[float] = 0
     remarks: Optional[str] = None
-    responsibility: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     dailyFollowup: Optional[str] = "No"
     followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
     followupIntervalDays: Optional[int] = None
@@ -903,6 +918,21 @@ class ClientBase(BaseModel):
     nextPaymentDueDate: Optional[RobustDate] = None
     paymentRemarks: Optional[str] = None
     workReviews: Optional[List[dict]] = []
+    
+    # Creative Team Assignments
+    assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
+    assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
+    campaigns: Optional[RobustCampaigns] = []
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -910,6 +940,8 @@ class ClientCreate(ClientBase):
 
 class ClientUpdate(BaseModel):
     name: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     companyName: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -931,7 +963,8 @@ class ClientUpdate(BaseModel):
     salesFocused: Optional[str] = None
     dailyBudget: Optional[float] = None
     remarks: Optional[str] = None
-    responsibility: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     meetings: Optional[List[dict]] = []
     dailyFollowup: Optional[str] = None
     interviewDate: Optional[RobustDate] = None
@@ -957,6 +990,20 @@ class ClientUpdate(BaseModel):
     nextPaymentDueDate: Optional[RobustDate] = None
     paymentRemarks: Optional[str] = None
     workReviews: Optional[List[dict]] = None
+    campaigns: Optional[RobustCampaigns] = None
+    
+    assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
+    assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
 
 class Client(ClientBase):
     id: str
@@ -975,9 +1022,12 @@ class ProjectBase(BaseModel):
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
     status: Optional[str] = "planning"
+    statusHistory: Optional[List[dict]] = []
     priority: Optional[str] = "medium"
     budget: Optional[float] = 0
     followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
@@ -986,6 +1036,29 @@ class ProjectBase(BaseModel):
     followupDatesOfMonth: Optional[List[int]] = [] # 1-31
     lastFollowupDate: Optional[RobustDate] = None
     nextFollowupDate: Optional[RobustDate] = None
+    
+    # Feedback Collection Fields
+    feedbackType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
+    feedbackIntervalDays: Optional[int] = None
+    feedbackDaysOfWeek: Optional[List[int]] = [] # 0=Monday, 6=Sunday
+    feedbackDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastFeedbackDate: Optional[RobustDate] = None
+    nextFeedbackDate: Optional[RobustDate] = None
+    
+    # Creative Tracking Fields
+    services: Optional[str] = None
+    post: Optional[int] = 0
+    reel: Optional[int] = 0
+    festivalPost: Optional[str] = "No"
+    graphicsRequired: Optional[str] = "No"
+    postRequired: Optional[str] = "No"
+    reelRequired: Optional[str] = "No"
+    assignedScriptwriterId: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedPosterId: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1000,6 +1073,8 @@ class ProjectUpdate(BaseModel):
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     startDate: Optional[RobustDate] = None
     endDate: Optional[RobustDate] = None
     status: Optional[str] = None
@@ -1011,8 +1086,29 @@ class ProjectUpdate(BaseModel):
     followupDatesOfMonth: Optional[List[int]] = None
     lastFollowupDate: Optional[RobustDate] = None
     nextFollowupDate: Optional[RobustDate] = None
+    feedbackType: Optional[str] = None
+    feedbackIntervalDays: Optional[int] = None
+    feedbackDaysOfWeek: Optional[List[int]] = None
+    feedbackDatesOfMonth: Optional[List[int]] = None
+    lastFeedbackDate: Optional[RobustDate] = None
+    nextFeedbackDate: Optional[RobustDate] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    
+    # Creative Tracking Fields
+    services: Optional[str] = None
+    post: Optional[int] = None
+    reel: Optional[int] = None
+    festivalPost: Optional[str] = None
+    graphicsRequired: Optional[str] = None
+    postRequired: Optional[str] = None
+    reelRequired: Optional[str] = None
+    assignedScriptwriterId: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedPosterId: Optional[str] = None
 
 class Project(ProjectBase):
     id: str
@@ -1073,6 +1169,7 @@ class WMTaskBase(BaseModel):
     status: Optional[str] = "todo" # todo, in-progress, review, completed
     priority: Optional[str] = "medium" # low, medium, high, urgent
     remarks: Optional[str] = None
+    createdBy: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
     
@@ -1283,6 +1380,23 @@ class SystemSettings(SystemSettingsBase):
         from_attributes = True
 
 # Marketing Report Schemas
+class ProjectDailyRemarkBase(BaseModel):
+    projectId: str
+    clientId: Optional[str] = None
+    date: RobustDate
+    remark: Optional[str] = None
+
+class ProjectDailyRemarkCreate(ProjectDailyRemarkBase):
+    pass
+
+class ProjectDailyRemarkUpdate(BaseModel):
+    remark: Optional[str] = None
+
+class ProjectDailyRemark(ProjectDailyRemarkBase):
+    id: str
+    class Config:
+        from_attributes = True
+
 class MarketingDailyReportBase(BaseModel):
     date: RobustDate
     campaignName: str
@@ -1292,15 +1406,25 @@ class MarketingDailyReportBase(BaseModel):
     followers: int = 0
     spend: float = 0
     cpl: float = 0
+    revenue: float = 0
     remarks: Optional[str] = None
+    reason: Optional[str] = None
+    campaignOptimization: bool = False
+    leadsFileUrl: Optional[str] = None
 
 class MarketingDailyReportCreate(MarketingDailyReportBase):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class MarketingDailyReportUpdate(BaseModel):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     date: Optional[RobustDate] = None
     campaignName: Optional[str] = None
     reach: Optional[int] = None
@@ -1309,7 +1433,11 @@ class MarketingDailyReportUpdate(BaseModel):
     followers: Optional[int] = None
     spend: Optional[float] = None
     cpl: Optional[float] = None
+    revenue: Optional[float] = None
     remarks: Optional[str] = None
+    reason: Optional[str] = None
+    campaignOptimization: Optional[bool] = None
+    leadsFileUrl: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -1317,8 +1445,15 @@ class MarketingDailyReport(MarketingDailyReportBase):
     id: str
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
     class Config:
         from_attributes = True
+
+class BulkDeleteLeadsRequest(BaseModel):
+    ids: List[str]
 
 class MarketingMonthlyReportBase(BaseModel):
     clientName: str
@@ -1334,10 +1469,14 @@ class MarketingMonthlyReportBase(BaseModel):
 
 class MarketingMonthlyReportCreate(MarketingMonthlyReportBase):
     clientId: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
 
 class MarketingMonthlyReportUpdate(BaseModel):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     month: Optional[str] = None
     totalSpend: Optional[float] = None
     totalLeads: Optional[int] = None
@@ -1346,13 +1485,17 @@ class MarketingMonthlyReportUpdate(BaseModel):
     avgCPP: Optional[float] = None
     totalRevenue: Optional[float] = None
     overallROAS: Optional[float] = None
-    conclusion: Optional[str] = None
+    employeeConclusion: Optional[str] = None
+    adminConclusion: Optional[str] = None
+    clientConclusion: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
 class MarketingMonthlyReport(MarketingMonthlyReportBase):
     id: str
     clientId: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -1934,11 +2077,14 @@ class ContentCalendarEntryBase(BaseModel):
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
     logs: Optional[List[dict]] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
 
 class ContentCalendarEntryCreate(ContentCalendarEntryBase):
     pass
 
 class ContentCalendarEntryUpdate(BaseModel):
+    monthYear: Optional[str] = None
     postingDate: Optional[str] = None
     postingDay: Optional[str] = None
     postReel: Optional[str] = None
@@ -1958,6 +2104,8 @@ class ContentCalendarEntryUpdate(BaseModel):
     postingLinkOfIg: Optional[str] = None
     actualPostingDate: Optional[str] = None
     updatedBy: Optional[str] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
 
 class ContentCalendarEntry(ContentCalendarEntryBase):
     id: str
@@ -1992,3 +2140,32 @@ class ContentCalendarSettings(ContentCalendarSettingsBase):
     class Config:
         from_attributes = True
 
+# --- Other Work ---
+class OtherWorkBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assigneeId: str
+    assigneeName: str
+    assignerId: str
+    assignerName: str
+    deadline: str
+    status: str = "Pending"
+    taskType: Optional[str] = "other-work"
+    logs: Optional[List[dict]] = None
+
+class OtherWorkCreate(OtherWorkBase):
+    pass
+
+class OtherWorkUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
+    deadline: Optional[str] = None
+    status: Optional[str] = None
+    logs: Optional[List[dict]] = None
+
+class OtherWork(OtherWorkBase):
+    id: str
+    class Config:
+        from_attributes = True

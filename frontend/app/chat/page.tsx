@@ -30,6 +30,7 @@ import {
   UserPlus,
   Hash,
   ChevronLeft,
+  ArrowLeft,
   Pencil,
   Trash2,
   X,
@@ -43,6 +44,7 @@ import {
   UserMinus,
   Filter,
   Check,
+  Info,
   Clock,
   Layout,
   ExternalLink,
@@ -60,7 +62,11 @@ import {
   BarChart2,
   Play,
   Pause,
-  Square
+  Square,
+  Crop,
+  Type,
+  PenTool,
+  MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +80,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Tabs,
@@ -118,6 +127,29 @@ const getSenderColor = (name: string) => {
   }
   const index = Math.abs(hash) % colors.length;
   return colors[index];
+};
+
+const ChatLink = ({ href, target, rel, className, children, onClick, textColor }: any) => {
+  const [isHovered, setIsHovered] = useState(false);
+  return (
+    <a
+      href={href}
+      target={target}
+      rel={rel}
+      className={className}
+      style={{ 
+        textDecorationLine: isHovered ? 'underline' : 'none',
+        textUnderlineOffset: '3px',
+        textDecorationThickness: '1px',
+        color: textColor
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={onClick}
+    >
+      {children}
+    </a>
+  );
 };
 
 const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
@@ -205,7 +237,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
 
 export default function ChatPage() {
   const { user } = useUser();
-  const { ws, lastEvent, unreadCounts, markAsSeen: contextMarkAsSeen, onlineUsers } = useChatContext();
+  const { ws, lastEvent, unreadCounts, markAsSeen: contextMarkAsSeen, onlineUsers, isWindowFocused } = useChatContext();
   const { data: apiData, isLoading } = useApi();
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [message, setMessage] = useState("");
@@ -234,7 +266,47 @@ export default function ChatPage() {
   const [showDeletedNotification, setShowDeletedNotification] = useState(true); // Placeholder for demo, normally would be based on actual deletion events
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
-  const [previewImage, setPreviewImage] = useState<{url: string, name: string} | null>(null);
+  const [previewImageMsgId, setPreviewImageMsgId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null);
+  const [pendingFileUrl, setPendingFileUrl] = useState<string>("");
+  const [showPickerForMsgId, setShowPickerForMsgId] = useState<string | null>(null);
+  const [showPreviewEmojiPicker, setShowPreviewEmojiPicker] = useState(false);
+
+  useEffect(() => {
+    if (!pendingFile) {
+      setPendingFileUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(pendingFile);
+    setPendingFileUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [pendingFile]);
+
+  const imageMessages = useMemo(() => {
+    return currentMessages.filter(msg => msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName));
+  }, [currentMessages]);
+
+  const currentPreviewMsg = useMemo(() => {
+    return currentMessages.find(m => m.id === previewImageMsgId);
+  }, [currentMessages, previewImageMsgId]);
+
+  const currentPreviewIndex = useMemo(() => {
+    return imageMessages.findIndex(m => m.id === previewImageMsgId);
+  }, [imageMessages, previewImageMsgId]);
+
+  const handlePrevImage = () => {
+    if (currentPreviewIndex > 0) {
+      setPreviewImageMsgId(imageMessages[currentPreviewIndex - 1].id);
+    }
+  };
+
+  const handleNextImage = () => {
+    if (currentPreviewIndex < imageMessages.length - 1) {
+      setPreviewImageMsgId(imageMessages[currentPreviewIndex + 1].id);
+    }
+  };
 
   const [chatChannels, setChatChannels] = useState<any[]>([]);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -245,6 +317,9 @@ export default function ChatPage() {
   const [showGroupMembers, setShowGroupMembers] = useState(false);
   const [globalSavedMessages, setGlobalSavedMessages] = useState<any[]>([]);
   const [showRightSidebar, setShowRightSidebar] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<'info' | 'files'>('info');
+  const [sidebarContactUser, setSidebarContactUser] = useState<any | null>(null);
+  const [activeTagIndex, setActiveTagIndex] = useState(0);
   const [chatFiles, setChatFiles] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
@@ -257,8 +332,87 @@ export default function ChatPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const [isWsConnected, setIsWsConnected] = useState(false);
   const selectedChatRef = useRef<any>(null);
+  const [msgInfoData, setMsgInfoData] = useState<any>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [tagPickerLeft, setTagPickerLeft] = useState<number>(0);
+
+  // Load drafts from localStorage on mount
+  useEffect(() => {
+    const savedDrafts = localStorage.getItem("chatDrafts");
+    if (savedDrafts) {
+      try {
+        setDrafts(JSON.parse(savedDrafts));
+      } catch (e) {
+        console.error("Error parsing saved drafts:", e);
+      }
+    }
+  }, []);
+
+
+  const inputOverlayRef = useRef<HTMLDivElement>(null);
 
   const isSelectedChatOnline = selectedChat?.type === 'personal' && (onlineUsers.has(selectedChat.id) || onlineUsers.has(selectedChat.employeeId));
+
+  const groupMembersList = useMemo(() => {
+    if (!selectedChat) return [];
+    if (selectedChat.type === 'general' || selectedChat.id?.startsWith("gen-") || selectedChat.id === "general") {
+      return Array.from(new Set(employees.map(emp => emp.id || emp._id).filter(Boolean)));
+    }
+    return Array.from(new Set(selectedChat.members || []));
+  }, [selectedChat, employees]);
+
+  const renderInputHighlight = (text: string) => {
+    if (!text) return "";
+    
+    // If tag picker is open, find the active '@' that triggered it
+    if (showTagPicker) {
+      const activeAtIdx = text.lastIndexOf("@");
+      if (activeAtIdx !== -1 && activeAtIdx >= text.length - 25) {
+        const before = text.substring(0, activeAtIdx);
+        const after = text.substring(activeAtIdx + 1);
+        return (
+          <>
+            {renderHighlightParts(before)}
+            <span id="active-mention-marker" className="text-[#0ea5e9]">@</span>
+            {renderHighlightParts(after)}
+          </>
+        );
+      }
+    }
+
+    return renderHighlightParts(text);
+  };
+
+  const renderHighlightParts = (text: string) => {
+    if (!text) return "";
+    const namePatterns = employees.map(emp => {
+      const name = emp.name || `${emp.firstName} ${emp.lastName}`;
+      return name.trim();
+    }).filter(Boolean)
+      .sort((a, b) => b.length - a.length)
+      .map(name => name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+
+    // Strict regex matching: only match actual employee names, no fallback.
+    const mentionRegex = namePatterns.length > 0
+      ? new RegExp(`(@(?:${namePatterns.join('|')})\\b)`, 'gi')
+      : /(?!)/g;
+
+    const parts = text.split(mentionRegex);
+    return parts.map((part, idx) => {
+      if (part.startsWith("@")) {
+        const nameOnly = part.substring(1).trim();
+        const matched = employees.some(emp => {
+          const empName = (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`).trim();
+          return empName.toLowerCase() === nameOnly.toLowerCase();
+        });
+        if (matched) {
+          return <span key={idx} className="text-[#0ea5e9]">{part}</span>;
+        }
+      }
+      return <span key={idx}>{part}</span>;
+    });
+  };
+
 
   const renderCheckmarks = (msg: any, isImageOverlay: boolean = false) => {
     if (!msg.isMe) return null;
@@ -266,15 +420,35 @@ export default function ChatPage() {
       return <Clock className={cn("w-3 h-3", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
     }
     
-    const isSeenByOthers = msg.seenBy && msg.seenBy.filter((id: string) => id !== user?.id).length > 0;
+    const isGroupMsg = !!msg.groupId || msg.receiverId === "group" || msg.type === "group";
+    const uniqueSeenBy = Array.from(new Set(msg.seenBy || []));
+    const seenByOthersCount = uniqueSeenBy.filter((id: any) => String(id) !== String(user?.id)).length;
+    const isSeenByOthers = seenByOthersCount > 0;
+    
+    if (isGroupMsg) {
+      const isChannel = chatChannels.some(c => String(c.id) === String(msg.groupId) || String(c.id) === String(msg.receiverId));
+      const isGroup = chatGroups.some(g => String(g.id) === String(msg.groupId) || String(g.id) === String(msg.receiverId));
+      
+      let totalMembers = 0;
+      if (isChannel) {
+        totalMembers = employees.length;
+      } else if (isGroup) {
+        const group = chatGroups.find(g => String(g.id) === String(msg.groupId) || String(g.id) === String(msg.receiverId));
+        const uniqueMembers = Array.from(new Set(group?.members || []));
+        totalMembers = uniqueMembers.length;
+      }
+
+      const requiredSeenCount = totalMembers > 1 ? totalMembers - 1 : 0; // Exclude sender
+
+      if (requiredSeenCount > 0 && seenByOthersCount >= requiredSeenCount) {
+        return <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />;
+      } else {
+        return <CheckCheck className={cn("w-3.5 h-3.5", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
+      }
+    }
     
     if (isSeenByOthers) {
       return <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />;
-    }
-    
-    const isGroupMsg = !!msg.groupId || msg.receiverId === "group" || msg.type === "group";
-    if (isGroupMsg) {
-      return <CheckCheck className={cn("w-3.5 h-3.5", isImageOverlay ? "text-white/70" : "text-[#8696a0]")} />;
     }
     
     const isRecipientOnline = onlineUsers.has(msg.receiverId);
@@ -309,16 +483,53 @@ export default function ChatPage() {
     }
   }, []);
 
-  // Listen for Escape key to close the active chat
+  // Listen for Escape key to close the active chat and click to close context menu
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (e.key === "Escape") {
+        if (previewImageMsgId) {
+          return;
+        }
+        if (pendingFile) {
+          setPendingFile(null);
+          return;
+        }
         setSelectedChat(null as any);
       }
     };
+    const handleCloseMenu = () => {
+      setContextMenu(null);
+    };
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+    window.addEventListener("click", handleCloseMenu);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("click", handleCloseMenu);
+    };
+  }, [previewImageMsgId, pendingFile]);
+
+  // Arrow key navigation for image preview
+  useEffect(() => {
+    if (!previewImageMsgId) return;
+
+    const handleArrowKeys = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        if (currentPreviewIndex > 0) {
+          setPreviewImageMsgId(imageMessages[currentPreviewIndex - 1].id);
+        }
+      } else if (e.key === "ArrowRight") {
+        if (currentPreviewIndex < imageMessages.length - 1) {
+          setPreviewImageMsgId(imageMessages[currentPreviewIndex + 1].id);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleArrowKeys);
+    return () => {
+      window.removeEventListener("keydown", handleArrowKeys);
+    };
+  }, [previewImageMsgId, currentPreviewIndex, imageMessages]);
 
   const [showCreatePoll, setShowCreatePoll] = useState(false);
   const [pollData, setPollData] = useState({ 
@@ -337,6 +548,35 @@ export default function ChatPage() {
   const [showTagPicker, setShowTagPicker] = useState(false);
   const [tagSearchQuery, setTagSearchQuery] = useState("");
 
+  // Dynamically position mention tag picker above '@' character
+  useEffect(() => {
+    if (showTagPicker) {
+      const timer = setTimeout(() => {
+        const marker = document.getElementById("active-mention-marker");
+        const container = messageInputRef.current?.parentElement;
+        if (marker && container) {
+          const markerRect = marker.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          let leftOffset = markerRect.left - containerRect.left;
+          
+          // Constrain the leftOffset so the box doesn't go off screen
+          const pickerWidth = 256; // w-64 is 256px
+          const maxLeft = containerRect.width - pickerWidth - 8;
+          if (leftOffset > maxLeft) {
+            leftOffset = maxLeft;
+          }
+          if (leftOffset < 0) {
+            leftOffset = 0;
+          }
+          
+          setTagPickerLeft(leftOffset);
+        }
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [showTagPicker, message]);
+
+
   const filteredEmployees = useMemo(() => {
     const q = tagSearchQuery.toLowerCase().trim();
     if (!q) return employees;
@@ -347,35 +587,86 @@ export default function ChatPage() {
     });
   }, [employees, tagSearchQuery]);
 
+  useEffect(() => {
+    setActiveTagIndex(0);
+  }, [tagSearchQuery]);
+
   const handleInputChange = (val: string) => {
     setMessage(val);
     handleTyping();
 
-    const lastAtIdx = val.lastIndexOf("@");
-    if (lastAtIdx !== -1 && lastAtIdx >= val.length - 20) {
-      const textAfterAt = val.slice(lastAtIdx + 1);
-      if (!textAfterAt.includes(" ")) {
-        setShowTagPicker(true);
-        setTagSearchQuery(textAfterAt);
-        return;
+    if (selectedChat) {
+      const chatId = selectedChat.id || selectedChat.employeeId;
+      if (chatId) {
+        setDrafts(prev => {
+          const updated = { ...prev };
+          if (val.trim()) {
+            updated[chatId] = val;
+          } else {
+            delete updated[chatId];
+          }
+          localStorage.setItem("chatDrafts", JSON.stringify(updated));
+          return updated;
+        });
       }
+    }
+
+    // Only trigger mention if @ is at the start or preceded by a space (and only for group/general chats, not personal)
+    const atMatch = val.match(/(^|\s)@([^\s]*)$/);
+    const isGroupOrChannel = selectedChat?.type === 'group' || selectedChat?.type === 'general';
+    if (atMatch && isGroupOrChannel) {
+      const textAfterAt = atMatch[2];
+      setShowTagPicker(true);
+      setTagSearchQuery(textAfterAt);
+      return;
     }
     setShowTagPicker(false);
   };
+
 
   const handleTagSelect = (emp: any) => {
     const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
     const formattedTag = `@${empName} `;
     
+    let newMsg = message;
     const lastAtIdx = message.lastIndexOf("@");
     if (lastAtIdx !== -1 && lastAtIdx >= message.length - 25) {
-      setMessage(message.slice(0, lastAtIdx) + formattedTag);
+      newMsg = message.slice(0, lastAtIdx) + formattedTag;
     } else {
-      setMessage(prev => prev + formattedTag);
+      newMsg = message + formattedTag;
     }
+    setMessage(newMsg);
+
+    // Save draft
+    if (selectedChat) {
+      const chatId = selectedChat.id || selectedChat.employeeId;
+      if (chatId) {
+        setDrafts(prev => {
+          const updated = { ...prev, [chatId]: newMsg };
+          localStorage.setItem("chatDrafts", JSON.stringify(updated));
+          return updated;
+        });
+      }
+    }
+
     setShowTagPicker(false);
     setTagSearchQuery("");
+
+    // Refocus, place caret at the end, and adjust auto-resized height
+    setTimeout(() => {
+      if (messageInputRef.current) {
+        messageInputRef.current.focus();
+        const len = newMsg.length;
+        messageInputRef.current.setSelectionRange(len, len);
+        messageInputRef.current.style.height = 'auto';
+        messageInputRef.current.style.height = Math.min(messageInputRef.current.scrollHeight, 120) + 'px';
+        if (inputOverlayRef.current) {
+          inputOverlayRef.current.scrollTop = messageInputRef.current.scrollTop;
+        }
+      }
+    }, 10);
   };
+
 
   useEffect(() => {
     const savedMuted = localStorage.getItem("mutedChats");
@@ -387,7 +678,14 @@ export default function ChatPage() {
       try { setChatNotificationPrefs(JSON.parse(savedPrefs)); } catch (e) { console.error(e); }
     }
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
+      try {
+        const p = Notification.requestPermission();
+        if (p && typeof p.catch === "function") {
+          p.catch((err) => console.warn("Notification request permission rejected:", err));
+        }
+      } catch (err) {
+        console.warn("Notification permission request failed:", err);
+      }
     }
     const savedDnd = localStorage.getItem("globalDndEnabled");
     if (savedDnd) setGlobalDndEnabled(savedDnd === "true");
@@ -491,6 +789,35 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const tagPickerContainerRef = useRef<HTMLDivElement>(null);
+  const captionInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showTagPicker && tagPickerContainerRef.current) {
+      const container = tagPickerContainerRef.current;
+      const buttons = container.querySelectorAll("button");
+      const activeElement = buttons[activeTagIndex] as HTMLElement;
+      if (activeElement) {
+        const containerHeight = container.clientHeight;
+        const elemTop = activeElement.offsetTop;
+        const elemHeight = activeElement.offsetHeight;
+        if (elemTop < container.scrollTop) {
+          container.scrollTop = elemTop;
+        } else if (elemTop + elemHeight > container.scrollTop + containerHeight) {
+          container.scrollTop = elemTop + elemHeight - containerHeight;
+        }
+      }
+    }
+  }, [activeTagIndex, showTagPicker]);
+
+  useEffect(() => {
+    if (pendingFile) {
+      setTimeout(() => {
+        captionInputRef.current?.focus();
+      }, 50);
+    }
+  }, [pendingFile]);
+
   const shouldScrollToBottom = useRef(true);
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -755,6 +1082,17 @@ export default function ChatPage() {
       }
     };
   }, [selectedChat]);
+ 
+  // Mark active chat as seen when window gains focus
+  useEffect(() => {
+    if (isWindowFocused && selectedChat) {
+      const chatId = selectedChat.id || selectedChat.employeeId;
+      if (chatId) {
+        markAsSeen(chatId);
+        fetchChatSummaries();
+      }
+    }
+  }, [isWindowFocused, selectedChat, fetchChatSummaries]);
 
   const handleSelectChat = (chat: any) => {
     if (!chat) return;
@@ -767,7 +1105,47 @@ export default function ChatPage() {
       return;
     }
 
+    // Save draft for current chat if any text is typed
+    if (selectedChat && currentId) {
+      setDrafts(prev => {
+        const updated = { ...prev };
+        if (message.trim()) {
+          updated[currentId] = message;
+        } else {
+          delete updated[currentId];
+        }
+        localStorage.setItem("chatDrafts", JSON.stringify(updated));
+        return updated;
+      });
+    }
+
     setSelectedChat(chat);
+    setSidebarContactUser(null);  // Clear single member detail override on chat switch
+    
+    // Automatically switch active tab on left sidebar
+    if (chat.type === 'personal') {
+      setActiveTab('Personal');
+    } else if (chat.type === 'group') {
+      setActiveTab('Groups');
+    } else if (chat.type === 'general' || chat.id?.startsWith("gen-") || chat.id === "general") {
+      setActiveTab('General');
+    }
+
+    // Load draft for newly selected chat
+    const nextDraft = drafts[newId] || "";
+    setMessage(nextDraft);
+
+    // Auto-resize input height for loaded draft
+    setTimeout(() => {
+      if (messageInputRef.current) {
+        messageInputRef.current.style.height = 'auto';
+        messageInputRef.current.style.height = Math.min(messageInputRef.current.scrollHeight, 120) + 'px';
+        if (inputOverlayRef.current) {
+          inputOverlayRef.current.scrollTop = messageInputRef.current.scrollTop;
+        }
+      }
+    }, 50);
+
     setCurrentMessages([]);  // Clear stale messages immediately on chat switch
     setFirstUnreadId(null);
     shouldScrollToBottom.current = true;
@@ -776,6 +1154,40 @@ export default function ChatPage() {
       markAsSeen(chatId);
     }
   };
+
+
+  const openSidebarForMember = (memberId: string) => {
+    const emp = employees.find(e => e.id === memberId || e.employeeId === memberId);
+    if (!emp) return;
+    setSidebarContactUser(emp);
+    setSidebarTab('info');
+    setShowRightSidebar(true);
+  };
+
+  const openPersonalChatWithEmployeeId = (empId: string) => {
+    if (empId === user?.id) return;
+    const emp = employees.find(e => e.id === empId);
+    if (!emp) return;
+    const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+    handleSelectChat({
+      id: emp.id || emp.employeeId,
+      name: empName,
+      status: onlineUsers.has(emp.id || emp.employeeId) ? "Online" : "Offline",
+      avatar: emp.profilePhoto 
+        ? (emp.profilePhoto.startsWith("http") ? emp.profilePhoto : `${API_URL}/uploads/${emp.profilePhoto}`)
+        : null,
+      type: "personal"
+    });
+  };
+
+  // Auto-focus message input when a chat is opened
+  useEffect(() => {
+    if (selectedChat && messageInputRef.current) {
+      setTimeout(() => {
+        messageInputRef.current?.focus();
+      }, 100);
+    }
+  }, [selectedChat]);
 
   const fetchMessages = React.useCallback(async () => {
     if (!selectedChat || !user || !user.id) return;
@@ -980,7 +1392,9 @@ export default function ChatPage() {
           }
           return [...prev, { ...data, isMe: data.senderId === user.id }];
         });
-        markAsSeen(messageChatId);
+        if (isWindowFocused) {
+          markAsSeen(messageChatId);
+        }
       }
       
       // Live refresh lists
@@ -1139,6 +1553,17 @@ export default function ChatPage() {
     }
     // Clear input fields immediately so the user gets instant feedback
     setMessage("");
+    if (selectedChat) {
+      const chatId = selectedChat.id || selectedChat.employeeId;
+      if (chatId) {
+        setDrafts(prev => {
+          const updated = { ...prev };
+          delete updated[chatId];
+          localStorage.setItem("chatDrafts", JSON.stringify(updated));
+          return updated;
+        });
+      }
+    }
     setReplyingTo(null);
     stopTyping();
     const capturedFile = pendingFile;
@@ -1238,6 +1663,8 @@ export default function ChatPage() {
   const renderMessageText = (text: string, isMeBubble: boolean = false) => {
     if (!text) return "";
     
+    const isPersonal = selectedChat?.type !== 'group' && selectedChat?.type !== 'general';
+
     const namePatterns = employees.map(emp => {
       const name = emp.name || `${emp.firstName} ${emp.lastName}`;
       return name.trim();
@@ -1245,27 +1672,37 @@ export default function ChatPage() {
       .sort((a, b) => b.length - a.length)
       .map(name => name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
 
-    const mentionRegex = namePatterns.length > 0
-      ? new RegExp(`(@(?:${namePatterns.join('|')})\\b|@\\w+)`, 'gi')
-      : /(@\w+)/g;
+    // Strict regex matching: only match actual employee names, no fallback. (disabled in personal chats)
+    const mentionRegex = (namePatterns.length > 0 && !isPersonal)
+      ? new RegExp(`(^|\\s)(@(?:${namePatterns.join('|')})\\b)`, 'gi')
+      : /(?!)/g;
 
     const parts = text.split(mentionRegex);
     const withMentions = parts.map((part, i) => {
+      if (!part) return null;
+      
       if (part.startsWith("@")) {
-        const name = part.substring(1);
-        const isMe = (() => {
-          const firstName = user?.firstName?.toLowerCase() || "";
-          const lastName = user?.lastName?.toLowerCase() || "";
-          const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
-          const strippedFullName = fullName.replace(/\s+/g, "");
-          const mentionName = name.toLowerCase();
-          return (
-            (firstName && firstName === mentionName) ||
-            (lastName && lastName === mentionName) ||
-            (fullName && fullName.includes(mentionName)) ||
-            (strippedFullName && strippedFullName === mentionName)
-          );
-        })();
+        const name = part.substring(1).trim();
+        const matchedEmp = employees.find(emp => {
+          const empName = (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`).trim();
+          return empName.toLowerCase() === name.toLowerCase();
+        });
+
+        const isMe = matchedEmp 
+          ? (matchedEmp.id === user?.id || matchedEmp.employeeId === user?.id)
+          : (() => {
+              const firstName = user?.firstName?.toLowerCase() || "";
+              const lastName = user?.lastName?.toLowerCase() || "";
+              const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
+              const strippedFullName = fullName.replace(/\s+/g, "");
+              const mentionName = name.toLowerCase();
+              return (
+                (firstName && firstName === mentionName) ||
+                (lastName && lastName === mentionName) ||
+                (fullName && fullName.includes(mentionName)) ||
+                (strippedFullName && strippedFullName === mentionName)
+              );
+            })();
 
         // Two unified color palettes: Orange/Amber for 'You', Blue/Cyan for 'Others'
         let tagColorClass = "";
@@ -1277,9 +1714,19 @@ export default function ChatPage() {
           tagColorClass = isMe ? "text-[#d97706] font-extrabold" : "text-[#0ea5e9] font-extrabold";
         }
 
+        const handleClick = () => {
+          if (matchedEmp) {
+            const empId = matchedEmp.id || matchedEmp.employeeId;
+            if (empId) {
+              openPersonalChatWithEmployeeId(empId);
+            }
+          }
+        };
+
         return (
           <span 
             key={`mention-${i}`} 
+            onClick={handleClick}
             className={cn(
               "text-[13px] transition-all cursor-pointer inline-block mr-1 font-bold hover:underline",
               tagColorClass
@@ -1290,24 +1737,36 @@ export default function ChatPage() {
         );
       }
       
-      // Then, handle URL parsing and search highlighting for non-mention parts
-      const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-      const textParts = part.split(urlRegex);
+      // Then, handle URL and Email parsing and search highlighting for non-mention parts
+      const urlOrEmailRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+      const textParts = part.split(urlOrEmailRegex);
 
       return textParts.map((tp, k) => {
-        if (tp.match(urlRegex)) {
-          const href = tp.startsWith('http') ? tp : `https://${tp}`;
+        if (!tp) return null; // Filter out empty strings from split
+        
+        if (tp.match(urlOrEmailRegex)) {
+          let href = tp;
+          let isMail = false;
+          if (tp.includes('@') && !tp.startsWith('http') && !tp.startsWith('www.')) {
+            href = `mailto:${tp}`;
+            isMail = true;
+          } else if (tp.startsWith('www.')) {
+            href = `https://${tp}`;
+          }
+          const hexColor = isMeBubble ? "#0369a1" : "#0ea5e9";
+
           return (
-            <a 
+            <ChatLink 
               key={`url-${i}-${k}`} 
               href={href} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-[#027eb5] hover:underline break-all"
-              onClick={(e) => e.stopPropagation()}
+              target={isMail ? undefined : "_blank"} 
+              rel={isMail ? undefined : "noopener noreferrer"}
+              className="break-all font-medium cursor-pointer"
+              textColor={hexColor}
+              onClick={(e: any) => e.stopPropagation()}
             >
               {tp}
-            </a>
+            </ChatLink>
           );
         }
 
@@ -1794,7 +2253,11 @@ export default function ChatPage() {
           id: emp.id || emp.employeeId,
           name: emp.id === user?.id ? `${empName} (You)` : empName,
           status: isOnline ? "Online" : "Offline",
-          lastMessage: summary?.lastMessage || "Click to start chatting",
+          lastMessage: summary?.lastMessage 
+            ? summary.lastMessage 
+            : (summary?.attachmentUrl || summary?.attachmentName)
+              ? "Sent a file"
+              : "Click to start chatting",
           time: summary?.timestamp ? dayjs(summary.timestamp).format("hh:mm A") : "",
           timestamp: summary?.timestamp || 0,
           avatar: emp.profilePhoto 
@@ -1856,6 +2319,18 @@ export default function ChatPage() {
 
     }
   }, [chats, selectedChat, chatChannels, chatGroups, handleSelectChat]);
+
+  // Disable outer layout scroll on mount of Chat page to prevent page overflow
+  useEffect(() => {
+    const siteLayout = document.querySelector(".site-layout");
+    if (siteLayout) {
+      const originalOverflow = (siteLayout as HTMLElement).style.overflow;
+      (siteLayout as HTMLElement).style.overflow = "hidden";
+      return () => {
+        (siteLayout as HTMLElement).style.overflow = originalOverflow;
+      };
+    }
+  }, []);
 
   // Listen for notification clicks when already on the chat page
   useEffect(() => {
@@ -2110,8 +2585,8 @@ export default function ChatPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3 className="font-bold text-[14px] text-foreground truncate">{chat.name}</h3>
                           {unreadCounts[chat.id] > 0 && (
                             <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
@@ -2119,7 +2594,7 @@ export default function ChatPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-[10px] font-semibold text-muted-foreground">{chat.time}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{chat.time}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -2127,7 +2602,14 @@ export default function ChatPage() {
                             <span className="text-[10px] shrink-0">{employees.find(e => e.id === chat.id)?.statusEmoji}</span>
                           )}
                           <p className="text-[12px] text-muted-foreground truncate">
-                            {employees.find(e => e.id === chat.id)?.customStatus || chat.lastMessage}
+                            {drafts[chat.id] ? (
+                              <>
+                                <span className="text-[#00a884] font-bold">Draft: </span>
+                                <span>{drafts[chat.id]}</span>
+                              </>
+                            ) : (
+                              employees.find(e => e.id === chat.id)?.customStatus || chat.lastMessage
+                            )}
                           </p>
                         </div>
                       </div>
@@ -2181,8 +2663,8 @@ export default function ChatPage() {
                       </Avatar>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3 className="font-bold text-[14px] text-foreground truncate">{group.name}</h3>
                           {unreadCounts[group.id] > 0 && (
                             <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
@@ -2190,11 +2672,18 @@ export default function ChatPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-[10px] font-semibold text-muted-foreground">{group.lastMessageTime}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{group.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
-                          {group.lastMessage || "No messages yet"}
+                          {drafts[group.id] ? (
+                            <>
+                              <span className="text-[#00a884] font-bold">Draft: </span>
+                              <span>{drafts[group.id]}</span>
+                            </>
+                          ) : (
+                            group.lastMessage || "No messages yet"
+                          )}
                         </p>
                         {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
                           <DropdownMenu>
@@ -2269,8 +2758,8 @@ export default function ChatPage() {
                       </Avatar>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3 className="font-bold text-[14px] text-foreground truncate">{channel.name}</h3>
                           {unreadCounts[channel.id] > 0 && (
                             <Badge className="bg-[#00a884] text-white text-[10px] h-5 min-w-5 px-1 flex items-center justify-center rounded-full border-none font-bold shrink-0">
@@ -2278,11 +2767,18 @@ export default function ChatPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-[10px] font-semibold text-muted-foreground">{channel.lastMessageTime}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">{channel.lastMessageTime}</span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[12px] text-muted-foreground truncate flex-1">
-                          {channel.lastMessage || channel.description}
+                          {drafts[channel.id] ? (
+                            <>
+                              <span className="text-[#00a884] font-bold">Draft: </span>
+                              <span>{drafts[channel.id]}</span>
+                            </>
+                          ) : (
+                            channel.lastMessage || channel.description
+                          )}
                         </p>
                         {(user?.role === "Admin" || user?.role === "HR") && (
                           <DropdownMenu>
@@ -2508,7 +3004,7 @@ export default function ChatPage() {
         )}
       >
         {isDragging && selectedChat && (
-          <div className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200 pointer-events-none">
             <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 border border-brand-teal/20 scale-100 transition-all">
               <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center animate-bounce">
                 <Paperclip className="w-8 h-8 text-brand-teal" />
@@ -2521,9 +3017,99 @@ export default function ChatPage() {
           </div>
         )}
         {selectedChat ? (
-          !showRightSidebar ? (
-          <>
-            {/* Chat Header */}
+          <div className="flex-1 flex flex-row overflow-hidden relative">
+            {pendingFile ? (
+            <div className="absolute inset-0 z-45 bg-white flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
+              {/* Top Bar */}
+              <div className="h-14 px-6 bg-white border-b border-slate-100 flex items-center justify-between text-slate-800 shrink-0 z-50">
+                <div className="flex items-center gap-4">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full"
+                    onClick={() => setPendingFile(null)}
+                  >
+                    <X className="w-6 h-6" />
+                  </Button>
+                  <span className="font-bold text-sm">Preview</span>
+                </div>
+                
+                {/* WhatsApp Editing Tools Removed */}
+              </div>
+
+              {/* Center File Display */}
+              <div className="flex-1 relative w-full flex items-center justify-center p-4 bg-[#f0f2f5]/40">
+                {pendingFile && (
+                  pendingFile.type.startsWith("image/") ? (
+                    pendingFileUrl ? (
+                      <img 
+                        src={pendingFileUrl} 
+                        alt={pendingFile.name}
+                        className="max-w-full max-h-[65vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
+                      />
+                    ) : null
+                  ) : (
+                    <div className="bg-white p-8 rounded-2xl flex flex-col items-center gap-4 border border-slate-200 max-w-sm w-full text-slate-800 shadow-md animate-in zoom-in-95 duration-200">
+                      <div className="w-20 h-20 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal">
+                        <FileIcon className="w-10 h-10" />
+                      </div>
+                      <div className="text-center min-w-0 w-full">
+                        <p className="font-bold truncate text-sm">{pendingFile.name}</p>
+                        <p className="text-xs text-slate-400 mt-1">{(pendingFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Bottom Bar containing Caption Input and Send Button */}
+              <div className="bg-[#f0f2f5] p-4 shrink-0 flex items-center gap-3 border-t border-slate-200 justify-center w-full">
+                <div className="max-w-3xl flex-1 flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-transparent focus-within:border-brand-teal shadow-xs">
+                  <Popover open={showPreviewEmojiPicker} onOpenChange={setShowPreviewEmojiPicker}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="text-slate-400 hover:text-slate-600 shrink-0 focus:outline-none">
+                        <Smile className="w-6 h-6" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="start" className="p-0 border-none bg-transparent shadow-none w-auto mb-4 z-[100]">
+                      <EmojiPicker 
+                        onEmojiSelect={(emoji) => {
+                          setMessage(prev => prev + emoji);
+                          setShowPreviewEmojiPicker(false);
+                        }}
+                        onClose={() => setShowPreviewEmojiPicker(false)}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <input 
+                    ref={captionInputRef}
+                    type="text" 
+                    autoFocus
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    placeholder="Add a caption..."
+                    className="flex-1 bg-transparent border-none text-slate-800 text-[15px] placeholder:text-slate-400 outline-none focus:outline-none"
+                  />
+                </div>
+                {/* Send Button */}
+                <button 
+                  type="button"
+                  onClick={() => handleSendMessage()}
+                  className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-12 h-12 shadow-md flex items-center justify-center transition-all shrink-0"
+                >
+                  <Send className="w-5 h-5 fill-current ml-0.5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col min-w-0 bg-white relative">
+              {/* Chat Header */}
             <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
               <div className="flex items-center gap-4">
                 <Button 
@@ -2540,7 +3126,17 @@ export default function ChatPage() {
                     <h2 className="font-bold text-slate-800 text-lg">{selectedChat.name.toLowerCase()}</h2>
                   </div>
                 ) : (
-                  <>
+                  <div 
+                    className="flex items-center gap-3.5 cursor-pointer select-none"
+                    onClick={() => {
+                      if (showRightSidebar && sidebarTab === 'info') {
+                        setShowRightSidebar(false);
+                      } else {
+                        setSidebarTab('info');
+                        setShowRightSidebar(true);
+                      }
+                    }}
+                  >
                     <div className="relative shrink-0">
                       <Avatar className="w-11 h-11 border border-border">
                         {selectedChat.avatar ? (
@@ -2556,18 +3152,26 @@ export default function ChatPage() {
                       )}
                     </div>
                     <div>
-                      <h2 className="font-bold text-slate-800">{selectedChat.name}</h2>
+                      <h2 className="font-bold text-slate-800 hover:underline">{selectedChat.name}</h2>
                       {typingUsers.length > 0 ? (
                         <p className="text-[11px] font-bold text-brand-teal animate-pulse">
                           {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
                         </p>
-                      ) : selectedChat.type === 'group' ? (
+                      ) : (selectedChat.type === 'group' || selectedChat.type === 'general') ? (
                         <div 
-                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-full pr-2 transition-colors py-0.5"
-                          onClick={() => setShowGroupMembers(true)}
+                          className="flex items-center gap-2 pr-2 py-0.5 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (showRightSidebar && sidebarTab === 'info') {
+                              setShowRightSidebar(false);
+                            } else {
+                              setSidebarTab('info');
+                              setShowRightSidebar(true);
+                            }
+                          }}
                         >
                           <div className="flex -space-x-2 overflow-hidden">
-                            {selectedChat.members?.slice(0, 3).map((memberId: string) => {
+                            {groupMembersList.slice(0, 3).map((memberId: string) => {
                               const member = employees.find((e: any) => e.id === memberId);
                               return (
                                 <Avatar key={memberId} className="w-5 h-5 border-2 border-white ring-1 ring-border shrink-0">
@@ -2580,7 +3184,7 @@ export default function ChatPage() {
                             })}
                           </div>
                           <p className="text-[11px] font-bold text-emerald-600">
-                            {selectedChat.members?.length > 3 ? `+${selectedChat.members.length - 3} others` : `${selectedChat.members?.length || 0} Members`}
+                            {groupMembersList.length > 3 ? `+${groupMembersList.length - 3} others` : `${groupMembersList.length} Members`}
                           </p>
                         </div>
                       ) : (
@@ -2589,7 +3193,7 @@ export default function ChatPage() {
                         </p>
                       )}
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
 
@@ -2652,8 +3256,15 @@ export default function ChatPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className={cn("text-muted-foreground h-9 w-9 rounded-full hover:bg-gray-100", showRightSidebar && "text-brand-teal bg-brand-teal/5")}
-                  onClick={() => setShowRightSidebar(!showRightSidebar)}
+                  className={cn("text-muted-foreground h-9 w-9 rounded-full hover:bg-gray-100", showRightSidebar && sidebarTab === 'files' && "text-brand-teal bg-brand-teal/5")}
+                  onClick={() => {
+                    if (showRightSidebar && sidebarTab === 'files') {
+                      setShowRightSidebar(false);
+                    } else {
+                      setSidebarTab('files');
+                      setShowRightSidebar(true);
+                    }
+                  }}
                 >
                   <FileIcon className="w-4 h-4" />
                 </Button>
@@ -2711,10 +3322,11 @@ export default function ChatPage() {
             )}
 
             {/* Chat Messages */}
-            <div 
-              ref={scrollRef}
-              className="flex-1 overflow-y-auto p-6 space-y-4 whatsapp-chat-bg custom-scrollbar"
-            >
+            <div className="flex-1 flex flex-col whatsapp-chat-bg overflow-hidden relative">
+              <div 
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent custom-scrollbar"
+              >
               <div className="flex justify-center">
                 <span className="px-3 py-1 bg-white border border-border rounded-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider shadow-sm">
                   Conversation with {selectedChat.name}
@@ -2735,6 +3347,10 @@ export default function ChatPage() {
                 const displayName = isGroup ? (sender?.name || msg.sender || "User") : selectedChat.name;
 
                 const showDateSeparator = index === 0 || !dayjs(msg.timestamp).isSame(dayjs(displayMessages[index - 1].timestamp), 'day');
+                const isConsecutive = index > 0 && String(displayMessages[index - 1].senderId) === String(msg.senderId) && !showDateSeparator;
+                const isLastInConsecutive = index === displayMessages.length - 1 || 
+                  String(displayMessages[index + 1].senderId) !== String(msg.senderId) || 
+                  !dayjs(displayMessages[index + 1].timestamp).isSame(dayjs(msg.timestamp), 'day');
                 const isToday = dayjs(msg.timestamp).isSame(dayjs(), 'day');
                 const isYesterday = dayjs(msg.timestamp).isSame(dayjs().subtract(1, 'day'), 'day');
                 const dateText = isToday ? "Today" : isYesterday ? "Yesterday" : dayjs(msg.timestamp).format("MMMM D, YYYY");
@@ -2763,17 +3379,29 @@ export default function ChatPage() {
                     <div 
                       id={`msg-${msg.id}`}
                       className={cn(
-                        "flex items-end gap-2 group w-full mb-1",
-                        msg.isMe ? "justify-end" : "justify-start"
+                        "flex gap-2 group w-full mb-1",
+                        msg.isMe ? "justify-end items-end" : "justify-start items-start"
                       )}
                     >
                       {!msg.isMe && (
-                        <Avatar className="w-8 h-8 border border-border shrink-0 mb-1" title={displayName}>
-                          {avatarSrc && <AvatarImage src={avatarSrc} />}
-                          <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
-                            {avatarFallback}
-                          </AvatarFallback>
-                        </Avatar>
+                        isConsecutive ? (
+                          <div className="w-8 h-8 shrink-0 mt-1" />
+                        ) : (
+                          <Avatar 
+                            className="w-8 h-8 border border-border shrink-0 mt-1 animate-in fade-in duration-200 cursor-pointer hover:opacity-85 transition-opacity" 
+                            title={displayName}
+                            onClick={() => {
+                              if (isGroup && msg.senderId) {
+                                openSidebarForMember(msg.senderId);
+                              }
+                            }}
+                          >
+                            {avatarSrc && <AvatarImage src={avatarSrc} />}
+                            <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-[10px]">
+                              {avatarFallback}
+                            </AvatarFallback>
+                          </Avatar>
+                        )
                       )}
                       <div className={cn(
                         "flex flex-col max-w-[85%] sm:max-w-[70%]",
@@ -2794,15 +3422,32 @@ export default function ChatPage() {
                           </div>
                         ) : (
                           <div className="relative group/msg max-w-full w-fit">
-                            <div className={cn(
-                              "whatsapp-bubble px-3 py-1.5 pb-2 text-[14.2px] leading-[19px] whitespace-pre-wrap break-words select-text w-fit",
-                              msg.isMe ? "whatsapp-bubble-sent" : "whatsapp-bubble-received"
-                            )}>
+                            <div 
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setContextMenu({
+                                  x: e.clientX,
+                                  y: e.clientY,
+                                  msg
+                                });
+                              }}
+                              className={cn(
+                                "whatsapp-bubble px-3 py-1.5 pb-2 text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text w-fit relative",
+                                msg.isMe 
+                                  ? (isConsecutive ? "bg-[#d9fdd3] text-[#111b21] rounded-[7.5px]" : "whatsapp-bubble-sent")
+                                  : (isConsecutive ? "bg-white text-[#111b21] rounded-[7.5px]" : "whatsapp-bubble-received")
+                              )}
+                            >
                               {/* Group chat sender display name */}
-                              {isGroup && !msg.isMe && (
+                              {isGroup && !msg.isMe && !isConsecutive && (
                                 <span 
-                                  className="block text-[12.8px] font-bold mb-1 select-none" 
+                                  className="block text-[12.8px] font-bold mb-1 select-none cursor-pointer hover:underline" 
                                   style={{ color: getSenderColor(displayName) }}
+                                  onClick={() => {
+                                    if (msg.senderId) {
+                                      openSidebarForMember(msg.senderId);
+                                    }
+                                  }}
                                 >
                                   {displayName}
                                 </span>
@@ -2841,10 +3486,7 @@ export default function ChatPage() {
                                     alt={msg.attachmentName} 
                                     className="max-w-[280px] sm:max-w-[360px] max-h-[300px] w-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
                                     onLoad={() => scrollToBottom(true)}
-                                    onClick={() => setPreviewImage({
-                                      url: msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl : msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`,
-                                      name: msg.attachmentName || 'Image'
-                                    })}
+                                    onClick={() => setPreviewImageMsgId(msg.id)}
                                   />
                                   {/* Timestamp overlay if no message text is present */}
                                   {!msg.text && (
@@ -3054,75 +3696,88 @@ export default function ChatPage() {
                               </div>
                             )}
 
-                            {/* Hover Options Dropdown Trigger */}
+                            {/* Hover options: Smile icon for text message, Forward icon for image/attachments */}
                             <div className={cn(
-                              "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover/msg:opacity-100 transition-opacity z-10",
-                              msg.isMe ? "-left-10" : "-right-10"
+                              "absolute top-1/2 -translate-y-1/2 opacity-0 group-hover/msg:opacity-100 transition-opacity z-10 flex items-center gap-1.5",
+                              msg.isMe ? "-left-12" : "-right-12"
                             )}>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-black/5">
-                                    <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align={msg.isMe ? "end" : "start"} className="w-56">
-                                  <DropdownMenuItem 
-                                    className="gap-2"
-                                    onClick={() => setReplyingTo(msg)}
-                                  >
-                                    <Reply className="w-4 h-4" /> Reply
-                                  </DropdownMenuItem>
-                                  {!(msg.poll || msg.isVoice) && (
-                                    <DropdownMenuItem 
-                                      className="gap-2"
-                                      onClick={() => setForwardingMessage(msg)}
+                              {msg.attachmentName || msg.isVoice ? (
+                                <Button 
+                                  type="button" 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 rounded-full bg-white hover:bg-slate-100 border border-slate-200/60 shadow-[0_1px_2px_rgba(0,0,0,0.08)] text-slate-500"
+                                  onClick={() => setForwardingMessage(msg)}
+                                  title="Forward"
+                                >
+                                  <Forward className="w-3.5 h-3.5" />
+                                </Button>
+                              ) : (
+                                <Popover onOpenChange={(open) => { if (!open) setShowPickerForMsgId(null); }}>
+                                  <PopoverTrigger asChild>
+                                    <Button 
+                                      type="button" 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-7 w-7 rounded-full bg-white hover:bg-slate-100 border border-slate-200/60 shadow-[0_1px_2px_rgba(0,0,0,0.08)] text-slate-500"
+                                      title="React"
                                     >
-                                      <Forward className="w-4 h-4" /> Forward message...
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem 
-                                    className="gap-2"
-                                    onClick={() => handleToggleSave(msg.id)}
+                                      <Smile className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent 
+                                    side="top" 
+                                    align="center" 
+                                    className={cn(
+                                      "border border-slate-200/80 bg-white/95 backdrop-blur-md shadow-lg z-50 animate-in zoom-in-95 duration-100",
+                                      showPickerForMsgId === msg.id 
+                                        ? "p-0 rounded-2xl border-none shadow-none w-auto mb-2" 
+                                        : "p-1 rounded-full flex items-center gap-0.5 w-auto mb-1"
+                                    )}
                                   >
-                                    <Bookmark className={cn("w-4 h-4", msg.savedBy?.includes(user?.id) && "fill-current text-brand-teal")} /> 
-                                    {msg.savedBy?.includes(user?.id) ? "Unsave" : "Save for later"}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  {!(msg.poll || msg.isVoice) && (
-                                    <DropdownMenuItem 
-                                      className="gap-2"
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(msg.text);
-                                      }}
-                                    >
-                                      <Copy className="w-4 h-4" /> Copy message
-                                    </DropdownMenuItem>
-                                  )}
-
-                                  <DropdownMenuItem 
-                                    className="gap-2"
-                                    onClick={() => handleTogglePin(msg.id)}
-                                  >
-                                    <Pin className={cn("w-4 h-4", msg.isPinned && "fill-current text-brand-teal")} /> 
-                                    {msg.isPinned ? "Unpin from conversation" : "Pin to this conversation"}
-                                  </DropdownMenuItem>
-
-                                  <DropdownMenuSeparator />
-                                  <div className="p-2 flex flex-wrap gap-1 justify-center">
-                                    {["👍", "❤️", "😂", "😮", "😢", "🔥"].map(emoji => (
-                                      <Button
-                                        key={emoji}
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 rounded-full hover:bg-brand-teal/10 hover:text-brand-teal text-lg p-0"
-                                        onClick={() => handleToggleReaction(msg.id, emoji)}
-                                      >
-                                        {emoji}
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                    {showPickerForMsgId === msg.id ? (
+                                      <EmojiPicker 
+                                        onEmojiSelect={(emoji) => {
+                                          handleToggleReaction(msg.id, emoji);
+                                          setShowPickerForMsgId(null);
+                                          document.body.click();
+                                        }}
+                                        onClose={() => setShowPickerForMsgId(null)}
+                                      />
+                                    ) : (
+                                      <>
+                                        {["👍", "❤️", "😂", "😮", "😢", "🙏"].map(emoji => (
+                                          <Button
+                                            key={emoji}
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 rounded-full hover:bg-slate-100 text-base p-0"
+                                            onClick={() => {
+                                              handleToggleReaction(msg.id, emoji);
+                                              document.body.click();
+                                            }}
+                                          >
+                                            {emoji}
+                                          </Button>
+                                        ))}
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 rounded-full hover:bg-slate-100 text-slate-500 font-bold flex items-center justify-center p-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowPickerForMsgId(msg.id);
+                                          }}
+                                          title="More Emojis"
+                                        >
+                                          <Plus className="w-3.5 h-3.5 text-slate-500" />
+                                        </Button>
+                                      </>
+                                    )}
+                                  </PopoverContent>
+                                </Popover>
+                              )}
                             </div>
                           </div>
                         )}
@@ -3157,7 +3812,7 @@ export default function ChatPage() {
             </div>
 
             {/* Chat Input */}
-            <div className="p-4 border-t border-border bg-white">
+            <div className="p-3 border-t border-slate-200/80 bg-[#f0f2f5] shrink-0">
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -3177,26 +3832,10 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {pendingFile && (
-                <div className="max-w-4xl mx-auto mb-2 flex items-center justify-between bg-brand-teal/5 p-3 rounded-xl border border-brand-teal/20 animate-in slide-in-from-bottom-2">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="bg-brand-teal/10 p-2 rounded-lg">
-                      <FileIcon className="w-4 h-4 text-brand-teal" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-bold text-brand-teal uppercase">Ready to send</p>
-                      <p className="text-xs text-muted-foreground truncate">{pendingFile.name}</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-red-500 hover:bg-red-50" onClick={() => setPendingFile(null)}>
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              )}
 
               <form 
                 onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
-                className="max-w-4xl mx-auto flex items-end gap-3 bg-transparent px-2 py-1"
+                className="w-full flex items-end gap-3 bg-transparent px-2"
               >
                 <div className="flex-1 flex items-end gap-2 bg-white px-3 py-2 rounded-[24px] border border-slate-200 shadow-xs min-h-[46px]">
                   {voicePreviewBlob ? (
@@ -3286,88 +3925,153 @@ export default function ChatPage() {
                       </div>
 
                       {/* Growing Textarea in the middle */}
-                      <Textarea 
-                        ref={messageInputRef}
-                        value={message}
-                        onChange={(e) => {
-                          handleInputChange(e.target.value);
-                          // Auto-resize textarea
-                          e.target.style.height = 'auto';
-                          e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage();
-                            // Reset textarea height after sending
-                            if (messageInputRef.current) {
-                              messageInputRef.current.style.height = 'auto';
+                      <div className="flex-1 relative">
+                        {showTagPicker && filteredEmployees.length > 0 && (
+                          <div 
+                            ref={tagPickerContainerRef}
+                            style={{ left: `${tagPickerLeft}px` }}
+                            className="absolute bottom-full mb-2 p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 max-h-64 overflow-y-auto z-[100] transition-all duration-75"
+                          >
+                            <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1.5 border-b border-slate-50 mb-1">
+                              Tag Colleague
+                            </div>
+                            <div className="space-y-0.5">
+                              {filteredEmployees.map((emp, idx) => {
+                                const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                                const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                                const isActive = idx === activeTagIndex;
+                                return (
+                                  <button
+                                    key={emp.id}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault(); // Keep focus on textarea
+                                      handleTagSelect(emp);
+                                    }}
+                                    className={cn(
+                                      "w-full flex items-center gap-2.5 p-2 rounded-xl text-left transition-all",
+                                      isActive ? "bg-brand-teal/10 font-bold" : "hover:bg-slate-50"
+                                    )}
+                                  >
+                                    <Avatar className="w-7 h-7 shrink-0">
+                                      <AvatarImage src={getAvatarUrl(emp.profilePhoto)} />
+                                      <AvatarFallback className="bg-brand-teal/10 text-brand-teal font-bold text-[10px]">{initials}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-bold text-slate-700 truncate">{empName}</p>
+                                      <p className="text-[9px] text-slate-400 font-medium truncate uppercase">{emp.designation || 'Employee'}</p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        <div 
+                          ref={inputOverlayRef}
+                          style={{
+                            fontFamily: 'inherit',
+                            fontSize: '15px',
+                            lineHeight: '20px',
+                            padding: '6px 8px',
+                            margin: '0',
+                            border: 'none',
+                            letterSpacing: 'normal',
+                            color: '#111b21',
+                          }}
+                          className="absolute inset-0 pointer-events-none whitespace-pre-wrap break-words [word-break:break-word] overflow-hidden select-none bg-transparent"
+                        >
+                          {renderInputHighlight(message)}
+                        </div>
+                        <Textarea 
+                          ref={messageInputRef}
+                          value={message}
+                          onChange={(e) => {
+                            handleInputChange(e.target.value);
+                            // Auto-resize textarea
+                            e.target.style.height = 'auto';
+                            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                            if (inputOverlayRef.current) {
+                              inputOverlayRef.current.scrollTop = e.target.scrollTop;
                             }
-                          }
-                        }}
-                        onPaste={(e) => {
-                          const items = e.clipboardData?.items;
-                          if (items) {
-                            for (let i = 0; i < items.length; i++) {
-                              if (items[i].type.indexOf('image') !== -1) {
-                                const file = items[i].getAsFile();
-                                if (file) {
-                                  setPendingFile(file);
-                                  e.preventDefault();
-                                  break;
+                          }}
+                          onScroll={(e: any) => {
+                            if (inputOverlayRef.current) {
+                              inputOverlayRef.current.scrollTop = e.target.scrollTop;
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (showTagPicker && filteredEmployees.length > 0) {
+                              if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setActiveTagIndex(prev => (prev + 1) % filteredEmployees.length);
+                                return;
+                              }
+                              if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setActiveTagIndex(prev => (prev - 1 + filteredEmployees.length) % filteredEmployees.length);
+                                return;
+                              }
+                              if (e.key === 'Enter' || e.key === 'Tab') {
+                                e.preventDefault();
+                                const selectedEmp = filteredEmployees[activeTagIndex];
+                                if (selectedEmp) {
+                                  handleTagSelect(selectedEmp);
+                                }
+                                return;
+                              }
+                              if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setShowTagPicker(false);
+                                return;
+                              }
+                            }
+
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendMessage();
+                              // Reset textarea height after sending
+                              if (messageInputRef.current) {
+                                messageInputRef.current.style.height = 'auto';
+                              }
+                            }
+                          }}
+                          onPaste={(e) => {
+                            const items = e.clipboardData?.items;
+                            if (items) {
+                              for (let i = 0; i < items.length; i++) {
+                                if (items[i].type.indexOf('image') !== -1) {
+                                  const file = items[i].getAsFile();
+                                  if (file) {
+                                    setPendingFile(file);
+                                    e.preventDefault();
+                                    break;
+                                  }
                                 }
                               }
                             }
-                          }
-                        }}
-                        placeholder="Type a message"
-                        rows={1}
-                        className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none text-[15px] placeholder:text-[#8696a0] text-[#111b21] min-h-[24px] max-h-[120px] py-1.5 px-2 resize-none overflow-y-auto outline-none focus:outline-none"
-                      />
+                          }}
+                          placeholder="Type a message"
+                          rows={1}
+                          spellCheck={false}
+                          style={{
+                            fontFamily: 'inherit',
+                            fontSize: '15px',
+                            lineHeight: '20px',
+                            padding: '6px 8px',
+                            margin: '0',
+                            border: 'none',
+                            letterSpacing: 'normal',
+                            color: 'transparent',
+                            WebkitTextFillColor: 'transparent',
+                            caretColor: '#111b21',
+                          }}
+                          className="w-full bg-transparent text-transparent caret-[#111b21] border-none focus-visible:ring-0 shadow-none min-h-[24px] max-h-[120px] resize-none overflow-y-auto outline-none focus:outline-none relative z-10 whitespace-pre-wrap break-words [word-break:break-word] selection:bg-[#0ea5e9]/20"
+                        />
+                      </div>
 
-                      {/* Right side actions: Tag + Poll + Mic */}
+                      {/* Right side actions: Poll + Send/Mic */}
                       <div className="flex items-center shrink-0">
-                        {/* Tagging / Mention Popover (Hidden Trigger) */}
-                        {/* Tagging / Mention Dropdown */}
-                        <div className="relative">
-                          {showTagPicker && (
-                            <div className="absolute bottom-full right-0 p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 mb-4 max-h-64 overflow-y-auto z-[100]">
-                              <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1.5 border-b border-slate-50 mb-1">
-                                Tag Colleague
-                              </div>
-                              {filteredEmployees.length === 0 ? (
-                                <div className="text-xs text-muted-foreground text-center py-4">No colleagues found</div>
-                              ) : (
-                                <div className="space-y-0.5">
-                                  {filteredEmployees.map((emp) => {
-                                    const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
-                                    const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
-                                    return (
-                                      <button
-                                        key={emp.id}
-                                        type="button"
-                                        onMouseDown={(e) => {
-                                          e.preventDefault(); // Keep focus on textarea
-                                          handleTagSelect(emp);
-                                        }}
-                                        className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-50 rounded-xl text-left transition-all"
-                                      >
-                                        <Avatar className="w-7 h-7 shrink-0">
-                                          <AvatarImage src={getAvatarUrl(emp.profilePhoto)} />
-                                          <AvatarFallback className="bg-brand-teal/10 text-brand-teal font-bold text-[10px]">{initials}</AvatarFallback>
-                                        </Avatar>
-                                        <div className="min-w-0">
-                                          <p className="text-xs font-bold text-slate-700 truncate">{empName}</p>
-                                          <p className="text-[9px] text-slate-400 font-medium truncate uppercase">{emp.designation || 'Employee'}</p>
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
 
                         {/* Poll Button */}
                         {selectedChat?.type !== 'personal' && (
@@ -3383,37 +4087,351 @@ export default function ChatPage() {
                           </Button>
                         )}
 
-                        {/* Mic Button */}
-                        <Button 
-                          type="button"
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-[#54656f] hover:bg-slate-100 rounded-full h-9 w-9 shrink-0"
-                          onClick={startRecording}
-                          title="Voice Message"
-                        >
-                          <Mic className="w-5 h-5" />
-                        </Button>
+                        {/* Send or Mic Button */}
+                        {(message.trim() || pendingFile || voicePreviewBlob) ? (
+                          <Button 
+                            type="submit"
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-brand-teal hover:bg-slate-100 rounded-full h-9 w-9 shrink-0"
+                            title="Send Message"
+                          >
+                            <Send className="w-5 h-5 fill-current" />
+                          </Button>
+                        ) : (
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-[#54656f] hover:bg-slate-100 rounded-full h-9 w-9 shrink-0"
+                            onClick={startRecording}
+                            title="Voice Message"
+                          >
+                            <Mic className="w-5 h-5" />
+                          </Button>
+                        )}
                       </div>
                     </>
                   )}
                 </div>
-
-                {/* Green/Teal Circle Send Button */}
-                <Button 
-                  type="submit"
-                  disabled={!message.trim() && !pendingFile && !voicePreviewBlob && !isRecording}
-                  className={cn(
-                    "bg-brand-teal hover:bg-brand-teal-light text-white rounded-full w-11 h-11 p-0 shadow-md transition-all shrink-0 flex items-center justify-center",
-                    (!message.trim() && !pendingFile && !voicePreviewBlob && !isRecording) ? "opacity-60 cursor-not-allowed" : "opacity-100 active:scale-95"
-                  )}
-                >
-                  <Send className="w-5 h-5 fill-current ml-0.5" />
-                </Button>
               </form>
             </div>
-          </>
-          ) : null
+          </div>
+          </div>
+            )}
+            {/* Right Sidebar - Shared Files Repository / Contact Info */}
+            {selectedChat && showRightSidebar && (
+          <div className="w-[380px] border-l border-border bg-white flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 shrink-0">
+            <div className="h-[88px] border-b border-border px-6 flex items-center justify-between bg-white shrink-0">
+              {sidebarContactUser ? (
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 rounded-full text-slate-500 hover:text-slate-700 -ml-2" 
+                    onClick={() => setSidebarContactUser(null)}
+                    title="Back"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </Button>
+                  <h3 className="font-bold text-slate-800 text-base">Contact info</h3>
+                </div>
+              ) : (
+                <h3 className="font-bold text-slate-800 text-base">
+                  {sidebarTab === 'files' ? 'Shared Files' : (selectedChat.type === 'group' || selectedChat.type === 'general') ? 'Group info' : 'Contact info'}
+                </h3>
+              )}
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 rounded-full text-slate-400 hover:text-slate-600" 
+                onClick={() => {
+                  setShowRightSidebar(false);
+                  setSidebarContactUser(null);
+                }}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto bg-slate-50/50">
+              {sidebarTab === 'files' ? (
+                <div className="p-4 space-y-6 bg-white min-h-full">
+                  {chatFiles.length > 0 ? (
+                    Object.entries(
+                      chatFiles.reduce((groups: any, file: any) => {
+                        const date = dayjs(file.timestamp).format("MMMM YYYY");
+                        if (!groups[date]) groups[date] = [];
+                        groups[date].push(file);
+                        return groups;
+                      }, {})
+                    ).map(([date, files]: [string, any]) => (
+                      <div key={date}>
+                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">{date}</h4>
+                        <div className="space-y-2">
+                          {files.map((file: any) => (
+                            <div 
+                              key={file.id} 
+                              className="bg-white border border-border p-3 rounded-2xl hover:shadow-md transition-all group/file cursor-pointer"
+                              onClick={() => {
+                                if (/\.(jpg|jpeg|png|gif|webp)$/i.test(file.attachmentName || "")) {
+                                  setPreviewImageMsgId(file.id);
+                                } else {
+                                  handleDownload(file.attachmentUrl, file.attachmentName);
+                                }
+                              }}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-brand-teal/5 flex items-center justify-center shrink-0 border border-brand-teal/10">
+                                  <FileIcon className="w-5 h-5 text-brand-teal" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[12px] font-bold text-slate-800 truncate mb-0.5">{file.attachmentName || "Document"}</p>
+                                  <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">
+                                    {dayjs(file.timestamp).format("MMM DD")} • Shared by {file.senderId === user?.id ? "You" : (employees.find((e: any) => e.id === file.senderId)?.name || "Member")}
+                                  </p>
+                                </div>
+                                <div className="opacity-0 group-hover/file:opacity-100 transition-opacity">
+                                  <Download className="w-4 h-4 text-brand-teal" />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-20 px-6">
+                      <div className="w-16 h-16 bg-white border-2 border-dashed border-border rounded-full flex items-center justify-center mx-auto mb-4">
+                        <FileIcon className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-500 mb-1">No shared files yet</p>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">Shared documents, images, and other media will appear here for easy access.</p>
+                    </div>
+                  )}
+                </div>
+              ) : sidebarContactUser ? (
+                <div className="space-y-4">
+                  {/* Avatar + Basic Details Card for Overridden Contact Info */}
+                  <div className="bg-white p-6 border-b border-slate-200/60 flex flex-col items-center">
+                    <Avatar className="w-32 h-32 border-2 border-slate-100 shadow-sm">
+                      {sidebarContactUser.profilePhoto ? (
+                        <AvatarImage src={getAvatarUrl(sidebarContactUser.profilePhoto)} />
+                      ) : (
+                        <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-3xl uppercase">
+                          {(sidebarContactUser.name || sidebarContactUser.firstName || "U")[0]}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    
+                    <h4 className="text-lg font-bold text-slate-800 mt-4 text-center">
+                      {sidebarContactUser.name || `${sidebarContactUser.firstName || ''} ${sidebarContactUser.lastName || ''}`.trim()}
+                    </h4>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1 text-center">
+                      {sidebarContactUser.designation || 'Employee'}
+                    </p>
+                    <span className="mt-2.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-teal/5 text-brand-teal">
+                      {sidebarContactUser.department || 'Staff'}
+                    </span>
+                    
+                    <div className="w-full mt-6">
+                      <Button 
+                        onClick={() => {
+                          const empId = sidebarContactUser.id || sidebarContactUser.employeeId || sidebarContactUser._id;
+                          if (empId) {
+                            openPersonalChatWithEmployeeId(String(empId));
+                            setShowRightSidebar(false);
+                            setSidebarContactUser(null);
+                          }
+                        }}
+                        className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold rounded-xl h-10 flex items-center justify-center gap-2 shadow-xs"
+                      >
+                        <MessageSquare className="w-4 h-4" /> Message
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Detailed Information Section for Overridden Contact Info */}
+                  <div className="bg-white p-6 border-y border-slate-200/60 space-y-4">
+                    <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Email address</span>
+                      <span className="text-sm font-semibold text-slate-700 break-all">{sidebarContactUser.email || '-'}</span>
+                    </div>
+                    <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Company Role</span>
+                      <span className="text-sm font-semibold text-slate-700 capitalize">{sidebarContactUser.role || 'Employee'}</span>
+                    </div>
+                    {sidebarContactUser.joinDate && (
+                      <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Joined Date</span>
+                        <span className="text-sm font-semibold text-slate-700">
+                          {dayjs(sidebarContactUser.joinDate).format("DD MMMM YYYY")}
+                        </span>
+                      </div>
+                    )}
+                    <div className="pb-3 last:border-0 last:pb-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Status</span>
+                      <span className={cn(
+                        "inline-flex items-center gap-1.5 text-xs font-bold",
+                        onlineUsers.has(String(sidebarContactUser.id || sidebarContactUser.employeeId || sidebarContactUser._id)) ? "text-emerald-600" : "text-slate-400"
+                      )}>
+                        <span className={cn("w-2 h-2 rounded-full", onlineUsers.has(String(sidebarContactUser.id || sidebarContactUser.employeeId || sidebarContactUser._id)) ? "bg-emerald-500" : "bg-slate-300")} />
+                        {onlineUsers.has(String(sidebarContactUser.id || sidebarContactUser.employeeId || sidebarContactUser._id)) ? "Online" : "Offline"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Avatar + Basic Details Card */}
+                  <div className="bg-white p-6 border-b border-slate-200/60 flex flex-col items-center">
+                    <Avatar className="w-32 h-32 border-2 border-slate-100 shadow-sm">
+                      {selectedChat.avatar ? (
+                        <AvatarImage src={getAvatarUrl(selectedChat.avatar)} />
+                      ) : (
+                        <AvatarFallback className="bg-brand-light text-brand-teal font-bold text-3xl uppercase">
+                          {selectedChat.name[0]}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    
+                    <h4 className="text-lg font-bold text-slate-800 mt-4 text-center">{selectedChat.name}</h4>
+                    {selectedChat.type === 'personal' ? (
+                      (() => {
+                        const emp = employees.find(e => String(e.id) === String(selectedChat.id) || String(e.employeeId) === String(selectedChat.id));
+                        return (
+                          <>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1 text-center">
+                              {emp?.designation || 'Employee'}
+                            </p>
+                            <span className="mt-2.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-teal/5 text-brand-teal">
+                              {emp?.department || 'Staff'}
+                            </span>
+                          </>
+                        );
+                      })()
+                    ) : (
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1 text-center">
+                        Group Chat • {groupMembersList.length} Members
+                      </p>
+                    )}
+                    
+                    {selectedChat.type === 'personal' && (
+                      <div className="w-full mt-6">
+                        <Button 
+                          onClick={() => {
+                            setShowRightSidebar(false);
+                            messageInputRef.current?.focus();
+                          }}
+                          className="w-full bg-brand-teal hover:bg-brand-teal/90 text-white font-bold rounded-xl h-10 flex items-center justify-center gap-2 shadow-xs"
+                        >
+                          <MessageSquare className="w-4 h-4" /> Message
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Detailed Information Section */}
+                  {selectedChat.type === 'personal' ? (
+                    (() => {
+                      const emp = employees.find(e => String(e.id) === String(selectedChat.id) || String(e.employeeId) === String(selectedChat.id));
+                      return (
+                        <div className="bg-white p-6 border-y border-slate-200/60 space-y-4">
+                          <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Email address</span>
+                            <span className="text-sm font-semibold text-slate-700 break-all">{emp?.email || '-'}</span>
+                          </div>
+                          <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Company Role</span>
+                            <span className="text-sm font-semibold text-slate-700 capitalize">{emp?.role || 'Employee'}</span>
+                          </div>
+                          {emp?.joinDate && (
+                            <div className="border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Joined Date</span>
+                              <span className="text-sm font-semibold text-slate-700">
+                                {dayjs(emp.joinDate).format("DD MMMM YYYY")}
+                              </span>
+                            </div>
+                          )}
+                          <div className="pb-3 last:border-0 last:pb-0">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Status</span>
+                            <span className={cn(
+                              "inline-flex items-center gap-1.5 text-xs font-bold",
+                              isSelectedChatOnline ? "text-emerald-600" : "text-slate-400"
+                            )}>
+                              <span className={cn("w-2 h-2 rounded-full", isSelectedChatOnline ? "bg-emerald-500" : "bg-slate-300")} />
+                              {isSelectedChatOnline ? "Online" : "Offline"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div className="bg-white border-y border-slate-200/60">
+                      {selectedChat.description && (
+                        <div className="p-6 border-b border-slate-100">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Description</span>
+                          <p className="text-sm text-slate-600 leading-relaxed font-medium">{selectedChat.description}</p>
+                        </div>
+                      )}
+                      
+                      <div className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Members ({groupMembersList.length})
+                          </span>
+                        </div>
+                        <div className="space-y-3">
+                          {groupMembersList.map((memberId: string) => {
+                            const emp = employees.find((e: any) => e.id === memberId);
+                            if (!emp) return null;
+                            const empName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+                            const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                            const isMe = memberId === user?.id;
+                            
+                            return (
+                              <div 
+                                key={memberId} 
+                                onClick={() => {
+                                  if (!isMe) {
+                                    openSidebarForMember(memberId);
+                                  }
+                                }}
+                                className={cn(
+                                  "flex items-center gap-3 p-2 rounded-xl transition-all",
+                                  isMe ? "" : "hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-100"
+                                )}
+                              >
+                                <Avatar className="w-9 h-9 border border-slate-100 shadow-2xs">
+                                  <AvatarImage src={getAvatarUrl(emp.profilePhoto)} />
+                                  <AvatarFallback className="bg-brand-teal/10 text-brand-teal font-extrabold text-xs">{initials}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-slate-700 truncate">{empName}</span>
+                                    {isMe && (
+                                      <span className="text-[9px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded-full select-none">
+                                        You
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block mt-0.5 truncate">
+                                    {emp.designation || emp.role || 'Employee'}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+          </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-4">
             <div className="w-20 h-20 rounded-full bg-brand-teal/10 flex items-center justify-center">
@@ -3422,79 +4440,6 @@ export default function ChatPage() {
             <div>
               <h3 className="text-lg font-bold text-foreground">Select a chat to start messaging</h3>
               <p className="text-muted-foreground max-w-sm mx-auto">Choose a conversation from the left sidebar to see messages and start chatting with your colleagues.</p>
-            </div>
-          </div>
-        )}
-
-        {/* Right Sidebar - Shared Files Repository */}
-        {selectedChat && showRightSidebar && (
-          <div className="flex-1 w-full bg-white flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
-            <div className="h-[88px] border-b border-border px-6 flex items-center gap-4 bg-white shrink-0">
-              <Button variant="ghost" size="sm" className="h-8 rounded-full text-brand-teal hover:text-brand-teal-light hover:bg-brand-teal/10" onClick={() => setShowRightSidebar(false)}>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back to Chat
-              </Button>
-              <h3 className="font-bold text-slate-800">Shared Files Repository</h3>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <div className="p-4 space-y-6">
-                {chatFiles.length > 0 ? (
-                  // Group files by date
-                  Object.entries(
-                    chatFiles.reduce((groups: any, file: any) => {
-                      const date = dayjs(file.timestamp).format("MMMM YYYY");
-                      if (!groups[date]) groups[date] = [];
-                      groups[date].push(file);
-                      return groups;
-                    }, {})
-                  ).map(([date, files]: [string, any]) => (
-                    <div key={date}>
-                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">{date}</h4>
-                      <div className="space-y-2">
-                        {files.map((file: any) => (
-                          <div 
-                            key={file.id} 
-                            className="bg-white border border-border p-3 rounded-2xl hover:shadow-md transition-all group/file cursor-pointer"
-                            onClick={() => {
-                              if (/\.(jpg|jpeg|png|gif|webp)$/i.test(file.attachmentName || "")) {
-                                setPreviewImage({
-                                  url: file.attachmentUrl?.startsWith('http') ? file.attachmentUrl : `${API_URL}${file.attachmentUrl}`,
-                                  name: file.attachmentName || 'Image'
-                                });
-                              } else {
-                                handleDownload(file.attachmentUrl, file.attachmentName);
-                              }
-                            }}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-brand-teal/5 flex items-center justify-center shrink-0 border border-brand-teal/10">
-                                <FileIcon className="w-5 h-5 text-brand-teal" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[12px] font-bold text-slate-800 truncate mb-0.5">{file.attachmentName || "Document"}</p>
-                                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">
-                                  {dayjs(file.timestamp).format("MMM DD")} • Shared by {file.senderId === user?.id ? "You" : (employees.find((e: any) => e.id === file.senderId)?.name || "Member")}
-                                </p>
-                              </div>
-                              <div className="opacity-0 group-hover/file:opacity-100 transition-opacity">
-                                <Download className="w-4 h-4 text-brand-teal" />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-20 px-6">
-                    <div className="w-16 h-16 bg-white border-2 border-dashed border-border rounded-full flex items-center justify-center mx-auto mb-4">
-                      <FileIcon className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                    <p className="text-sm font-bold text-slate-500 mb-1">No shared files yet</p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">Shared documents, images, and other media will appear here for easy access.</p>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         )}
@@ -3728,7 +4673,7 @@ export default function ChatPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 max-h-[400px] overflow-y-auto space-y-3">
-            {selectedChat?.members?.map((memberId: string) => {
+            {Array.from(new Set(selectedChat?.members || [])).map((memberId: any) => {
               const member = employees.find((e: any) => e.id === memberId);
               if (!member) return null;
               return (
@@ -3741,7 +4686,7 @@ export default function ChatPage() {
                   </Avatar>
                   <div className="flex-1">
                     <p className="text-sm font-bold text-slate-800">{member.name} {member.id === user?.id && "(You)"}</p>
-                    <p className="text-[11px] text-muted-foreground">{member.designation || "Team Member"}</p>
+                    <p className="text-[11px] text-muted-foreground">{member.designation || member.role || "Team Member"}</p>
                   </div>
                   {selectedChat.createdBy === memberId && (
                     <Badge variant="outline" className="text-[9px] h-5 border-brand-teal/20 text-brand-teal bg-brand-teal/5">
@@ -3965,44 +4910,360 @@ export default function ChatPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Image Preview Modal */}
-      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="sm:max-w-[800px] p-0 overflow-hidden bg-black/95 border-none shadow-2xl [&>button:last-child]:hidden">
+      {/* Image Preview Modal (WhatsApp Style - Light Theme) */}
+      <Dialog open={!!previewImageMsgId} onOpenChange={(open) => !open && setPreviewImageMsgId(null)}>
+        <DialogContent 
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+            }
+          }}
+          className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#eaebeb] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden"
+        >
           <DialogTitle className="sr-only">Image Preview</DialogTitle>
-          <div className="absolute top-0 right-0 p-4 z-50 flex items-center gap-2">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-white hover:bg-white/20 rounded-full"
-              onClick={() => previewImage && handleDownload(previewImage.url, previewImage.name)}
-            >
-              <Download className="w-5 h-5" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-white hover:bg-white/20 rounded-full"
-              onClick={() => setPreviewImage(null)}
-            >
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
-          <div className="relative w-full h-[80vh] flex items-center justify-center p-4">
-            {previewImage && (
+          
+          {/* Top Bar */}
+          {currentPreviewMsg && (
+            <div className="h-16 px-6 bg-[#f0f2f5] flex items-center justify-between text-slate-800 shrink-0 z-50 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-9 h-9 border border-slate-200">
+                  <AvatarImage src={currentPreviewMsg.isMe ? getAvatarUrl(user?.profilePhoto) : getAvatarUrl(selectedChat?.avatar)} />
+                  <AvatarFallback className="bg-brand-teal text-white font-bold text-xs">
+                    {(currentPreviewMsg.isMe ? user?.name : selectedChat?.name)?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 text-left">
+                  <p className="text-sm font-bold truncate leading-snug text-slate-800">
+                    {currentPreviewMsg.isMe ? `${user?.name} (You)` : (employees.find(e => e.id === currentPreviewMsg.senderId)?.name || currentPreviewMsg.sender || selectedChat?.name)}
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    {dayjs(currentPreviewMsg.timestamp).format("MMMM D, YYYY [at] hh:mm A")}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-1">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
+                  onClick={() => currentPreviewMsg.replyToId && scrollToMessage(currentPreviewMsg.replyToId)}
+                >
+                  <Reply className="w-5 h-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
+                  onClick={() => setForwardingMessage(currentPreviewMsg)}
+                >
+                  <Forward className="w-5 h-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
+                  onClick={() => handleDownload(currentPreviewMsg.attachmentUrl, currentPreviewMsg.attachmentName)}
+                >
+                  <Download className="w-5 h-5" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-full"
+                  onClick={() => setPreviewImageMsgId(null)}
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Center Image View Area */}
+          <div className="flex-1 relative w-full flex items-center justify-center p-4">
+            {/* Left Nav Arrow */}
+            {currentPreviewIndex > 0 && (
+              <button 
+                onClick={handlePrevImage}
+                className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+            )}
+
+            {currentPreviewMsg && (
               <img 
-                src={previewImage.url} 
-                alt={previewImage.name}
-                className="max-w-full max-h-full object-contain select-none"
+                src={
+                  currentPreviewMsg.attachmentUrl?.startsWith('blob:') ? currentPreviewMsg.attachmentUrl :
+                  currentPreviewMsg.attachmentUrl?.startsWith('http') ? currentPreviewMsg.attachmentUrl :
+                  `${API_URL}${currentPreviewMsg.attachmentUrl}`
+                } 
+                alt={currentPreviewMsg.attachmentName}
+                className="max-w-full max-h-[75vh] object-contain select-none shadow-2xl rounded-sm"
               />
             )}
+
+            {/* Right Nav Arrow */}
+            {currentPreviewIndex < imageMessages.length - 1 && (
+              <button 
+                onClick={handleNextImage}
+                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
+              >
+                <ChevronLeft className="w-6 h-6 rotate-180" />
+              </button>
+            )}
           </div>
-          {previewImage && (
-            <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white text-center text-sm font-medium truncate">
-              {previewImage.name}
+
+          {/* Bottom Thumbnail Strip Carousel */}
+          {imageMessages.length > 1 && (
+            <div className="h-20 bg-[#f0f2f5] border-t border-slate-200 flex items-center justify-center gap-2 p-2 shrink-0 overflow-x-auto">
+              {imageMessages.map((msg) => {
+                const isSelected = msg.id === previewImageMsgId;
+                const thumbUrl = msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
+                  msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
+                  `${API_URL}${msg.attachmentUrl}`;
+                return (
+                  <div 
+                    key={msg.id}
+                    onClick={() => setPreviewImageMsgId(msg.id)}
+                    className={cn(
+                      "w-12 h-12 rounded-md overflow-hidden cursor-pointer border-2 transition-all relative shrink-0",
+                      isSelected ? "border-brand-teal scale-105" : "border-slate-300 opacity-50 hover:opacity-100"
+                    )}
+                  >
+                    <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
+                );
+              })}
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Message Info Modal */}
+      <Dialog open={!!msgInfoData} onOpenChange={(open) => {
+        if (!open) setMsgInfoData(null);
+      }}>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-brand-teal">Message Info</DialogTitle>
+            <DialogDescription>
+              See who has read your message.
+            </DialogDescription>
+          </DialogHeader>
+          {(() => {
+            if (!msgInfoData) return null;
+
+            const latestMsg = currentMessages.find((m: any) => String(m.id) === String(msgInfoData.id)) || msgInfoData;
+            const seenBy = latestMsg.seenBy || [];
+            const readByUsers = seenBy.filter((id: string) => String(id) !== String(user?.id));
+
+            return (
+              <div className="py-2">
+                {/* Read by section */}
+                <h4 className="text-[12px] font-bold mb-2 text-[#53bdeb] uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCheck className="w-4 h-4" /> Read by
+                </h4>
+                <div className="max-h-[300px] overflow-y-auto space-y-0.5 pr-1">
+                  {readByUsers.length > 0 ? (
+                    readByUsers.map((id: string) => {
+                      const emp = employees.find((e: any) => String(e.id) === String(id));
+                      if (!emp) return null;
+                      return (
+                        <div key={id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg transition-colors">
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage src={getAvatarUrl(emp.avatar)} />
+                            <AvatarFallback className="bg-brand-light text-brand-teal text-[10px]">
+                              {emp.name ? emp.name[0]?.toUpperCase() : "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-800 truncate">{emp.name}</p>
+                          </div>
+                          <CheckCheck className="w-4 h-4 text-[#53bdeb]" />
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-slate-500 py-2 italic px-2">No one has read this message yet.</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Right-click Context Menu */}
+      {contextMenu && (
+        <div 
+          key={`${contextMenu.msg.id}-${contextMenu.x}-${contextMenu.y}`}
+          className="fixed z-[999] bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-2xl p-1.5 min-w-[200px] animate-in fade-in zoom-in-95 duration-100"
+          style={{ 
+            top: Math.min(contextMenu.y, typeof window !== 'undefined' ? window.innerHeight - 440 : contextMenu.y), 
+            left: Math.min(contextMenu.x, typeof window !== 'undefined' ? window.innerWidth - 220 : contextMenu.x) 
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Reaction Bar */}
+          <div className="flex items-center justify-between px-2 py-1 mb-1.5 bg-slate-50/50 rounded-lg border-b border-slate-100 gap-1">
+            {["👍", "❤️", "😂", "😮", "😢", "🙏"].map(emoji => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => {
+                  handleToggleReaction(contextMenu.msg.id, emoji);
+                  setContextMenu(null);
+                }}
+                className="w-7 h-7 text-lg hover:scale-125 transition-transform flex items-center justify-center rounded-full hover:bg-slate-100"
+              >
+                {emoji}
+              </button>
+            ))}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="right" className="p-0 border-none bg-transparent shadow-none z-[1000] w-auto">
+                <EmojiPicker
+                  onEmojiSelect={(emoji) => {
+                    handleToggleReaction(contextMenu.msg.id, emoji);
+                    setContextMenu(null);
+                  }}
+                  onClose={() => {}}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {contextMenu.msg.isMe && selectedChat?.type !== 'personal' && (
+            <button 
+              type="button"
+              onClick={() => { setMsgInfoData(contextMenu.msg); setContextMenu(null); }}
+              className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+            >
+              <Info className="w-4 h-4 text-slate-400" />
+              Message Info
+            </button>
+          )}
+
+          <button 
+            type="button"
+            onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Reply className="w-4 h-4 text-slate-400" />
+            Reply
+          </button>
+          
+          <button 
+            type="button"
+            onClick={async () => { 
+              if (contextMenu.msg.text && !contextMenu.msg.attachmentName) {
+                navigator.clipboard.writeText(contextMenu.msg.text);
+                toast.success("Copied to clipboard!");
+              } else if (contextMenu.msg.attachmentName) {
+                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(contextMenu.msg.attachmentName);
+                if (isImage) {
+                  try {
+                    const fullUrl = contextMenu.msg.attachmentUrl.startsWith('http') 
+                      ? contextMenu.msg.attachmentUrl 
+                      : `${API_URL}${contextMenu.msg.attachmentUrl}`;
+                    
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = fullUrl;
+                    img.onload = () => {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = img.naturalWidth;
+                      canvas.height = img.naturalHeight;
+                      const ctx = canvas.getContext('2d');
+                      if (ctx) {
+                        ctx.drawImage(img, 0, 0);
+                        canvas.toBlob(async (pngBlob) => {
+                          if (pngBlob) {
+                            try {
+                              await navigator.clipboard.write([
+                                new ClipboardItem({
+                                  [pngBlob.type]: pngBlob
+                                })
+                              ]);
+                              toast.success("Image copied to clipboard!");
+                            } catch (err) {
+                              navigator.clipboard.writeText(fullUrl);
+                              toast.success("Copied image link to clipboard!");
+                            }
+                          }
+                        }, 'image/png');
+                      }
+                    };
+                    img.onerror = () => {
+                      navigator.clipboard.writeText(fullUrl);
+                      toast.success("Copied image link to clipboard!");
+                    };
+                  } catch (e) {
+                    navigator.clipboard.writeText(contextMenu.msg.attachmentName);
+                    toast.success("Copied file name to clipboard!");
+                  }
+                } else {
+                  navigator.clipboard.writeText(contextMenu.msg.attachmentName);
+                  toast.success("Copied file name to clipboard!");
+                }
+              }
+              setContextMenu(null); 
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Copy className="w-4 h-4 text-slate-400" />
+            Copy
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { setForwardingMessage(contextMenu.msg); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Forward className="w-4 h-4 text-slate-400" />
+            Forward
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { handleTogglePin(contextMenu.msg.id); setContextMenu(null); }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Pin className={cn("w-4 h-4 text-slate-400", contextMenu.msg.isPinned && "fill-current text-brand-teal")} />
+            {contextMenu.msg.isPinned ? "Unpin" : "Pin"}
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => { 
+              if (contextMenu.msg.attachmentUrl) {
+                handleDownload(contextMenu.msg.attachmentUrl, contextMenu.msg.attachmentName);
+              } else if (contextMenu.msg.text) {
+                const blob = new Blob([contextMenu.msg.text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `msg-${contextMenu.msg.id}.txt`;
+                a.click();
+                toast.success("Saved text message!");
+              }
+              setContextMenu(null); 
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+          >
+            <Download className="w-4 h-4 text-slate-400" />
+            Save as
+          </button>
+        </div>
+      )}
     </div>
   );
 }

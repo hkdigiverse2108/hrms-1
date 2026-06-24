@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useConfirm } from "@/context/ConfirmContext";
 
 export default function ClientFeedbackPage() {
@@ -20,6 +22,9 @@ export default function ClientFeedbackPage() {
   const [forms, setForms] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [origin, setOrigin] = useState("");
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<Record<string, string>>({});
+  const [filterProjectId, setFilterProjectId] = useState<string>("all");
 
   useEffect(() => {
     setOrigin(typeof window !== "undefined" ? window.location.origin : "");
@@ -31,13 +36,22 @@ export default function ClientFeedbackPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [formsRes, respRes] = await Promise.all([
+      const [formsRes, respRes, projRes] = await Promise.all([
         fetch(`${API_URL}/forms/client/${clientId}`),
-        fetch(`${API_URL}/forms/client/${clientId}/responses`)
+        fetch(`${API_URL}/forms/client/${clientId}/responses`),
+        fetch(`${API_URL}/projects`)
       ]);
       if (formsRes.ok && respRes.ok) {
         setForms(await formsRes.json());
         setResponses(await respRes.json());
+        if (projRes.ok) {
+          const allProjects = await projRes.json();
+          if (clientId === "common") {
+            setProjects(allProjects.filter((p: any) => p.department === "Creative"));
+          } else {
+            setProjects(allProjects.filter((p: any) => p.clientId === clientId && p.department === "Creative"));
+          }
+        }
       }
     } catch (err) {
       console.error(err);
@@ -85,6 +99,13 @@ export default function ClientFeedbackPage() {
     return field ? field.label : questionId;
   };
 
+  const getProjectName = (projectId: string) => {
+    if (!projectId) return null;
+    const proj = projects.find(p => p.id === projectId);
+    if (!proj) return "Unknown Project";
+    return clientId === "common" && proj.clientName ? `${proj.title} (${proj.clientName})` : proj.title;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
@@ -118,7 +139,12 @@ export default function ClientFeedbackPage() {
               ) : (
                 <div className="space-y-4">
                   {forms.map((form, i) => {
-                    const publicLink = `${origin}/feedback/${form.id}`;
+                    const sp = selectedProjects[form.id];
+                    let publicLink = `${origin}/feedback/${form.id}`;
+                    if (sp && sp !== "none") {
+                      const pName = getProjectName(sp);
+                      publicLink += `?projectId=${sp}&projectName=${encodeURIComponent(pName || '')}`;
+                    }
                     return (
                       <Card key={i} className="shadow-sm border-l-4 border-l-brand-teal">
                         <CardContent className="pt-6">
@@ -155,12 +181,28 @@ export default function ClientFeedbackPage() {
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-2 mt-4 bg-slate-50 p-2 rounded border border-slate-200">
+                          <div className="flex flex-col sm:flex-row items-center gap-2 mt-4 bg-slate-50 p-2 rounded border border-slate-200">
+                            {clientId === "common" && (
+                              <Select 
+                                value={selectedProjects[form.id] || "none"} 
+                                onValueChange={(val) => setSelectedProjects(prev => ({...prev, [form.id]: val}))}
+                              >
+                                <SelectTrigger className="w-full sm:w-[200px] h-8 text-xs bg-white">
+                                  <SelectValue placeholder="Select Project for Link" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">General Link (No Project)</SelectItem>
+                                  {projects.map(p => (
+                                    <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
                             <code className="text-xs text-slate-600 flex-1 truncate">{publicLink}</code>
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-slate-500 hover:text-brand-teal"
+                              className="h-8 w-8 text-slate-500 hover:text-brand-teal shrink-0"
                               onClick={() => {
                                 navigator.clipboard.writeText(publicLink);
                                 toast.success("Link copied!");
@@ -184,12 +226,44 @@ export default function ClientFeedbackPage() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {responses.map((resp, i) => (
-                    <Card key={i} className="shadow-sm border-t-4 border-t-brand-teal">
+                  {clientId === "common" && projects.length > 0 && (
+                    <div className="flex justify-end mb-4">
+                      <Select value={filterProjectId} onValueChange={setFilterProjectId}>
+                        <SelectTrigger className="w-[250px] bg-white">
+                          <SelectValue placeholder="Filter by Project" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Projects</SelectItem>
+                          <SelectItem value="general">General (No Project)</SelectItem>
+                          {projects.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {(() => {
+                    const filteredResponses = filterProjectId === "all" ? responses : responses.filter(r => filterProjectId === "general" ? !r.projectId : r.projectId === filterProjectId);
+                    if (filteredResponses.length === 0) {
+                      return (
+                        <div className="text-center py-10 text-slate-500 bg-white rounded-xl border border-slate-200">
+                          No responses match the selected project filter.
+                        </div>
+                      );
+                    }
+                    return filteredResponses.map((resp, i) => (
+                      <Card key={i} className="shadow-sm border-t-4 border-t-brand-teal">
                       <CardContent className="pt-6">
                         <div className="mb-4 flex justify-between items-start">
                           <div>
-                            <h3 className="font-bold text-slate-800 text-lg">{getFormTitle(resp.formId)}</h3>
+                            <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                              {getFormTitle(resp.formId)}
+                              {resp.projectId && (
+                                <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 ml-2 text-xs">
+                                  {getProjectName(resp.projectId) || "Unknown Project"}
+                                </Badge>
+                              )}
+                            </h3>
                             <p className="text-xs text-slate-500 mt-1">Submitted on: {new Date(resp.submittedAt).toLocaleString()}</p>
                           </div>
                         </div>
@@ -206,7 +280,8 @@ export default function ClientFeedbackPage() {
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                    ));
+                  })()}
                 </div>
               )}
             </TabsContent>

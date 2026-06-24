@@ -58,12 +58,101 @@ export function ActivityLogDialog({
   isLoading = false,
 }: ActivityLogDialogProps) {
   const processedLogs = logs.map(log => {
-    if (!log.details) return { ...log, processedDetails: [] };
+    let derivedAction = log.action;
+    if (title === "Client Activity History" && log.action === "Updated") {
+      derivedAction = "CLIENT UPDATED";
+    }
+
+    if (!log.details) return { ...log, processedDetails: [], derivedAction };
     
-    const detailsList = log.details
-      .replace(/^Client '[^']+': /, '')
-      .split(', ')
+    let detailsStr = log.details.replace(/^Client '[^']+': /, '');
+    
+    // Custom split function that ignores commas inside quotes or brackets
+    const splitDetails = (str: string) => {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      let bracketLevel = 0;
+      let curlyLevel = 0;
+      
+      for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        if (char === "'") inQuotes = !inQuotes;
+        else if (char === "[") bracketLevel++;
+        else if (char === "]") bracketLevel--;
+        else if (char === "{") curlyLevel++;
+        else if (char === "}") curlyLevel--;
+        
+        if (char === ',' && str[i+1] === ' ' && !inQuotes && bracketLevel === 0 && curlyLevel === 0) {
+          result.push(current);
+          current = '';
+          i++; // skip space
+        } else {
+          current += char;
+        }
+      }
+      if (current) result.push(current);
+      return result;
+    };
+
+    let detailsList = splitDetails(detailsStr)
       .map(d => d.trim())
+      .map(d => {
+        if (d.startsWith("Campaigns changed from")) {
+          const fromMatch = d.match(/from '(\[.*?\])' to/);
+          const toMatch = d.match(/to '(\[.*?\])'/);
+          if (fromMatch && toMatch) {
+            try {
+              const extractCampsObj = (s: string) => {
+                const dicts = [...s.matchAll(/\{([^{}]+)\}/g)];
+                const obj: Record<string, boolean> = {};
+                dicts.forEach(m => {
+                  const nameMatch = m[1].match(/'name':\s*'([^']+)'/);
+                  const isActiveMatch = m[1].match(/'isActive':\s*(True|False)/);
+                  if (nameMatch && isActiveMatch) {
+                    obj[nameMatch[1]] = isActiveMatch[1] === 'True';
+                  }
+                });
+                return obj;
+              };
+              
+              const fromObj = extractCampsObj(fromMatch[1]);
+              const toObj = extractCampsObj(toMatch[1]);
+              
+              const changes = [];
+              let hasAdds = false;
+              let hasUpdates = false;
+              
+              for (const [name, isActive] of Object.entries(toObj)) {
+                if (!(name in fromObj)) {
+                  hasAdds = true;
+                  changes.push(`Added new campaign '${name}' (${isActive ? 'Active' : 'Inactive'})`);
+                } else if (fromObj[name] !== isActive) {
+                  hasUpdates = true;
+                  changes.push(`Campaign '${name}' status changed to ${isActive ? 'Active' : 'Inactive'}`);
+                }
+              }
+              
+              for (const name of Object.keys(fromObj)) {
+                if (!(name in toObj)) {
+                  hasUpdates = true;
+                  changes.push(`Deleted campaign '${name}'`);
+                }
+              }
+              
+              if (hasAdds && !hasUpdates) {
+                derivedAction = "CAMPAIGN CREATED";
+              } else if (hasUpdates || hasAdds) {
+                derivedAction = "CAMPAIGN UPDATED";
+              }
+              
+              if (changes.length > 0) return changes.join(" | ");
+              else return "Campaigns updated";
+            } catch (e) {}
+          }
+        }
+        return d;
+      })
       .filter(d => {
         if (!d) return false;
         if (d.toLowerCase().includes("updated_at changed")) return false;
@@ -74,7 +163,7 @@ export function ActivityLogDialog({
         return true;
       });
 
-    return { ...log, processedDetails: detailsList };
+    return { ...log, processedDetails: detailsList, derivedAction };
   }).filter(log => {
     if (log.details && log.processedDetails.length === 0 && log.action === "Updated") {
       return false;
@@ -124,21 +213,19 @@ export function ActivityLogDialog({
                         <span className="text-[10.5px] font-medium text-[#9CA3AF] tabular-nums">{formatTimestamp(log.timestamp)}</span>
                       </div>
                       
-                      {log.action && (
+                      {log.derivedAction && (
                         <div className="mb-1">
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#F0FDF4] text-[#0D9488] border border-[#D1FAE5] uppercase tracking-wider">
-                            {log.action}
+                            {log.derivedAction}
                           </span>
                         </div>
                       )}
                       
-                      <div className="text-[13px] text-[#4B5563] leading-[1.6] font-medium space-y-1">
+                      <div className="text-[13px] text-[#4B5563] leading-[1.6] font-medium space-y-1.5">
                         {log.processedDetails && log.processedDetails.length > 0 ? (
-                          <ul className="list-disc pl-4 marker:text-[#9CA3AF]">
-                            {log.processedDetails.map((detail: string, i: number) => (
-                              <li key={i}>{detail.replace(" 00:00:00", "")}</li>
-                            ))}
-                          </ul>
+                          log.processedDetails.map((detail: string, i: number) => (
+                            <p key={i}>{detail.replace(/ 00:00:00/g, "")}</p>
+                          ))
                         ) : (
                           (!log.details && log.action) ? <span>Action logged</span> : null
                         )}

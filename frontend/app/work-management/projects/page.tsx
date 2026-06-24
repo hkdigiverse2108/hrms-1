@@ -10,7 +10,7 @@ import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
+
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -45,9 +45,10 @@ export default function ProjectsPage() {
   const [selectedPriority, setSelectedPriority] = useState("all");
 
   useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canViewProjects) {
-      router.push("/");
+    if (!permissionsLoading && !canViewProjects) {
+      setTimeout(() => {
+        router.push("/");
+      }, 0);
     }
   }, [router, permissionsLoading, canViewProjects]);
   
@@ -427,7 +428,7 @@ export default function ProjectsPage() {
               <SelectItem value="all">All Departments</SelectItem>
               <SelectItem value="Development">Development</SelectItem>
               <SelectItem value="Creative">Creative</SelectItem>
-              <SelectItem value="Marketing">Marketing</SelectItem>
+              <SelectItem value="Digital Marketing">Digital Marketing</SelectItem>
             </SelectContent>
           </Select>
 
@@ -530,7 +531,7 @@ export default function ProjectsPage() {
                       <h3 className="font-bold text-lg text-foreground leading-tight">{project.title}</h3>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fetchLogs(project)} title="View History">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => handleOpenLogs(project, e)} title="View History">
                         <History className="w-4 h-4 text-brand-teal" />
                       </Button>
                       {user && (
@@ -587,19 +588,7 @@ export default function ProjectsPage() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                        <span>Project Progress</span>
-                        <span className={progress === 100 ? "text-brand-teal font-bold" : ""}>{progress}%</span>
-                      </div>
-                      <Progress value={progress} className={`h-1.5 ${
-                        overdue ? "bg-red-100" : ""
-                      }`} />
-                      <div className="flex justify-between text-[10px] text-muted-foreground font-medium italic">
-                        <span>{tasks.filter(t => t.projectId === project.id).length} Total Tasks</span>
-                        <span>{tasks.filter(t => t.projectId === project.id && t.status === "completed").length} Done</span>
-                      </div>
-                    </div>
+
 
                     <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       <div className={`flex items-center gap-1.5 ${overdue ? "text-red-600 font-bold" : ""}`}>

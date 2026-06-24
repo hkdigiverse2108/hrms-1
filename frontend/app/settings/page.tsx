@@ -41,6 +41,8 @@ import { INDIAN_STATES } from "@/lib/constants";
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
   const { checkPermission, isAdmin } = usePermissions();
+  const canViewSettings = isAdmin || checkPermission('settings', 'canView');
+  const canEditSettings = isAdmin || checkPermission('settings', 'canEdit');
   const router = useRouter();
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -260,7 +262,7 @@ export default function SettingsPage() {
         title="Settings" 
         description="Manage your account preferences, system security, and module access."
       >
-        {isAdmin && (
+        {canEditSettings && (
           <Button 
             onClick={handleSaveAllSettings}
             disabled={isUpdating}
@@ -278,7 +280,7 @@ export default function SettingsPage() {
 
       <div className="space-y-6">
           {/* Access Control Card */}
-          {isAdmin && (
+          {canViewSettings && (
             <Card className="p-6 border-border shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-brand-light rounded-lg">
@@ -307,7 +309,7 @@ export default function SettingsPage() {
                         <Switch 
                           checked={settings?.latePunchDeductionEnabled ?? true}
                           onCheckedChange={handleToggleLatePunchDeduction}
-                          disabled={isUpdating || !isAdmin}
+                          disabled={isUpdating || !canEditSettings}
                         />
                       )}
                     </div>
@@ -355,7 +357,7 @@ export default function SettingsPage() {
                       className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
                       value={settings?.officeStartTime || "09:30"}
                       onChange={(e) => setSettings({...settings, officeStartTime: e.target.value})}
-                      disabled={isUpdating || !isAdmin}
+                      disabled={isUpdating || !canEditSettings}
                     />
                     <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">AM</div>
                   </div>
@@ -369,7 +371,7 @@ export default function SettingsPage() {
                       className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
                       value={settings?.officeEndTime || "18:30"}
                       onChange={(e) => setSettings({...settings, officeEndTime: e.target.value})}
-                      disabled={isUpdating || !isAdmin}
+                      disabled={isUpdating || !canEditSettings}
                     />
                     <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">PM</div>
                   </div>
@@ -389,7 +391,7 @@ export default function SettingsPage() {
                         className="w-20 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
                         value={settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10}
                         onChange={(e) => setSettings({...settings, lateBufferMins: parseInt(e.target.value) || 0})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                       <span className="text-xs text-muted-foreground font-medium">minutes</span>
                     </div>
@@ -403,7 +405,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* Leave Configuration Card */}
-          {isAdmin && (
+          {canViewSettings && (
             <Card className="p-6 border-border shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-brand-light rounded-lg">
@@ -425,7 +427,7 @@ export default function SettingsPage() {
                         className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
                         value={settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1}
                         onChange={(e) => setSettings({...settings, allowedMonthlyPaidLeaves: parseInt(e.target.value) || 0})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                         min={0}
                       />
                       <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">DAYS</div>
@@ -446,7 +448,7 @@ export default function SettingsPage() {
           )}
 
           {/* Company Configuration Card */}
-          {isAdmin && (
+          {canViewSettings && (
             <Card className="p-6 border-border shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-blue-50 rounded-lg">
@@ -473,7 +475,7 @@ export default function SettingsPage() {
                       placeholder="Enter company's physical address"
                       value={settings?.companyAddress || ""}
                       onChange={(e) => setSettings({...settings, companyAddress: e.target.value})}
-                      disabled={isUpdating || !isAdmin}
+                      disabled={isUpdating || !canEditSettings}
                     />
                   </div>
 
@@ -486,7 +488,7 @@ export default function SettingsPage() {
                         placeholder="e.g. +91 87805 64463"
                         value={settings?.companyPhone || ""}
                         onChange={(e) => setSettings({...settings, companyPhone: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -497,7 +499,7 @@ export default function SettingsPage() {
                         placeholder="e.g. billing@hkdigiverse.com"
                         value={settings?.companyEmail || ""}
                         onChange={(e) => setSettings({...settings, companyEmail: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                   </div>
@@ -518,7 +520,7 @@ export default function SettingsPage() {
                         placeholder="e.g. 24AAXFN3372M1ZK"
                         value={settings?.companyGstin || ""}
                         onChange={(e) => setSettings({...settings, companyGstin: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -529,7 +531,7 @@ export default function SettingsPage() {
                         placeholder="e.g. AAXFN3372M"
                         value={settings?.companyPan || ""}
                         onChange={(e) => setSettings({...settings, companyPan: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -540,7 +542,7 @@ export default function SettingsPage() {
                         placeholder="e.g. ACK-1143"
                         value={settings?.companyLlpin || ""}
                         onChange={(e) => setSettings({...settings, companyLlpin: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -549,7 +551,7 @@ export default function SettingsPage() {
                         className="w-full h-10 px-3 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer font-medium text-slate-700"
                         value={settings?.companyState || ""}
                         onChange={(e) => setSettings({...settings, companyState: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       >
                         <option value="">Select State...</option>
                         {INDIAN_STATES.map((state) => (
@@ -580,7 +582,7 @@ export default function SettingsPage() {
                         placeholder="e.g. Axis Bank"
                         value={settings?.bankName || ""}
                         onChange={(e) => setSettings({...settings, bankName: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -591,7 +593,7 @@ export default function SettingsPage() {
                         placeholder="e.g. 924020057377415"
                         value={settings?.bankAccountNumber || ""}
                         onChange={(e) => setSettings({...settings, bankAccountNumber: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -602,7 +604,7 @@ export default function SettingsPage() {
                         placeholder="e.g. UTIB0002891"
                         value={settings?.bankIfscCode || ""}
                         onChange={(e) => setSettings({...settings, bankIfscCode: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                   </div>
@@ -690,7 +692,7 @@ export default function SettingsPage() {
             </Card>
           )}
           {/* Invoice Configuration Card */}
-          {isAdmin && (
+          {canViewSettings && (
             <Card className="p-6 border-border shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-brand-light rounded-lg">
@@ -711,7 +713,7 @@ export default function SettingsPage() {
                       className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold uppercase"
                       value={settings?.taxInvoicePrefix || ""}
                       onChange={(e) => setSettings({...settings, taxInvoicePrefix: e.target.value.toUpperCase()})}
-                      disabled={isUpdating || user?.role !== 'Admin'}
+                      disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. INV"
                     />
                   </div>
@@ -725,7 +727,7 @@ export default function SettingsPage() {
                       className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold uppercase"
                       value={settings?.proformaInvoicePrefix || ""}
                       onChange={(e) => setSettings({...settings, proformaInvoicePrefix: e.target.value.toUpperCase()})}
-                      disabled={isUpdating || user?.role !== 'Admin'}
+                      disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. PINV"
                     />
                   </div>
@@ -739,7 +741,7 @@ export default function SettingsPage() {
                       className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold uppercase"
                       value={settings?.noTaxInvoicePrefix || ""}
                       onChange={(e) => setSettings({...settings, noTaxInvoicePrefix: e.target.value.toUpperCase()})}
-                      disabled={isUpdating || user?.role !== 'Admin'}
+                      disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. NINV"
                     />
                   </div>
@@ -759,14 +761,14 @@ export default function SettingsPage() {
                             className="w-10 h-10 rounded-lg cursor-pointer border border-border p-1 bg-white"
                             value={settings?.invoiceColor1 || "#08304b"}
                             onChange={(e) => setSettings({...settings, invoiceColor1: e.target.value})}
-                            disabled={isUpdating || user?.role !== 'Admin'}
+                            disabled={isUpdating || !canEditSettings}
                           />
                           <input 
                             type="text" 
                             className="w-24 h-10 px-2 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-xs font-mono uppercase"
                             value={settings?.invoiceColor1 || "#08304b"}
                             onChange={(e) => setSettings({...settings, invoiceColor1: e.target.value})}
-                            disabled={isUpdating || user?.role !== 'Admin'}
+                            disabled={isUpdating || !canEditSettings}
                           />
                         </div>
                       </div>
@@ -781,14 +783,14 @@ export default function SettingsPage() {
                             className="w-10 h-10 rounded-lg cursor-pointer border border-border p-1 bg-white"
                             value={settings?.invoiceColor2 || "#08304b"}
                             onChange={(e) => setSettings({...settings, invoiceColor2: e.target.value})}
-                            disabled={isUpdating || user?.role !== 'Admin'}
+                            disabled={isUpdating || !canEditSettings}
                           />
                           <input 
                             type="text" 
                             className="w-24 h-10 px-2 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-xs font-mono uppercase"
                             value={settings?.invoiceColor2 || "#08304b"}
                             onChange={(e) => setSettings({...settings, invoiceColor2: e.target.value})}
-                            disabled={isUpdating || user?.role !== 'Admin'}
+                            disabled={isUpdating || !canEditSettings}
                           />
                         </div>
                       </div>

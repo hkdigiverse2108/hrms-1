@@ -197,6 +197,9 @@ export default function DocumentGeneratorPage() {
 
     let htmlContent = templateData.content
 
+    // Fix MS Word pasted non-breaking spaces preventing text wrap
+    htmlContent = htmlContent.replace(/&nbsp;/g, ' ')
+
     // Replace basic variables
     htmlContent = htmlContent.replace(/\{\{todayFormatted\}\}/g, todayFormatted)
     htmlContent = htmlContent.replace(/\{\{empName\}\}/g, empName)
@@ -235,6 +238,9 @@ export default function DocumentGeneratorPage() {
     ` : ''
     
     htmlContent = htmlContent.replace(/\{\{includeAcceptance\}\}/g, acceptanceHtml)
+
+    // Replace non-breaking spaces with normal spaces to prevent giant word blocks that force mid-word breaks
+    htmlContent = htmlContent.replace(/&nbsp;/g, ' ')
 
     setPreviewContent(htmlContent)
     toast.success('Document preview generated!')
@@ -349,17 +355,80 @@ export default function DocumentGeneratorPage() {
         el.classList.remove('opacity-30')
       })
 
-      const scale = 1
+      // --- AUTO PAGINATION TO PREVENT SLICED TEXT ---
+      // We must adjust the DOM *before* taking the snapshot.
+      let finalNodeHeight = nodeHeight;
+      const editorClone = clone.querySelector('.ql-editor') as HTMLElement;
+      if (editorClone) {
+        let currentPage = 1;
+        const pageHeightPx = 1123;
+        
+        // Dynamically measure the EXACT margin distance of the very first paragraph on Page 1.
+        // This ensures Page 2+ text perfectly aligns with the native template spacing!
+        let safeMarginTop = 150; // Fallback
+        const children = Array.from(editorClone.children);
+        for (let i = 0; i < children.length; i++) {
+          const el = children[i] as HTMLElement;
+          if (el.innerText.trim() !== '' || el.querySelector('img')) {
+            const cloneRect = clone.getBoundingClientRect();
+            const elRect = el.getBoundingClientRect();
+            safeMarginTop = elRect.top - cloneRect.top;
+            break;
+          }
+        }
+        
+        for (let i = 0; i < children.length; i++) {
+          const el = children[i] as HTMLElement;
+          
+          // Ignore empty manual Enters! If the user manually hit Enter to dodge the letterhead, 
+          // we let those empty paragraphs get sliced and swallowed so they don't stack on top of our auto-pagination gap!
+          const isEmpty = el.innerText.trim() === '' && !el.querySelector('img');
+          if (isEmpty) continue;
+          
+          const cloneRect = clone.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          
+          const absoluteTop = elRect.top - cloneRect.top;
+          const absoluteBottom = absoluteTop + elRect.height;
+          
+          const pageBoundary = currentPage * pageHeightPx;
+          
+          // If the element crosses the slice line OR falls dangerously close to the repeating letterhead
+          if ((absoluteTop < pageBoundary && absoluteBottom > pageBoundary - 15) || 
+              (absoluteTop >= pageBoundary && absoluteTop < pageBoundary + safeMarginTop)) {
+            
+            const targetTop = pageBoundary + safeMarginTop;
+            const pushAmount = targetTop - absoluteTop;
+            
+            const currentMarginTop = parseFloat(window.getComputedStyle(el).marginTop) || 0;
+            el.style.marginTop = `${currentMarginTop + pushAmount}px`;
+            
+            currentPage++;
+          } else if (absoluteTop >= pageBoundary + safeMarginTop) {
+            currentPage = Math.floor(absoluteTop / pageHeightPx) + 1;
+          }
+        }
+        
+        // Recalculate final node height after pagination adjustments
+        const finalCloneRect = clone.getBoundingClientRect();
+        const newPagesNeeded = Math.ceil(finalCloneRect.height / pageHeightPx);
+        finalNodeHeight = Math.max(pageHeightPx, newPagesNeeded * pageHeightPx);
+        
+        container.style.height = `${finalNodeHeight}px`;
+        clone.style.height = `${finalNodeHeight}px`;
+      }
+
+      const scale = 3
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
-        height: nodeHeight * scale,
+        height: finalNodeHeight * scale,
         cacheBust: true,
         style: {
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
           width: `${a4WidthPx}px`,
-          height: `${nodeHeight}px`,
+          height: `${finalNodeHeight}px`,
         }
       })
 
@@ -368,7 +437,7 @@ export default function DocumentGeneratorPage() {
 
       const pdf = new jsPDF('p', 'mm', 'a4')
       const pdfWidth = pdf.internal.pageSize.getWidth()
-      const pdfHeight = (nodeHeight * pdfWidth) / a4WidthPx
+      const pdfHeight = (finalNodeHeight * pdfWidth) / a4WidthPx
       
       const pageHeight = pdf.internal.pageSize.getHeight()
       let heightLeft = pdfHeight
@@ -1011,7 +1080,7 @@ export default function DocumentGeneratorPage() {
                             src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
                             alt="Company Letterhead" 
                             className="w-full"
-                            style={{ objectFit: 'contain', objectPosition: 'top' }}
+                            style={{ objectFit: 'contain', objectPosition: 'top', mixBlendMode: 'multiply' }}
                           />
                         </div>
                       ))}

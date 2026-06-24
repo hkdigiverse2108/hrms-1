@@ -108,6 +108,7 @@ export default function TaskManagementPage() {
   const [editingDescId, setEditingDescId] = useState<string | null>(null);
   const [editTaskDesc, setEditTaskDesc] = useState("");
   const [assigneeSearch, setAssigneeSearch] = useState("");
+  const [adminViewAllUsers, setAdminViewAllUsers] = useState(false);
 
   // Form State
   const [newTask, setNewTask] = useState<{
@@ -432,8 +433,7 @@ export default function TaskManagementPage() {
     { id: "completed", title: "Completed", textColor: "text-emerald-600" }
   ];
 
-  const filteredTasks = tasks.filter(task => {
-    const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status) || (activeStatuses.includes('on-hold') && task.status === 'pending') || (activeStatuses.includes('pending') && task.status === 'on-hold');
+  const statsTasks = tasks.filter(task => {
     const priorityMatch = activePriorities.length === 0 || activePriorities.includes(task.priority?.toLowerCase() || "");
     const assigneeMatch = activeAssignees.length === 0 || 
       (task.assignedToIds && activeAssignees.some(id => task.assignedToIds.includes(id))) || 
@@ -458,18 +458,28 @@ export default function TaskManagementPage() {
     }
     
     const isAssignedToMe = task.assignedToId === user?.id || (task.assignedToIds && task.assignedToIds.includes(user?.id));
-    const isCreatedByMe = task.assignedById === user?.id;
+    const isCreatedByMe = task.assignedById === user?.id || task.createdBy === user?.id;
     
     let ownershipMatch = true;
-    if (assignedToMe && createdByMe) {
+    
+    if (isAdmin && !adminViewAllUsers) {
       ownershipMatch = isAssignedToMe || isCreatedByMe;
-    } else if (assignedToMe) {
-      ownershipMatch = isAssignedToMe;
-    } else if (createdByMe) {
-      ownershipMatch = isCreatedByMe;
     }
 
-    return statusMatch && priorityMatch && assigneeMatch && dateMatch && ownershipMatch;
+    if (assignedToMe && createdByMe) {
+      ownershipMatch = ownershipMatch && (isAssignedToMe || isCreatedByMe);
+    } else if (assignedToMe) {
+      ownershipMatch = ownershipMatch && isAssignedToMe;
+    } else if (createdByMe) {
+      ownershipMatch = ownershipMatch && isCreatedByMe;
+    }
+
+    return priorityMatch && assigneeMatch && dateMatch && ownershipMatch;
+  });
+
+  const filteredTasks = statsTasks.filter(task => {
+    const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status) || (activeStatuses.includes('on-hold') && task.status === 'pending') || (activeStatuses.includes('pending') && task.status === 'on-hold');
+    return statusMatch;
   });
 
   const sortedTasks = [...filteredTasks].sort((a, b) => {
@@ -491,6 +501,27 @@ export default function TaskManagementPage() {
       >
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           
+          {isAdmin && (
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className={`h-8 text-[12px] font-bold px-4 ${!adminViewAllUsers ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setAdminViewAllUsers(false)}
+              >
+                My Tasks
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className={`h-8 text-[12px] font-bold px-4 ${adminViewAllUsers ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setAdminViewAllUsers(true)}
+              >
+                All Users
+              </Button>
+            </div>
+          )}
+
           {/* Create Task Modal */}
           {canAdd && (
           <Dialog open={createModalOpen} onOpenChange={(val) => {
@@ -795,11 +826,11 @@ export default function TaskManagementPage() {
       {/* Summary Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { title: "To do", count: tasks.filter(t => t.status === 'todo').length.toString().padStart(2, '0'), desc: "New tasks waiting to be picked up.", dot: "bg-slate-400" },
-          { title: "On Hold", count: tasks.filter(t => t.status === 'on-hold' || t.status === 'pending').length.toString().padStart(2, '0'), desc: "Tasks paused for approval or feedback.", dot: "bg-amber-400" },
-          { title: "In progress", count: tasks.filter(t => t.status === 'in-progress').length.toString().padStart(2, '0'), desc: "Active work items currently being handled.", dot: "bg-brand-teal" },
-          { title: "Due Tasks", count: tasks.filter(t => t.dueDate && t.status !== 'completed' && t.dueDate <= todayStr).length.toString().padStart(2, '0'), desc: "Tasks that are due today or overdue.", dot: "bg-red-500", highlight: true },
-          { title: "Completed", count: tasks.filter(t => t.status === 'completed').length.toString().padStart(2, '0'), desc: "Completed tasks reviewed and closed.", dot: "bg-emerald-600" },
+          { title: "To do", count: statsTasks.filter(t => t.status === 'todo').length.toString().padStart(2, '0'), desc: "New tasks waiting to be picked up.", dot: "bg-slate-400" },
+          { title: "On Hold", count: statsTasks.filter(t => t.status === 'on-hold' || t.status === 'pending').length.toString().padStart(2, '0'), desc: "Tasks paused for approval or feedback.", dot: "bg-amber-400" },
+          { title: "In progress", count: statsTasks.filter(t => t.status === 'in-progress').length.toString().padStart(2, '0'), desc: "Active work items currently being handled.", dot: "bg-brand-teal" },
+          { title: "Due Tasks", count: statsTasks.filter(t => t.dueDate && t.status !== 'completed' && t.dueDate <= todayStr).length.toString().padStart(2, '0'), desc: "Tasks that are due today or overdue.", dot: "bg-red-500", highlight: true },
+          { title: "Completed", count: statsTasks.filter(t => t.status === 'completed').length.toString().padStart(2, '0'), desc: "Completed tasks reviewed and closed.", dot: "bg-emerald-600" },
         ].map((stat, i) => (
           <div key={i} className={`bg-white border ${stat.highlight ? 'border-red-200 bg-red-50/30' : 'border-border'} rounded-xl p-4 shadow-sm flex flex-col h-full`}>
             <div className="flex items-center justify-between mb-2">

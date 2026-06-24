@@ -22,7 +22,16 @@ import {
   CalendarClock,
   Banknote,
   CreditCard,
-  Star
+  Star,
+  UserPlus,
+  SlidersHorizontal,
+  Video,
+  Image as ImageIcon,
+  PenTool,
+  ChevronDown,
+  ChevronsUpDown,
+  Check,
+  MoreHorizontal
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -40,7 +49,69 @@ import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { WhatsAppSmmDialog } from "@/components/hrms/WhatsAppSmmDialog";
 import { WhatsAppIcon } from "@/components/hrms/WhatsAppIcon";
 import { SmmMeetingDialog } from "@/components/hrms/SmmMeetingDialog";
+import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
+import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
+import { FeedbackReviewsEmbedded } from "@/components/hrms/FeedbackReviewsEmbedded";
 import { ClientReviewDialog } from "@/components/hrms/ClientReviewDialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+const SearchableEmployeeSelect = ({ value, onChange, placeholder, employees }: { value: string, onChange: (val: string) => void, placeholder: string, employees: any[] }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const selectedEmp = employees.find((e: any) => e.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-10 border-slate-200">
+          {selectedEmp ? (selectedEmp.name || `${selectedEmp.firstName} ${selectedEmp.lastName}`) : (value === "none" ? <span className="italic text-slate-500">None</span> : <span className="text-slate-500">{placeholder}</span>)}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <div className="flex items-center border-b px-3 bg-slate-50/50">
+          <Search className="mr-2 h-4 w-4 shrink-0 opacity-50 text-slate-500" />
+          <input 
+            className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-slate-400"
+            placeholder="Search employee..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="max-h-56 overflow-y-auto p-1">
+          <div
+             className={`relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-slate-100 transition-colors ${value === "none" ? "bg-slate-100 font-medium text-slate-900" : "text-slate-600"}`}
+             onClick={() => { onChange("none"); setOpen(false); setSearch(""); }}
+          >
+            <Check className={`mr-2 h-4 w-4 text-brand-teal ${value === "none" ? "opacity-100" : "opacity-0"}`} />
+            <span className="italic">None</span>
+          </div>
+          {employees.filter((e: any) => {
+            const term = search.toLowerCase();
+            const name = (e.name || `${e.firstName} ${e.lastName}`).toLowerCase();
+            const dept = (e.department || "").toLowerCase();
+            return name.includes(term) || dept.includes(term);
+          }).map((emp: any) => (
+             <div 
+               key={emp.id}
+               className={`relative flex justify-between cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none hover:bg-slate-100 transition-colors ${value === emp.id ? "bg-slate-100 font-medium text-slate-900" : "text-slate-700"}`}
+               onClick={() => { onChange(emp.id); setOpen(false); setSearch(""); }}
+             >
+               <div className="flex items-center truncate">
+                 <Check className={`mr-2 h-4 w-4 shrink-0 text-brand-teal ${value === emp.id ? "opacity-100" : "opacity-0"}`} />
+                 <span className="truncate">{emp.name || `${emp.firstName} ${emp.lastName}`}</span>
+               </div>
+               {emp.department && <span className="ml-2 shrink-0 text-[10px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded-md truncate max-w-[100px]">{emp.department}</span>}
+             </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 const noScrollbarStyle = `
   .no-scrollbar::-webkit-scrollbar,
@@ -91,13 +162,30 @@ export default function CreativeClientsPage() {
   const router = useRouter();
   const { confirm } = useConfirm();
   const { user } = useUser();
+  const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
   const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [masterFilter, setMasterFilter] = useState("all");
   const [inlineEditing, setInlineEditing] = useState<{id: string, field: string} | null>(null);
+
+  // Advanced Filters
+  const [creativeFilter, setCreativeFilter] = useState("all");
+  
+  // Creative Team Assignment
+  const [creativeEmployees, setCreativeEmployees] = useState<any[]>([]);
+  const [assignTeamClient, setAssignTeamClient] = useState<any>(null);
+  const [assignTeamOpen, setAssignTeamOpen] = useState(false);
+  const [scriptwriterId, setScriptwriterId] = useState("");
+  const [reelEditorId, setReelEditorId] = useState("");
+  const [postDesignerId, setPostDesignerId] = useState("");
+  const [shooterId, setShooterId] = useState("");
+  const [approverId, setApproverId] = useState("");
+  const [posterId, setPosterId] = useState("");
+
   const [logsOpen, setLogsOpen] = useState(false);
   const [clientLogs, setClientLogs] = useState<any[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
@@ -135,6 +223,15 @@ export default function CreativeClientsPage() {
   const [paymentLastDateInput, setPaymentLastDateInput] = useState("");
   const [paymentNextDateInput, setPaymentNextDateInput] = useState("");
   
+  const [feedbackConfigOpen, setFeedbackConfigOpen] = useState(false);
+  const [feedbackConfigProject, setFeedbackConfigProject] = useState<any>(null);
+  const [feedbackTypeInput, setFeedbackTypeInput] = useState("Interval");
+  const [feedbackIntervalInput, setFeedbackIntervalInput] = useState("");
+  const [feedbackDaysOfWeekInput, setFeedbackDaysOfWeekInput] = useState<number[]>([]);
+  const [feedbackDatesOfMonthInput, setFeedbackDatesOfMonthInput] = useState<number[]>([]);
+  const [feedbackLastDateInput, setFeedbackLastDateInput] = useState("");
+  const [feedbackNextDateInput, setFeedbackNextDateInput] = useState("");
+  
   const [newRemarkText, setNewRemarkText] = useState("");
   const [isAddingRemark, setIsAddingRemark] = useState(false);
 
@@ -144,7 +241,14 @@ export default function CreativeClientsPage() {
   const fetchFollowupHistory = async (client: any) => {
     setIsLoadingFollowupHistory(true);
     try {
-      const res = await fetch(`${API_URL}/task-logs?clientId=${client.id}`);
+      const proj = clientProjects[client.id];
+      if (!proj) {
+        setFollowupHistoryLogs([]);
+        setIsLoadingFollowupHistory(false);
+        return;
+      }
+      const param = `projectId=${proj.id}`;
+      const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         const data = await res.json();
         setFollowupHistoryLogs(data.filter((l: any) => l.action === "Follow-up Completed"));
@@ -160,6 +264,7 @@ export default function CreativeClientsPage() {
     if (!followupConfigClient || !newRemarkText.trim()) return;
     setIsAddingRemark(true);
     try {
+      const proj = clientProjects[followupConfigClient.id];
       const res = await fetch(`${API_URL}/task-logs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -167,6 +272,7 @@ export default function CreativeClientsPage() {
           action: "Follow-up Completed",
           details: `Remark: ${newRemarkText}`,
           clientId: followupConfigClient.id,
+          projectId: proj?.id,
           performedBy: user?.id,
           userName: user?.name || `${user?.firstName} ${user?.lastName}`,
         })
@@ -242,7 +348,14 @@ export default function CreativeClientsPage() {
     setLogsOpen(true);
     setActiveClient(client);
     try {
-      const res = await fetch(`${API_URL}/task-logs?clientId=${client.id}`);
+      const proj = clientProjects[client.id];
+      if (!proj) {
+        setClientLogs([]);
+        setIsLoadingLogs(false);
+        return;
+      }
+      const param = `projectId=${proj.id}`;
+      const res = await fetch(`${API_URL}/task-logs?${param}`);
       if (res.ok) {
         setClientLogs(await res.json());
       }
@@ -282,14 +395,18 @@ export default function CreativeClientsPage() {
 
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
+  const [calendarSettings, setCalendarSettings] = useState<Record<string, any>>({});
+  const currentMonthYear = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
   const fetchClients = async () => {
     setIsLoading(true);
     try {
-      const [res, ccRes, pRes] = await Promise.all([
+      const [res, ccRes, pRes, settingsRes, empRes] = await Promise.all([
         fetch(`${API_URL}/clients`),
         fetch(`${API_URL}/content-calendar/all`),
-        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`)
+        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
+        fetch(`${API_URL}/content-calendar-settings/all?monthYear=${currentMonthYear}`),
+        fetch(`${API_URL}/employees`)
       ]);
       
       let clientsData = [];
@@ -315,6 +432,15 @@ export default function CreativeClientsPage() {
         setPendingCounts(counts);
       }
       
+      if (settingsRes && settingsRes.ok) {
+        const settingsList = await settingsRes.json();
+        const settingsMap: Record<string, any> = {};
+        settingsList.forEach((s: any) => {
+          settingsMap[s.clientId] = s;
+        });
+        setCalendarSettings(settingsMap);
+      }
+
       if (pRes.ok) {
         const projects = await pRes.json();
         const projectMap: Record<string, any> = {};
@@ -330,6 +456,11 @@ export default function CreativeClientsPage() {
         setClients(clientsData.filter((c: any) => c.department?.includes("Creative") && validClientIds.has(c.id)));
       } else {
         setClients(clientsData.filter((c: any) => c.department?.includes("Creative")));
+      }
+
+      if (empRes.ok) {
+        const emps = await empRes.json();
+        setCreativeEmployees(emps); // No longer filtering, user requested all employees
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -402,6 +533,7 @@ export default function CreativeClientsPage() {
   const handleFollowupCompleteWithRemark = async () => {
     if (!followupRemarkClient) return;
     try {
+      const proj = clientProjects[followupRemarkClient.id];
       if (followupRemarkText.trim()) {
         await fetch(`${API_URL}/task-logs`, {
           method: "POST",
@@ -410,6 +542,7 @@ export default function CreativeClientsPage() {
             action: "Follow-up Completed",
             details: `Remark: ${followupRemarkText}`,
             clientId: followupRemarkClient.id,
+            projectId: proj?.id,
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`,
           })
@@ -475,6 +608,55 @@ export default function CreativeClientsPage() {
     }
   };
 
+  const handleSaveTeamAssignment = async () => {
+    if (!assignTeamClient) return;
+    const project = clientProjects[assignTeamClient.id];
+    if (!project) {
+      toast.error("No creative project found for this client");
+      return;
+    }
+    
+    const scriptwriter = creativeEmployees.find(e => e.id === scriptwriterId);
+    const reelEditor = creativeEmployees.find(e => e.id === reelEditorId);
+    const postDesigner = creativeEmployees.find(e => e.id === postDesignerId);
+    const shooter = creativeEmployees.find(e => e.id === shooterId);
+    const approver = creativeEmployees.find(e => e.id === approverId);
+    const poster = creativeEmployees.find(e => e.id === posterId);
+    
+    try {
+      const res = await fetch(`${API_URL}/projects/${project.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          assignedScriptwriterId: scriptwriterId === "none" ? null : scriptwriterId || null,
+          assignedScriptwriterName: scriptwriterId === "none" ? null : scriptwriter?.name || null,
+          assignedReelEditorId: reelEditorId === "none" ? null : reelEditorId || null,
+          assignedReelEditorName: reelEditorId === "none" ? null : reelEditor?.name || null,
+          assignedPostDesignerId: postDesignerId === "none" ? null : postDesignerId || null,
+          assignedPostDesignerName: postDesignerId === "none" ? null : postDesigner?.name || null,
+          assignedShooterId: shooterId === "none" ? null : shooterId || null,
+          assignedShooterName: shooterId === "none" ? null : shooter?.name || null,
+          assignedApproverId: approverId === "none" ? null : approverId || null,
+          assignedApproverName: approverId === "none" ? null : approver?.name || null,
+          assignedPosterId: posterId === "none" ? null : posterId || null,
+          assignedPosterName: posterId === "none" ? null : poster?.name || null,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Team assigned successfully");
+        setAssignTeamOpen(false);
+        fetchClients();
+      } else {
+        toast.error("Failed to assign team");
+      }
+    } catch (err) {
+      console.error("Error assigning team:", err);
+      toast.error("An error occurred");
+    }
+  };
+
   const handleMarkPaymentDone = async (client: any) => {
     const today = new Date().toISOString().split('T')[0];
     let nextDate = null;
@@ -518,6 +700,7 @@ export default function CreativeClientsPage() {
       if (res.ok) {
         toast.success("Payment marked as done");
         
+        const proj = clientProjects[client.id];
         await fetch(`${API_URL}/task-logs`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -525,6 +708,7 @@ export default function CreativeClientsPage() {
             action: "Payment Logged",
             details: `Payment recorded on ${today}.`,
             clientId: client.id,
+            projectId: proj?.id,
             performedBy: user?.id,
             userName: user?.name || `${user?.firstName} ${user?.lastName}`,
           })
@@ -569,11 +753,89 @@ export default function CreativeClientsPage() {
     }
   };
 
-  const filteredClients = clients.filter(c => 
-    c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleSaveFeedbackConfig = async () => {
+    if (!feedbackConfigProject) return;
+    try {
+      const res = await fetch(`${API_URL}/projects/${feedbackConfigProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          feedbackType: feedbackTypeInput,
+          feedbackIntervalDays: parseInt(feedbackIntervalInput) || null,
+          feedbackDaysOfWeek: feedbackDaysOfWeekInput,
+          feedbackDatesOfMonth: feedbackDatesOfMonthInput,
+          lastFeedbackDate: feedbackLastDateInput || null,
+          nextFeedbackDate: feedbackNextDateInput || null,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Feedback configuration saved");
+        setFeedbackConfigOpen(false);
+        fetchClients();
+      } else {
+        toast.error("Failed to save feedback configuration");
+      }
+    } catch (err) {
+      console.error("Error saving feedback config:", err);
+      toast.error("An error occurred");
+    }
+  };
+
+  const filteredClients = clients.filter(c => {
+    if (isEmployeeOrIntern && user?.id) {
+      const p = clientProjects[c.id] || {};
+      const isAssigned = (p.assignedScriptwriterId || c.assignedScriptwriterId) === user.id || 
+                         (p.assignedReelEditorId || c.assignedReelEditorId) === user.id ||
+                         (p.assignedPostDesignerId || c.assignedPostDesignerId) === user.id ||
+                         (p.assignedShooterId || c.assignedShooterId) === user.id ||
+                         (p.assignedApproverId || c.assignedApproverId) === user.id ||
+                         (p.assignedPosterId || c.assignedPosterId) === user.id;
+      if (!isAssigned) return false;
+    }
+
+    const matchesSearch = c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.email.toLowerCase().includes(searchTerm.toLowerCase());
+      
+    if (!matchesSearch) return false;
+
+    const projectStatus = clientProjects[c.id]?.status || "";
+    const isOnHold = projectStatus.toLowerCase() === "on-hold";
+    const isFollowupDue = clientProjects[c.id]?.nextFollowupDate && new Date(clientProjects[c.id].nextFollowupDate) <= new Date();
+    const isPaymentDue = c.nextPaymentDueDate && new Date(c.nextPaymentDueDate) <= new Date();
+    const hasPendingWork = pendingCounts[c.id] > 0;
+
+    switch(masterFilter) {
+      case 'whatsapp-submitted': return !!c.whatsappGroup;
+      case 'whatsapp-pending': return !c.whatsappGroup;
+      case 'greetings-sent': return !!c.greetingsMsgSent;
+      case 'greetings-pending': return !c.greetingsMsgSent;
+      case 'payment-due': return !!isPaymentDue;
+      case 'followup-due': return !!isFollowupDue;
+      case 'active': return !isOnHold;
+      case 'on-hold': return isOnHold;
+      case 'festival-post': return (clientProjects[c.id]?.festivalPost === "Yes") || c.festivalPost === "Yes";
+      case 'pending-work': return hasPendingWork;
+      case 'meeting-done': return c.meetings && c.meetings.length > 0;
+      case 'meeting-not-done': return !c.meetings || c.meetings.length === 0;
+      default: return true;
+    }
+  }).filter(c => {
+    if (creativeFilter !== "all") {
+      const p = clientProjects[c.id] || {};
+      const isAssigned = (p.assignedScriptwriterId || c.assignedScriptwriterId) === creativeFilter || 
+                         (p.assignedReelEditorId || c.assignedReelEditorId) === creativeFilter ||
+                         (p.assignedPostDesignerId || c.assignedPostDesignerId) === creativeFilter ||
+                         (p.assignedShooterId || c.assignedShooterId) === creativeFilter ||
+                         (p.assignedApproverId || c.assignedApproverId) === creativeFilter ||
+                         (p.assignedPosterId || c.assignedPosterId) === creativeFilter;
+      if (!isAssigned) return false;
+    }
+
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -584,20 +846,201 @@ export default function CreativeClientsPage() {
       />
 
       <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input 
-            placeholder="Search by client name, email..." 
-            className="pl-10 h-10 border-slate-200 focus:border-brand-teal focus:ring-brand-teal"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="relative flex-1 w-full flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input 
+              placeholder="Search by client name, email..." 
+              className="pl-10 h-10 border-slate-200 focus:border-brand-teal focus:ring-brand-teal"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={`h-10 shrink-0 gap-2 border-slate-200 ${creativeFilter !== 'all' ? 'bg-brand-teal/5 text-brand-teal border-brand-teal/30' : ''}`}>
+                <SlidersHorizontal className="w-4 h-4" />
+                Advanced Filters
+                {creativeFilter !== 'all' && (
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] bg-brand-teal text-white">Active</Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0 shadow-xl border-slate-200" align="start">
+              <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h4 className="font-semibold text-slate-700 text-sm">Master Filters</h4>
+                {creativeFilter !== 'all' && (
+                  <button onClick={() => setCreativeFilter('all')} className="text-xs text-slate-400 hover:text-rose-500 font-medium">Clear All</button>
+                )}
+              </div>
+                <div className="p-4 space-y-5">
+                <div className="space-y-3">
+                  <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Team Member</Label>
+                  <Select value={creativeFilter} onValueChange={setCreativeFilter}>
+                    <SelectTrigger className="w-full h-10 border-slate-200">
+                      <SelectValue placeholder="All Creative Team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="font-medium">All Team Members</SelectItem>
+                      {creativeEmployees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="w-5 h-5">
+                              <AvatarFallback className="text-[9px] bg-brand-teal/10 text-brand-teal">{emp.name?.substring(0,2).toUpperCase() || emp.firstName?.substring(0,2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <span>{emp.name || `${emp.firstName} ${emp.lastName}`}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
-        <Button onClick={() => router.push('/work-management/smm/pending')} className="h-10 bg-brand-teal hover:bg-brand-teal/90 text-white gap-2 w-full md:w-auto">
-          <CalendarClock className="w-4 h-4" />
-          View Pending Work
-        </Button>
 
+        <OtherWorkDialog />
+        <Button onClick={() => router.push('/work-management/smm/common/feedback')} className="h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 gap-2 w-full md:w-auto shrink-0 border border-slate-200">
+          <ClipboardList className="w-4 h-4" />
+          View Common Forms
+        </Button>
+      </div>
+
+      <div className="w-full mb-6 overflow-x-auto pb-2 no-scrollbar">
+        <div className="inline-flex items-center gap-1 w-max bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60">
+          {[
+            { value: "all", label: "All Clients" },
+            { value: "active", label: "Active Projects" },
+            { value: "work-group", label: "Work" },
+            { value: "reviews", label: "Client Reviews" },
+            { value: "payment-due", label: "Payment Due" },
+            { value: "followup-due", label: "Follow-up Due" },
+            { value: "on-hold", label: "On Hold" },
+          ].map(filter => {
+            if (filter.value === "work-group") {
+              return (
+                <DropdownMenu key="work-group">
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                        ["pending-work", "todays-work", "upcoming-work", "completed-work"].includes(masterFilter)
+                          ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
+                          : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
+                      }`}
+                    >
+                      Work
+                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    <DropdownMenuItem onClick={() => setMasterFilter("pending-work")} className="font-medium cursor-pointer">
+                      Pending Work
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setMasterFilter("todays-work")} className="font-medium cursor-pointer">
+                      Today's Work
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setMasterFilter("upcoming-work")} className="font-medium cursor-pointer">
+                      Upcoming Work
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setMasterFilter("completed-work")} className="font-medium cursor-pointer">
+                      Completed Work
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            }
+            return (
+              <button
+                key={filter.value}
+                onClick={() => setMasterFilter(filter.value)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                  masterFilter === filter.value 
+                    ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
+                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
+                }`}
+              >
+                {filter.label}
+              </button>
+            );
+          })}
+
+          <div className="w-px h-6 bg-slate-200 mx-1"></div>
+
+          <button
+            onClick={() => setMasterFilter("festival-post")}
+            className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+              masterFilter === "festival-post" 
+                ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
+            }`}
+          >
+            Festival Post
+          </button>
+
+          <button
+            onClick={() => setMasterFilter("digital-marketing")}
+            className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+              masterFilter === "digital-marketing" 
+                ? "bg-white text-brand-teal shadow-sm border border-slate-200/50" 
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent"
+            }`}
+          >
+            Digital Marketing
+          </button>
+
+          <Select 
+            value={
+              ["whatsapp-submitted", "whatsapp-pending", "greetings-sent", "greetings-pending"].includes(masterFilter) 
+                ? masterFilter 
+                : ""
+            } 
+            onValueChange={(val) => {
+              if (val) setMasterFilter(val);
+            }}
+          >
+            <SelectTrigger 
+              className={`w-[140px] h-9 border-none font-bold rounded-lg ${
+                ["whatsapp-submitted", "whatsapp-pending", "greetings-sent", "greetings-pending"].includes(masterFilter)
+                  ? "bg-white text-brand-teal shadow-sm" 
+                  : "bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
+              }`}
+            >
+              <SelectValue placeholder="WhatsApp" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="whatsapp-submitted">Group Created</SelectItem>
+              <SelectItem value="whatsapp-pending">Group Pending</SelectItem>
+              <SelectItem value="greetings-sent">Greetings Sent</SelectItem>
+              <SelectItem value="greetings-pending">Greetings Pending</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select 
+            value={
+              ["meeting-done", "meeting-not-done"].includes(masterFilter) 
+                ? masterFilter 
+                : ""
+            } 
+            onValueChange={(val) => {
+              if (val) setMasterFilter(val);
+            }}
+          >
+            <SelectTrigger 
+              className={`w-[130px] h-9 border-none font-bold rounded-lg ${
+                ["meeting-done", "meeting-not-done"].includes(masterFilter)
+                  ? "bg-white text-brand-teal shadow-sm" 
+                  : "bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
+              }`}
+            >
+              <SelectValue placeholder="Meetings" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="meeting-done">Meeting Done</SelectItem>
+              <SelectItem value="meeting-not-done">Meeting Pending</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {isLoading ? (
@@ -605,6 +1048,13 @@ export default function CreativeClientsPage() {
           <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
           <p className="text-sm text-slate-500 font-medium">Fetching dashboard...</p>
         </div>
+      ) : ['pending-work', 'todays-work', 'upcoming-work', 'completed-work', 'digital-marketing'].includes(masterFilter) ? (
+        <PendingWorkEmbedded 
+          type={masterFilter === 'digital-marketing' ? 'pending-work' : masterFilter as any} 
+          defaultTaskType={masterFilter === 'digital-marketing' ? 'digital-marketing' : 'all'}
+        />
+      ) : masterFilter === 'reviews' ? (
+        <FeedbackReviewsEmbedded />
       ) : filteredClients.length > 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-md min-h-[calc(100vh-260px)]" data-slot="table-container">
           <div className="overflow-x-auto no-scrollbar">
@@ -644,11 +1094,26 @@ export default function CreativeClientsPage() {
                           </Badge>
                         )}
                       </div>
+                      {calendarSettings[client.id] && calendarSettings[client.id].approvalStatus && calendarSettings[client.id].approvalStatus !== "Approved by Client" && calendarSettings[client.id].approvalStatus !== "Pending" && (
+                        <div className="mt-2 text-[10px] font-medium text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100 inline-block w-full max-w-full">
+                          <span className="font-semibold">{calendarSettings[client.id].approvalStatus}</span>
+                          {calendarSettings[client.id].statusLogs && calendarSettings[client.id].statusLogs.length > 0 && calendarSettings[client.id].statusLogs[calendarSettings[client.id].statusLogs.length - 1].reason && (
+                            <div className="text-rose-500 font-normal truncate mt-0.5" title={calendarSettings[client.id].statusLogs[calendarSettings[client.id].statusLogs.length - 1].reason}>
+                              Reason: {calendarSettings[client.id].statusLogs[calendarSettings[client.id].statusLogs.length - 1].reason}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-slate-700 text-sm font-medium">
-                        {clientProjects[client.id]?.title || <span className="text-slate-400 italic font-normal">No active project</span>}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className="text-slate-700 text-sm font-medium">
+                          {clientProjects[client.id]?.title || <span className="text-slate-400 italic font-normal">No active project</span>}
+                        </span>
+                        {clientProjects[client.id]?.status?.toLowerCase() === "on-hold" && (
+                          <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-slate-700">
@@ -669,8 +1134,8 @@ export default function CreativeClientsPage() {
                           <Phone className="w-3 h-3" /> 
                         </div>
                         <span 
-                          className="cursor-pointer hover:text-brand-teal transition-colors"
-                          onClick={() => setInlineEditing({ id: client.id, field: 'phone' })}
+                          className={`truncate max-w-[180px] ${!isEmployeeOrIntern ? 'cursor-pointer hover:text-brand-teal transition-colors' : ''}`}
+                          onClick={() => !isEmployeeOrIntern && setInlineEditing({ id: client.id, field: 'phone' })}
                         >
                           {client.phone || "N/A"}
                         </span>
@@ -682,8 +1147,8 @@ export default function CreativeClientsPage() {
                           <Mail className="w-3 h-3" /> 
                         </div>
                         <span 
-                          className="cursor-pointer hover:text-brand-teal transition-colors truncate max-w-[180px]"
-                          onClick={() => setInlineEditing({ id: client.id, field: 'email' })}
+                          className={`truncate max-w-[180px] ${!isEmployeeOrIntern ? 'cursor-pointer hover:text-brand-teal transition-colors' : ''}`}
+                          onClick={() => !isEmployeeOrIntern && setInlineEditing({ id: client.id, field: 'email' })}
                         >
                           {client.email || "N/A"}
                         </span>
@@ -692,12 +1157,12 @@ export default function CreativeClientsPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div 
-                          className="cursor-pointer hover:text-brand-teal transition-colors line-clamp-2 max-w-[220px] font-medium text-slate-700"
-                          onClick={() => setInlineEditing({ id: client.id, field: 'services' })}
+                          className={`line-clamp-2 max-w-[220px] font-medium text-slate-700 ${!isEmployeeOrIntern ? 'cursor-pointer hover:text-brand-teal transition-colors' : ''}`}
+                          onClick={() => !isEmployeeOrIntern && setInlineEditing({ id: client.id, field: 'services' })}
                         >
-                          {client.services || "N/A"}
+                          {clientProjects[client.id]?.services || client.services || "N/A"}
                         </div>
-                        {client.festivalPost === "Yes" && (
+                        {(clientProjects[client.id]?.festivalPost === "Yes" || client.festivalPost === "Yes") && (
                           <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200/60 font-medium px-2 py-0.5 shadow-sm">
                             Festival Post
                           </Badge>
@@ -706,9 +1171,16 @@ export default function CreativeClientsPage() {
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-2.5">
-                        <Badge className={client.status === "active" ? "bg-emerald-50 text-emerald-600 border-emerald-200/60 shadow-sm font-semibold" : "bg-red-50 text-red-600 border-red-200/60 shadow-sm font-semibold"}>
-                          {client.status?.toUpperCase() || "ACTIVE"}
-                        </Badge>
+                        {(() => {
+                          const projectStatus = clientProjects[client.id]?.status || "";
+                          const isOnHold = projectStatus.toLowerCase() === "on-hold";
+                          const displayText = isOnHold ? "ON HOLD" : "ACTIVE";
+                          return (
+                            <Badge className={!isOnHold ? "bg-emerald-50 text-emerald-600 border-emerald-200/60 shadow-sm font-semibold" : "bg-red-50 text-red-600 border-red-200/60 shadow-sm font-semibold"}>
+                              {displayText}
+                            </Badge>
+                          );
+                        })()}
                         {clientProjects[client.id]?.nextFollowupDate && new Date(clientProjects[client.id].nextFollowupDate) <= new Date() && (
                           <Badge 
                             className="bg-rose-50 text-rose-600 border-rose-200/60 animate-pulse flex items-center gap-1.5 shadow-sm cursor-pointer hover:bg-rose-100 hover:text-rose-700 transition-colors"
@@ -740,44 +1212,12 @@ export default function CreativeClientsPage() {
                     </td>
                     <td className="px-6 py-4 text-right align-middle whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5 opacity-100 transition-all duration-200">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-full"
-                          title="Payment Settings"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPaymentConfigClient(client);
-                            setPaymentFrequencyInput(client.paymentFrequency || "One-Time");
-                            setPaymentCustomDaysInput(client.paymentCustomDays ? String(client.paymentCustomDays) : "");
-                            setPaymentAmountInput(client.paymentAmount ? String(client.paymentAmount) : "");
-                            setPaymentDatesInput(client.paymentDatesOfMonth || []);
-                            setPaymentLastDateInput(client.lastPaymentDate || "");
-                            setPaymentNextDateInput(client.nextPaymentDueDate || "");
-                            setPaymentConfigOpen(true);
-                          }}
-                        >
-                          <CreditCard className="w-4.5 h-4.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full"
-                          title="Set Follow-up Rules"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFollowupConfigClient(client);
-                            setFollowupTypeInput(client.followupType || "Interval");
-                            setFollowupIntervalInput(client.followupIntervalDays ? String(client.followupIntervalDays) : "");
-                            setFollowupDaysOfWeekInput(client.followupDaysOfWeek || []);
-                            setFollowupDatesOfMonthInput(client.followupDatesOfMonth || []);
-                            setFollowupLastDateInput(client.lastFollowupDate || "");
-                            setFollowupConfigOpen(true);
-                            fetchFollowupHistory(client);
-                          }}
-                        >
-                          <CalendarClock className="w-4.5 h-4.5" />
-                        </Button>
+                        <SmmMeetingDialog 
+                          client={client} 
+                          onUpdate={fetchClients} 
+                          userId={user?.userId} 
+                          userName={user?.name} 
+                        />
                         <Button 
                           variant="ghost"  
                           size="icon" 
@@ -791,72 +1231,112 @@ export default function CreativeClientsPage() {
                         >
                           <WhatsAppIcon className="w-4.5 h-4.5" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-full"
-                          title="Manage Client Reviews"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setReviewClient(client);
-                            setReviewDialogOpen(true);
-                          }}
-                        >
-                          <Star className="w-4.5 h-4.5" />
-                        </Button>
-                        <SmmMeetingDialog 
-                          client={client} 
-                          onUpdate={fetchClients} 
-                          userId={user?.userId} 
-                          userName={user?.name} 
-                        />
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full"
-                          title="View Forms & Feedback"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/work-management/smm/${client.id}/feedback`);
-                          }}
-                        >
-                          <ClipboardList className="w-4.5 h-4.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-brand-teal hover:bg-teal-50 rounded-full"
-                          title="Create Feedback Form"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/feedback-builder/${client.id}`);
-                          }}
-                        >
-                          <Plus className="w-4.5 h-4.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"
-                          title="View Activity Logs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            fetchLogs(client);
-                          }}
-                        >
-                          <History className="w-4.5 h-4.5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-slate-400 hover:text-destructive hover:bg-destructive/10 rounded-full" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(client.id);
-                          }}
-                        >
-                          <Trash2 className="w-4.5 h-4.5" />
-                        </Button>
+
+                        {!isEmployeeOrIntern && (
+                          <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-9 w-9 text-slate-400 hover:text-brand-teal hover:bg-brand-teal/10 rounded-full"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreHorizontal className="w-4.5 h-4.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuLabel className="text-xs text-slate-500 font-normal">Manage Client</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              setAssignTeamClient(client);
+                              const p = clientProjects[client.id] || {};
+                              setScriptwriterId(p.assignedScriptwriterId || client.assignedScriptwriterId || "none");
+                              setReelEditorId(p.assignedReelEditorId || client.assignedReelEditorId || "none");
+                              setPostDesignerId(p.assignedPostDesignerId || client.assignedPostDesignerId || "none");
+                              setShooterId(p.assignedShooterId || client.assignedShooterId || "none");
+                              setApproverId(p.assignedApproverId || client.assignedApproverId || "none");
+                              setPosterId(p.assignedPosterId || client.assignedPosterId || "none");
+                              setAssignTeamOpen(true);
+                            }}>
+                              <UserPlus className="w-4 h-4 mr-2" /> Assign Creative Team
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              setPaymentConfigClient(client);
+                              setPaymentFrequencyInput(client.paymentFrequency || "One-Time");
+                              setPaymentCustomDaysInput(client.paymentCustomDays ? String(client.paymentCustomDays) : "");
+                              setPaymentAmountInput(client.paymentAmount ? String(client.paymentAmount) : "");
+                              setPaymentDatesInput(client.paymentDatesOfMonth || []);
+                              setPaymentLastDateInput(client.lastPaymentDate || "");
+                              setPaymentNextDateInput(client.nextPaymentDueDate || "");
+                              setPaymentConfigOpen(true);
+                            }}>
+                              <CreditCard className="w-4 h-4 mr-2" /> Payment Settings
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              setFollowupConfigClient(client);
+                              setFollowupTypeInput(client.followupType || "Interval");
+                              setFollowupIntervalInput(client.followupIntervalDays ? String(client.followupIntervalDays) : "");
+                              setFollowupDaysOfWeekInput(client.followupDaysOfWeek || []);
+                              setFollowupDatesOfMonthInput(client.followupDatesOfMonth || []);
+                              setFollowupLastDateInput(client.lastFollowupDate || "");
+                              setFollowupConfigOpen(true);
+                              fetchFollowupHistory(client);
+                            }}>
+                              <CalendarClock className="w-4 h-4 mr-2" /> Follow-up Rules
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              const p = clientProjects[client.id];
+                              if (p) {
+                                setFeedbackConfigProject(p);
+                                setFeedbackTypeInput(p.feedbackType || "Interval");
+                                setFeedbackIntervalInput(p.feedbackIntervalDays ? String(p.feedbackIntervalDays) : "");
+                                setFeedbackDaysOfWeekInput(p.feedbackDaysOfWeek || []);
+                                setFeedbackDatesOfMonthInput(p.feedbackDatesOfMonth || []);
+                                setFeedbackLastDateInput(p.lastFeedbackDate || "");
+                                setFeedbackNextDateInput(p.nextFeedbackDate || "");
+                                setFeedbackConfigOpen(true);
+                              } else {
+                                toast.error("No active project found for this client.");
+                              }
+                            }}>
+                              <History className="w-4 h-4 mr-2 text-emerald-600" /> Feedback Collection
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              setReviewClient(client);
+                              setReviewDialogOpen(true);
+                            }}>
+                              <Star className="w-4 h-4 mr-2 text-amber-500" /> Client Reviews
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/work-management/smm/${client.id}/feedback`);
+                            }}>
+                              <ClipboardList className="w-4 h-4 mr-2 text-indigo-600" /> View Forms & Feedback
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              fetchLogs(client);
+                            }}>
+                              <History className="w-4 h-4 mr-2" /> Activity Logs
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(client.id);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -882,7 +1362,7 @@ export default function CreativeClientsPage() {
           <ClientForm
             initialData={editingClient || undefined}
             onSubmit={handleSubmit}
-            isLoading={isSubmitting}
+            isSubmitting={isSubmitting}
           />
         </DialogContent>
       </Dialog>
@@ -891,7 +1371,8 @@ export default function CreativeClientsPage() {
       <ActivityLogDialog 
         open={logsOpen} 
         onOpenChange={setLogsOpen}
-        clientName={activeClient?.companyName || "Client"}
+        title="Client Activity Logs"
+        subtitle={activeClient?.companyName || "Client"}
         logs={clientLogs}
         isLoading={isLoadingLogs}
       />
@@ -1008,6 +1489,104 @@ export default function CreativeClientsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Feedback Config Dialog */}
+      <Dialog open={feedbackConfigOpen} onOpenChange={setFeedbackConfigOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Feedback Reminder Schedule</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Reminder Frequency</Label>
+              <Select value={feedbackTypeInput} onValueChange={setFeedbackTypeInput}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Interval">Every X Days</SelectItem>
+                  <SelectItem value="Weekly">Weekly</SelectItem>
+                  <SelectItem value="Monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {feedbackTypeInput === "Interval" && (
+              <div className="space-y-2">
+                <Label>Interval (Days)</Label>
+                <Input 
+                  type="number" 
+                  placeholder="e.g. 15" 
+                  value={feedbackIntervalInput} 
+                  onChange={(e) => setFeedbackIntervalInput(e.target.value)} 
+                />
+              </div>
+            )}
+
+            {feedbackTypeInput === "Weekly" && (
+              <div className="space-y-2">
+                <Label>Days of the week</Label>
+                <div className="flex flex-wrap gap-2">
+                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, idx) => {
+                    const isSelected = feedbackDaysOfWeekInput.includes(idx);
+                    return (
+                      <Badge 
+                        key={day} 
+                        variant={isSelected ? "default" : "outline"}
+                        className={`cursor-pointer ${isSelected ? 'bg-brand-teal text-white border-brand-teal hover:bg-brand-teal/90' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600'}`}
+                        onClick={() => {
+                          if (isSelected) setFeedbackDaysOfWeekInput(prev => prev.filter(d => d !== idx));
+                          else setFeedbackDaysOfWeekInput(prev => [...prev, idx]);
+                        }}
+                      >
+                        {day}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {feedbackTypeInput === "Monthly" && (
+              <div className="space-y-2">
+                <Label>Dates of the month (1-31)</Label>
+                <Input 
+                  placeholder="e.g. 1, 15" 
+                  value={feedbackDatesOfMonthInput.join(", ")}
+                  onChange={(e) => {
+                    const parts = e.target.value.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 31);
+                    setFeedbackDatesOfMonthInput(parts);
+                  }}
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Last Feedback Collected</Label>
+                <Input 
+                  type="date" 
+                  value={feedbackLastDateInput} 
+                  onChange={(e) => setFeedbackLastDateInput(e.target.value)} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Next Reminder Date</Label>
+                <Input 
+                  type="date" 
+                  value={feedbackNextDateInput} 
+                  onChange={(e) => setFeedbackNextDateInput(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setFeedbackConfigOpen(false)}>Cancel</Button>
+              <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleSaveFeedbackConfig}>Save Configuration</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Payment Config Dialog */}
       <Dialog open={paymentConfigOpen} onOpenChange={setPaymentConfigOpen}>
         <DialogContent className="max-w-md">
@@ -1103,6 +1682,78 @@ export default function CreativeClientsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Assign Team Dialog */}
+      <Dialog open={assignTeamOpen} onOpenChange={setAssignTeamOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Creative Team</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Scripting</Label>
+              <SearchableEmployeeSelect 
+                value={scriptwriterId} 
+                onChange={setScriptwriterId} 
+                placeholder="Select scriptwriter..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Reel / Editing</Label>
+              <SearchableEmployeeSelect 
+                value={reelEditorId} 
+                onChange={setReelEditorId} 
+                placeholder="Select editor..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Post / Graphics</Label>
+              <SearchableEmployeeSelect 
+                value={postDesignerId} 
+                onChange={setPostDesignerId} 
+                placeholder="Select designer..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Shoot / Videography</Label>
+              <SearchableEmployeeSelect 
+                value={shooterId} 
+                onChange={setShooterId} 
+                placeholder="Select shooter..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Approval / QC</Label>
+              <SearchableEmployeeSelect 
+                value={approverId} 
+                onChange={setApproverId} 
+                placeholder="Select approver..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Posting / Publisher</Label>
+              <SearchableEmployeeSelect 
+                value={posterId} 
+                onChange={setPosterId} 
+                placeholder="Select poster..." 
+                employees={creativeEmployees} 
+              />
+            </div>
+            <div className="pt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAssignTeamOpen(false)}>Cancel</Button>
+              <Button className="bg-brand-teal text-white hover:bg-brand-teal-light" onClick={handleSaveTeamAssignment}>
+                Save Assignments
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <ClientReviewDialog 
         open={reviewDialogOpen} 
         onOpenChange={setReviewDialogOpen} 

@@ -29,6 +29,7 @@ export default function ClientDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const [client, setClient] = useState<any>(null);
+  const [project, setProject] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Edit Modal State
@@ -49,12 +50,20 @@ export default function ClientDetailsPage() {
   const fetchClient = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/clients/${params.id}`);
-      if (res.ok) {
-        setClient(await res.json());
+      const [cRes, pRes] = await Promise.all([
+        fetch(`${API_URL}/clients/${params.id}`),
+        fetch(`${API_URL}/projects`)
+      ]);
+      if (cRes.ok) {
+        setClient(await cRes.json());
       } else {
         toast.error("Client not found");
         router.push("/work-management/smm");
+      }
+      if (pRes.ok) {
+        const projs = await pRes.json();
+        const creativeProj = projs.find((p: any) => p.clientId === params.id && p.department === "Creative" && p.status !== "completed");
+        if (creativeProj) setProject(creativeProj);
       }
     } catch (err) {
       console.error("Error fetching client:", err);
@@ -141,7 +150,7 @@ export default function ClientDetailsPage() {
           </div>
           <div className="flex flex-col items-center gap-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Festival Post</span>
-            <span className={`px-2 py-0.5 rounded text-xs font-bold ${client.festivalPost === "Yes" ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-500"}`}>{client.festivalPost || "No"}</span>
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ${(project?.festivalPost || client.festivalPost) === "Yes" ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-500"}`}>{(project?.festivalPost || client.festivalPost) || "No"}</span>
           </div>
         </div>
 
@@ -151,7 +160,7 @@ export default function ClientDetailsPage() {
           </div>
           <div className="flex flex-col items-center gap-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Graph Req</span>
-            <span className={`px-2 py-0.5 rounded text-xs font-bold ${client.graphicsRequired === "Yes" || client.graphics === "Required" ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-500"}`}>{client.graphicsRequired || (client.graphics === "Required" ? "Yes" : "No")}</span>
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ${(project?.graphicsRequired || client.graphicsRequired) === "Yes" || client.graphics === "Required" ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-500"}`}>{(project?.graphicsRequired || client.graphicsRequired) || (client.graphics === "Required" ? "Yes" : "No")}</span>
           </div>
         </div>
 
@@ -161,7 +170,7 @@ export default function ClientDetailsPage() {
           </div>
           <div className="flex flex-col items-center gap-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Post Req</span>
-            <span className={`px-2 py-0.5 rounded text-xs font-bold ${client.postRequired === "Yes" ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-500"}`}>{client.postRequired || "No"}</span>
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ${(project?.postRequired || client.postRequired) === "Yes" ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-500"}`}>{(project?.postRequired || client.postRequired) || "No"}</span>
           </div>
         </div>
 
@@ -171,7 +180,7 @@ export default function ClientDetailsPage() {
           </div>
           <div className="flex flex-col items-center gap-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Post Count</span>
-            <span className="text-lg font-black text-slate-700">{client.post || 0}</span>
+            <span className="text-lg font-black text-slate-700">{(project?.post || client.post) || 0}</span>
           </div>
         </div>
 
@@ -181,7 +190,7 @@ export default function ClientDetailsPage() {
           </div>
           <div className="flex flex-col items-center gap-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Reel Req</span>
-            <span className={`px-2 py-0.5 rounded text-xs font-bold ${client.reelRequired === "Yes" ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-500"}`}>{client.reelRequired || "No"}</span>
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ${(project?.reelRequired || client.reelRequired) === "Yes" ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-500"}`}>{(project?.reelRequired || client.reelRequired) || "No"}</span>
           </div>
         </div>
 
@@ -191,7 +200,7 @@ export default function ClientDetailsPage() {
           </div>
           <div className="flex flex-col items-center gap-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Reel Count</span>
-            <span className="text-lg font-black text-slate-700">{client.reel || 0}</span>
+            <span className="text-lg font-black text-slate-700">{(project?.reel || client.reel) || 0}</span>
           </div>
         </div>
       </div>

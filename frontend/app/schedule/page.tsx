@@ -146,7 +146,6 @@ export default function SchedulePage() {
   const handleDisconnectGoogle = async () => {
     if (!user) return;
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const res = await fetch(`${API_URL}/auth/google/disconnect?employeeId=${user.id || user.employeeId}`, {
         method: 'POST'
       });
@@ -202,9 +201,7 @@ export default function SchedulePage() {
   const fetchSchedules = async (dateStr: string) => {
     setIsLoading(true);
     try {
-      const userId = user?.id || user?.employeeId || "";
-      const empParam = isAdmin ? "" : (userId ? `&employeeId=${userId}` : "");
-      const res = await fetch(`${API_URL}/schedules?date=${dateStr}${empParam}`);
+      const res = await fetch(`${API_URL}/schedules?date=${dateStr}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
     } catch (err) {
@@ -217,9 +214,7 @@ export default function SchedulePage() {
   const fetchSchedulesRange = async (from: string, to: string) => {
     setIsLoading(true);
     try {
-      const userId = user?.id || user?.employeeId || "";
-      const empParam = isAdmin ? "" : (userId ? `&employeeId=${userId}` : "");
-      const res = await fetch(`${API_URL}/schedules?date_from=${from}&date_to=${to}${empParam}`);
+      const res = await fetch(`${API_URL}/schedules?date_from=${from}&date_to=${to}`);
       if (res.ok) setSchedules(await res.json());
       else setSchedules([]);
     } catch (err) {
@@ -515,11 +510,19 @@ export default function SchedulePage() {
     const startMin = timeToMinutes(event.startTime);
     const endMin = timeToMinutes(event.endTime);
     const top = Math.max(0, startMin);
-    const height = Math.max(20, Math.min(1440, endMin) - top);
+    const duration = Math.max(20, Math.min(1440, endMin) - top);
+    const height = Math.max(15, duration - 1.5); // Subtract 1.5px to create visual gap for back-to-back
     const color = getEmployeeColor(event.employeeId);
     
     const userId = String(user?.id || user?.employeeId);
-    const canEditOrDelete = String(event.createdBy) === userId || String(event.employeeId) === userId || user?.role === "Admin" || user?.role === "HR";
+    const isAdminUser = user?.role === "Admin" || user?.role === "HR" || isAdmin;
+    const isOwner = String(event.employeeId) === userId;
+    const isCreator = String(event.createdBy) === userId;
+    const isAttendee = Array.isArray(event.attendees) && event.attendees.some((id: any) => String(id) === userId);
+    const canSeeDetails = isAdminUser || isOwner || isCreator || isAttendee;
+    
+    const displayTitle = canSeeDetails ? event.title : "Busy";
+    const canEditOrDelete = isCreator || isOwner || isAdminUser;
     
     const colWidth = 100 / totalColumns;
     const leftPercent = column * colWidth;
@@ -533,7 +536,7 @@ export default function SchedulePage() {
             handleEditClick(event);
           }
         }}
-        className="absolute rounded-md overflow-hidden cursor-pointer transition-shadow hover:shadow-lg group"
+        className={`absolute rounded-md overflow-hidden transition-shadow ${canEditOrDelete ? 'cursor-pointer hover:shadow-lg' : 'cursor-default'} group`}
         style={{
           top: `${top}px`,
           height: `${height}px`,
@@ -547,7 +550,7 @@ export default function SchedulePage() {
         <div className={`${compact ? "p-0.5 px-1" : "p-1.5"} h-full flex flex-col relative`}>
           <div className="flex items-start justify-between gap-0.5">
             <div className={`${compact ? "text-[10px]" : "text-xs"} font-bold text-white truncate flex-1 leading-tight`}>
-              {event.title}
+              {displayTitle}
             </div>
           </div>
           {height > 30 && (
@@ -566,11 +569,11 @@ export default function SchedulePage() {
 
     const tooltipContent = (
       <div className="text-xs max-w-[200px]">
-        <div className="font-bold mb-1">{event.title}</div>
-        {event.createdBy && (
+        <div className="font-bold mb-1">{displayTitle}</div>
+        {canSeeDetails && event.createdBy && (
           <div><strong>Created By:</strong> {employees.find(e => String(e.id) === String(event.createdBy) || String(e.employeeId) === String(event.createdBy))?.name || "Unknown"}</div>
         )}
-        {event.attendees && event.attendees.length > 0 && (
+        {canSeeDetails && event.attendees && event.attendees.length > 0 && (
           <div className="mt-1">
             <strong>With:</strong> {
               event.attendees.map((id: string) => {
@@ -658,7 +661,7 @@ export default function SchedulePage() {
                 Add Schedule
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px]">
+            <DialogContent className="sm:max-w-[450px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">{editingScheduleId ? "Edit Schedule" : "New Schedule Block"}</DialogTitle>
               </DialogHeader>
