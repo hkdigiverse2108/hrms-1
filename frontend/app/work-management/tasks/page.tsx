@@ -166,7 +166,6 @@ export default function TasksPage() {
       if (res.ok) {
         const newTask = await res.json();
         setTasks(prev => [...prev, newTask]);
-        setQuickAddStage(null);
         setQuickAddTitle("");
       } else {
         const error = await res.json();
@@ -733,19 +732,16 @@ export default function TasksPage() {
                                       "bg-white hover:bg-slate-50 shadow-sm hover:shadow-md border border-slate-200 hover:border-brand-teal/30"
                                     }`}>
                                       
-                                      <div className="flex items-start justify-between min-h-[24px]">
-                                        <div className="flex items-start gap-2">
-                                          <h4 className="font-medium text-[14.5px] text-slate-800 leading-snug flex-1 transition-all duration-200 pt-0.5">
-                                            {task.title}
-                                          </h4>
-                                        </div>
-
-                                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity pl-2">
+                                      <div className="min-h-[24px] relative">
+                                        <div className="float-right ml-2 -mt-1 flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                           <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-brand-teal" title="View Logs"><History className="w-3.5 h-3.5" /></button>
                                           {canDeleteTask && (
                                             <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-400 hover:text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
                                           )}
                                         </div>
+                                        <h4 className="font-medium text-[14.5px] text-slate-800 leading-snug break-words whitespace-pre-wrap">
+                                          {task.title}
+                                        </h4>
                                       </div>
                                     </div>
                                   </div>
