@@ -1123,8 +1123,15 @@ async def run_payroll_processing(db, month: str, year: int):
             
             if remark_type == "Late Punch-in":
                 if late_punch_deduction_enabled:
-                    penalty_total += per_day_gross
-                    deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{round(per_day_gross, 2)}")
+                    if per_day_gross > 0:
+                        penalty_total += per_day_gross
+                        deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{round(per_day_gross, 2)}")
+                    else:
+                        # Salary is 0, so deduct the penalty given in penalty_types for Late Punch-in
+                        p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
+                        if p_amount > 0:
+                            penalty_total += p_amount
+                            deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{p_amount}")
                 continue
 
             p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
