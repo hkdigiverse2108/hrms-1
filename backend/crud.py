@@ -307,7 +307,7 @@ async def get_employees(db, skip: int = 0, limit: int = 100):
     return [fix_id(row) for row in rows]
 
 async def get_attendance(db, skip: int = 0, limit: int = 100):
-    cursor = db.attendance.find().skip(skip).limit(limit)
+    cursor = db.attendance.find().sort([("date", -1), ("_id", -1)]).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
