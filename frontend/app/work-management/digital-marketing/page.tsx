@@ -18,6 +18,7 @@ import {
   Plus,
   Info,
   TrendingUp,
+  Activity,
   Power,
   FileText,
   History,
@@ -28,6 +29,8 @@ import {
   MoreHorizontal,
   GripVertical,
   X,
+  Upload,
+  FileSpreadsheet,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -39,6 +42,7 @@ import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { startOfToday, subDays, format, isSameDay, differenceInDays, parseISO, isAfter, startOfDay } from "date-fns";
 import { OtherWorkDialog } from "@/components/hrms/OtherWorkDialog";
+import { PendingWorkEmbedded } from "@/components/hrms/PendingWorkEmbedded";
 import {
   Table,
   TableBody,
@@ -78,6 +82,18 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/context/ConfirmContext";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from "recharts";
 
 const monthMap: { [key: string]: string } = {
   January: "01",
@@ -233,6 +249,65 @@ export default function MarketingReportsPage() {
   };
   const [monthlyReports, setMonthlyReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(startOfToday(), 1),
+    to: subDays(startOfToday(), 1)
+  });
+
+  const analysisStats = React.useMemo(() => {
+    let filtered = dailyReports;
+    if (dateRange?.from) {
+      filtered = filtered.filter(r => new Date(r.date) >= dateRange.from!);
+    }
+    if (dateRange?.to) {
+      filtered = filtered.filter(r => new Date(r.date) <= dateRange.to!);
+    }
+
+    let totalSpend = 0;
+    let totalLeads = 0;
+    let totalRevenue = 0;
+    
+    const dailyDataMap: Record<string, any> = {};
+    const employeeDataMap: Record<string, any> = {};
+    const projectDataMap: Record<string, any> = {};
+
+    filtered.forEach(r => {
+      const spend = Number(r.spend) || 0;
+      const leads = Number(r.leads) || 0;
+      const revenue = Number(r.revenue) || 0;
+      
+      totalSpend += spend;
+      totalLeads += leads;
+      totalRevenue += revenue;
+
+      const d = r.date;
+      if(!dailyDataMap[d]) dailyDataMap[d] = { date: d, spend: 0, leads: 0, revenue: 0 };
+      dailyDataMap[d].spend += spend;
+      dailyDataMap[d].leads += leads;
+      dailyDataMap[d].revenue += revenue;
+
+      const emp = r.userName || 'Unknown User';
+      if(!employeeDataMap[emp]) employeeDataMap[emp] = { name: emp, spend: 0, leads: 0, revenue: 0 };
+      employeeDataMap[emp].spend += spend;
+      employeeDataMap[emp].leads += leads;
+      employeeDataMap[emp].revenue += revenue;
+
+      const proj = r.projectName || 'Unknown Project';
+      if(!projectDataMap[proj]) projectDataMap[proj] = { name: proj, spend: 0, leads: 0, revenue: 0 };
+      projectDataMap[proj].spend += spend;
+      projectDataMap[proj].leads += leads;
+      projectDataMap[proj].revenue += revenue;
+    });
+
+    const dailyTrends = Object.values(dailyDataMap).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const employeeStats = Object.values(employeeDataMap).sort((a,b) => b.revenue - a.revenue);
+    const projectStats = Object.values(projectDataMap).sort((a,b) => b.revenue - a.revenue);
+
+    return {
+      totalSpend, totalLeads, totalRevenue, roas: totalSpend > 0 ? (totalRevenue / totalSpend) : 0,
+      dailyTrends, employeeStats, projectStats
+    };
+  }, [dailyReports, dateRange]);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modals
@@ -270,10 +345,6 @@ export default function MarketingReportsPage() {
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [monthlyItemsPerPage, setMonthlyItemsPerPage] = useState(10);
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(startOfToday(), 1),
-    to: subDays(startOfToday(), 1)
-  });
   const [monthFilter, setMonthFilter] = useState<string[]>([getLocalMonthString()]);
 
   const handleMonthFilterChange = (val: string) => {
@@ -447,6 +518,7 @@ export default function MarketingReportsPage() {
     projectId: "",
     projectName: "",
     clientId: "",
+    clientName: "",
     reach: 0,
     impression: 0,
     leads: 0,
@@ -752,6 +824,8 @@ export default function MarketingReportsPage() {
         body: JSON.stringify({
           ...dailyFormData,
           clientName: client?.companyName || "",
+          performedBy: user?.id,
+          userName: user?.name || user?.firstName || "Unknown User",
         }),
       });
 
@@ -764,6 +838,7 @@ export default function MarketingReportsPage() {
           projectId: "",
           projectName: "",
           clientId: "",
+          clientName: "",
           reach: 0,
           impression: 0,
           leads: 0,
@@ -771,6 +846,7 @@ export default function MarketingReportsPage() {
           spend: 0,
           cpl: 0,
           remarks: "",
+          campaignOptimization: false,
         });
         toast.success(
           editingReport
@@ -914,6 +990,79 @@ export default function MarketingReportsPage() {
     setInlineEditing(null);
   };
 
+  const handleUploadLeads = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    id: string,
+    type: "daily" | "monthly"
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size should be smaller than 10 MB");
+      e.target.value = ''; // Reset input
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const uploadRes = await fetch(`${API_URL}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        toast.error("Failed to upload file");
+        return;
+      }
+
+      const { url } = await uploadRes.json();
+      await handleInlineUpdate(id, "leadsFileUrl", url, type);
+      toast.success("Leads file uploaded successfully");
+    } catch (err) {
+      toast.error("An error occurred during upload");
+    }
+  };
+
+  const handleDownloadLeads = (fileUrl: string) => {
+    const isExternal = fileUrl.startsWith('http');
+    const fullUrl = isExternal ? fileUrl : `${API_URL}${fileUrl.replace('/api', '')}`;
+    
+    let originalName = 'leads_file';
+    try {
+      const parts = fileUrl.split('/');
+      const fileNameWithUuid = parts[parts.length - 1];
+      const nameParts = fileNameWithUuid.split('_');
+      if (nameParts.length > 1 && nameParts[0].length === 32) {
+        originalName = nameParts.slice(1).join('_');
+      } else {
+        originalName = fileNameWithUuid;
+      }
+    } catch (e) {
+      // fallback
+    }
+
+    const link = document.createElement('a');
+    link.href = fullUrl;
+    link.download = originalName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const getTodayStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const isZeroOrEmpty = (val: any) =>
+    !val || val === 0 || val === "0" || String(val).trim() === "";
+
   const startEditingRow = (report: any) => {
     if (!canEditMarketing) return;
     setEditingRowId(report.id);
@@ -922,6 +1071,37 @@ export default function MarketingReportsPage() {
 
   const saveRowEdit = async (id: string, type: "daily" | "monthly") => {
     if (!canEditMarketing) return;
+
+    if (type === "daily") {
+      const report = dailyReports.find(r => r.id === id);
+      if (report) {
+        const isTrulyEmpty =
+          isZeroOrEmpty(report.reach) &&
+          isZeroOrEmpty(report.impression) &&
+          isZeroOrEmpty(report.leads) &&
+          isZeroOrEmpty(report.revenue) &&
+          isZeroOrEmpty(report.followers) &&
+          isZeroOrEmpty(report.spend) &&
+          isZeroOrEmpty(report.cpl) &&
+          isZeroOrEmpty(report.remarks);
+        const isDue = isTrulyEmpty && normalizeDate(report.date) < getTodayStr();
+
+        if (isDue) {
+          const savingEmpty =
+            isZeroOrEmpty(editFormData.reach) &&
+            isZeroOrEmpty(editFormData.impression) &&
+            isZeroOrEmpty(editFormData.leads) &&
+            isZeroOrEmpty(editFormData.spend) &&
+            isZeroOrEmpty(editFormData.cpl);
+            
+          if (savingEmpty && (!editFormData.reason || editFormData.reason.trim() === '')) {
+            toast.error("Please provide a reason before saving an empty report.");
+            return;
+          }
+        }
+      }
+    }
+
     setIsSavingRow(true);
     try {
       const res = await fetch(`${API_URL}/marketing/reports/${type}/${id}`, {
@@ -1053,13 +1233,7 @@ export default function MarketingReportsPage() {
     }
   };
 
-  const getTodayStr = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
+
 
   const filteredDaily = dailyReports.filter((r) => {
     const isEmpty =
@@ -1094,8 +1268,7 @@ export default function MarketingReportsPage() {
       return false;
     }
 
-    const isZeroOrEmpty = (val: any) =>
-      !val || val === 0 || val === "0" || String(val).trim() === "";
+
     const isTrulyEmpty =
       isZeroOrEmpty(r.reach) &&
       isZeroOrEmpty(r.impression) &&
@@ -1464,10 +1637,24 @@ export default function MarketingReportsPage() {
             >
               Clients
             </TabsTrigger>
+            <TabsTrigger
+              value="tasks"
+              className="px-6 py-2 rounded-md transition-all"
+            >
+              Creative Tasks
+            </TabsTrigger>
+            {user?.role?.toLowerCase() === 'admin' && (
+              <TabsTrigger
+                value="analysis"
+                className="px-6 py-2 rounded-md transition-all"
+              >
+                Analysis
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
-        {activeTab !== "clients" && (
+        {activeTab !== "clients" && activeTab !== "tasks" && activeTab !== "analysis" && (
           <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border shadow-sm mb-6">
             <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
               <Label className="text-xs text-slate-500">
@@ -2046,11 +2233,23 @@ export default function MarketingReportsPage() {
                                               draggableId={String(report.id)}
                                               index={dragIndex}
                                             >
-                                              {(provided) => (
+                                              {(provided) => {
+                                                const isTrulyEmpty =
+                                                  isZeroOrEmpty(report.reach) &&
+                                                  isZeroOrEmpty(report.impression) &&
+                                                  isZeroOrEmpty(report.leads) &&
+                                                  isZeroOrEmpty(report.revenue) &&
+                                                  isZeroOrEmpty(report.followers) &&
+                                                  isZeroOrEmpty(report.spend) &&
+                                                  isZeroOrEmpty(report.cpl) &&
+                                                  isZeroOrEmpty(report.remarks);
+                                                const isDue = isTrulyEmpty && normalizeDate(report.date) < getTodayStr();
+                                                
+                                                return (
                                                 <TableRow
                                                   ref={provided.innerRef}
                                                   {...provided.draggableProps}
-                                                  className="hover:bg-slate-50/50"
+                                                  className={isDue ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-slate-50/50"}
                                                 >
                                                   <TableCell className="text-center w-8">
                                                     <div
@@ -2445,10 +2644,23 @@ export default function MarketingReportsPage() {
                                                   </TableCell>
 
                                                   <TableCell className="text-center">
-                                                    <div className="flex justify-center gap-1">
+                                                    <div className="flex justify-center items-center gap-1">
                                                       {editingRowId ===
                                                       report.id ? (
                                                         <>
+                                                          {isDue && (
+                                                            <Input
+                                                              placeholder="Reason for zero metrics..."
+                                                              className="h-6 text-[10px] w-28 border-red-300 focus-visible:ring-red-300"
+                                                              value={editFormData.reason || ""}
+                                                              onChange={(e) =>
+                                                                setEditFormData({
+                                                                  ...editFormData,
+                                                                  reason: e.target.value,
+                                                                })
+                                                              }
+                                                            />
+                                                          )}
                                                           <Button
                                                             size="icon"
                                                             variant="ghost"
@@ -2484,6 +2696,14 @@ export default function MarketingReportsPage() {
                                                         </>
                                                       ) : (
                                                         <>
+                                                          {isDue && report.reason && (
+                                                            <span className="text-[10px] text-red-600 font-medium max-w-[80px] truncate mr-1" title={report.reason}>
+                                                              {report.reason}
+                                                            </span>
+                                                          )}
+                                                          {isDue && !report.reason && (
+                                                            <Badge variant="outline" className="text-[9px] bg-red-100 text-red-600 border-red-200 px-1 py-0 shadow-none mr-1">DUE</Badge>
+                                                          )}
                                                           <Button
                                                             variant="ghost"
                                                             size="icon"
@@ -2497,6 +2717,34 @@ export default function MarketingReportsPage() {
                                                           >
                                                             <History className="w-4 h-4" />
                                                           </Button>
+
+                                                          <input 
+                                                            type="file" 
+                                                            className="hidden" 
+                                                            id={`upload-leads-${report.id}`} 
+                                                            accept=".xlsx,.xls,.csv"
+                                                            onChange={(e) => handleUploadLeads(e, report.id, "daily")}
+                                                          />
+                                                          <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                                            title="Upload Leads"
+                                                            onClick={() => document.getElementById(`upload-leads-${report.id}`)?.click()}
+                                                          >
+                                                            <Upload className="w-4 h-4" />
+                                                          </Button>
+                                                          {report.leadsFileUrl && (
+                                                            <Button
+                                                              variant="ghost"
+                                                              size="icon"
+                                                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                              title="Download Leads"
+                                                              onClick={() => handleDownloadLeads(report.leadsFileUrl)}
+                                                            >
+                                                              <FileSpreadsheet className="w-4 h-4" />
+                                                            </Button>
+                                                          )}
 
                                                           {canDeleteMarketing && (
                                                             <Button
@@ -2518,7 +2766,8 @@ export default function MarketingReportsPage() {
                                                     </div>
                                                   </TableCell>
                                                 </TableRow>
-                                              )}
+                                                );
+                                              }}
                                             </Draggable>
                                           );
                                         })}
@@ -2997,6 +3246,122 @@ export default function MarketingReportsPage() {
             />
           </div>
         </TabsContent>
+        <TabsContent value="tasks" className="flex-1 overflow-hidden mt-0">
+          <PendingWorkEmbedded type="all" defaultTaskType="digital-marketing" />
+        </TabsContent>
+        {user?.role?.toLowerCase() === 'admin' && (
+          <TabsContent value="analysis" className="flex-1 overflow-y-auto mt-0 px-1 pb-10">
+            <div className="space-y-6">
+              {/* Date Filter */}
+              <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                <h3 className="font-bold text-slate-800 text-lg">Marketing Analysis Dashboard</h3>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-slate-500">Date Range:</span>
+                  <DateRangePicker
+                    value={dateRange}
+                    onChange={setDateRange}
+                    className="w-[280px]"
+                  />
+                </div>
+              </div>
+
+              {/* Top Aggregate Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-1 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <TrendingUp className="w-12 h-12 text-blue-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider z-10">Total Spend</span>
+                  <span className="text-3xl font-bold text-slate-800 z-10">₹{analysisStats.totalSpend.toLocaleString()}</span>
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-1 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <Users className="w-12 h-12 text-brand-teal" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider z-10">Total Leads</span>
+                  <span className="text-3xl font-bold text-slate-800 z-10">{analysisStats.totalLeads.toLocaleString()}</span>
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-1 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <BarChart3 className="w-12 h-12 text-emerald-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider z-10">Total Revenue</span>
+                  <span className="text-3xl font-bold text-slate-800 z-10">₹{analysisStats.totalRevenue.toLocaleString()}</span>
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-1 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <BarChart3 className="w-12 h-12 text-indigo-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider z-10">Overall ROAS</span>
+                  <span className="text-3xl font-bold text-slate-800 z-10">{analysisStats.roas.toFixed(2)}x</span>
+                </div>
+              </div>
+
+              {/* Charts Grid */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                
+                {/* Company Trend */}
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm col-span-1 xl:col-span-2">
+                  <h4 className="font-bold text-slate-800 mb-4">Company Trends (Daily)</h4>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={analysisStats.dailyTrends} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="date" tick={{fontSize: 12, fill: '#64748b'}} tickMargin={10} minTickGap={30} />
+                        <YAxis yAxisId="left" tick={{fontSize: 12, fill: '#64748b'}} />
+                        <YAxis yAxisId="right" orientation="right" tick={{fontSize: 12, fill: '#64748b'}} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                        <Line yAxisId="left" type="monotone" dataKey="spend" name="Spend (₹)" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                        <Line yAxisId="left" type="monotone" dataKey="revenue" name="Revenue (₹)" stroke="#10b981" strokeWidth={2} dot={false} />
+                        <Line yAxisId="right" type="monotone" dataKey="leads" name="Leads" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Employee Wise */}
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                  <h4 className="font-bold text-slate-800 mb-4">Employee Performance</h4>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analysisStats.employeeStats} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" tick={{fontSize: 12, fill: '#64748b'}} tickMargin={10} />
+                        <YAxis tick={{fontSize: 12, fill: '#64748b'}} />
+                        <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                        <Bar dataKey="revenue" name="Revenue (₹)" fill="#10b981" radius={[4,4,0,0]} />
+                        <Bar dataKey="spend" name="Spend (₹)" fill="#3b82f6" radius={[4,4,0,0]} />
+                        <Bar dataKey="leads" name="Leads" fill="#0ea5e9" radius={[4,4,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Project Wise */}
+                <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                  <h4 className="font-bold text-slate-800 mb-4">Project Performance</h4>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analysisStats.projectStats} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" tick={{fontSize: 12, fill: '#64748b'}} tickMargin={10} />
+                        <YAxis tick={{fontSize: 12, fill: '#64748b'}} />
+                        <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                        <Bar dataKey="revenue" name="Revenue (₹)" fill="#8b5cf6" radius={[4,4,0,0]} />
+                        <Bar dataKey="spend" name="Spend (₹)" fill="#f59e0b" radius={[4,4,0,0]} />
+                        <Bar dataKey="leads" name="Leads" fill="#f43f5e" radius={[4,4,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Daily Report Modal */}

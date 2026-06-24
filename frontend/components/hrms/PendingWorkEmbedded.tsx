@@ -16,7 +16,7 @@ export function PendingWorkEmbedded({
   type = "pending-work",
   defaultTaskType = "all"
 }: { 
-  type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work",
+  type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work" | "all",
   defaultTaskType?: string
 }) {
   const router = useRouter();
@@ -189,11 +189,11 @@ export function PendingWorkEmbedded({
       else if (ow.status === 'Ready for Review') canSee = isAssigner || isAssignee;
       else if (ow.status === 'Approved') canSee = isAssignee || isAssigner; // Show in completed
 
-      if (!isEmployeeOrIntern || canSee) {
-        if (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved') {
+      if (!isEmployeeOrIntern || canSee || type === 'all') {
+        if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
           tasks.push({
             ...ow,
-            clientDisplayName: `Assigned by ${ow.assignerName}`,
+            clientDisplayName: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Other Work',
             clientId: 'other-work',
             stage: ow.status,
             deadline: ow.deadline,
@@ -248,8 +248,7 @@ export function PendingWorkEmbedded({
       });
     }
 
-    // Apply Type Filter
-    if (type) {
+    if (type && type !== 'all') {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       filteredTasks = filteredTasks.filter(t => {
@@ -298,7 +297,7 @@ export function PendingWorkEmbedded({
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <ClipboardList className="w-5 h-5 text-brand-teal" />
           <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : 'Pending Work'}
+            {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : type === 'all' ? 'All Tasks' : 'Pending Work'}
           </h2>
         </div>
         
@@ -419,12 +418,20 @@ export function PendingWorkEmbedded({
                       </Badge>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-800">{item.taskName}</span>
-                        {item.monthYear && (
-                          <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                            {item.monthYear}
-                          </span>
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-800">{item.taskName}</span>
+                          {item.monthYear && (
+                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                              {item.monthYear}
+                            </span>
+                          )}
+                        </div>
+                        {item.isOtherWork && (item.assignerName || item.assigneeName) && (
+                          <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            {item.assignerName && <div>Assigned by: <span className="font-medium text-slate-700">{item.assignerName}</span></div>}
+                            {item.assigneeName && <div>Assigned to: <span className="font-medium text-slate-700">{item.assigneeName}</span></div>}
+                          </div>
                         )}
                       </div>
                     </td>

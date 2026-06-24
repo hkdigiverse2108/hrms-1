@@ -1406,13 +1406,17 @@ class MarketingDailyReportBase(BaseModel):
     cpl: float = 0
     revenue: float = 0
     remarks: Optional[str] = None
+    reason: Optional[str] = None
     campaignOptimization: bool = False
+    leadsFileUrl: Optional[str] = None
 
 class MarketingDailyReportCreate(MarketingDailyReportBase):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
     projectId: Optional[str] = None
     projectName: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class MarketingDailyReportUpdate(BaseModel):
     clientId: Optional[str] = None
@@ -1429,7 +1433,9 @@ class MarketingDailyReportUpdate(BaseModel):
     cpl: Optional[float] = None
     revenue: Optional[float] = None
     remarks: Optional[str] = None
+    reason: Optional[str] = None
     campaignOptimization: Optional[bool] = None
+    leadsFileUrl: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -1439,6 +1445,8 @@ class MarketingDailyReport(MarketingDailyReportBase):
     clientName: Optional[str] = None
     projectId: Optional[str] = None
     projectName: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
     class Config:
         from_attributes = True
 
