@@ -236,6 +236,7 @@ export default function SchedulePage() {
     // Check for overlap within current schedules if creating for the current date
     if (form.date === currentDate.format("YYYY-MM-DD")) {
       const isOverlap = schedules.some((s) => {
+        if (editingScheduleId && s.id === editingScheduleId) return false;
         if (s.employeeId !== form.employeeId) return false;
         // Overlap condition: max(start1, start2) < min(end1, end2)
         const maxStart = form.startTime > s.startTime ? form.startTime : s.startTime;
