@@ -149,13 +149,25 @@ async function performSilentInstall(downloadUrl) {
 
           const totalSize = parseInt(response.headers['content-length'], 10);
           let downloadedSize = 0;
+          let lastSentProgress = -1;
 
           response.on('data', (chunk) => {
             downloadedSize += chunk.length;
-            if (totalSize > 0) {
+            if (totalSize > 0 && !isNaN(totalSize)) {
               const progress = Math.round((downloadedSize / totalSize) * 100);
-              if (mainWindow) {
-                mainWindow.webContents.send('update-progress', progress);
+              if (progress !== lastSentProgress) {
+                lastSentProgress = progress;
+                if (mainWindow) {
+                  mainWindow.webContents.send('update-progress', progress);
+                }
+              }
+            } else {
+              // Indeterminate progress when content-length is missing
+              if (lastSentProgress !== -1) {
+                lastSentProgress = -1;
+                if (mainWindow) {
+                  mainWindow.webContents.send('update-progress', -1);
+                }
               }
             }
           });
@@ -197,6 +209,9 @@ async function performSilentInstall(downloadUrl) {
 
     // /S = fully silent NSIS install, no UI, no prompts.
     await spawnDetachedWithRetry(tempPath, ['/S']);
+
+    // Give the NSIS installer time to finish writing files before killing processes
+    await wait(3000);
 
     killSubprocesses();
     isQuitting = true;

@@ -38,10 +38,17 @@
   nsExec::ExecToLog 'icacls "$INSTDIR" /grant *S-1-5-32-545:(OI)(CI)F /T'
   
   # Auto-launch application after silent background update install
+  # Using the same path ensures the taskbar pin remains valid
   IfSilent 0 +2
     Exec '"$INSTDIR\HRMS.exe"'
 !macroend
 
 !macro customUnInstall
+  # Remove Start Menu and Desktop shortcuts
+  RMDir /r "$SMPROGRAMS\HRMS"
+  Delete "$DESKTOP\HRMS.lnk"
+  Delete "$DESKTOP\HRMS Desktop App.lnk"
+  
+  # Remove installation directory
   RMDir /r "$INSTDIR"
 !macroend

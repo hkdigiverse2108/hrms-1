@@ -775,9 +775,14 @@ export default function EmployeeAttendanceListPage() {
                     const breakStr = formatToHhMm(breakMinutes);
                     const totalWorkingStr = formatToHhMm(totalWorkingMinutes);
                     const productionStr = formatToHhMm(productionMinutes);
+                    
+                    const isToday = dayjs(record.date).isSame(dayjs(), 'day');
+                    
+                    const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
+                    const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
+                    const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
 
-                    const dateStr = record.date ? (typeof record.date === 'string' ? record.date.split('T')[0].split(' ')[0] : dayjs(record.date).format('YYYY-MM-DD')) : '';
-                    const checkIn = dayjs(`${dateStr} ${record.checkIn}`);
+                    const checkIn = dayjs(`${record.date} ${record.checkIn}`);
 
                     const recoveryReq = recoveryRequests.find(req => 
                       req.date === record.date && 
@@ -789,27 +794,15 @@ export default function EmployeeAttendanceListPage() {
                     
                     const lateMinutes = (() => {
                       if (!isLate || !checkIn.isValid()) return 0;
-                      const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
-                      const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
-                      return Math.max(0, checkIn.diff(dayjs(`${dateStr} ${officeStartTime}`), 'minute'));
+                      return Math.max(0, checkIn.diff(dayjs(`${record.date} ${officeStartTime}`), 'minute'));
                     })();
                     
                     const lateStr = isLate || recoveryReq ? formatToHhMm(lateMinutes) : "-";
                     
                     const shiftDurationMinutes = (() => {
-                      const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
-                      const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
-                      const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
-                      let [sh, sm] = officeStartTime.split(':').map(Number);
-                      let [eh, em] = officeEndTime.split(':').map(Number);
-                      if (sh >= 8 && sh <= 16 && eh >= 1 && eh <= 8) {
-                        eh += 12;
-                      }
-                      let diff = (eh * 60 + em) - (sh * 60 + sm);
-                      if (diff < 0) {
-                        diff += 24 * 60;
-                      }
-                      return diff;
+                      const [sh, sm] = officeStartTime.split(':').map(Number);
+                      const [eh, em] = officeEndTime.split(':').map(Number);
+                      return (eh * 60 + em) - (sh * 60 + sm);
                     })();
                     
                     const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
