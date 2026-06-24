@@ -67,12 +67,12 @@ export default function ProjectsPage() {
   const [followupLastDateInput, setFollowupLastDateInput] = useState("");
 
   useEffect(() => {
-    fetchData();
+    fetchData(true);
   }, [user]);
 
-  const fetchData = async () => {
+  const fetchData = async (showLoading = true) => {
     if (!user) return;
-    setIsLoading(true);
+    if (showLoading) setIsLoading(true);
     try {
       const [pRes, tRes, lRes, cRes] = await Promise.all([
         fetch(`${API_URL}/projects?userId=${user.id}&role=${user.role}`),
@@ -88,7 +88,7 @@ export default function ProjectsPage() {
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -130,12 +130,24 @@ export default function ProjectsPage() {
       });
 
       if (res.ok) {
+        const savedProject = await res.json();
+        setProjects(prev => {
+          if (editingProject) {
+            return prev.map(p => p.id === savedProject.id ? savedProject : p);
+          } else {
+            return [savedProject, ...prev];
+          }
+        });
         setModalOpen(false);
-        fetchData();
+        fetchData(false);
         setEditingProject(null);
+      } else {
+        const errorData = await res.json();
+        toast.error(`Error: ${errorData.detail || "Failed to save project"}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error saving project:", err);
+      toast.error(`Error: ${err.message || "Failed to connect to server"}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -155,7 +167,7 @@ export default function ProjectsPage() {
         method: "DELETE",
       });
       if (res.ok) {
-        fetchData();
+        fetchData(false);
       }
     } catch (err) {
       console.error("Error deleting project:", err);
@@ -181,7 +193,7 @@ export default function ProjectsPage() {
       if (res.ok) {
         toast.success("Follow-up configuration saved");
         setFollowupConfigOpen(false);
-        fetchData();
+        fetchData(false);
       } else {
         toast.error("Failed to save follow-up configuration");
       }

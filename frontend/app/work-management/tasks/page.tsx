@@ -402,14 +402,7 @@ export default function TasksPage() {
             setModalOpen(open);
             if (!open) setEditingTask(null);
           }}>
-            {canAddTask && (
-              <DialogTrigger asChild>
-                <Button size="sm" className="bg-brand-teal hover:bg-brand-teal-light text-white h-9 px-4 text-[12px] rounded-lg">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Task
-                </Button>
-              </DialogTrigger>
-            )}
+
             <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto custom-scrollbar">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">

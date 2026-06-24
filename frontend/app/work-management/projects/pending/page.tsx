@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { toast } from "sonner";
 
 export default function PendingProjectsPage() {
   const { user } = useUser();
@@ -107,13 +108,15 @@ export default function PendingProjectsPage() {
       
       if (res.ok) {
         setModalOpen(false);
+        fetchData();
         setEditingProject(null);
-        router.push('/work-management/projects');
       } else {
-        console.error("Error saving project");
+        const errorData = await res.json();
+        toast.error(`Error: ${errorData.detail || "Failed to save project"}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error saving project:", err);
+      toast.error(`Error: ${err.message || "Failed to connect to server"}`);
     } finally {
       setIsSubmitting(false);
     }

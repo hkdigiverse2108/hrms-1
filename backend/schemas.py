@@ -1061,6 +1061,10 @@ class ProjectBase(BaseModel):
     assignedShooterId: Optional[str] = None
     assignedApproverId: Optional[str] = None
     assignedPosterId: Optional[str] = None
+    
+    # Phase Wise Project Fields
+    isPhaseWise: Optional[bool] = False
+    phases: Optional[List[dict]] = []
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1111,6 +1115,10 @@ class ProjectUpdate(BaseModel):
     assignedShooterId: Optional[str] = None
     assignedApproverId: Optional[str] = None
     assignedPosterId: Optional[str] = None
+    
+    # Phase Wise Project Fields
+    isPhaseWise: Optional[bool] = None
+    phases: Optional[List[dict]] = None
 
 class Project(ProjectBase):
     id: str

@@ -3134,7 +3134,6 @@ async def delete_task(db, task_id: str):
     return True
 
 # Work Management Task CRUD
-async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
 async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 1000):
     query = {}
     if role and role.lower() not in ["admin", "hr"] and userId:
