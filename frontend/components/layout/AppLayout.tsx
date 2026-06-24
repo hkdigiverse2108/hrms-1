@@ -317,6 +317,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [user, showRecoveryModal]);
 
   const resetInactivityTimer = useCallback(() => {
+    // Inactivity auto-punchout is disabled as requested by the user
+    return;
     if (!user || showRecoveryModal) return;
     
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
@@ -460,6 +462,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
 
     // 3. Check if user went inactive while away/sleep
+    return; // Disabled inactivity check as requested by the user
     if (Date.now() - resolvedLastActivityTs > INACTIVITY_TIMEOUT_MS) {
       if (isCurrentlyPunchedIn) {
         try {

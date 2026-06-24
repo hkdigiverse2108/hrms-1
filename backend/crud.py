@@ -1825,32 +1825,8 @@ async def _apply_punch_out_to_record(db, record: dict, close_dt: datetime, auto_
 
 async def auto_close_stale_open_sessions(db, employee_id: str) -> int:
     """Auto-close open attendance sessions from previous days (forgotten punch-out)."""
-    today_date = get_now().date()
-    query_or = [{"employeeId": employee_id}]
-    if ObjectId.is_valid(employee_id):
-        query_or.append({"employeeId": ObjectId(employee_id)})
-        
-    cursor = db.attendance.find({
-        "$or": query_or,
-        "checkOut": None,
-    }).sort("date", -1)
-    records = await cursor.to_list(length=50)
-    closed = 0
-
-    for record in records:
-        rec_date = _record_to_date(record.get("date"))
-        if rec_date >= today_date:
-            continue
-        close_dt = IST.localize(datetime.combine(rec_date, datetime.strptime("23:59:59", "%H:%M:%S").time()))
-        await _apply_punch_out_to_record(
-            db,
-            record,
-            close_dt,
-            auto_remark="Auto-closed: previous day session was left open",
-        )
-        closed += 1
-
-    return closed
+    # Disabled automatic punch-out as requested by the user
+    return 0
 
 
 async def get_attendance_status(db, employee_id: str):
