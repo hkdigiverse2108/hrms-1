@@ -625,10 +625,16 @@ export default function MarketingReportsPage() {
                     c.campaignName === campName &&
                     c.date === checkDate,
                 );
+                
                 if (!exists && !alreadyMissing) {
                   // Try to find an associated project for this client
                   const project = projects.find(p => p.clientId === client.id);
                   
+                  // Do not add row if the associated project is on-hold
+                  if (project && project.status === "on-hold") {
+                    return;
+                  }
+
                   missingCampaigns.push({
                     projectId: project ? project.id : "",
                     projectName: project ? project.title : "",
@@ -812,6 +818,15 @@ export default function MarketingReportsPage() {
       return;
     }
     const client = clients.find((c) => c.id === dailyFormData.clientId);
+    
+    if (!editingReport) {
+      const project = projects.find(p => p.id === dailyFormData.projectId || p.clientId === dailyFormData.clientId);
+      if (project && project.status === "on-hold") {
+        toast.error("Cannot add daily report because the associated project is on hold.");
+        return;
+      }
+    }
+    
     try {
       const method = editingReport ? "PUT" : "POST";
       const url = editingReport
