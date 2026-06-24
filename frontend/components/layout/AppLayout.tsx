@@ -159,9 +159,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     };
   }, [user, isPublicPage]);
 
-  // Monitor download progress from Electron IPC
+  // Monitor download progress from Electron IPC — subscribe on mount so we never miss events
   useEffect(() => {
-    if (typeof window === "undefined" || !(window as any).electronAPI || !isDownloadingUpdate) return;
+    if (typeof window === "undefined" || !(window as any).electronAPI) return;
     
     const unsubscribe = (window as any).electronAPI.onUpdateProgress((progress: number) => {
       setDownloadProgress(progress);
@@ -170,7 +170,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return () => {
       unsubscribe();
     };
-  }, [isDownloadingUpdate]);
+  }, []);
 
   const handleStartUpdate = async () => {
     if (!updateInfo) return;
@@ -956,17 +956,29 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <div style={{ width: "100%", marginTop: "20px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 700, color: "#475569", marginBottom: "8px" }}>
                   <span>Downloading update...</span>
-                  <span>{downloadProgress}%</span>
+                  <span>{downloadProgress > 0 ? `${downloadProgress}%` : downloadProgress === -1 ? '...' : '0%'}</span>
                 </div>
                 <div style={{ width: "100%", height: "8px", background: "#e2e8f0", borderRadius: "4px", overflow: "hidden" }}>
-                  <div
-                    style={{
-                      width: `${downloadProgress}%`,
-                      height: "100%",
-                      background: "linear-gradient(90deg, #0d9488, #0f766e)",
-                      transition: "width 0.2s ease"
-                    }}
-                  />
+                  {downloadProgress > 0 ? (
+                    <div
+                      style={{
+                        width: `${downloadProgress}%`,
+                        height: "100%",
+                        background: "linear-gradient(90deg, #0d9488, #0f766e)",
+                        transition: "width 0.3s ease"
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: "30%",
+                        height: "100%",
+                        background: "linear-gradient(90deg, #0d9488, #0f766e)",
+                        borderRadius: "4px",
+                        animation: "indeterminate 1.5s ease-in-out infinite"
+                      }}
+                    />
+                  )}
                 </div>
                 <p style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px", fontStyle: "italic" }}>
                   The app will automatically close and restart when download finishes.
@@ -1016,6 +1028,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </div>
             )}
           </div>
+          <style>{`
+            @keyframes indeterminate {
+              0% { margin-left: -30%; width: 30%; }
+              50% { margin-left: 50%; width: 30%; }
+              100% { margin-left: 100%; width: 30%; }
+            }
+          `}</style>
         </div>
       )}
     </Layout>

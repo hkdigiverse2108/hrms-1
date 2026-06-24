@@ -2070,11 +2070,11 @@ export default function ChatPage() {
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!selectedChat) return;
-    dragCounter.current++;
     if (e.dataTransfer) {
       e.dataTransfer.dropEffect = 'copy';
     }
+    if (!selectedChat) return;
+    dragCounter.current++;
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
       setIsDragging(true);
     }
@@ -3511,6 +3511,28 @@ export default function ChatPage() {
                         if (e.key === 'Enter') {
                           e.preventDefault();
                           handleSendMessage();
+                        }
+                      }}
+                      onPaste={(e) => {
+                        const items = e.clipboardData?.items;
+                        if (items) {
+                          const newFiles: File[] = [];
+                          for (let i = 0; i < items.length; i++) {
+                            if (items[i].type.indexOf('image') !== -1) {
+                              const file = items[i].getAsFile();
+                              if (file) {
+                                newFiles.push(file);
+                              }
+                            }
+                          }
+                          if (newFiles.length > 0) {
+                            const newAttachments = newFiles.map((file) => ({ 
+                              file, 
+                              caption: "" 
+                            }));
+                            setPendingAttachments(prev => [...prev, ...newAttachments]);
+                            e.preventDefault();
+                          }
                         }
                       }}
                       placeholder="Add a caption..."
