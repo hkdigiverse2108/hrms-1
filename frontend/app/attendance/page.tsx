@@ -29,7 +29,7 @@ import { API_URL, getAvatarUrl } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from 'sonner';
-import { formatTime12h } from "@/lib/utils";
+import { formatTime12h, calculateAttendanceTimes } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/context/ConfirmContext";
@@ -892,26 +892,14 @@ export default function AttendancePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">{filteredAttendance.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row, idx) => {
-                      const totalBreakMinutes = (row.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
-                      const breakStr = formatToHhMm(totalBreakMinutes);
-                      
-                      const isToday = dayjs(row.date).isSame(dayjs(), 'day');
-                      const checkIn = dayjs(`${row.date} ${row.checkIn}`);
-                      const checkOut = row.checkOut 
-                        ? dayjs(`${row.date} ${row.checkOut}`) 
-                        : (isToday && row.checkIn && row.checkIn !== "--" ? dayjs() : null);
-                      
-                      // Total Working Hours
-                      let totalWorkingMinutes = 0;
-                      if (checkIn.isValid() && checkOut && checkOut.isValid()) {
-                        totalWorkingMinutes = checkOut.diff(checkIn, 'minute');
-                      }
+                      const { productionMinutes, totalWorkingMinutes, breakMinutes } = calculateAttendanceTimes(row, getISTNow());
+                      const breakStr = formatToHhMm(breakMinutes);
                       const totalWorkingStr = formatToHhMm(totalWorkingMinutes);
-                      
-                      // Production Hours
-                      const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
                       const productionStr = formatToHhMm(productionMinutes);
-                      
+
+                      const dateStr = row.date ? (typeof row.date === 'string' ? row.date.split('T')[0].split(' ')[0] : dayjs(row.date).format('YYYY-MM-DD')) : '';
+                      const checkIn = dayjs(`${dateStr} ${row.checkIn}`);
+
                       // Late
                       // Check for approved recovery request
                       const recoveryReq = recoveryRequests.find(req => 
@@ -935,19 +923,25 @@ export default function AttendancePage() {
                         return punchMins > limitMins;
                       })();
                       
-                      const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${row.date} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
+                      const lateMinutes = checkIn.isValid() ? Math.max(0, checkIn.diff(dayjs(`${dateStr} ${sysSettings?.officeStartTime || "09:30"}`), 'minute')) : 0;
                       // Just show the actual minutes as requested
                       const lateStr = isLate || recoveryReq 
                         ? formatToHhMm(lateMinutes) 
                         : "-";
                       
-                      // Overtime
                       const shiftDurationMinutes = (() => {
                         const officeStartTime = sysSettings?.officeStartTime || "09:30";
                         const officeEndTime = sysSettings?.officeEndTime || "18:30";
-                        const [sh, sm] = officeStartTime.split(':').map(Number);
-                        const [eh, em] = officeEndTime.split(':').map(Number);
-                        return (eh * 60 + em) - (sh * 60 + sm);
+                        let [sh, sm] = officeStartTime.split(':').map(Number);
+                        let [eh, em] = officeEndTime.split(':').map(Number);
+                        if (sh >= 8 && sh <= 16 && eh >= 1 && eh <= 8) {
+                          eh += 12;
+                        }
+                        let diff = (eh * 60 + em) - (sh * 60 + sm);
+                        if (diff < 0) {
+                          diff += 24 * 60;
+                        }
+                        return diff;
                       })();
                       
                       const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);

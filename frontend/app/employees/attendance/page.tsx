@@ -31,8 +31,9 @@ import { PageHeader } from "@/components/common/PageHeader";
 import dayjs from "dayjs";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { exportToCSV } from "@/lib/export-utils";
-import { formatTime12h } from "@/lib/utils";
+import { formatTime12h, calculateAttendanceTimes } from "@/lib/utils";
 import { toast } from "sonner";
+import { useUserContext } from "@/context/UserContext";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRouter } from "next/navigation";
@@ -43,6 +44,7 @@ export default function EmployeeAttendanceListPage() {
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
   const { confirm } = useConfirm();
+  const { getISTNow } = useUserContext();
   const formatToHhMm = (totalMinutes: number) => {
     if (!totalMinutes || totalMinutes <= 0) return "-";
     const h = Math.floor(totalMinutes / 60);
@@ -769,27 +771,16 @@ export default function EmployeeAttendanceListPage() {
                   </tr>
                 ) : (
                   paginatedAttendance.map((record, idx) => {
-                    const totalBreakMinutes = (record.breaks || []).reduce((acc: number, b: any) => acc + (parseInt(b.duration) || 0), 0);
-                    const breakStr = formatToHhMm(totalBreakMinutes);
-                    
-                    const isToday = dayjs(record.date).isSame(dayjs(), 'day');
-                    const checkIn = dayjs(`${record.date} ${record.checkIn}`);
-                    const checkOut = record.checkOut 
-                      ? dayjs(`${record.date} ${record.checkOut}`) 
-                      : (isToday && record.checkIn && record.checkIn !== "--" ? dayjs() : null);
-                    
-                    let totalWorkingMinutes = 0;
-                    if (checkIn.isValid() && checkOut && checkOut.isValid()) {
-                      totalWorkingMinutes = checkOut.diff(checkIn, 'minute');
-                    }
+                    const { productionMinutes, totalWorkingMinutes, breakMinutes } = calculateAttendanceTimes(record, getISTNow());
+                    const breakStr = formatToHhMm(breakMinutes);
                     const totalWorkingStr = formatToHhMm(totalWorkingMinutes);
-                    
-                    const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
                     const productionStr = formatToHhMm(productionMinutes);
                     
                     const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
                     const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
                     const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
+
+                    const checkIn = dayjs(`${record.date} ${record.checkIn}`);
 
                     const recoveryReq = recoveryRequests.find(req => 
                       req.date === record.date && 

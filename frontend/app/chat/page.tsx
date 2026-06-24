@@ -30,6 +30,8 @@ import {
   UserPlus,
   Hash,
   ChevronLeft,
+  ChevronRight,
+  ChevronDown,
   ArrowLeft,
   Pencil,
   Trash2,
@@ -250,7 +252,12 @@ export default function ChatPage() {
   const [forwardingMessage, setForwardingMessage] = useState<any>(null);
   const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"Personal" | "Groups" | "General" | "Saved">("Personal");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<{ file: File; caption: string }[]>([]);
+  const [activePendingIndex, setActivePendingIndex] = useState<number>(0);
+  const [pendingUrls, setPendingUrls] = useState<string[]>([]);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
+  const [attachmentsDrafts, setAttachmentsDrafts] = useState<Record<string, { file: File; caption: string }[]>>({});
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
   const [isSearchingMessages, setIsSearchingMessages] = useState(false);
@@ -268,21 +275,16 @@ export default function ChatPage() {
   const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
   const [previewImageMsgId, setPreviewImageMsgId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null);
-  const [pendingFileUrl, setPendingFileUrl] = useState<string>("");
   const [showPickerForMsgId, setShowPickerForMsgId] = useState<string | null>(null);
   const [showPreviewEmojiPicker, setShowPreviewEmojiPicker] = useState(false);
 
   useEffect(() => {
-    if (!pendingFile) {
-      setPendingFileUrl("");
-      return;
-    }
-    const url = URL.createObjectURL(pendingFile);
-    setPendingFileUrl(url);
+    const urls = pendingAttachments.map(att => URL.createObjectURL(att.file));
+    setPendingUrls(urls);
     return () => {
-      URL.revokeObjectURL(url);
+      urls.forEach(url => URL.revokeObjectURL(url));
     };
-  }, [pendingFile]);
+  }, [pendingAttachments]);
 
   const imageMessages = useMemo(() => {
     return currentMessages.filter(msg => msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName));
@@ -488,11 +490,15 @@ export default function ChatPage() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       if (e.key === "Escape") {
+        if (showDiscardConfirm) {
+          setShowDiscardConfirm(false);
+          return;
+        }
         if (previewImageMsgId) {
           return;
         }
-        if (pendingFile) {
-          setPendingFile(null);
+        if (pendingAttachments.length > 0) {
+          setShowDiscardConfirm(true);
           return;
         }
         setSelectedChat(null as any);
@@ -507,7 +513,49 @@ export default function ChatPage() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("click", handleCloseMenu);
     };
-  }, [previewImageMsgId, pendingFile]);
+  }, [previewImageMsgId, pendingAttachments, showDiscardConfirm]);
+
+  // Arrow key navigation for pending upload attachments (caret position aware)
+  useEffect(() => {
+    if (pendingAttachments.length === 0) return;
+
+    const handlePendingArrowKeys = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl) {
+        const tagName = activeEl.tagName;
+        if (tagName === "INPUT" || tagName === "TEXTAREA") {
+          const input = activeEl as HTMLInputElement;
+          if (input === captionInputRef.current) {
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const valLen = input.value.length;
+            
+            if (start === end) {
+              if (e.key === "ArrowLeft" && start === 0) {
+                setActivePendingIndex(prev => (prev > 0 ? prev - 1 : prev));
+                e.preventDefault();
+              } else if (e.key === "ArrowRight" && start === valLen) {
+                setActivePendingIndex(prev => (prev < pendingAttachments.length - 1 ? prev + 1 : prev));
+                e.preventDefault();
+              }
+            }
+          }
+          return;
+        }
+      }
+
+      if (e.key === "ArrowLeft") {
+        setActivePendingIndex(prev => (prev > 0 ? prev - 1 : prev));
+      } else if (e.key === "ArrowRight") {
+        setActivePendingIndex(prev => (prev < pendingAttachments.length - 1 ? prev + 1 : prev));
+      }
+    };
+
+    window.addEventListener("keydown", handlePendingArrowKeys);
+    return () => {
+      window.removeEventListener("keydown", handlePendingArrowKeys);
+    };
+  }, [pendingAttachments.length]);
 
   // Arrow key navigation for image preview
   useEffect(() => {
@@ -811,12 +859,12 @@ export default function ChatPage() {
   }, [activeTagIndex, showTagPicker]);
 
   useEffect(() => {
-    if (pendingFile) {
+    if (pendingAttachments.length > 0) {
       setTimeout(() => {
         captionInputRef.current?.focus();
       }, 50);
     }
-  }, [pendingFile]);
+  }, [pendingAttachments.length, activePendingIndex]);
 
   const shouldScrollToBottom = useRef(true);
   const mediaRecorderRef = useRef<any>(null);
@@ -827,6 +875,13 @@ export default function ChatPage() {
 
 
   const prevMessagesLength = useRef(0);
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const isScrolledUp = scrollHeight - scrollTop - clientHeight > 300;
+    setShowScrollBottomBtn(isScrolledUp);
+  };
 
   const scrollToBottom = useCallback((force = false) => {
     if (scrollRef.current && (shouldScrollToBottom.current || force)) {
@@ -1105,7 +1160,7 @@ export default function ChatPage() {
       return;
     }
 
-    // Save draft for current chat if any text is typed
+    // Save draft for current chat if any text is typed or attachments exist
     if (selectedChat && currentId) {
       setDrafts(prev => {
         const updated = { ...prev };
@@ -1115,6 +1170,16 @@ export default function ChatPage() {
           delete updated[currentId];
         }
         localStorage.setItem("chatDrafts", JSON.stringify(updated));
+        return updated;
+      });
+
+      setAttachmentsDrafts(prev => {
+        const updated = { ...prev };
+        if (pendingAttachments.length > 0) {
+          updated[currentId] = pendingAttachments;
+        } else {
+          delete updated[currentId];
+        }
         return updated;
       });
     }
@@ -1134,6 +1199,10 @@ export default function ChatPage() {
     // Load draft for newly selected chat
     const nextDraft = drafts[newId] || "";
     setMessage(nextDraft);
+
+    const nextAttachments = attachmentsDrafts[newId] || [];
+    setPendingAttachments(nextAttachments);
+    setActivePendingIndex(0);
 
     // Auto-resize input height for loaded draft
     setTimeout(() => {
@@ -1456,10 +1525,159 @@ export default function ChatPage() {
   const handleSendMessage = async (extraData: any = null) => {
     // Prevent double-send on rapid taps
     if (isSendingRef.current) return;
-    if (!extraData && (!message.trim() && !pendingFile && !voicePreviewBlob) || !selectedChat || !user) return;
+    if (!extraData && (!message.trim() && pendingAttachments.length === 0 && !voicePreviewBlob) || !selectedChat || !user) return;
 
     isSendingRef.current = true;
 
+    // --- CASE 1: Multiple / Single Attachment Upload Queue ---
+    if (pendingAttachments.length > 0) {
+      const attachmentsToSend = [...pendingAttachments];
+      // Clear pending attachments state immediately to close the preview window
+      setPendingAttachments([]);
+      setActivePendingIndex(0);
+      
+      const targetId = selectedChat.id || selectedChat.employeeId;
+      const now = new Date();
+      
+      const optimisticMsgs = attachmentsToSend.map((att, idx) => {
+        const tempId = `temp-${Date.now()}-${idx}`;
+        const isImageFile = /\.(jpg|jpeg|png|gif|webp)$/i.test(att.file.name);
+        const optimisticText = att.caption || (isImageFile ? "" : `Sent a file: ${att.file.name}`);
+        
+        return {
+          id: tempId,
+          text: optimisticText,
+          time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sender: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          senderId: user.id,
+          isMe: true,
+          _optimistic: true,
+          attachmentName: att.file.name,
+          attachmentUrl: URL.createObjectURL(att.file),
+          _blobUrl: true,
+          file: att.file,
+          caption: att.caption
+        };
+      });
+
+      // Append all optimistic messages to currentMessages
+      shouldScrollToBottom.current = true;
+      setCurrentMessages(prev => [...prev, ...optimisticMsgs]);
+
+      // Optimistically update the sidebar lists (using the caption of the last image or first image)
+      const lastText = optimisticMsgs[optimisticMsgs.length - 1].text || "Sent attachments";
+      const nowIso = now.toISOString();
+      if (selectedChat.type === 'personal') {
+        setChatSummaries(prev => ({
+          ...prev,
+          [targetId]: {
+            ...prev[targetId],
+            lastMessage: lastText,
+            timestamp: nowIso,
+            isSeen: true,
+            senderId: user.id
+          }
+        }));
+      } else if (selectedChat.type === 'group') {
+        setChatGroups(prev => prev.map(g => g.id === targetId ? { ...g, lastMessage: lastText, lastMessageTime: nowIso } : g));
+      } else if (selectedChat.type === 'general') {
+        setChatChannels(prev => prev.map(c => c.id === targetId ? { ...c, lastMessage: lastText, lastMessageTime: nowIso } : c));
+      }
+
+      // Clear input fields immediately
+      setMessage("");
+      if (selectedChat) {
+        const chatId = selectedChat.id || selectedChat.employeeId;
+        if (chatId) {
+          setDrafts(prev => {
+            const updated = { ...prev };
+            delete updated[chatId];
+            localStorage.setItem("chatDrafts", JSON.stringify(updated));
+            return updated;
+          });
+        }
+      }
+      setReplyingTo(null);
+      stopTyping();
+
+      // Sequentially upload and post each attachment
+      for (const optMsg of optimisticMsgs) {
+        if (optMsg.file.size > 512 * 1024 * 1024) {
+          toast.error(`File ${optMsg.file.name} size cannot exceed 512 MB`);
+          setCurrentMessages(prev => prev.filter(m => m.id !== optMsg.id));
+          continue;
+        }
+
+        const formData = new FormData();
+        formData.append('file', optMsg.file);
+
+        let attachmentUrl = "";
+        let attachmentName = optMsg.file.name;
+
+        try {
+          const uploadRes = await fetch(`${API_URL}/chat/upload`, {
+            method: 'POST',
+            body: formData
+          });
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            attachmentUrl = uploadData.url;
+            attachmentName = uploadData.filename;
+          } else {
+            toast.error(`Failed to upload ${optMsg.file.name}.`);
+            setCurrentMessages(prev => prev.filter(m => m.id !== optMsg.id));
+            continue;
+          }
+        } catch (err) {
+          console.error("Upload error:", err);
+          toast.error(`An error occurred during upload of ${optMsg.file.name}.`);
+          setCurrentMessages(prev => prev.filter(m => m.id !== optMsg.id));
+          continue;
+        }
+
+        // Post message to backend
+        try {
+          const payload: any = {
+            senderId: user.id,
+            receiverId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : targetId,
+            groupId: (selectedChat.type === 'group' || selectedChat.type === 'general') ? targetId : null,
+            text: optMsg.text,
+            type: (selectedChat.type === 'group' || selectedChat.type === 'general') ? "group" : "personal",
+            tempId: optMsg.id,
+            attachmentUrl,
+            attachmentName
+          };
+
+          if (replyingTo) {
+            payload.replyToId = replyingTo.id;
+            payload.replyToText = replyingTo.text || (replyingTo.attachmentUrl ? "📷 Image" : (replyingTo.isVoice ? "🎤 Voice Message" : ""));
+          }
+
+          const res = await fetch(`${API_URL}/chat/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            const newMessage = await res.json();
+            setCurrentMessages(prev =>
+              prev.map(m => m.id === optMsg.id ? { ...newMessage, isMe: true } : m)
+            );
+          } else {
+            setCurrentMessages(prev => prev.filter(m => m.id !== optMsg.id));
+          }
+        } catch (err) {
+          console.error("Error sending message:", err);
+          setCurrentMessages(prev => prev.filter(m => m.id !== optMsg.id));
+        }
+      }
+
+      isSendingRef.current = false;
+      return;
+    }
+
+    // --- CASE 2: Voice message upload ---
     if (voicePreviewBlob && !extraData?.isVoice) {
       const audioFile = new File([voicePreviewBlob], "voice_message.webm", { type: 'audio/webm' });
       const formData = new FormData();
@@ -1489,8 +1707,8 @@ export default function ChatPage() {
       return;
     }
 
-    const isImageFile = pendingFile && /\.(jpg|jpeg|png|gif|webp)$/i.test(pendingFile.name);
-    const optimisticText = message || (pendingFile && !isImageFile ? `Sent a file: ${pendingFile.name}` : (extraData?.isVoice ? "Sent a voice message" : ""));
+    // --- CASE 3: Text-only message ---
+    const optimisticText = message || (extraData?.isVoice ? "Sent a voice message" : "");
     const tempId = `temp-${Date.now()}`;
 
     const targetId = selectedChat.id || selectedChat.employeeId;
@@ -1523,12 +1741,6 @@ export default function ChatPage() {
       replyToId: replyingTo?.id,
       replyToText: replyingTo?.text || (replyingTo?.attachmentUrl ? "📷 Image" : (replyingTo?.isVoice ? "🎤 Voice Message" : "")),
       _optimistic: true,
-      // Show image preview instantly using blob URL before upload finishes
-      ...(isImageFile ? {
-        attachmentName: pendingFile.name,
-        attachmentUrl: URL.createObjectURL(pendingFile),
-        _blobUrl: true,
-      } : {}),
     };
     shouldScrollToBottom.current = true;
     setCurrentMessages(prev => [...prev, optimisticMessage]);
@@ -1551,6 +1763,7 @@ export default function ChatPage() {
     } else if (selectedChat.type === 'general') {
       setChatChannels(prev => prev.map(c => c.id === targetId ? { ...c, lastMessage: optimisticText, lastMessageTime: nowIso } : c));
     }
+    
     // Clear input fields immediately so the user gets instant feedback
     setMessage("");
     if (selectedChat) {
@@ -1566,43 +1779,6 @@ export default function ChatPage() {
     }
     setReplyingTo(null);
     stopTyping();
-    const capturedFile = pendingFile;
-    setPendingFile(null);
-
-    if (capturedFile) {
-      if (capturedFile.size > 512 * 1024 * 1024) {
-        toast.error("File size cannot exceed 512 MB");
-        setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
-        isSendingRef.current = false;
-        return;
-      }
-      // Real upload to backend
-      const formData = new FormData();
-      formData.append('file', capturedFile);
-      
-      try {
-        const uploadRes = await fetch(`${API_URL}/chat/upload`, {
-          method: 'POST',
-          body: formData
-        });
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          payload.attachmentUrl = uploadData.url;
-          payload.attachmentName = uploadData.filename;
-        } else {
-          toast.error("Failed to upload file. Please try again.");
-          setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
-          isSendingRef.current = false;
-          return;
-        }
-      } catch (err) {
-        console.error("Upload error:", err);
-        toast.error("An error occurred during upload.");
-        setCurrentMessages(prev => prev.filter(m => m.id !== tempId));
-        isSendingRef.current = false;
-        return;
-      }
-    }
 
     try {
       const res = await fetch(`${API_URL}/chat/messages`, {
@@ -1784,17 +1960,119 @@ export default function ChatPage() {
     return withMentions;
   };
 
+  const renderImageGrid = (groupMsgs: any[], originalMsg: any) => {
+    const count = groupMsgs.length;
+    const visibleMsgs = groupMsgs.slice(0, 4);
+    
+    let gridClass = "";
+    if (count === 2) {
+      gridClass = "grid grid-cols-2 gap-1 w-[280px] sm:w-[360px] h-[140px] sm:h-[180px]";
+    } else if (count === 3) {
+      gridClass = "grid grid-cols-3 grid-rows-2 gap-1 w-[280px] sm:w-[360px] h-[180px] sm:h-[240px]";
+    } else {
+      gridClass = "grid grid-cols-2 grid-rows-2 gap-1 w-[280px] sm:w-[360px] h-[280px] sm:h-[360px]";
+    }
+
+    const showTimestampOverlay = groupMsgs.every(gMsg => !gMsg.text || !gMsg.text.trim());
+    const bottomRightIdx = Math.min(count - 1, 3);
+
+    return (
+      <div className={gridClass}>
+        {visibleMsgs.map((gMsg, idx) => {
+          const isLast = idx === 3 && count > 4;
+          const remainingCount = count - 3;
+          const isBottomRight = idx === bottomRightIdx;
+          
+          let itemClass = "relative overflow-hidden rounded-md cursor-pointer hover:opacity-95 transition-opacity border border-black/5";
+          if (count === 3) {
+            if (idx === 0) {
+              itemClass += " col-span-2 row-span-2";
+            } else {
+              itemClass += " col-span-1 row-span-1";
+            }
+          } else {
+            itemClass += " col-span-1 row-span-1";
+          }
+
+          const imgUrl = gMsg.attachmentUrl?.startsWith('blob:') ? gMsg.attachmentUrl :
+                         gMsg.attachmentUrl?.startsWith('http') ? gMsg.attachmentUrl :
+                         `${API_URL}${gMsg.attachmentUrl}`;
+
+          return (
+            <div 
+              key={gMsg.id} 
+              className={itemClass}
+              onClick={() => setPreviewImageMsgId(gMsg.id)}
+            >
+              <img 
+                src={imgUrl} 
+                alt={gMsg.attachmentName}
+                className="w-full h-full object-cover"
+                onLoad={() => scrollToBottom(true)}
+              />
+              {isLast && (
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center select-none z-5">
+                  <span className="text-white text-2xl font-bold">+{remainingCount}</span>
+                </div>
+              )}
+              {isBottomRight && showTimestampOverlay && (
+                <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-[10px] text-white bg-black/40 px-2 py-0.5 rounded-[10px] select-none backdrop-blur-xs z-10">
+                  <span>{dayjs(originalMsg.timestamp).format("hh:mm A")}</span>
+                  {renderCheckmarks(originalMsg, true)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setPendingFile(file);
+    const selectedFiles = e.target.files;
+    console.log("handleFileSelect: Files selected count =", selectedFiles?.length);
+    if (selectedFiles && selectedFiles.length > 0) {
+      const wasEmpty = pendingAttachments.length === 0;
+      const newAttachments = Array.from(selectedFiles).map((file, idx) => ({
+        file,
+        caption: (wasEmpty && idx === 0) ? message : ""
+      }));
+      
+      setPendingAttachments(prev => [...prev, ...newAttachments]);
+      if (wasEmpty) {
+        setActivePendingIndex(0);
+        if (message) {
+          setMessage("");
+        }
+      }
+      e.target.value = ""; // Reset value to allow re-selection
       setTimeout(() => messageInputRef.current?.focus(), 10);
     }
+  };
+
+  const handleCaptionChange = (val: string) => {
+    setPendingAttachments(prev => prev.map((att, idx) => idx === activePendingIndex ? { ...att, caption: val } : att));
+  };
+
+  const removeAttachment = (indexToRemove: number) => {
+    setPendingAttachments(prev => {
+      const updated = prev.filter((_, i) => i !== indexToRemove);
+      setActivePendingIndex(prevIndex => {
+        const newLen = updated.length;
+        if (newLen === 0) return 0;
+        if (prevIndex >= newLen) return newLen - 1;
+        return prevIndex;
+      });
+      return updated;
+    });
   };
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
     if (!selectedChat) return;
     dragCounter.current++;
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
@@ -1815,6 +2093,9 @@ export default function ChatPage() {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -1824,9 +2105,21 @@ export default function ChatPage() {
     dragCounter.current = 0;
     if (!selectedChat) return;
     
+    console.log("handleDrop: Files dropped count =", e.dataTransfer.files?.length);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      setPendingFile(file);
+      const wasEmpty = pendingAttachments.length === 0;
+      const newAttachments = Array.from(e.dataTransfer.files).map((file, idx) => ({
+        file,
+        caption: (wasEmpty && idx === 0) ? message : ""
+      }));
+      
+      setPendingAttachments(prev => [...prev, ...newAttachments]);
+      if (wasEmpty) {
+        setActivePendingIndex(0);
+        if (message) {
+          setMessage("");
+        }
+      }
       e.dataTransfer.clearData();
       setTimeout(() => messageInputRef.current?.focus(), 10);
     }
@@ -2386,6 +2679,59 @@ export default function ChatPage() {
       m.text.toLowerCase().includes(messageSearchQuery.toLowerCase())
     );
   }, [currentMessages, messageSearchQuery]);
+
+  const { imageGroups, messageToGroupFirstId } = useMemo(() => {
+    const isImageMessage = (msg: any) => {
+      return msg && msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName);
+    };
+
+    const groups: Record<string, any[]> = {};
+    const msgToFirstId: Record<string, string> = {};
+
+    let currentGroup: any[] = [];
+    for (let i = 0; i < displayMessages.length; i++) {
+      const msg = displayMessages[i];
+      if (isImageMessage(msg)) {
+        if (currentGroup.length === 0) {
+          currentGroup.push(msg);
+        } else {
+          const prevMsg = currentGroup[currentGroup.length - 1];
+          const sameSender = String(prevMsg.senderId) === String(msg.senderId);
+          const timeDiff = Math.abs(dayjs(msg.timestamp).diff(dayjs(prevMsg.timestamp), 'second'));
+          if (sameSender && timeDiff <= 5) {
+            currentGroup.push(msg);
+          } else {
+            if (currentGroup.length > 1) {
+              const firstId = currentGroup[0].id;
+              groups[firstId] = [...currentGroup];
+              currentGroup.forEach(m => {
+                msgToFirstId[m.id] = firstId;
+              });
+            }
+            currentGroup = [msg];
+          }
+        }
+      } else {
+        if (currentGroup.length > 1) {
+          const firstId = currentGroup[0].id;
+          groups[firstId] = [...currentGroup];
+          currentGroup.forEach(m => {
+            msgToFirstId[m.id] = firstId;
+          });
+        }
+        currentGroup = [];
+      }
+    }
+    if (currentGroup.length > 1) {
+      const firstId = currentGroup[0].id;
+      groups[firstId] = [...currentGroup];
+      currentGroup.forEach(m => {
+        msgToFirstId[m.id] = firstId;
+      });
+    }
+
+    return { imageGroups: groups, messageToGroupFirstId: msgToFirstId };
+  }, [displayMessages]);
 
   const totalPersonalUnread = useMemo(() => {
     return Object.entries(unreadCounts).reduce((acc, [id, count]) => {
@@ -3004,7 +3350,7 @@ export default function ChatPage() {
         )}
       >
         {isDragging && selectedChat && (
-          <div className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200 pointer-events-none">
+          <div className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200">
             <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 border border-brand-teal/20 scale-100 transition-all">
               <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center animate-bounce">
                 <Paperclip className="w-8 h-8 text-brand-teal" />
@@ -3018,7 +3364,14 @@ export default function ChatPage() {
         )}
         {selectedChat ? (
           <div className="flex-1 flex flex-row overflow-hidden relative">
-            {pendingFile ? (
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              multiple
+              onChange={handleFileSelect}
+            />
+            {pendingAttachments.length > 0 ? (
             <div className="absolute inset-0 z-45 bg-white flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
               {/* Top Bar */}
               <div className="h-14 px-6 bg-white border-b border-slate-100 flex items-center justify-between text-slate-800 shrink-0 z-50">
@@ -3027,25 +3380,43 @@ export default function ChatPage() {
                     variant="ghost" 
                     size="icon" 
                     className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full"
-                    onClick={() => setPendingFile(null)}
+                    onClick={() => setShowDiscardConfirm(true)}
                   >
                     <X className="w-6 h-6" />
                   </Button>
                   <span className="font-bold text-sm">Preview</span>
                 </div>
-                
-                {/* WhatsApp Editing Tools Removed */}
               </div>
 
               {/* Center File Display */}
-              <div className="flex-1 relative w-full flex items-center justify-center p-4 bg-[#f0f2f5]/40">
-                {pendingFile && (
-                  pendingFile.type.startsWith("image/") ? (
-                    pendingFileUrl ? (
+              <div className="flex-1 relative w-full flex items-center justify-center p-4 bg-[#f0f2f5]/40 select-none">
+                {/* Arrow navigation buttons inside center display */}
+                {activePendingIndex > 0 && (
+                  <button 
+                    type="button" 
+                    onClick={() => setActivePendingIndex(prev => prev - 1)}
+                    className="absolute left-6 w-11 h-11 bg-black/20 hover:bg-black/35 text-white rounded-full flex items-center justify-center transition-all z-10 focus:outline-none"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
+                )}
+                {activePendingIndex < pendingAttachments.length - 1 && (
+                  <button 
+                    type="button" 
+                    onClick={() => setActivePendingIndex(prev => prev + 1)}
+                    className="absolute right-6 w-11 h-11 bg-black/20 hover:bg-black/35 text-white rounded-full flex items-center justify-center transition-all z-10 focus:outline-none"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+                )}
+
+                {pendingAttachments[activePendingIndex] && (
+                  pendingAttachments[activePendingIndex].file.type.startsWith("image/") ? (
+                    pendingUrls[activePendingIndex] ? (
                       <img 
-                        src={pendingFileUrl} 
-                        alt={pendingFile.name}
-                        className="max-w-full max-h-[65vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
+                        src={pendingUrls[activePendingIndex]} 
+                        alt={pendingAttachments[activePendingIndex].file.name}
+                        className="max-w-full max-h-[55vh] object-contain select-none shadow-xl rounded-lg animate-in zoom-in-95 duration-200"
                       />
                     ) : null
                   ) : (
@@ -3054,57 +3425,134 @@ export default function ChatPage() {
                         <FileIcon className="w-10 h-10" />
                       </div>
                       <div className="text-center min-w-0 w-full">
-                        <p className="font-bold truncate text-sm">{pendingFile.name}</p>
-                        <p className="text-xs text-slate-400 mt-1">{(pendingFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                        <p className="font-bold truncate text-sm">{pendingAttachments[activePendingIndex].file.name}</p>
+                        <p className="text-xs text-slate-400 mt-1">{(pendingAttachments[activePendingIndex].file.size / 1024 / 1024).toFixed(2)} MB</p>
                       </div>
                     </div>
                   )
                 )}
               </div>
 
-              {/* Bottom Bar containing Caption Input and Send Button */}
-              <div className="bg-[#f0f2f5] p-4 shrink-0 flex items-center gap-3 border-t border-slate-200 justify-center w-full">
-                <div className="max-w-3xl flex-1 flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-transparent focus-within:border-brand-teal shadow-xs">
-                  <Popover open={showPreviewEmojiPicker} onOpenChange={setShowPreviewEmojiPicker}>
-                    <PopoverTrigger asChild>
-                      <button type="button" className="text-slate-400 hover:text-slate-600 shrink-0 focus:outline-none">
-                        <Smile className="w-6 h-6" />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent side="top" align="start" className="p-0 border-none bg-transparent shadow-none w-auto mb-4 z-[100]">
-                      <EmojiPicker 
-                        onEmojiSelect={(emoji) => {
-                          setMessage(prev => prev + emoji);
-                          setShowPreviewEmojiPicker(false);
-                        }}
-                        onClose={() => setShowPreviewEmojiPicker(false)}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <input 
-                    ref={captionInputRef}
-                    type="text" 
-                    autoFocus
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder="Add a caption..."
-                    className="flex-1 bg-transparent border-none text-slate-800 text-[15px] placeholder:text-slate-400 outline-none focus:outline-none"
-                  />
+              {/* Bottom Bar containing Caption Input, Thumbnails list, and Send Button */}
+              <div className="bg-[#f0f2f5] p-4 shrink-0 flex flex-col items-center gap-3 border-t border-slate-200 justify-center w-full">
+                {/* Thumbnails Row */}
+                <div className="flex items-center gap-2 overflow-x-auto max-w-3xl w-full py-2 justify-center scrollbar-thin shrink-0 min-h-[72px]">
+                  {pendingAttachments.map((att, idx) => {
+                    const isImg = att.file.type.startsWith("image/");
+                    const url = pendingUrls[idx];
+                    const isActive = idx === activePendingIndex;
+
+                    return (
+                      <div 
+                        key={idx}
+                        onClick={() => setActivePendingIndex(idx)}
+                        className={cn(
+                          "group relative w-14 h-14 rounded-lg overflow-hidden border-2 cursor-pointer transition-all shrink-0 bg-white flex items-center justify-center",
+                          isActive ? "border-[#00a884] scale-105 shadow-sm" : "border-transparent opacity-75 hover:opacity-100"
+                        )}
+                      >
+                        {isImg && url ? (
+                          <img src={url} alt={att.file.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <FileIcon className="w-6 h-6 text-slate-400" />
+                        )}
+                        
+                        {/* Delete cross button */}
+                        <button 
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeAttachment(idx);
+                          }}
+                          className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center text-[9px] opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  
+                  {/* Plus thumbnail card */}
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-14 h-14 rounded-lg border-2 border-dashed border-slate-300 hover:border-[#00a884] flex items-center justify-center text-slate-400 hover:text-[#00a884] transition-colors shrink-0 bg-white focus:outline-none"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
                 </div>
-                {/* Send Button */}
-                <button 
-                  type="button"
-                  onClick={() => handleSendMessage()}
-                  className="bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-12 h-12 shadow-md flex items-center justify-center transition-all shrink-0"
-                >
-                  <Send className="w-5 h-5 fill-current ml-0.5" />
-                </button>
+
+                {/* Caption input and Send circle */}
+                <div className="max-w-3xl w-full flex items-center gap-3">
+                  <div className="flex-1 flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-transparent focus-within:border-brand-teal shadow-xs">
+                    <Popover open={showPreviewEmojiPicker} onOpenChange={setShowPreviewEmojiPicker}>
+                      <PopoverTrigger asChild>
+                        <button type="button" className="text-slate-400 hover:text-slate-600 shrink-0 focus:outline-none">
+                          <Smile className="w-6 h-6" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent side="top" align="start" className="p-0 border-none bg-transparent shadow-none w-auto mb-4 z-[100]">
+                        <EmojiPicker 
+                          onEmojiSelect={(emoji) => {
+                            handleCaptionChange((pendingAttachments[activePendingIndex]?.caption || "") + emoji);
+                            setShowPreviewEmojiPicker(false);
+                          }}
+                          onClose={() => setShowPreviewEmojiPicker(false)}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <input 
+                      ref={captionInputRef}
+                      type="text" 
+                      autoFocus
+                      value={pendingAttachments[activePendingIndex]?.caption || ""}
+                      onChange={(e) => handleCaptionChange(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      onPaste={(e) => {
+                        const items = e.clipboardData?.items;
+                        if (items) {
+                          const newFiles: File[] = [];
+                          for (let i = 0; i < items.length; i++) {
+                            if (items[i].type.indexOf('image') !== -1) {
+                              const file = items[i].getAsFile();
+                              if (file) {
+                                newFiles.push(file);
+                              }
+                            }
+                          }
+                          if (newFiles.length > 0) {
+                            const newAttachments = newFiles.map((file) => ({ 
+                              file, 
+                              caption: "" 
+                            }));
+                            setPendingAttachments(prev => [...prev, ...newAttachments]);
+                            e.preventDefault();
+                          }
+                        }
+                      }}
+                      placeholder="Add a caption..."
+                      className="flex-1 bg-transparent border-none text-slate-800 text-[15px] placeholder:text-slate-400 outline-none focus:outline-none"
+                    />
+                  </div>
+                  {/* Send Button with badge */}
+                  <button 
+                    type="button"
+                    onClick={() => handleSendMessage()}
+                    className="relative bg-[#00a884] hover:bg-[#008f72] active:scale-95 text-white rounded-full w-12 h-12 shadow-md flex items-center justify-center transition-all shrink-0 focus:outline-none"
+                  >
+                    <Send className="w-5 h-5 fill-current ml-0.5" />
+                    {pendingAttachments.length > 1 && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-[#00a884] border-2 border-white text-white text-[9.5px] font-extrabold w-5 h-5 rounded-full flex items-center justify-center">
+                        {pendingAttachments.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -3325,6 +3773,7 @@ export default function ChatPage() {
             <div className="flex-1 flex flex-col whatsapp-chat-bg overflow-hidden relative">
               <div 
                 ref={scrollRef}
+                onScroll={handleScroll}
                 className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent custom-scrollbar"
               >
               <div className="flex justify-center">
@@ -3340,6 +3789,9 @@ export default function ChatPage() {
                   </p>
                 </div>
               ) : displayMessages.map((msg, index) => {
+                if (messageToGroupFirstId[msg.id] && messageToGroupFirstId[msg.id] !== msg.id) {
+                  return null;
+                }
                 const isGroup = selectedChat.type === 'group' || selectedChat.type === 'general';
                 const sender = isGroup ? employees.find((e: any) => e.id === msg.senderId) : null;
                 const avatarSrc = isGroup ? getAvatarUrl(sender?.profilePhoto) : getAvatarUrl(selectedChat.avatar);
@@ -3432,7 +3884,14 @@ export default function ChatPage() {
                                 });
                               }}
                               className={cn(
-                                "whatsapp-bubble px-3 py-1.5 pb-2 text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text w-fit relative",
+                                "whatsapp-bubble text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text w-fit relative",
+                                (msg.attachmentName || imageGroups[msg.id]) 
+                                  ? (
+                                      (msg.text || (imageGroups[msg.id] && imageGroups[msg.id].some(g => g.text && g.text.trim())))
+                                        ? "p-[3.5px] pb-2" 
+                                        : "p-[3.5px]"
+                                    ) 
+                                  : "px-3 py-1.5 pb-2",
                                 msg.isMe 
                                   ? (isConsecutive ? "bg-[#d9fdd3] text-[#111b21] rounded-[7.5px]" : "whatsapp-bubble-sent")
                                   : (isConsecutive ? "bg-white text-[#111b21] rounded-[7.5px]" : "whatsapp-bubble-received")
@@ -3475,27 +3934,39 @@ export default function ChatPage() {
                               )}
 
                               {/* Image Attachment */}
-                              {msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) && (
-                                <div className="relative rounded-lg overflow-hidden border border-black/10 max-w-full mb-1">
-                                  <img 
-                                    src={
-                                      msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
-                                      msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
-                                      `${API_URL}${msg.attachmentUrl}`
-                                    }
-                                    alt={msg.attachmentName} 
-                                    className="max-w-[280px] sm:max-w-[360px] max-h-[300px] w-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
-                                    onLoad={() => scrollToBottom(true)}
-                                    onClick={() => setPreviewImageMsgId(msg.id)}
-                                  />
-                                  {/* Timestamp overlay if no message text is present */}
-                                  {!msg.text && (
-                                    <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-[10px] text-white bg-black/40 px-2 py-0.5 rounded-[10px] select-none backdrop-blur-xs">
-                                      <span>{dayjs(msg.timestamp).format("hh:mm A")}</span>
-                                      {renderCheckmarks(msg, true)}
-                                    </div>
-                                  )}
+                              {imageGroups[msg.id] ? (
+                                <div className={cn(
+                                  "relative rounded-lg overflow-hidden border border-black/10 max-w-full",
+                                  (msg.text || imageGroups[msg.id].some(g => g.text && g.text.trim())) ? "mb-1" : "mb-0"
+                                )}>
+                                  {renderImageGrid(imageGroups[msg.id], msg)}
                                 </div>
+                              ) : (
+                                msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) && (
+                                  <div className={cn(
+                                    "relative rounded-lg overflow-hidden border border-black/10 max-w-full",
+                                    msg.text ? "mb-1" : "mb-0"
+                                  )}>
+                                    <img 
+                                      src={
+                                        msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
+                                        msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
+                                        `${API_URL}${msg.attachmentUrl}`
+                                      }
+                                      alt={msg.attachmentName} 
+                                      className="max-w-[280px] sm:max-w-[360px] max-h-[300px] w-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                                      onLoad={() => scrollToBottom(true)}
+                                      onClick={() => setPreviewImageMsgId(msg.id)}
+                                    />
+                                    {/* Timestamp overlay if no message text is present */}
+                                    {!msg.text && (
+                                      <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-[10px] text-white bg-black/40 px-2 py-0.5 rounded-[10px] select-none backdrop-blur-xs">
+                                        <span>{dayjs(msg.timestamp).format("hh:mm A")}</span>
+                                        {renderCheckmarks(msg, true)}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
                               )}
 
                               {/* File Attachment */}
@@ -3654,15 +4125,30 @@ export default function ChatPage() {
                               })()}
 
                               {/* Message Text Content */}
-                              {msg.text && msg.text !== `Poll: ${msg.poll?.question}` && (
-                                <div className="inline">
-                                  {renderMessageText(msg.text, msg.isMe)}
-                                </div>
+                              {imageGroups[msg.id] ? (
+                                imageGroups[msg.id].some(gMsg => gMsg.text && gMsg.text.trim()) && (
+                                  <div className="flex flex-col gap-1.5 mt-1 text-[#111b21] max-w-full px-2.5 py-1">
+                                    {imageGroups[msg.id]
+                                      .filter(gMsg => gMsg.text && gMsg.text.trim())
+                                      .map((gMsg, idx) => (
+                                        <div key={gMsg.id} className={cn("inline-block break-words", idx > 0 && "border-t border-black/5 pt-1.5 mt-1")}>
+                                          {renderMessageText(gMsg.text, msg.isMe)}
+                                        </div>
+                                      ))}
+                                  </div>
+                                )
+                              ) : (
+                                msg.text && msg.text !== `Poll: ${msg.poll?.question}` && (
+                                  <div className={cn("inline", msg.attachmentName && "inline-block px-2.5 py-1.5 text-slate-800")}>
+                                    {renderMessageText(msg.text, msg.isMe)}
+                                  </div>
+                                )
                               )}
 
                               {/* Inline Timestamp inside the bubble */}
-                              {(!msg.attachmentName || !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) || msg.text) && (
-                                <span className="whatsapp-time-stamp">
+                              {((!msg.attachmentName || !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) || msg.text) || 
+                                (imageGroups[msg.id] && imageGroups[msg.id].some(gMsg => gMsg.text && gMsg.text.trim()))) && (
+                                <span className={cn("whatsapp-time-stamp", msg.attachmentName && "px-2 pb-1.5")}>
                                   <span>{dayjs(msg.timestamp).format("hh:mm A")}</span>
                                   {msg.isEdited && <span className="text-[8px] opacity-60 italic mr-1">(edited)</span>}
                                   {renderCheckmarks(msg, false)}
@@ -3810,34 +4296,45 @@ export default function ChatPage() {
                 </div>
               )}
             </div>
+            
+            {showScrollBottomBtn && (
+              <button
+                type="button"
+                onClick={() => scrollToBottom(true)}
+                className="absolute bottom-4 right-6 bg-white hover:bg-slate-50 text-slate-600 rounded-full p-2.5 shadow-md border border-slate-100 hover:scale-105 active:scale-95 transition-all z-20 flex items-center justify-center animate-in fade-in duration-200 focus:outline-none"
+              >
+                <ChevronDown className="w-5 h-5" />
+              </button>
+            )}
 
             {/* Chat Input */}
-            <div className="p-3 border-t border-slate-200/80 bg-[#f0f2f5] shrink-0">
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                onChange={handleFileSelect}
-              />
-
-              {replyingTo && (
-                <div className="max-w-4xl mx-auto mb-2 flex items-center justify-between bg-gray-50 p-3 rounded-xl border-l-4 border-brand-teal animate-in slide-in-from-bottom-2">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold text-brand-teal uppercase">Replying to {replyingTo.isMe ? "Yourself" : selectedChat.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{replyingTo.text || (replyingTo.attachmentUrl ? "📷 Image" : (replyingTo.isVoice ? "🎤 Voice Message" : ""))}</p>
-                  </div>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full" onClick={() => setReplyingTo(null)}>
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              )}
-
-
+            <div className="px-4 pb-4 pt-1 whatsapp-chat-bg shrink-0">
               <form 
                 onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
                 className="w-full flex items-end gap-3 bg-transparent px-2"
               >
-                <div className="flex-1 flex items-end gap-2 bg-white px-3 py-2 rounded-[24px] border border-slate-200 shadow-xs min-h-[46px]">
+                <div className="flex-1 flex flex-col bg-white rounded-[24px] border border-slate-200 shadow-xs overflow-hidden">
+                  {replyingTo && (
+                    <div className="relative flex items-center justify-between bg-slate-50/70 p-2.5 border-l-4 border-brand-teal border-b border-slate-100 animate-in slide-in-from-bottom-2">
+                      <div className="min-w-0 flex-1 pl-2">
+                        <p className="text-[11px] font-bold text-brand-teal uppercase">
+                          Replying to {replyingTo.isMe ? "Yourself" : (replyingTo.sender || selectedChat.name)}
+                        </p>
+                        <p className="text-xs text-slate-500 truncate mt-0.5">
+                          {replyingTo.text || (replyingTo.attachmentUrl ? "📷 Image" : (replyingTo.isVoice ? "🎤 Voice Message" : ""))}
+                        </p>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setReplyingTo(null)}
+                        className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-200/50 transition-colors focus:outline-none shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex items-end gap-2 px-3 py-2 min-h-[44px]">
                   {voicePreviewBlob ? (
                     <div className="flex-1 flex items-center justify-between bg-emerald-50/50 px-3 py-1.5 rounded-xl border border-emerald-100/50 animate-in fade-in duration-300">
                       <Button 
@@ -4039,15 +4536,29 @@ export default function ChatPage() {
                           onPaste={(e) => {
                             const items = e.clipboardData?.items;
                             if (items) {
+                              const newFiles: File[] = [];
                               for (let i = 0; i < items.length; i++) {
                                 if (items[i].type.indexOf('image') !== -1) {
                                   const file = items[i].getAsFile();
                                   if (file) {
-                                    setPendingFile(file);
-                                    e.preventDefault();
-                                    break;
+                                    newFiles.push(file);
                                   }
                                 }
+                              }
+                              if (newFiles.length > 0) {
+                                const wasEmpty = pendingAttachments.length === 0;
+                                const newAttachments = newFiles.map((file, idx) => ({ 
+                                  file, 
+                                  caption: (wasEmpty && idx === 0) ? message : "" 
+                                }));
+                                setPendingAttachments(prev => [...prev, ...newAttachments]);
+                                if (wasEmpty) {
+                                  setActivePendingIndex(0);
+                                  if (message) {
+                                    setMessage("");
+                                  }
+                                }
+                                e.preventDefault();
                               }
                             }
                           }}
@@ -4088,7 +4599,7 @@ export default function ChatPage() {
                         )}
 
                         {/* Send or Mic Button */}
-                        {(message.trim() || pendingFile || voicePreviewBlob) ? (
+                        {(message.trim() || pendingAttachments.length > 0 || voicePreviewBlob) ? (
                           <Button 
                             type="submit"
                             variant="ghost" 
@@ -4113,6 +4624,7 @@ export default function ChatPage() {
                       </div>
                     </>
                   )}
+                  </div>
                 </div>
               </form>
             </div>
@@ -5153,8 +5665,12 @@ export default function ChatPage() {
           )}
 
           <button 
-            type="button"
-            onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); }}
+            type="button" 
+            onClick={() => { 
+              setReplyingTo(contextMenu.msg); 
+              setContextMenu(null); 
+              setTimeout(() => messageInputRef.current?.focus(), 50);
+            }}
             className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
           >
             <Reply className="w-4 h-4 text-slate-400" />
@@ -5262,6 +5778,32 @@ export default function ChatPage() {
             <Download className="w-4 h-4 text-slate-400" />
             Save as
           </button>
+        </div>
+      )}
+      {showDiscardConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center animate-in fade-in duration-200">
+          <div className="bg-white rounded-[8px] p-6 max-w-[320px] w-full shadow-2xl flex flex-col gap-5 animate-in zoom-in-95 duration-200 text-left">
+            <h4 className="text-slate-700 text-[15px] font-semibold">Discard selection?</h4>
+            <div className="flex justify-end gap-5">
+              <button 
+                type="button" 
+                onClick={() => setShowDiscardConfirm(false)}
+                className="text-[#00a884] hover:bg-slate-50 font-bold text-sm px-3 py-1.5 rounded transition-colors focus:outline-none"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setPendingAttachments([]);
+                  setShowDiscardConfirm(false);
+                }}
+                className="bg-[#00a884] hover:bg-[#008f72] text-white font-bold text-sm px-4 py-1.5 rounded transition-colors shadow-xs focus:outline-none"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
