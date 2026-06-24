@@ -661,7 +661,7 @@ export default function SchedulePage() {
                 Add Schedule
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px]">
+            <DialogContent className="sm:max-w-[450px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">{editingScheduleId ? "Edit Schedule" : "New Schedule Block"}</DialogTitle>
               </DialogHeader>
