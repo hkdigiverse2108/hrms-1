@@ -787,6 +787,10 @@ export default function EmployeeAttendanceListPage() {
                     const productionMinutes = Math.max(0, totalWorkingMinutes - totalBreakMinutes);
                     const productionStr = formatToHhMm(productionMinutes);
                     
+                    const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
+                    const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
+                    const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
+
                     const recoveryReq = recoveryRequests.find(req => 
                       req.date === record.date && 
                       (req.employee_id === record.employeeId || req.employeeId === record.employeeId) && 
@@ -797,17 +801,12 @@ export default function EmployeeAttendanceListPage() {
                     
                     const lateMinutes = (() => {
                       if (!isLate || !checkIn.isValid()) return 0;
-                      const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
-                      const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
                       return Math.max(0, checkIn.diff(dayjs(`${record.date} ${officeStartTime}`), 'minute'));
                     })();
                     
                     const lateStr = isLate || recoveryReq ? formatToHhMm(lateMinutes) : "-";
                     
                     const shiftDurationMinutes = (() => {
-                      const emp = employees.find(e => e.id === record.employeeId || e.employeeId === record.employeeId);
-                      const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
-                      const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
                       const [sh, sm] = officeStartTime.split(':').map(Number);
                       const [eh, em] = officeEndTime.split(':').map(Number);
                       return (eh * 60 + em) - (sh * 60 + sm);
