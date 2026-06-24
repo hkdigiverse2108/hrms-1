@@ -487,7 +487,11 @@ export default function ChatPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (previewImageMsgId || pendingFile) {
+        if (previewImageMsgId) {
+          return;
+        }
+        if (pendingFile) {
+          setPendingFile(null);
           return;
         }
         setSelectedChat(null as any);
@@ -606,9 +610,10 @@ export default function ChatPage() {
       }
     }
 
-    // Only trigger mention if @ is at the start or preceded by a space
+    // Only trigger mention if @ is at the start or preceded by a space (and only for group/general chats, not personal)
     const atMatch = val.match(/(^|\s)@([^\s]*)$/);
-    if (atMatch) {
+    const isGroupOrChannel = selectedChat?.type === 'group' || selectedChat?.type === 'general';
+    if (atMatch && isGroupOrChannel) {
       const textAfterAt = atMatch[2];
       setShowTagPicker(true);
       setTagSearchQuery(textAfterAt);
@@ -783,6 +788,35 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const tagPickerContainerRef = useRef<HTMLDivElement>(null);
+  const captionInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showTagPicker && tagPickerContainerRef.current) {
+      const container = tagPickerContainerRef.current;
+      const buttons = container.querySelectorAll("button");
+      const activeElement = buttons[activeTagIndex] as HTMLElement;
+      if (activeElement) {
+        const containerHeight = container.clientHeight;
+        const elemTop = activeElement.offsetTop;
+        const elemHeight = activeElement.offsetHeight;
+        if (elemTop < container.scrollTop) {
+          container.scrollTop = elemTop;
+        } else if (elemTop + elemHeight > container.scrollTop + containerHeight) {
+          container.scrollTop = elemTop + elemHeight - containerHeight;
+        }
+      }
+    }
+  }, [activeTagIndex, showTagPicker]);
+
+  useEffect(() => {
+    if (pendingFile) {
+      setTimeout(() => {
+        captionInputRef.current?.focus();
+      }, 50);
+    }
+  }, [pendingFile]);
+
   const shouldScrollToBottom = useRef(true);
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -1628,6 +1662,8 @@ export default function ChatPage() {
   const renderMessageText = (text: string, isMeBubble: boolean = false) => {
     if (!text) return "";
     
+    const isPersonal = selectedChat?.type !== 'group' && selectedChat?.type !== 'general';
+
     const namePatterns = employees.map(emp => {
       const name = emp.name || `${emp.firstName} ${emp.lastName}`;
       return name.trim();
@@ -1635,8 +1671,8 @@ export default function ChatPage() {
       .sort((a, b) => b.length - a.length)
       .map(name => name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
 
-    // Strict regex matching: only match actual employee names, no fallback.
-    const mentionRegex = namePatterns.length > 0
+    // Strict regex matching: only match actual employee names, no fallback. (disabled in personal chats)
+    const mentionRegex = (namePatterns.length > 0 && !isPersonal)
       ? new RegExp(`(^|\\s)(@(?:${namePatterns.join('|')})\\b)`, 'gi')
       : /(?!)/g;
 
@@ -3043,7 +3079,9 @@ export default function ChatPage() {
                     </PopoverContent>
                   </Popover>
                   <input 
+                    ref={captionInputRef}
                     type="text" 
+                    autoFocus
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => {
@@ -3887,6 +3925,7 @@ export default function ChatPage() {
                       <div className="flex-1 relative">
                         {showTagPicker && filteredEmployees.length > 0 && (
                           <div 
+                            ref={tagPickerContainerRef}
                             style={{ left: `${tagPickerLeft}px` }}
                             className="absolute bottom-full mb-2 p-2 border border-slate-100 bg-white rounded-2xl shadow-xl w-64 max-h-64 overflow-y-auto z-[100] transition-all duration-75"
                           >
@@ -4870,7 +4909,14 @@ export default function ChatPage() {
 
       {/* Image Preview Modal (WhatsApp Style - Light Theme) */}
       <Dialog open={!!previewImageMsgId} onOpenChange={(open) => !open && setPreviewImageMsgId(null)}>
-        <DialogContent className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#eaebeb] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden">
+        <DialogContent 
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+            }
+          }}
+          className="sm:max-w-full w-screen h-screen p-0 overflow-hidden bg-[#eaebeb] border-none shadow-2xl flex flex-col justify-between [&>button:last-child]:hidden"
+        >
           <DialogTitle className="sr-only">Image Preview</DialogTitle>
           
           {/* Top Bar */}

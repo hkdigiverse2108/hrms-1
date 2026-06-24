@@ -194,7 +194,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
     // Double check if there was global PC activity (clicks/keypress/mouse movement)
     try {
-      const activeRes = await fetch(`${API_URL}/activity/last-active`);
+      const activeRes = await fetch(`${API_URL}/activity/last-active?employee_id=${user.id || user.employeeId}`);
       if (activeRes.ok) {
         const activeData = await activeRes.json();
         if (activeData && typeof activeData.last_active === 'number') {
@@ -440,7 +440,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
     // 2. Fetch last active time from local backend/tracker
     try {
-      const activeRes = await fetch(`${API_URL}/activity/last-active`);
+      const activeRes = await fetch(`${API_URL}/activity/last-active?employee_id=${user.id || user.employeeId}`);
       if (activeRes.ok) {
         const activeData = await activeRes.json();
         if (activeData && typeof activeData.last_active === 'number') {
