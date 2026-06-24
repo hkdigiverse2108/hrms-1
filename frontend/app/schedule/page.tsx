@@ -75,6 +75,10 @@ export default function SchedulePage() {
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  /* ───── free slots state ───── */
+  const [freeSlots, setFreeSlots] = useState<{start: string, end: string}[]>([]);
+  const [isCheckingSlots, setIsCheckingSlots] = useState(false);
+
   const resetForm = () => {
     setEditingScheduleId(null);
     setForm({
@@ -129,6 +133,44 @@ export default function SchedulePage() {
       }
     }
   }, [user, employees, selectedEmployeeIds.length]);
+
+  /* ───── fetch free slots ───── */
+  useEffect(() => {
+    const fetchFreeSlots = async () => {
+      if (!form.date || !form.employeeId || !createModalOpen) return;
+      const attendeeIds = [form.employeeId, ...(form.attendees || [])];
+      
+      setIsCheckingSlots(true);
+      try {
+        const res = await fetch(`${API_URL}/schedules/free-slots`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            employeeIds: attendeeIds,
+            date: form.date,
+            durationMins: 30
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setFreeSlots(data.freeSlots || []);
+        } else {
+          setFreeSlots([]);
+        }
+      } catch (err) {
+        console.error("Error fetching free slots:", err);
+        setFreeSlots([]);
+      } finally {
+        setIsCheckingSlots(false);
+      }
+    };
+    
+    // Use a small debounce to avoid spamming the API while selecting attendees
+    const timeoutId = setTimeout(() => {
+      fetchFreeSlots();
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [form.date, form.employeeId, form.attendees, createModalOpen]);
 
   /* scroll to current time on mount */
   useEffect(() => {
@@ -243,19 +285,23 @@ export default function SchedulePage() {
       toast.error("End time must be after start time");
       return;
     }
-    // Check for overlap within current schedules if creating for the current date
-    if (form.date === currentDate.format("YYYY-MM-DD")) {
-      const isOverlap = schedules.some((s) => {
-        if (editingScheduleId && s.id === editingScheduleId) return false;
-        if (s.employeeId !== form.employeeId) return false;
-        // Overlap condition: max(start1, start2) < min(end1, end2)
-        const maxStart = form.startTime > s.startTime ? form.startTime : s.startTime;
-        const minEnd = form.endTime < s.endTime ? form.endTime : s.endTime;
-        return maxStart < minEnd;
-      });
+    // Check for overlap within currently loaded schedules
+    const isOverlap = schedules.some((s) => {
+      const sDate = typeof s.date === "string" ? s.date.split("T")[0] : dayjs(s.date).format("YYYY-MM-DD");
+      if (form.date !== sDate) return false;
+      if (editingScheduleId && s.id === editingScheduleId) return false;
+      if (s.employeeId !== form.employeeId) return false;
+      // Overlap condition: max(start1, start2) < min(end1, end2)
+      const maxStart = form.startTime > s.startTime ? form.startTime : s.startTime;
+      const minEnd = form.endTime < s.endTime ? form.endTime : s.endTime;
+      return maxStart < minEnd;
+    });
 
-      if (isOverlap) {
-        toast.error("This schedule overlaps with an existing schedule for this employee.");
+    if (isOverlap) {
+      if (form.employeeId === (user?.id || user?.employeeId)) {
+        toast.warning("Overlap detected in your schedule!");
+      } else {
+        toast.error("Cannot assign an overlapping schedule to someone else.");
         return;
       }
     }
@@ -533,7 +579,7 @@ export default function SchedulePage() {
     const canSeeDetails = isAdminUser || isOwner || isCreator || isAttendee;
     
     const displayTitle = canSeeDetails ? event.title : "Busy";
-    const canEditOrDelete = isCreator || isOwner || isAdminUser;
+    const canEditOrDelete = isOwner;
     
     const colWidth = 100 / totalColumns;
     const leftPercent = column * colWidth;
@@ -745,6 +791,37 @@ export default function SchedulePage() {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* ───── Common Free Slots ───── */}
+                {form.employeeId && (form.attendees.length > 0) && form.date && (
+                  <div className="mt-3">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">Common Free Slots</label>
+                    {isCheckingSlots ? (
+                      <div className="text-xs text-slate-500 animate-pulse">Finding available times...</div>
+                    ) : freeSlots.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1 custom-scrollbar">
+                        {freeSlots.slice(0, 10).map((slot, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => {
+                              const s = slot.start.length === 5 ? slot.start + ":00" : slot.start;
+                              const e = slot.end.length === 5 ? slot.end + ":00" : slot.end;
+                              setForm({ ...form, startTime: s, endTime: e });
+                            }}
+                            className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-1 rounded cursor-pointer hover:bg-indigo-600 hover:text-white transition-colors"
+                          >
+                            {format12Hour(slot.start)} - {format12Hour(slot.end)}
+                          </div>
+                        ))}
+                        {freeSlots.length === 0 && <span className="text-xs text-slate-400">No common slots found.</span>}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1.5 rounded border border-amber-100">
+                        No common free slots available on this date.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

@@ -2139,7 +2139,7 @@ async def get_schedules(employeeId: Optional[str] = None, date: Optional[str] = 
     return await crud.get_schedules(db, employee_id=employeeId, date_str=date, date_from=date_from, date_to=date_to)
 
 @app.post("/schedules", response_model=schemas.Schedule)
-async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
+async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db), _token=Depends(auth.require_auth)):
     from datetime import datetime, date
     # Check for overlaps
     existing_schedules = await crud.get_schedules(db, employee_id=schedule.employeeId, date_str=str(schedule.date))
@@ -2149,7 +2149,8 @@ async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
             ex_end = existing.get("endTime")
             if ex_start and ex_end:
                 if max(schedule.startTime, ex_start) < min(schedule.endTime, ex_end):
-                    raise HTTPException(status_code=400, detail="Schedule overlaps with an existing schedule for this employee on this date.")
+                    if schedule.employeeId != _token.get("sub"):
+                        raise HTTPException(status_code=400, detail="Schedule overlaps with an existing schedule for this employee on this date.")
 
     schedule_data = schedule.model_dump()
     dt_val = schedule_data.get("date")
@@ -2161,9 +2162,24 @@ async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
     return await crud.create_schedule(db, schedule_data)
 
 @app.put("/schedules/{schedule_id}", response_model=schemas.Schedule)
-async def update_schedule(schedule_id: str, schedule: schemas.ScheduleUpdate, db=Depends(get_db)):
+async def update_schedule(schedule_id: str, schedule: schemas.ScheduleUpdate, db=Depends(get_db), _token=Depends(auth.require_auth)):
     from datetime import datetime, date
     update_data = schedule.model_dump(exclude_unset=True)
+
+    # Check for overlaps if time is updated
+    if update_data.get("startTime") and update_data.get("endTime"):
+        existing_schedules = await crud.get_schedules(db, employee_id=update_data.get("employeeId"), date_str=str(update_data.get("date")))
+        if existing_schedules:
+            for existing in existing_schedules:
+                if str(existing.get("_id")) == schedule_id or str(existing.get("id")) == schedule_id:
+                    continue
+                ex_start = existing.get("startTime")
+                ex_end = existing.get("endTime")
+                if ex_start and ex_end:
+                    if max(update_data["startTime"], ex_start) < min(update_data["endTime"], ex_end):
+                        if update_data.get("employeeId") != _token.get("sub"):
+                            raise HTTPException(status_code=400, detail="Schedule overlaps with an existing schedule for this employee on this date.")
+
     dt_val = update_data.get("date")
     if dt_val is not None:
         if type(dt_val) is date:
