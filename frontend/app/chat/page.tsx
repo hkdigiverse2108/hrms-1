@@ -140,7 +140,7 @@ const ChatLink = ({ href, target, rel, className, children, onClick, textColor }
       rel={rel}
       className={className}
       style={{ 
-        textDecorationLine: isHovered ? 'underline' : 'none',
+        textDecorationLine: 'none',
         textUnderlineOffset: '3px',
         textDecorationThickness: '1px',
         color: textColor
@@ -1904,7 +1904,7 @@ export default function ChatPage() {
             key={`mention-${i}`} 
             onClick={handleClick}
             className={cn(
-              "text-[13px] transition-all cursor-pointer inline-block mr-1 font-bold hover:underline",
+              "text-[13px] transition-all cursor-pointer inline-block mr-1 font-bold",
               tagColorClass
             )}
           >
@@ -3002,8 +3002,8 @@ export default function ChatPage() {
                         {group.avatar ? (
                           <AvatarImage src={getAvatarUrl(group.avatar)} />
                         ) : (
-                          <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
-                            <Users className="w-6 h-6" />
+                          <AvatarFallback className="bg-brand-light text-brand-teal font-bold uppercase">
+                            {group.name[0]}
                           </AvatarFallback>
                         )}
                       </Avatar>
@@ -3097,8 +3097,8 @@ export default function ChatPage() {
                         {channel.avatar ? (
                           <AvatarImage src={getAvatarUrl(channel.avatar)} />
                         ) : (
-                          <AvatarFallback className="bg-brand-light text-brand-teal font-bold">
-                            <Hash className="w-5 h-5 text-brand-teal" />
+                          <AvatarFallback className="bg-brand-light text-brand-teal font-bold uppercase">
+                            {channel.name[0]}
                           </AvatarFallback>
                         )}
                       </Avatar>
@@ -3600,7 +3600,7 @@ export default function ChatPage() {
                       )}
                     </div>
                     <div>
-                      <h2 className="font-bold text-slate-800 hover:underline">{selectedChat.name}</h2>
+                      <h2 className="font-bold text-slate-800">{selectedChat.name}</h2>
                       {typingUsers.length > 0 ? (
                         <p className="text-[11px] font-bold text-brand-teal animate-pulse">
                           {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
@@ -3900,7 +3900,7 @@ export default function ChatPage() {
                               {/* Group chat sender display name */}
                               {isGroup && !msg.isMe && !isConsecutive && (
                                 <span 
-                                  className="block text-[12.8px] font-bold mb-1 select-none cursor-pointer hover:underline" 
+                                  className="block text-[12.8px] font-bold mb-1 select-none cursor-pointer"
                                   style={{ color: getSenderColor(displayName) }}
                                   onClick={() => {
                                     if (msg.senderId) {
@@ -4300,8 +4300,12 @@ export default function ChatPage() {
             {showScrollBottomBtn && (
               <button
                 type="button"
-                onClick={() => scrollToBottom(true)}
-                className="absolute bottom-4 right-6 bg-white hover:bg-slate-50 text-slate-600 rounded-full p-2.5 shadow-md border border-slate-100 hover:scale-105 active:scale-95 transition-all z-20 flex items-center justify-center animate-in fade-in duration-200 focus:outline-none"
+                onClick={() => {
+                  if (scrollRef.current) {
+                    scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+                  }
+                }}
+                className="absolute bottom-20 right-6 bg-white hover:bg-slate-50 text-slate-500 rounded-full w-9 h-9 shadow-lg border border-slate-200/60 hover:scale-105 active:scale-95 transition-all z-20 flex items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-200 focus:outline-none"
               >
                 <ChevronDown className="w-5 h-5" />
               </button>
