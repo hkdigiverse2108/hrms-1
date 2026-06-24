@@ -3746,6 +3746,27 @@ async def delete_marketing_daily_report(db, report_id: str):
     result = await db.marketing_daily_reports.delete_one({"_id": ObjectId(report_id)})
     return result.deleted_count > 0
 
+async def bulk_clear_leads_files(db, ids: list, collection_name: str):
+    object_ids = [ObjectId(id) for id in ids if ObjectId.is_valid(id)]
+    if not object_ids:
+        return []
+    
+    collection = db[collection_name]
+    
+    # 1. Fetch documents to return their leadsFileUrl
+    cursor = collection.find({"_id": {"$in": object_ids}, "leadsFileUrl": {"$ne": None}})
+    docs = await cursor.to_list(length=None)
+    
+    urls_to_delete = [doc.get("leadsFileUrl") for doc in docs if doc.get("leadsFileUrl")]
+    
+    # 2. Update documents to clear leadsFileUrl
+    await collection.update_many(
+        {"_id": {"$in": object_ids}},
+        {"$set": {"leadsFileUrl": ""}}
+    )
+    
+    return urls_to_delete
+
 async def create_marketing_monthly_report(db, report: schemas.MarketingMonthlyReportCreate):
     report_dict = report.dict()
     result = await db.marketing_monthly_reports.insert_one(report_dict)

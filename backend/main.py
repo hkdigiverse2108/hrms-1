@@ -521,6 +521,21 @@ async def upload_file(file: UploadFile = File(...)):
         buffer.write(contents)
     return {"url": f"/uploads/{filename}"}
 
+@app.delete("/upload/{filename}")
+async def delete_file(filename: str):
+    import os
+    # Prevent directory traversal
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join(UPLOAD_DIR, safe_filename)
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            return {"message": "File deleted successfully"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
+    else:
+        raise HTTPException(status_code=404, detail="File not found")
+
 @app.post("/upload-profile-photo/{user_id}")
 async def upload_profile_photo(user_id: str, file: UploadFile = File(...), db=Depends(get_db)):
     contents = await file.read()
@@ -1332,6 +1347,22 @@ async def delete_marketing_daily_report(report_id: str, db=Depends(get_db)):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Daily report not found")
     return {"message": "Daily report deleted"}
+
+@app.post("/marketing/reports/daily/bulk-delete-leads")
+async def bulk_delete_daily_leads(req: schemas.BulkDeleteLeadsRequest, db=Depends(get_db)):
+    urls_to_delete = await crud.bulk_clear_leads_files(db, req.ids, "marketing_daily_reports")
+    import os
+    for url in urls_to_delete:
+        parts = url.split('/uploads/')
+        if len(parts) > 1:
+            filename = parts[1]
+            file_path = os.path.join(UPLOAD_DIR, os.path.basename(filename))
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+    return {"message": f"Cleared {len(urls_to_delete)} leads files."}
 
 @app.post("/marketing/project-remarks", response_model=schemas.ProjectDailyRemark)
 async def upsert_project_daily_remark(remark: schemas.ProjectDailyRemarkCreate, db=Depends(get_db)):

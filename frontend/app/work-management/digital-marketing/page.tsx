@@ -31,6 +31,7 @@ import {
   X,
   Upload,
   FileSpreadsheet,
+  FileX,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -324,6 +325,7 @@ export default function MarketingReportsPage() {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>({});
   const [isSavingRow, setIsSavingRow] = useState(false);
+  const [selectedLeadsIds, setSelectedLeadsIds] = useState<string[]>([]);
 
   // Logs state
   const [logsOpen, setLogsOpen] = useState(false);
@@ -1009,7 +1011,8 @@ export default function MarketingReportsPage() {
   const handleUploadLeads = async (
     e: React.ChangeEvent<HTMLInputElement>,
     id: string,
-    type: "daily" | "monthly"
+    type: "daily" | "monthly",
+    oldFileUrl?: string
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1034,6 +1037,16 @@ export default function MarketingReportsPage() {
         return;
       }
 
+      if (oldFileUrl) {
+        const parts = oldFileUrl.split('/uploads/');
+        if (parts.length > 1) {
+          const oldFilename = parts[1];
+          await fetch(`${API_URL}/upload/${oldFilename}`, {
+            method: "DELETE",
+          }).catch(() => {});
+        }
+      }
+
       const { url } = await uploadRes.json();
       await handleInlineUpdate(id, "leadsFileUrl", url, type);
       toast.success("Leads file uploaded successfully");
@@ -1042,6 +1055,45 @@ export default function MarketingReportsPage() {
     }
   };
 
+  const handleRemoveLeadsFile = async (id: string, fileUrl: string, type: "daily" | "monthly") => {
+    try {
+      if (fileUrl) {
+        const parts = fileUrl.split('/uploads/');
+        if (parts.length > 1) {
+          const filename = parts[1];
+          await fetch(`${API_URL}/upload/${filename}`, {
+            method: "DELETE",
+          });
+        }
+      }
+      await handleInlineUpdate(id, "leadsFileUrl", "", type);
+      toast.success("Leads file removed successfully");
+    } catch (err) {
+      toast.error("Failed to remove leads file");
+    }
+  };
+
+  const handleBulkDeleteLeadsFiles = async () => {
+    if (selectedLeadsIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete the leads files for ${selectedLeadsIds.length} selected reports?`)) return;
+
+    try {
+      const res = await fetch(`${API_URL}/marketing/reports/daily/bulk-delete-leads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedLeadsIds }),
+      });
+      if (res.ok) {
+        toast.success("Selected leads files deleted successfully");
+        setSelectedLeadsIds([]);
+        fetchDailyReports();
+      } else {
+        toast.error("Failed to bulk delete leads files");
+      }
+    } catch (error) {
+      toast.error("An error occurred during bulk deletion");
+    }
+  };
   const handleDownloadLeads = (fileUrl: string) => {
     const isExternal = fileUrl.startsWith('http');
     const fullUrl = isExternal ? fileUrl : `${API_URL}${fileUrl.replace('/api', '')}`;
@@ -1932,6 +1984,17 @@ export default function MarketingReportsPage() {
               </div>
             )}
             <div className="flex self-end pb-[1px] items-center gap-2 ml-auto">
+              {activeTab === "daily" && selectedLeadsIds.length > 0 && canDeleteMarketing && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-9 px-3 text-xs font-medium"
+                  onClick={handleBulkDeleteLeadsFiles}
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  Delete {selectedLeadsIds.length} Leads Files
+                </Button>
+              )}
               {activeTab === "daily" && filteredDaily.length > 0 && (
                 <>
                   <Button
@@ -2337,6 +2400,27 @@ export default function MarketingReportsPage() {
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-50">
                       <TableHead className="w-12 text-center font-bold text-slate-700"></TableHead>
+                      <TableHead className="w-10 text-center font-bold text-slate-700">
+                        {filteredDaily.some((r: any) => r.leadsFileUrl) && (
+                          <input 
+                            type="checkbox" 
+                            className="cursor-pointer w-3.5 h-3.5 mt-1"
+                            title="Select all with leads files"
+                            checked={
+                              filteredDaily.filter((r: any) => r.leadsFileUrl).length > 0 &&
+                              filteredDaily.filter((r: any) => r.leadsFileUrl).every((r: any) => selectedLeadsIds.includes(r.id))
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const idsWithFiles = filteredDaily.filter((r: any) => r.leadsFileUrl).map((r: any) => r.id);
+                                setSelectedLeadsIds(idsWithFiles);
+                              } else {
+                                setSelectedLeadsIds([]);
+                              }
+                            }}
+                          />
+                        )}
+                      </TableHead>
                       <TableHead className="w-12 text-center font-bold text-slate-700">
                         S.N
                       </TableHead>
@@ -2403,7 +2487,7 @@ export default function MarketingReportsPage() {
                             {filteredDaily.length === 0 ? (
                               <TableRow>
                                 <TableCell
-                                  colSpan={15}
+                                  colSpan={16}
                                   className="text-center py-20 text-slate-400 italic"
                                 >
                                   No daily reports found.
@@ -2481,6 +2565,24 @@ export default function MarketingReportsPage() {
                                                       <GripVertical className="w-4 h-4 mx-auto" />
                                                     </div>
                                                   </TableCell>
+                                                  <TableCell className="text-center w-10">
+                                                    {report.leadsFileUrl ? (
+                                                      <input 
+                                                        type="checkbox" 
+                                                        className="cursor-pointer w-3.5 h-3.5 mt-1"
+                                                        checked={selectedLeadsIds.includes(report.id)}
+                                                        onChange={(e) => {
+                                                          if (e.target.checked) {
+                                                            setSelectedLeadsIds([...selectedLeadsIds, report.id]);
+                                                          } else {
+                                                            setSelectedLeadsIds(selectedLeadsIds.filter((id: string) => id !== report.id));
+                                                          }
+                                                        }}
+                                                      />
+                                                    ) : (
+                                                      <span className="text-slate-300">-</span>
+                                                    )}
+                                                  </TableCell>
                                                   <TableCell className="text-center text-slate-400">
                                                     {globalIdx}
                                                   </TableCell>
@@ -2512,7 +2614,7 @@ export default function MarketingReportsPage() {
                                                     report.id ? (
                                                       <Input
                                                         type="number"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.reach ??
                                                           ""
@@ -2542,7 +2644,7 @@ export default function MarketingReportsPage() {
                                                     report.id ? (
                                                       <Input
                                                         type="number"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.impression ??
                                                           ""
@@ -2572,7 +2674,7 @@ export default function MarketingReportsPage() {
                                                     report.id ? (
                                                       <Input
                                                         type="number"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.leads ??
                                                           ""
@@ -2603,7 +2705,7 @@ export default function MarketingReportsPage() {
                                                       <Input
                                                         type="number"
                                                         step="0.01"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.revenue ??
                                                           ""
@@ -2633,7 +2735,7 @@ export default function MarketingReportsPage() {
                                                     report.id ? (
                                                       <Input
                                                         type="number"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.followers ??
                                                           ""
@@ -2664,7 +2766,7 @@ export default function MarketingReportsPage() {
                                                       <Input
                                                         type="number"
                                                         step="0.01"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.spend ??
                                                           ""
@@ -2695,7 +2797,7 @@ export default function MarketingReportsPage() {
                                                       <Input
                                                         type="number"
                                                         step="0.01"
-                                                        className="h-8 text-xs text-center outline-none"
+                                                        className="h-8 text-xs text-center outline-none min-w-[60px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         value={
                                                           editFormData.cpl ?? ""
                                                         }
@@ -2827,7 +2929,7 @@ export default function MarketingReportsPage() {
                                                             className="hidden" 
                                                             id={`upload-leads-${report.id}`} 
                                                             accept=".xlsx,.xls,.csv"
-                                                            onChange={(e) => handleUploadLeads(e, report.id, "daily")}
+                                                            onChange={(e) => handleUploadLeads(e, report.id, "daily", report.leadsFileUrl)}
                                                           />
                                                           <Button
                                                             variant="ghost"
@@ -2839,15 +2941,17 @@ export default function MarketingReportsPage() {
                                                             <Upload className="w-4 h-4" />
                                                           </Button>
                                                           {report.leadsFileUrl && (
-                                                            <Button
-                                                              variant="ghost"
-                                                              size="icon"
-                                                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                                              title="Download Leads"
-                                                              onClick={() => handleDownloadLeads(report.leadsFileUrl)}
-                                                            >
-                                                              <FileSpreadsheet className="w-4 h-4" />
-                                                            </Button>
+                                                            <>
+                                                              <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                                title="Download Leads"
+                                                                onClick={() => handleDownloadLeads(report.leadsFileUrl)}
+                                                              >
+                                                                <FileSpreadsheet className="w-4 h-4" />
+                                                              </Button>
+                                                            </>
                                                           )}
 
                                                           {canDeleteMarketing && (
