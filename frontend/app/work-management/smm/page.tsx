@@ -1276,7 +1276,7 @@ export default function CreativeClientsPage() {
                               setFollowupConfigOpen(true);
                               fetchFollowupHistory(client);
                             }}>
-                              <CalendarClock className="w-4 h-4 mr-2" /> Follow-up Rules
+                              <CalendarClock className="w-4 h-4 mr-2" /> Follow-ups
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
@@ -1380,7 +1380,7 @@ export default function CreativeClientsPage() {
       <Dialog open={followupConfigOpen} onOpenChange={setFollowupConfigOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Follow-up Settings</DialogTitle>
+            <DialogTitle>Follow-ups</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="pt-2">
