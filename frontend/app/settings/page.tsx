@@ -112,6 +112,24 @@ export default function SettingsPage() {
     }
   };
 
+  const handleToggleDailyProgressRejectDeduction = async (checked: boolean) => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dailyProgressRejectDeductionEnabled: checked })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleUpdateShiftSettings = async (key: string, value: any) => {
     setIsUpdating(true);
     try {
@@ -310,6 +328,27 @@ export default function SettingsPage() {
                         <Switch 
                           checked={settings?.latePunchDeductionEnabled ?? true}
                           onCheckedChange={handleToggleLatePunchDeduction}
+                          disabled={isUpdating || !canEditSettings}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/30 mt-4">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-bold">Daily Progress Reject Salary Cut</Label>
+                          <Badge variant="outline" className="text-[9px] h-4 font-bold bg-white">PAYROLL</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground max-w-[400px]">
+                          When enabled, system will automatically deduct 1 day salary if an employee's Daily Progress is rejected.
+                        </p>
+                      </div>
+                      {isLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-brand-teal" />
+                      ) : (
+                        <Switch 
+                          checked={settings?.dailyProgressRejectDeductionEnabled ?? false}
+                          onCheckedChange={handleToggleDailyProgressRejectDeduction}
                           disabled={isUpdating || !canEditSettings}
                         />
                       )}

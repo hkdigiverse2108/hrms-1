@@ -749,6 +749,7 @@ async def run_payroll_processing(db, month: str, year: int):
     penalty_types = await get_penalty_types(db)
     system_settings = await get_system_settings(db)
     late_punch_deduction_enabled = system_settings.get("latePunchDeductionEnabled", True)
+    daily_progress_reject_deduction_enabled = system_settings.get("dailyProgressRejectDeductionEnabled", False)
     payroll_results = []
     
     for emp in employees:
@@ -1081,7 +1082,7 @@ async def run_payroll_processing(db, month: str, year: int):
             if a["type"] == "bonus":
                 total_bonus += a["amount"]
             elif a["type"] == "deduction":
-                if "rejected by Team Leader" in a["reason"] or "Work rejected by TL" in a["reason"]:
+                if "was rejected. Automatic full-day salary deduction applied" in a["reason"] or "Work rejected by TL" in a["reason"]:
                     penalty_total += per_day_gross
                     deduction_details.append(f"{a['reason']}: ₹{round(per_day_gross, 2)}")
                 else:
@@ -4733,7 +4734,7 @@ async def delete_document_request(db, req_id: str):
     return result.deleted_count > 0
 
 # Employee Daily Report CRUD
-async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
+async def apply_work_rejection_penalty(db, employee_id: str, report_date):
     employee = await get_employee(db, employee_id)
     if not employee:
         return
@@ -4743,7 +4744,14 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
         return
     
     try:
-        dt = datetime.strptime(report_date, "%Y-%m-%d")
+        if isinstance(report_date, str):
+            dt = datetime.strptime(report_date.split("T")[0].split(" ")[0], "%Y-%m-%d")
+        else:
+            # It's already a date or datetime object
+            dt = report_date
+            
+        report_date_str = dt.strftime("%Y-%m-%d")
+            
         month_name = calendar.month_name[dt.month]
         month_num = dt.month
         year = dt.year
@@ -4786,7 +4794,7 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
                 
         total_working_days = max(1, num_days - len(sunday_dates) - unique_holidays)
         per_day_salary = salary_struct["monthlyGross"] / total_working_days
-        reason = f"Daily work report for {report_date} was rejected by Team Leader. Automatic full-day salary deduction applied."
+        reason = f"Daily work report for {report_date_str} was rejected. Automatic full-day salary deduction applied."
         
         # Check if already deducted for this specific date
         existing = await db.bonus_deductions.find_one({
@@ -4804,7 +4812,7 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
                 amount=round(per_day_salary, 2),
                 reason=reason,
                 status="active",
-                date=report_date
+                date=report_date_str
             )
             await create_bonus_deduction(db, deduction)
             
@@ -4815,7 +4823,7 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
                 "role": employee.get("designation", "Staff"),
                 "avatar": employee.get("profilePhoto", ""),
                 "type": "Performance",
-                "details": f"Daily work report for {report_date} was rejected by Team Leader. Automatic full-day salary deduction applied.",
+                "details": f"Daily work report for {report_date_str} was rejected. Automatic full-day salary deduction applied.",
                 "addedBy": "System",
                 "date": datetime.combine(dt.date(), datetime.min.time()).replace(tzinfo=IST)
             }
@@ -4823,6 +4831,32 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
             
     except Exception as e:
         print(f"Error applying work rejection penalty: {e}")
+
+async def remove_work_rejection_penalty(db, employee_id: str, report_date):
+    try:
+        if isinstance(report_date, str):
+            dt = datetime.strptime(report_date.split("T")[0].split(" ")[0], "%Y-%m-%d")
+        else:
+            dt = report_date
+            
+        report_date_str = dt.strftime("%Y-%m-%d")
+        reason = f"Daily work report for {report_date_str} was rejected. Automatic full-day salary deduction applied."
+        
+        # Remove deduction
+        await db.bonus_deductions.delete_many({
+            "employeeId": employee_id,
+            "type": "deduction",
+            "reason": reason
+        })
+        
+        # Remove remark
+        await db.remarks.delete_many({
+            "employeeId": employee_id,
+            "type": "Performance",
+            "details": reason
+        })
+    except Exception as e:
+        print(f"Error removing work rejection penalty: {e}")
 
 async def create_employee_daily_report(db, report: schemas.EmployeeDailyReportCreate):
     report_dict = report.dict()
@@ -5315,7 +5349,11 @@ async def update_employee_daily_report(db, report_id: str, report_update: schema
     
     # Apply penalty if status changed to Rejected
     if update_data.get("status") == "Rejected" and existing and existing.get("status") != "Rejected":
-        await apply_work_rejection_penalty(db, existing["employeeId"], existing["date"])
+        system_settings = await get_system_settings(db)
+        if system_settings.get("dailyProgressRejectDeductionEnabled", False):
+            await apply_work_rejection_penalty(db, existing["employeeId"], existing["date"])
+    elif update_data.get("status") != "Rejected" and existing and existing.get("status") == "Rejected":
+        await remove_work_rejection_penalty(db, existing["employeeId"], existing["date"])
         
     # Log activity
     if existing:
