@@ -1429,9 +1429,24 @@ export default function MarketingReportsPage() {
     monthlyPage * monthlyItemsPerPage,
   );
 
+  const getProjectNameForReport = (report: any) => {
+    if (report.projectName && report.projectName !== "N/A") {
+      return report.projectName;
+    }
+    if (report.projectId) {
+      const proj = projects.find((p: any) => String(p.id) === String(report.projectId));
+      if (proj) return proj.title;
+    }
+    const clientProjs = projects.filter((p: any) => String(p.clientId) === String(report.clientId));
+    if (clientProjs.length > 0) {
+      return clientProjs.map((p: any) => p.title).join(", ");
+    }
+    return report.clientName || "Unknown";
+  };
+
   const groupedPaginatedDaily = paginatedDaily.reduce(
     (acc: Record<string, any[]>, curr) => {
-      const pName = curr.projectName || curr.clientName || "Unknown";
+      const pName = getProjectNameForReport(curr);
       if (!acc[pName]) acc[pName] = [];
       acc[pName].push(curr);
       return acc;
@@ -1513,7 +1528,7 @@ export default function MarketingReportsPage() {
           "S.N.": serialNumber++,
           Date: normalizeDate(r.date),
           Client: clientName,
-          Project: r.projectName || "N/A",
+          Project: getProjectNameForReport(r),
           Campaign: r.campaignName,
           Reach: r.reach || 0,
           Impressions: r.impression || 0,
@@ -1587,7 +1602,7 @@ export default function MarketingReportsPage() {
     filteredMonthly.forEach((r: any) => {
       exportData.push({
         "S.N.": serialNumber++,
-        "Project Name": getProjectNamesForReport(r),
+        "Project Name": getProjectNameForReport(r),
         Month: r.month,
         "Total Spend": r.totalSpend || 0,
         "Total Leads": r.totalLeads || 0,
@@ -1618,16 +1633,7 @@ export default function MarketingReportsPage() {
     return exportData;
   };
 
-  const getProjectNamesForReport = (report: any) => {
-    if (report.projectName && report.projectName !== "N/A") {
-      return report.projectName;
-    }
-    const clientProjs = projects.filter((p: any) => String(p.clientId) === String(report.clientId));
-    if (clientProjs.length > 0) {
-      return clientProjs.map((p: any) => p.title).join(", ");
-    }
-    return report.clientName || "Unknown";
-  };
+  // Replaced by getProjectNameForReport earlier
 
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-100px)] overflow-hidden">
@@ -1717,7 +1723,7 @@ export default function MarketingReportsPage() {
                               <TableCell>{normalizeDate(r.date)}</TableCell>
                               <TableCell>
                                 <div className="flex flex-col items-start gap-1">
-                                  <span>{r.projectName || "N/A"}</span>
+                                  <span>{getProjectNameForReport(r)}</span>
                                   {projects.find((p: any) => p.id === r.projectId)?.status === 'on-hold' && (
                                     <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
                                   )}
@@ -1790,7 +1796,7 @@ export default function MarketingReportsPage() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-col items-start gap-1">
-                                  <span>{r.projectName || r.clientName || "N/A"}</span>
+                                  <span>{getProjectNameForReport(r)}</span>
                                   {projects.find((p: any) => (p.id === r.projectId || p.clientId === r.clientId))?.status === 'on-hold' && (
                                     <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
                                   )}
@@ -2602,7 +2608,7 @@ export default function MarketingReportsPage() {
 
                                                   <TableCell className="font-semibold text-slate-600">
                                                     <div className="flex flex-col items-start gap-1">
-                                                      <span>{report.projectName || "N/A"}</span>
+                                                      <span>{getProjectNameForReport(report)}</span>
                                                       {projects.find((p: any) => p.id === report.projectId)?.status === 'on-hold' && (
                                                         <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
                                                       )}
