@@ -84,7 +84,7 @@ function run() {
 
     // ── Step 4: Run electron-builder to generate NSIS Installer ──────────────
     console.log('Running electron-builder to generate installer...');
-    execSync('npx electron-builder --win', { stdio: 'inherit' });
+    execSync('npx electron-builder --win', { stdio: 'inherit', cwd: __dirname });
     console.log('[OK] Installer generated successfully.');
 
   } catch (err) {
