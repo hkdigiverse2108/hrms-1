@@ -810,12 +810,39 @@ export default function EmployeeAttendanceListPage() {
                     const lateStr = isLate || recoveryReq ? formatToHhMm(lateMinutes) : "-";
                     
                     const shiftDurationMinutes = (() => {
-                      const [sh, sm] = officeStartTime.split(':').map(Number);
-                      const [eh, em] = officeEndTime.split(':').map(Number);
-                      return (eh * 60 + em) - (sh * 60 + sm);
+                      const parseTimeToMinutes = (timeStr: string): number => {
+                        if (!timeStr) return 0;
+                        const cleaned = timeStr.trim().toUpperCase();
+                        let hours = 0;
+                        let minutes = 0;
+                        const ampmMatch = cleaned.match(/(\d+):(\d+)(?::\d+)?\s*(AM|PM)/);
+                        if (ampmMatch) {
+                          hours = parseInt(ampmMatch[1], 10);
+                          minutes = parseInt(ampmMatch[2], 10);
+                          const ampm = ampmMatch[3];
+                          if (ampm === "PM" && hours < 12) hours += 12;
+                          if (ampm === "AM" && hours === 12) hours = 0;
+                        } else {
+                          const parts = cleaned.split(':');
+                          hours = parseInt(parts[0] || '0', 10);
+                          minutes = parseInt(parts[1] || '0', 10);
+                          if (hours >= 1 && hours <= 8) {
+                            hours += 12;
+                          }
+                        }
+                        return hours * 60 + minutes;
+                      };
+
+                      const startMinutes = parseTimeToMinutes(officeStartTime);
+                      const endMinutes = parseTimeToMinutes(officeEndTime);
+                      let diff = endMinutes - startMinutes;
+                      if (diff < 0) {
+                        diff += 24 * 60;
+                      }
+                      return diff;
                     })();
                     
-                    const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
+                    const overtimeMinutes = productionMinutes > 0 ? Math.max(0, productionMinutes - shiftDurationMinutes) : 0;
                     const overtimeStr = formatToHhMm(overtimeMinutes);
 
                     const day = dayjs(record.date).format("dddd");

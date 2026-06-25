@@ -174,11 +174,11 @@ export default function AttendancePage() {
     if (getISTNow().getTime() !== new Date().getTime()) {
       const now = getISTNow();
 
-      setCreateForm(prev => ({
+      setCreateForm((prev: any) => ({
         ...prev,
         date: dayjs(now).format("YYYY-MM-DD")
       }));
-      setRecoveryForm(prev => ({
+      setRecoveryForm((prev: any) => ({
         ...prev,
         date: dayjs(now).format("YYYY-MM-DD")
       }));
@@ -204,7 +204,7 @@ export default function AttendancePage() {
         const data = await res.json();
         setSysSettings(data);
         // Update createForm defaults if needed
-        setCreateForm(prev => ({
+        setCreateForm((prev: any) => ({
           ...prev,
           checkIn: data.officeStartTime ? `${data.officeStartTime}:00` : "09:30:00",
           checkOut: data.officeEndTime ? `${data.officeEndTime}:00` : "18:30:00"
@@ -948,21 +948,43 @@ export default function AttendancePage() {
                         : "-";
                       
                       const shiftDurationMinutes = (() => {
-                        const officeStartTime = sysSettings?.officeStartTime || "09:30";
-                        const officeEndTime = sysSettings?.officeEndTime || "18:30";
-                        let [sh, sm] = officeStartTime.split(':').map(Number);
-                        let [eh, em] = officeEndTime.split(':').map(Number);
-                        if (sh >= 8 && sh <= 16 && eh >= 1 && eh <= 8) {
-                          eh += 12;
-                        }
-                        let diff = (eh * 60 + em) - (sh * 60 + sm);
+                        const emp = allEmployees.find(e => e.id === row.employeeId || e.employeeId === row.employeeId);
+                        const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
+                        const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
+                        
+                        const parseTimeToMinutes = (timeStr: string): number => {
+                          if (!timeStr) return 0;
+                          const cleaned = timeStr.trim().toUpperCase();
+                          let hours = 0;
+                          let minutes = 0;
+                          const ampmMatch = cleaned.match(/(\d+):(\d+)(?::\d+)?\s*(AM|PM)/);
+                          if (ampmMatch) {
+                            hours = parseInt(ampmMatch[1], 10);
+                            minutes = parseInt(ampmMatch[2], 10);
+                            const ampm = ampmMatch[3];
+                            if (ampm === "PM" && hours < 12) hours += 12;
+                            if (ampm === "AM" && hours === 12) hours = 0;
+                          } else {
+                            const parts = cleaned.split(':');
+                            hours = parseInt(parts[0] || '0', 10);
+                            minutes = parseInt(parts[1] || '0', 10);
+                            if (hours >= 1 && hours <= 8) {
+                              hours += 12;
+                            }
+                          }
+                          return hours * 60 + minutes;
+                        };
+
+                        const startMinutes = parseTimeToMinutes(officeStartTime);
+                        const endMinutes = parseTimeToMinutes(officeEndTime);
+                        let diff = endMinutes - startMinutes;
                         if (diff < 0) {
                           diff += 24 * 60;
                         }
                         return diff;
                       })();
                       
-                      const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
+                      const overtimeMinutes = productionMinutes > 0 ? Math.max(0, productionMinutes - shiftDurationMinutes) : 0;
                       const overtimeStr = formatToHhMm(overtimeMinutes);
  
                       let statusLabel = row.status === "Leave" ? "Leave" : (row.checkIn && row.checkIn !== "--" && row.checkIn !== "--:--" ? "Present" : "Absent");
