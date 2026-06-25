@@ -133,11 +133,14 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
                 <SelectContent>
                   {clients
                     .filter(client => !formData.department || client.department === formData.department)
-                    .map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.companyName}
-                    </SelectItem>
-                  ))}
+                    .map((client) => {
+                      const displayName = client.companyName || client.name || "Unknown Client";
+                      return (
+                        <SelectItem key={client.id} value={client.id}>
+                          {displayName} {client.name && client.companyName ? `(${client.name})` : ""}
+                        </SelectItem>
+                      );
+                    })}
                 </SelectContent>
               </Select>
             </div>

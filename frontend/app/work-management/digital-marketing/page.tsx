@@ -1925,11 +1925,14 @@ export default function MarketingReportsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Clients</SelectItem>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.companyName}
-                    </SelectItem>
-                  ))}
+                  {clients.map((client) => {
+                    const displayName = client.companyName || client.name || "Unknown";
+                    return (
+                      <SelectItem key={client.id} value={client.id}>
+                        {displayName} {client.name && client.companyName ? `(${client.name})` : ""}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
