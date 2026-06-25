@@ -1466,6 +1466,9 @@ class MarketingMonthlyReportBase(BaseModel):
     totalRevenue: float = 0
     overallROAS: float = 0
     conclusion: Optional[str] = None
+    employeeConclusion: Optional[str] = None
+    adminConclusion: Optional[str] = None
+    clientConclusion: Optional[str] = None
 
 class MarketingMonthlyReportCreate(MarketingMonthlyReportBase):
     clientId: Optional[str] = None

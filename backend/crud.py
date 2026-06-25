@@ -3864,6 +3864,14 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: list =
     
     aggregated = await db.marketing_daily_reports.aggregate(pipeline).to_list(length=1000)
     
+    display_month = "All"
+    if isinstance(month, str):
+        display_month = month if month != "all" else "All"
+    elif isinstance(month, list) and month:
+        filtered_months = [m for m in month if m != "all"]
+        if filtered_months:
+            display_month = ", ".join(filtered_months)
+
     # Fetch manual conclusions from existing marketing_monthly_reports collection
     monthly_query = {}
     if is_restricted:
@@ -3877,7 +3885,13 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: list =
         monthly_query.pop("$or", None)
         
     if month and month != "all":
-        monthly_query["month"] = month
+        # Handle if month is a list from FastAPI
+        if isinstance(month, list):
+            valid_months = [m for m in month if m != "all"]
+            if valid_months:
+                monthly_query["month"] = {"$in": valid_months}
+        else:
+            monthly_query["month"] = month
         
     manual_reports_cursor = db.marketing_monthly_reports.find(monthly_query)
     manual_reports = {doc.get("clientId"): doc async for doc in manual_reports_cursor}
@@ -3894,14 +3908,6 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: list =
         cpr = spend / leads if leads > 0 else 0
         roas = revenue / spend if spend > 0 else 0
         
-        display_month = "All"
-        if isinstance(month, str):
-            display_month = month if month != "all" else "All"
-        elif isinstance(month, list) and month:
-            filtered_months = [m for m in month if m != "all"]
-            if filtered_months:
-                display_month = ", ".join(filtered_months)
-        
         report = {
             "id": str(manual.get("_id")) if manual.get("_id") else f"agg-{cid}-{display_month}",
             "clientId": cid,
@@ -3914,7 +3920,10 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: list =
             "avgCPR": cpr,
             "avgCPP": 0,
             "overallROAS": roas,
-            "conclusion": manual.get("conclusion") or ""
+            "conclusion": manual.get("conclusion") or "",
+            "employeeConclusion": manual.get("employeeConclusion") or "",
+            "adminConclusion": manual.get("adminConclusion") or "",
+            "clientConclusion": manual.get("clientConclusion") or ""
         }
         results.append(report)
         
@@ -3933,6 +3942,9 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: list =
             doc["avgCPP"] = float(doc.get("avgCPP") or 0)
             doc["overallROAS"] = float(doc.get("overallROAS") or 0)
             doc["conclusion"] = doc.get("conclusion") or ""
+            doc["employeeConclusion"] = doc.get("employeeConclusion") or ""
+            doc["adminConclusion"] = doc.get("adminConclusion") or ""
+            doc["clientConclusion"] = doc.get("clientConclusion") or ""
             results.append(doc)
             
     return results

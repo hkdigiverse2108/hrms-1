@@ -225,6 +225,10 @@ export function PendingWorkEmbedded({
 
       if (!isEmployeeOrIntern || canSee || type === 'all') {
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
+          
+          const assignee = employees.find((e: any) => e.id === ow.assigneeId);
+          const assigner = employees.find((e: any) => e.id === ow.assignerId);
+
           tasks.push({
             ...ow,
             clientDisplayName: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Other Work',
@@ -233,6 +237,8 @@ export function PendingWorkEmbedded({
             deadline: ow.deadline,
             type: ow.taskType || 'other-work',
             taskName: ow.title,
+            assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : (ow.assigneeName || null),
+            assignerName: assigner ? `${assigner.firstName} ${assigner.lastName}` : (ow.assignerName || null),
             isOtherWork: true
           });
         }
