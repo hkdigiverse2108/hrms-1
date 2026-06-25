@@ -3293,7 +3293,7 @@ export default function MarketingReportsPage() {
 
                                       <TableCell className="font-medium text-slate-800">
                                         <div className="flex flex-col items-start gap-1">
-                                          <span>{getProjectNamesForReport(report)}</span>
+                                          <span>{getProjectNameForReport(report)}</span>
                                           {projects.find((p: any) => (p.id === report.projectId || p.clientId === report.clientId))?.status === 'on-hold' && (
                                             <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
                                           )}
