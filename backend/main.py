@@ -2267,9 +2267,13 @@ async def get_free_slots(request: dict, db=Depends(get_db)):
         else:
             merged.append((start, end))
 
-    # Office hours: 09:30 to 18:30
-    office_start = time_to_mins("09:30")
-    office_end = time_to_mins("18:30")
+    # Office hours: get from settings, default to 09:30 to 18:30
+    sys_settings = await crud.get_system_settings(db)
+    office_start_str = sys_settings.get("officeStartTime", "09:30")
+    office_end_str = sys_settings.get("officeEndTime", "18:30")
+    
+    office_start = time_to_mins(office_start_str)
+    office_end = time_to_mins(office_end_str)
 
     # If the requested date is today, do not allow past time slots
     now = crud.get_now()

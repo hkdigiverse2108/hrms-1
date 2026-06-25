@@ -348,15 +348,17 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
 
   // Watch for changes in add mode
   useEffect(() => {
-    fetchFreeSlots(selectedEmployeeIds, meetingDate);
-  }, [selectedEmployeeIds, meetingDate, fetchFreeSlots]);
+    const idsToCheck = userId ? Array.from(new Set([...selectedEmployeeIds, userId])) : selectedEmployeeIds;
+    fetchFreeSlots(idsToCheck, meetingDate);
+  }, [selectedEmployeeIds, meetingDate, fetchFreeSlots, userId]);
 
   // Watch for changes in edit mode
   useEffect(() => {
     if (editingIdx !== null) {
-      fetchEditFreeSlots(editSelectedEmployeeIds, editDate);
+      const idsToCheck = userId ? Array.from(new Set([...editSelectedEmployeeIds, userId])) : editSelectedEmployeeIds;
+      fetchEditFreeSlots(idsToCheck, editDate);
     }
-  }, [editSelectedEmployeeIds, editDate, editingIdx, fetchEditFreeSlots]);
+  }, [editSelectedEmployeeIds, editDate, editingIdx, fetchEditFreeSlots, userId]);
 
   // Sync selected employee IDs to attendees string
   useEffect(() => {
