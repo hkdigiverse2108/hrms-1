@@ -44,6 +44,7 @@ export function PendingWorkEmbedded({
 
   const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null);
   const [editingRemarkValue, setEditingRemarkValue] = useState<string>('');
+  const [editingIsClientIssue, setEditingIsClientIssue] = useState<boolean>(false);
   
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<any[]>([]);
@@ -59,13 +60,15 @@ export function PendingWorkEmbedded({
       const user = storedUser ? JSON.parse(storedUser) : null;
       const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
 
+      const finalRemark = editingIsClientIssue ? `[CLIENT ISSUE] ${editingRemarkValue}` : editingRemarkValue;
+
       const response = await fetch(`${API_URL}/content-calendar/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remark: editingRemarkValue, updatedBy: userName, remarkStage: stage }),
+        body: JSON.stringify({ remark: finalRemark, updatedBy: userName, remarkStage: stage }),
       });
       if (response.ok) {
-        setEntries(entries.map(e => e.id === id ? { ...e, remark: editingRemarkValue, remarkStage: stage } : e));
+        setEntries(entries.map(e => e.id === id ? { ...e, remark: finalRemark, remarkStage: stage } : e));
         setEditingRemarkId(null);
       }
     } catch (err) {
@@ -309,14 +312,19 @@ export function PendingWorkEmbedded({
         }
 
         const hasApplicableRemark = t.remark && t.remark.trim() !== '' && (!t.remarkStage || t.stage === t.remarkStage);
+        const isClientIssue = hasApplicableRemark && t.remark.startsWith('[CLIENT ISSUE] ');
 
         if (type === 'pending-work') {
+          if (isClientIssue) return true;
           return hasApplicableRemark;
         }
         
         if (type === 'completed-work') {
           return false; // For now, only Other Work is shown in completed work
         }
+
+        // If it's a client issue, it should ONLY show in pending work!
+        if (isClientIssue) return false;
         
         const deadlineDate = new Date(t.deadline);
         deadlineDate.setHours(0, 0, 0, 0);
@@ -527,35 +535,64 @@ export function PendingWorkEmbedded({
                         const displayRemark = isApplicable ? item.remark : null;
 
                         return editingRemarkId === `${item.id}-${item.stage}` ? (
-                          <div className="flex items-center gap-1.5 min-w-[150px]">
-                            <Input 
-                              value={editingRemarkValue}
-                              onChange={(e) => setEditingRemarkValue(e.target.value)}
-                              className="h-8 text-xs px-2 py-1 w-full focus-visible:ring-brand-teal"
-                              autoFocus
-                              placeholder="Type reason..."
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveRemark(item.id, item.stage);
-                                if (e.key === 'Escape') setEditingRemarkId(null);
-                              }}
-                            />
-                            <button onClick={() => handleSaveRemark(item.id, item.stage)} className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors" title="Save">
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => setEditingRemarkId(null)} className="text-slate-400 hover:bg-slate-100 p-1.5 rounded transition-colors" title="Cancel">
-                              <X className="w-4 h-4" />
-                            </button>
+                          <div className="flex flex-col gap-1.5 min-w-[150px]">
+                            <div className="flex items-center gap-1.5">
+                              <Input 
+                                value={editingRemarkValue}
+                                onChange={(e) => setEditingRemarkValue(e.target.value)}
+                                className="h-8 text-xs px-2 py-1 w-full focus-visible:ring-brand-teal"
+                                autoFocus
+                                placeholder="Type reason..."
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveRemark(item.id, item.stage);
+                                  if (e.key === 'Escape') setEditingRemarkId(null);
+                                }}
+                              />
+                              <button onClick={() => handleSaveRemark(item.id, item.stage)} className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors" title="Save">
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => setEditingRemarkId(null)} className="text-slate-400 hover:bg-slate-100 p-1.5 rounded transition-colors" title="Cancel">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer mt-0.5">
+                              <input 
+                                type="checkbox" 
+                                className="w-3 h-3 text-red-500 rounded border-slate-300 focus:ring-red-500 cursor-pointer"
+                                checked={editingIsClientIssue}
+                                onChange={(e) => setEditingIsClientIssue(e.target.checked)}
+                              />
+                              <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Issue from client</span>
+                            </label>
                           </div>
                         ) : (
                           <div 
-                            className="cursor-pointer py-1 px-1 -mx-1 rounded hover:bg-slate-100 truncate flex-1 text-slate-600"
+                            className="cursor-pointer py-1 px-1 -mx-1 rounded hover:bg-slate-100 truncate flex-1 flex flex-col gap-0.5"
                             onClick={() => {
                               setEditingRemarkId(`${item.id}-${item.stage}`);
-                              setEditingRemarkValue(displayRemark || '');
+                              const remarkText = displayRemark || '';
+                              if (remarkText.startsWith('[CLIENT ISSUE] ')) {
+                                setEditingIsClientIssue(true);
+                                setEditingRemarkValue(remarkText.replace('[CLIENT ISSUE] ', ''));
+                              } else {
+                                setEditingIsClientIssue(false);
+                                setEditingRemarkValue(remarkText);
+                              }
                             }}
                             title={displayRemark || ""}
                           >
-                            {displayRemark || "-"}
+                            {displayRemark ? (
+                                displayRemark.startsWith('[CLIENT ISSUE] ') ? (
+                                  <>
+                                    <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Client Issue</span>
+                                    <span className="text-slate-600 truncate">{displayRemark.replace('[CLIENT ISSUE] ', '')}</span>
+                                  </>
+                                ) : (
+                                  <span className="text-slate-600 truncate">{displayRemark}</span>
+                                )
+                            ) : (
+                                "-"
+                            )}
                           </div>
                         );
                       })()}
