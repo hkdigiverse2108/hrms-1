@@ -3464,7 +3464,7 @@ export default function MarketingReportsPage() {
           </div>
         </TabsContent>
         <TabsContent value="tasks" className="flex-1 overflow-hidden mt-0">
-          <PendingWorkEmbedded type="all" defaultTaskType="digital-marketing" />
+          <PendingWorkEmbedded type="all" defaultTaskType="digital-marketing" hideTaskTypeFilter hideStageFilter hideProjectFilter />
         </TabsContent>
         {user?.role?.toLowerCase() === 'admin' && (
           <TabsContent value="analysis" className="flex-1 overflow-y-auto mt-0 px-1 pb-10">

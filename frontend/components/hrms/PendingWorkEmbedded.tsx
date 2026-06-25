@@ -14,10 +14,16 @@ import { toast } from 'sonner';
 
 export function PendingWorkEmbedded({ 
   type = "pending-work",
-  defaultTaskType = "all"
+  defaultTaskType = "all",
+  hideTaskTypeFilter = false,
+  hideStageFilter = false,
+  hideProjectFilter = false
 }: { 
   type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work" | "all",
-  defaultTaskType?: string
+  defaultTaskType?: string,
+  hideTaskTypeFilter?: boolean,
+  hideStageFilter?: boolean,
+  hideProjectFilter?: boolean
 }) {
   const router = useRouter();
   
@@ -331,47 +337,53 @@ export function PendingWorkEmbedded({
             )}
           </div>
 
-          <Select value={filterTaskType} onValueChange={setFilterTaskType}>
-            <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
-              <SelectValue placeholder="Task Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="content-calendar">Content Calendar</SelectItem>
-              <SelectItem value="other-work">Other Work</SelectItem>
-              <SelectItem value="digital-marketing">Digital Marketing</SelectItem>
-            </SelectContent>
-          </Select>
+          {!hideTaskTypeFilter && (
+            <Select value={filterTaskType} onValueChange={setFilterTaskType}>
+              <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
+                <SelectValue placeholder="Task Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="content-calendar">Content Calendar</SelectItem>
+                <SelectItem value="other-work">Other Work</SelectItem>
+                <SelectItem value="digital-marketing">Digital Marketing</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
 
-          <Select value={filterStage} onValueChange={setFilterStage}>
-            <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
-              <SelectValue placeholder="Stage" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stages</SelectItem>
-              <SelectItem value="script">Script</SelectItem>
-              <SelectItem value="shoot">Shoot</SelectItem>
-              <SelectItem value="editing">Editing</SelectItem>
-              <SelectItem value="approval">Approval</SelectItem>
-              <SelectItem value="posting">Posting</SelectItem>
-            </SelectContent>
-          </Select>
+          {!hideStageFilter && (
+            <Select value={filterStage} onValueChange={setFilterStage}>
+              <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
+                <SelectValue placeholder="Stage" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Stages</SelectItem>
+                <SelectItem value="script">Script</SelectItem>
+                <SelectItem value="shoot">Shoot</SelectItem>
+                <SelectItem value="editing">Editing</SelectItem>
+                <SelectItem value="approval">Approval</SelectItem>
+                <SelectItem value="posting">Posting</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
 
-          <Select value={filterProject} onValueChange={setFilterProject}>
-            <SelectTrigger className="w-full sm:w-[200px] h-9 text-sm bg-white">
-              <SelectValue placeholder="Filter by Project" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Projects</SelectItem>
-              {Object.entries(clientProjects).map(([cId, project]) => {
-                const client = clients.find(c => c.id === cId);
-                const cName = client ? (client.companyName || client.clientName) : '';
-                return (
-                  <SelectItem key={cId} value={cId}>{project.title} ({cName})</SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
+          {!hideProjectFilter && (
+            <Select value={filterProject} onValueChange={setFilterProject}>
+              <SelectTrigger className="w-full sm:w-[200px] h-9 text-sm bg-white">
+                <SelectValue placeholder="Filter by Project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {Object.entries(clientProjects).map(([cId, project]) => {
+                  const client = clients.find(c => c.id === cId);
+                  const cName = client ? (client.companyName || client.clientName) : '';
+                  return (
+                    <SelectItem key={cId} value={cId}>{project.title} ({cName})</SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
       {loading ? (
