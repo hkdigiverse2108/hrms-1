@@ -37,6 +37,8 @@ export function PendingWorkEmbedded({
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterStage, setFilterStage] = useState<string>('all');
   const [filterTaskType, setFilterTaskType] = useState<string>(defaultTaskType);
+  const [filterAssigner, setFilterAssigner] = useState<string>('all');
+  const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState<string>('');
 
@@ -256,6 +258,16 @@ export function PendingWorkEmbedded({
       filteredTasks = filteredTasks.filter(t => t.stage.toLowerCase() === filterStage.toLowerCase());
     }
 
+    // Apply Assigner Filter
+    if (filterAssigner !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.assignerName && t.assignerName === filterAssigner);
+    }
+
+    // Apply Assignee Filter
+    if (filterAssignee !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.assigneeName && t.assigneeName === filterAssignee);
+    }
+
     // Apply Search Query
     if (searchQuery.trim()) {
       const lowerQ = searchQuery.toLowerCase();
@@ -317,96 +329,135 @@ export function PendingWorkEmbedded({
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, searchQuery, filterDate, type, employees]);
+  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
       {/* Filters Bar */}
-      <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-50/50">
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <ClipboardList className="w-5 h-5 text-brand-teal" />
-          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : type === 'all' ? 'All Tasks' : 'Pending Work'}
-          </h2>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          <div className="relative w-full sm:w-48">
+      <div className="flex flex-col border-b border-slate-200 bg-slate-50/50">
+        {/* Top Header Row */}
+        <div className="p-4 pb-3 flex flex-col sm:flex-row gap-4 items-center justify-between">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <ClipboardList className="w-5 h-5 text-brand-teal" />
+            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+              {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : type === 'all' ? 'All Tasks' : 'Pending Work'}
+            </h2>
+          </div>
+          
+          <div className="relative w-full sm:w-72">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <Input 
-              placeholder="Search tasks..." 
+              placeholder="Search tasks, clients, or stages..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 text-sm bg-white"
+              className="pl-9 h-9 text-sm bg-white border-slate-200 shadow-sm rounded-full focus-visible:ring-brand-teal"
             />
           </div>
+        </div>
 
-          <div className="relative w-full sm:w-[160px]">
-            <Input 
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="h-9 text-sm bg-white pr-8 text-slate-600"
-            />
-            {filterDate && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="absolute right-0 top-0 h-9 w-9 hover:bg-transparent"
-                onClick={() => setFilterDate('')}
-              >
-                <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
-              </Button>
+        {/* Bottom Filters Row */}
+        <div className="px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div className="flex items-center gap-2 min-w-max">
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm mr-2">
+              <Filter className="w-4 h-4 text-slate-400 mx-2" />
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider pr-2">Filters</span>
+            </div>
+
+            <div className="relative w-[150px]">
+              <Input 
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="h-9 text-sm bg-white pr-8 text-slate-600 rounded-md border-slate-200 focus-visible:ring-brand-teal"
+              />
+              {filterDate && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute right-0 top-0 h-9 w-9 hover:bg-transparent"
+                  onClick={() => setFilterDate('')}
+                >
+                  <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+                </Button>
+              )}
+            </div>
+
+            {!hideTaskTypeFilter && (
+              <Select value={filterTaskType} onValueChange={setFilterTaskType}>
+                <SelectTrigger className="w-[150px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                  <SelectValue placeholder="Task Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="content-calendar">Content Calendar</SelectItem>
+                  <SelectItem value="other-work">Other Work</SelectItem>
+                  <SelectItem value="digital-marketing">Digital Marketing</SelectItem>
+                </SelectContent>
+              </Select>
             )}
+
+            {!hideStageFilter && (
+              <Select value={filterStage} onValueChange={setFilterStage}>
+                <SelectTrigger className="w-[140px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                  <SelectValue placeholder="Stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Stages</SelectItem>
+                  <SelectItem value="script">Script</SelectItem>
+                  <SelectItem value="shoot">Shoot</SelectItem>
+                  <SelectItem value="editing">Editing</SelectItem>
+                  <SelectItem value="approval">Approval</SelectItem>
+                  <SelectItem value="posting">Posting</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            {!hideProjectFilter && (
+              <Select value={filterProject} onValueChange={setFilterProject}>
+                <SelectTrigger className="w-[180px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                  <SelectValue placeholder="Filter by Project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  {Object.entries(clientProjects).map(([cId, project]) => {
+                    const client = clients.find(c => c.id === cId);
+                    const cName = client ? (client.companyName || client.clientName) : '';
+                    return (
+                      <SelectItem key={cId} value={cId}>{project.title} ({cName})</SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Select value={filterAssigner} onValueChange={setFilterAssigner}>
+              <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                <SelectValue placeholder="Assigned By" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Assigned By: All</SelectItem>
+                {employees.map(emp => (
+                  <SelectItem key={`assigner-${emp.id}`} value={`${emp.firstName} ${emp.lastName}`}>
+                    {emp.firstName} {emp.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+              <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                <SelectValue placeholder="Assigned To" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Assigned To: All</SelectItem>
+                {employees.map(emp => (
+                  <SelectItem key={`assignee-${emp.id}`} value={`${emp.firstName} ${emp.lastName}`}>
+                    {emp.firstName} {emp.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-
-          {!hideTaskTypeFilter && (
-            <Select value={filterTaskType} onValueChange={setFilterTaskType}>
-              <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
-                <SelectValue placeholder="Task Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="content-calendar">Content Calendar</SelectItem>
-                <SelectItem value="other-work">Other Work</SelectItem>
-                <SelectItem value="digital-marketing">Digital Marketing</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-
-          {!hideStageFilter && (
-            <Select value={filterStage} onValueChange={setFilterStage}>
-              <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
-                <SelectValue placeholder="Stage" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Stages</SelectItem>
-                <SelectItem value="script">Script</SelectItem>
-                <SelectItem value="shoot">Shoot</SelectItem>
-                <SelectItem value="editing">Editing</SelectItem>
-                <SelectItem value="approval">Approval</SelectItem>
-                <SelectItem value="posting">Posting</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-
-          {!hideProjectFilter && (
-            <Select value={filterProject} onValueChange={setFilterProject}>
-              <SelectTrigger className="w-full sm:w-[200px] h-9 text-sm bg-white">
-                <SelectValue placeholder="Filter by Project" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Projects</SelectItem>
-                {Object.entries(clientProjects).map(([cId, project]) => {
-                  const client = clients.find(c => c.id === cId);
-                  const cName = client ? (client.companyName || client.clientName) : '';
-                  return (
-                    <SelectItem key={cId} value={cId}>{project.title} ({cName})</SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          )}
         </div>
       </div>
       {loading ? (
