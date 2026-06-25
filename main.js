@@ -826,6 +826,14 @@ function createWindow() {
     }
   });
 
+  ipcMain.on('open-external', (event, url) => {
+    if (url && (url.startsWith('http:') || url.startsWith('https:'))) {
+      const { shell } = require('electron');
+      shell.openExternal(url);
+      log(`Opened external URL: ${url}`);
+    }
+  });
+
   ipcMain.on('save-session', (event, sessionData) => {
     try {
       const sessionPath = path.join(app.getPath('userData'), 'session.json');

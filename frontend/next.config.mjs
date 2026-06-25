@@ -19,6 +19,10 @@ const nextConfig = {
     return {
       beforeFiles: [
         {
+          source: '/uploads/:path*',
+          destination: `${backendUrl}/uploads/:path*`,
+        },
+        {
           source: '/api/activity/session-active/:path*',
           destination: `http://127.0.0.1:${localBackendPort}/activity/session-active/:path*`,
         },
