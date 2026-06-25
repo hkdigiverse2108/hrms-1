@@ -1839,7 +1839,7 @@ export default function MarketingReportsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <OtherWorkDialog source="digital-marketing" />
+          {(isAdmin || user?.role === 'Team Leader' || user?.role === 'HR') && <OtherWorkDialog source="digital-marketing" />}
         </div>
       </div>
 

@@ -967,7 +967,7 @@ export default function CreativeClientsPage() {
             Daily Progress
           </Button>
         )}
-        <OtherWorkDialog />
+        {(isAdmin || user?.role === 'Team Leader' || user?.role === 'HR') && <OtherWorkDialog />}
         <Button onClick={() => router.push('/work-management/smm/common/feedback')} className="h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 gap-2 w-full md:w-auto shrink-0 border border-slate-200">
           <ClipboardList className="w-4 h-4" />
           View Common Forms
