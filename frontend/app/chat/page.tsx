@@ -239,6 +239,7 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
 
 export default function ChatPage() {
   const { user } = useUser();
+  const { confirm } = useConfirm();
   const { ws, lastEvent, unreadCounts, markAsSeen: contextMarkAsSeen, onlineUsers, isWindowFocused } = useChatContext();
   const { data: apiData, isLoading } = useApi();
   const [selectedChat, setSelectedChat] = useState<any>(null);
@@ -529,21 +530,44 @@ export default function ChatPage() {
     const chatArea = document.querySelector('.whatsapp-chat-bg');
     if (!chatArea) return;
 
-    const handleContextMenu = (e: MouseEvent) => {
+    const handleContextMenu = (e: Event) => {
       const target = e.target as HTMLElement;
-      const isOnMessage = !!target.closest('[id^="msg-"]');
+      const me = e as MouseEvent;
       const isOnInput = !!target.closest('textarea') || !!target.closest('input') || !!target.closest('button');
       const isOnContextMenu = !!target.closest('.custom-ctx-menu');
-      if (!isOnMessage && !isOnInput && !isOnContextMenu) {
-        e.preventDefault();
-        e.stopPropagation();
-        setChatBackgroundContextMenu({ x: e.clientX, y: e.clientY });
+      
+      if (isOnInput) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const bubbleElement = target.closest('.whatsapp-bubble');
+      if (bubbleElement) {
+        const msgElement = target.closest('[id^="msg-"]');
+        if (msgElement) {
+          const msgId = msgElement.id.replace('msg-', '');
+          const msg = currentMessages.find(m => m.id === msgId);
+          if (msg) {
+            setContextMenu({
+              x: me.clientX,
+              y: me.clientY,
+              msg
+            });
+            setChatBackgroundContextMenu(null);
+            return;
+          }
+        }
+      }
+
+      if (!isOnContextMenu) {
+        setChatBackgroundContextMenu({ x: me.clientX, y: me.clientY });
+        setContextMenu(null);
       }
     };
 
     chatArea.addEventListener('contextmenu', handleContextMenu, true);
     return () => chatArea.removeEventListener('contextmenu', handleContextMenu, true);
-  }, [selectedChat]);
+  }, [selectedChat, currentMessages]);
 
   const toggleMessageSelection = (msgId: string) => {
     setSelectedMessageIds(prev => 
@@ -3344,10 +3368,7 @@ export default function ChatPage() {
                                         src={msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`}
                                         alt={msg.attachmentName} 
                                         className="max-w-full max-h-[200px] object-contain bg-black/5 cursor-pointer hover:opacity-90 transition-opacity"
-                                        onClick={() => setPreviewImage({
-                                          url: msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`,
-                                          name: msg.attachmentName || 'Image'
-                                        })}
+                                        onClick={() => setPreviewImageMsgId(msg.id)}
                                       />
                                     </div>
                                   ) : (
@@ -3989,14 +4010,6 @@ export default function ChatPage() {
                         ) : (
                           <div className="relative group/msg max-w-full w-fit">
                             <div 
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                setContextMenu({
-                                  x: e.clientX,
-                                  y: e.clientY,
-                                  msg
-                                });
-                              }}
                               className={cn(
                                 "whatsapp-bubble text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text w-fit relative",
                                 (msg.attachmentName || imageGroups[msg.id]) 
@@ -5774,131 +5787,194 @@ export default function ChatPage() {
             </Popover>
           </div>
 
-          {contextMenu.msg.isMe && selectedChat?.type !== 'personal' && (
-            <button 
-              type="button"
-              onClick={() => { setMsgInfoData(contextMenu.msg); setContextMenu(null); }}
-              className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-            >
-              <Info className="w-4 h-4 text-slate-400" />
-              Message Info
-            </button>
-          )}
+          {isSelectionMode ? (
+            <>
+              <button 
+                type="button"
+                onClick={() => {
+                  toggleMessageSelection(contextMenu.msg.id);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                {selectedMessageIds.includes(contextMenu.msg.id) ? (
+                  <>
+                    <X className="w-4 h-4 text-slate-400" />
+                    Deselect message
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 text-slate-400" />
+                    Select message
+                  </>
+                )}
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  handleForwardSelectedMessages();
+                  setContextMenu(null);
+                }}
+                disabled={selectedMessageIds.length === 0}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors disabled:opacity-50"
+              >
+                <Forward className="w-4 h-4 text-slate-400" />
+                Forward selected ({selectedMessageIds.length})
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  exitSelectionMode();
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <X className="w-4 h-4 text-slate-400" />
+                Clear selection
+              </button>
+            </>
+          ) : (
+            <>
+              {contextMenu.msg.isMe && selectedChat?.type !== 'personal' && (
+                <button 
+                  type="button"
+                  onClick={() => { setMsgInfoData(contextMenu.msg); setContextMenu(null); }}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                >
+                  <Info className="w-4 h-4 text-slate-400" />
+                  Message Info
+                </button>
+              )}
 
-          <button 
-            type="button" 
-            onClick={() => { 
-              setReplyingTo(contextMenu.msg); 
-              setContextMenu(null); 
-              setTimeout(() => messageInputRef.current?.focus(), 50);
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <Reply className="w-4 h-4 text-slate-400" />
-            Reply
-          </button>
-          
-          <button 
-            type="button"
-            onClick={async () => { 
-              if (contextMenu.msg.text && !contextMenu.msg.attachmentName) {
-                navigator.clipboard.writeText(contextMenu.msg.text);
-                toast.success("Copied to clipboard!");
-              } else if (contextMenu.msg.attachmentName) {
-                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(contextMenu.msg.attachmentName);
-                if (isImage) {
-                  try {
-                    const fullUrl = contextMenu.msg.attachmentUrl.startsWith('http') 
-                      ? contextMenu.msg.attachmentUrl 
-                      : `${API_URL}${contextMenu.msg.attachmentUrl}`;
-                    
-                    const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    img.src = fullUrl;
-                    img.onload = () => {
-                      const canvas = document.createElement('canvas');
-                      canvas.width = img.naturalWidth;
-                      canvas.height = img.naturalHeight;
-                      const ctx = canvas.getContext('2d');
-                      if (ctx) {
-                        ctx.drawImage(img, 0, 0);
-                        canvas.toBlob(async (pngBlob) => {
-                          if (pngBlob) {
-                            try {
-                              await navigator.clipboard.write([
-                                new ClipboardItem({
-                                  [pngBlob.type]: pngBlob
-                                })
-                              ]);
-                              toast.success("Image copied to clipboard!");
-                            } catch (err) {
-                              navigator.clipboard.writeText(fullUrl);
-                              toast.success("Copied image link to clipboard!");
-                            }
+              <button 
+                type="button" 
+                onClick={() => { 
+                  setReplyingTo(contextMenu.msg); 
+                  setContextMenu(null); 
+                  setTimeout(() => messageInputRef.current?.focus(), 50);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <Reply className="w-4 h-4 text-slate-400" />
+                Reply
+              </button>
+              
+              <button 
+                type="button"
+                onClick={async () => { 
+                  if (contextMenu.msg.text && !contextMenu.msg.attachmentName) {
+                    navigator.clipboard.writeText(contextMenu.msg.text);
+                    toast.success("Copied to clipboard!");
+                  } else if (contextMenu.msg.attachmentName) {
+                    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(contextMenu.msg.attachmentName);
+                    if (isImage) {
+                      try {
+                        const fullUrl = contextMenu.msg.attachmentUrl.startsWith('http') 
+                          ? contextMenu.msg.attachmentUrl 
+                          : `${API_URL}${contextMenu.msg.attachmentUrl}`;
+                        
+                        const img = new Image();
+                        img.crossOrigin = "anonymous";
+                        img.src = fullUrl;
+                        img.onload = () => {
+                          const canvas = document.createElement('canvas');
+                          canvas.width = img.naturalWidth;
+                          canvas.height = img.naturalHeight;
+                          const ctx = canvas.getContext('2d');
+                          if (ctx) {
+                            ctx.drawImage(img, 0, 0);
+                            canvas.toBlob(async (pngBlob) => {
+                              if (pngBlob) {
+                                try {
+                                  await navigator.clipboard.write([
+                                    new ClipboardItem({
+                                      [pngBlob.type]: pngBlob
+                                    })
+                                  ]);
+                                  toast.success("Image copied to clipboard!");
+                                } catch (err) {
+                                  navigator.clipboard.writeText(fullUrl);
+                                  toast.success("Copied image link to clipboard!");
+                                }
+                              }
+                            }, 'image/png');
                           }
-                        }, 'image/png');
+                        };
+                        img.onerror = () => {
+                          navigator.clipboard.writeText(fullUrl);
+                          toast.success("Copied image link to clipboard!");
+                        };
+                      } catch (e) {
+                        navigator.clipboard.writeText(contextMenu.msg.attachmentName);
+                        toast.success("Copied file name to clipboard!");
                       }
-                    };
-                    img.onerror = () => {
-                      navigator.clipboard.writeText(fullUrl);
-                      toast.success("Copied image link to clipboard!");
-                    };
-                  } catch (e) {
-                    navigator.clipboard.writeText(contextMenu.msg.attachmentName);
-                    toast.success("Copied file name to clipboard!");
+                    } else {
+                      navigator.clipboard.writeText(contextMenu.msg.attachmentName);
+                      toast.success("Copied file name to clipboard!");
+                    }
                   }
-                } else {
-                  navigator.clipboard.writeText(contextMenu.msg.attachmentName);
-                  toast.success("Copied file name to clipboard!");
-                }
-              }
-              setContextMenu(null); 
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <Copy className="w-4 h-4 text-slate-400" />
-            Copy
-          </button>
+                  setContextMenu(null); 
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <Copy className="w-4 h-4 text-slate-400" />
+                Copy
+              </button>
 
-          <button 
-            type="button"
-            onClick={() => { setForwardingMessage(contextMenu.msg); setForwardingMessages(null); setContextMenu(null); }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <Forward className="w-4 h-4 text-slate-400" />
-            Forward
-          </button>
+              <button 
+                type="button"
+                onClick={() => { setForwardingMessage(contextMenu.msg); setForwardingMessages(null); setContextMenu(null); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <Forward className="w-4 h-4 text-slate-400" />
+                Forward
+              </button>
 
-          <button 
-            type="button"
-            onClick={() => { handleTogglePin(contextMenu.msg.id); setContextMenu(null); }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <Pin className={cn("w-4 h-4 text-slate-400", contextMenu.msg.isPinned && "fill-current text-brand-teal")} />
-            {contextMenu.msg.isPinned ? "Unpin" : "Pin"}
-          </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  enterSelectionMode();
+                  toggleMessageSelection(contextMenu.msg.id);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <CheckCheck className="w-4 h-4 text-slate-400" />
+                Select messages
+              </button>
 
-          <button 
-            type="button"
-            onClick={() => { 
-              if (contextMenu.msg.attachmentUrl) {
-                handleDownload(contextMenu.msg.attachmentUrl, contextMenu.msg.attachmentName);
-              } else if (contextMenu.msg.text) {
-                const blob = new Blob([contextMenu.msg.text], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `msg-${contextMenu.msg.id}.txt`;
-                a.click();
-                toast.success("Saved text message!");
-              }
-              setContextMenu(null); 
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <Download className="w-4 h-4 text-slate-400" />
-            Save as
-          </button>
+              <button 
+                type="button"
+                onClick={() => { handleTogglePin(contextMenu.msg.id); setContextMenu(null); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <Pin className={cn("w-4 h-4 text-slate-400", contextMenu.msg.isPinned && "fill-current text-brand-teal")} />
+                {contextMenu.msg.isPinned ? "Unpin" : "Pin"}
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => { 
+                  if (contextMenu.msg.attachmentUrl) {
+                    handleDownload(contextMenu.msg.attachmentUrl, contextMenu.msg.attachmentName);
+                  } else if (contextMenu.msg.text) {
+                    const blob = new Blob([contextMenu.msg.text], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `msg-${contextMenu.msg.id}.txt`;
+                    a.click();
+                    toast.success("Saved text message!");
+                  }
+                  setContextMenu(null); 
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <Download className="w-4 h-4 text-slate-400" />
+                Save as
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -5912,22 +5988,52 @@ export default function ChatPage() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button 
-            type="button"
-            onClick={() => { enterSelectionMode(); }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <CheckCheck className="w-4 h-4 text-slate-400" />
-            Select messages
-          </button>
-          <button 
-            type="button"
-            onClick={() => { setSelectedChat(null as any); setChatBackgroundContextMenu(null); }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
-          >
-            <X className="w-4 h-4 text-slate-400" />
-            Close chat
-          </button>
+          {isSelectionMode ? (
+            <>
+              <button 
+                type="button"
+                onClick={() => {
+                  handleForwardSelectedMessages();
+                  setChatBackgroundContextMenu(null);
+                }}
+                disabled={selectedMessageIds.length === 0}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors disabled:opacity-50"
+              >
+                <Forward className="w-4 h-4 text-slate-400" />
+                Forward selected ({selectedMessageIds.length})
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  exitSelectionMode();
+                  setChatBackgroundContextMenu(null);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <X className="w-4 h-4 text-slate-400" />
+                Clear selection
+              </button>
+            </>
+          ) : (
+            <>
+              <button 
+                type="button"
+                onClick={() => { enterSelectionMode(); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <CheckCheck className="w-4 h-4 text-slate-400" />
+                Select messages
+              </button>
+              <button 
+                type="button"
+                onClick={() => { setSelectedChat(null as any); setChatBackgroundContextMenu(null); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <X className="w-4 h-4 text-slate-400" />
+                Close chat
+              </button>
+            </>
+          )}
         </div>
       )}
 

@@ -41,13 +41,45 @@ const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
 type ViewMode = "day" | "week";
 
 export default function SchedulePage() {
-  const { user, getISTNow } = useUserContext();
+  const { user, getISTNow, updateUser } = useUserContext();
   const { checkPermission, isAdmin } = usePermissions();
+  const [isSyncing, setIsSyncing] = useState(false);
   const canAdd = isAdmin || checkPermission('schedule', 'canAdd');
   const canDeletePerm = isAdmin || checkPermission('schedule', 'canDelete');
   const [currentDate, setCurrentDate] = useState(dayjs(getISTNow()));
   const [calendarMonth, setCalendarMonth] = useState<Date>(dayjs(getISTNow()).toDate());
   const [schedules, setSchedules] = useState<any[]>([]);
+
+  // Sync user profile from server to detect Google Calendar tokens
+  const syncUserProfile = React.useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/employees/${user.id}`);
+      if (res.ok) {
+        const freshUser = await res.json();
+        if (freshUser && !freshUser.detail) {
+          const pRes = await fetch(`${API_URL}/user-permissions/${user.id}`);
+          const pData = pRes.ok ? await pRes.json() : { permissions: [] };
+          if (updateUser) {
+            updateUser({
+              ...freshUser,
+              permissions: pData?.permissions || []
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to sync user profile in schedule:", err);
+    }
+  }, [user?.id, updateUser]);
+
+  useEffect(() => {
+    syncUserProfile();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', syncUserProfile);
+      return () => window.removeEventListener('focus', syncUserProfile);
+    }
+  }, [syncUserProfile]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
@@ -192,8 +224,6 @@ export default function SchedulePage() {
       setIsLoading(false);
     }
   };
-
-  const [isSyncing, setIsSyncing] = useState(false);
 
   const handleDisconnectGoogle = async () => {
     if (!user) return;
@@ -1091,7 +1121,10 @@ export default function SchedulePage() {
                   type="button"
                   onClick={() => {
                     if (user) {
-                      const authUrl = `${API_URL}/auth/google/url?employeeId=${user.id || user.employeeId}`;
+                      const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+                      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                      const baseApi = API_URL.startsWith('http') ? API_URL : `${origin}${API_URL}`;
+                      const authUrl = `${baseApi}/auth/google/url?employeeId=${user.id || user.employeeId}${isDesktop ? '&desktop=true' : ''}`;
                       if (typeof window !== 'undefined' && (window as any).electronAPI?.openExternal) {
                         (window as any).electronAPI.openExternal(authUrl);
                       } else {

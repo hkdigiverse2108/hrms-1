@@ -2302,10 +2302,11 @@ async def get_free_slots(request: dict, db=Depends(get_db)):
 from fastapi.responses import RedirectResponse
 
 @app.get("/auth/google/url")
-async def get_google_auth_url(employeeId: str):
+async def get_google_auth_url(employeeId: str, desktop: bool = False):
     """Generates the Google OAuth URL to link a user's account."""
     try:
-        url = google_auth.get_authorization_url(state=employeeId)
+        state_str = f"{employeeId}:desktop" if desktop else employeeId
+        url = google_auth.get_authorization_url(state=state_str)
         return RedirectResponse(url=url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2315,8 +2316,11 @@ async def get_google_auth_url(employeeId: str):
 async def google_auth_callback(code: str, state: str, db=Depends(get_db)):
     """Handles the OAuth callback, exchanges code for tokens, and saves them."""
     try:
-        # State parameter carries the employeeId
-        employee_id = state
+        # State parameter carries the employeeId and optional desktop flag
+        parts = state.split(":")
+        employee_id = parts[0]
+        is_desktop = len(parts) > 1 and parts[1] == "desktop"
+        
         tokens = google_auth.fetch_tokens(code, state)
         
         from bson import ObjectId
@@ -2332,6 +2336,32 @@ async def google_auth_callback(code: str, state: str, db=Depends(get_db)):
         
         if result.modified_count == 0:
             print(f"Warning: Failed to update Google Calendar Tokens for user {employee_id}. User not found.")
+            
+        if is_desktop:
+            from fastapi.responses import HTMLResponse
+            html_content = """
+            <html>
+            <head>
+              <title>Google Calendar Connected</title>
+              <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f3f4f6; }
+                .card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; max-width: 400px; }
+                h1 { color: #0d9488; margin-top: 0; font-size: 24px; }
+                p { color: #4b5563; font-size: 15px; line-height: 1.5; margin: 10px 0; }
+                .success-icon { font-size: 54px; margin-bottom: 15px; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <div class="success-icon">✅</div>
+                <h1>Google Calendar Connected!</h1>
+                <p>Your Google Calendar has been successfully linked to your HRMS account.</p>
+                <p>You can now close this browser tab and return to the HRMS Desktop Application.</p>
+              </div>
+            </body>
+            </html>
+            """
+            return HTMLResponse(content=html_content, status_code=200)
             
         # Redirect the user back to the frontend schedule page
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3535")
