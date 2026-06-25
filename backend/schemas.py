@@ -1325,6 +1325,7 @@ class Lead(LeadBase):
 class SystemSettingsBase(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = True
     latePunchDeductionEnabled: Optional[bool] = True
+    dailyProgressRejectDeductionEnabled: Optional[bool] = False
     officeStartTime: Optional[str] = "09:30"
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
@@ -1351,6 +1352,7 @@ class SystemSettingsBase(BaseModel):
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
     latePunchDeductionEnabled: Optional[bool] = None
+    dailyProgressRejectDeductionEnabled: Optional[bool] = None
     officeStartTime: Optional[str] = None
     officeEndTime: Optional[str] = None
     lateBufferMins: Optional[int] = None

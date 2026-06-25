@@ -177,6 +177,8 @@ export default function CreativeClientsPage() {
 
   // Advanced Filters
   const [creativeFilter, setCreativeFilter] = useState("all");
+  const [calendarFilterMonth, setCalendarFilterMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`);
+  const [calendarFilterStatus, setCalendarFilterStatus] = useState("all");
   const [activeTab, setActiveTab] = useState("projects");
   
   // Creative Team Assignment
@@ -402,6 +404,25 @@ export default function CreativeClientsPage() {
   const [calendarSettings, setCalendarSettings] = useState<Record<string, any>>({});
   const currentMonthYear = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
+  useEffect(() => {
+    const fetchCalendarSettingsForMonth = async () => {
+      try {
+        const res = await fetch(`${API_URL}/content-calendar-settings/all?monthYear=${calendarFilterMonth}`);
+        if (res.ok) {
+          const settingsList = await res.json();
+          const settingsMap: Record<string, any> = {};
+          settingsList.forEach((s: any) => {
+            settingsMap[s.clientId] = s;
+          });
+          setCalendarSettings(settingsMap);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchCalendarSettingsForMonth();
+  }, [calendarFilterMonth]);
+
   const fetchClients = async () => {
     setIsLoading(true);
     try {
@@ -409,7 +430,7 @@ export default function CreativeClientsPage() {
         fetch(`${API_URL}/clients`),
         fetch(`${API_URL}/content-calendar/all`),
         fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
-        fetch(`${API_URL}/content-calendar-settings/all?monthYear=${currentMonthYear}`),
+        fetch(`${API_URL}/content-calendar-settings/all?monthYear=${calendarFilterMonth}`),
         fetch(`${API_URL}/employees`)
       ]);
       
@@ -838,6 +859,12 @@ export default function CreativeClientsPage() {
       if (!isAssigned) return false;
     }
 
+    if (calendarFilterStatus === "created") {
+      if (!calendarSettings[c.id]) return false;
+    } else if (calendarFilterStatus === "not-created") {
+      if (calendarSettings[c.id]) return false;
+    }
+
     return true;
   });
 
@@ -905,6 +932,32 @@ export default function CreativeClientsPage() {
             </PopoverContent>
           </Popover>
         </div>
+
+        {/* Content Calendar Filter */}
+        <div className="flex items-center h-10 bg-white rounded-md border border-slate-200 shrink-0 w-full md:w-auto overflow-hidden text-sm transition-all focus-within:ring-1 focus-within:ring-brand-teal focus-within:border-brand-teal">
+          <div className="flex items-center gap-2 px-3 bg-slate-50/80 border-r border-slate-200 h-full text-slate-600 shrink-0">
+            <CalendarClock className="h-4 w-4" />
+            <span className="font-medium hidden xl:inline">Calendar</span>
+          </div>
+          <input 
+            type="month" 
+            value={calendarFilterMonth} 
+            onChange={(e) => setCalendarFilterMonth(e.target.value)}
+            className="h-full bg-transparent border-none text-slate-700 outline-none cursor-pointer w-[135px] px-3 focus:ring-0 shrink-0"
+          />
+          <div className="w-px h-6 bg-slate-200 shrink-0"></div>
+          <Select value={calendarFilterStatus} onValueChange={setCalendarFilterStatus}>
+            <SelectTrigger className="w-[115px] h-full border-none bg-transparent shadow-none text-slate-700 focus:ring-0 rounded-none px-3 hover:bg-slate-50 shrink-0">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="created">Created</SelectItem>
+              <SelectItem value="not-created">Not Created</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {!isAdmin && (
           <Button 
             variant="default" 

@@ -4001,7 +4001,7 @@ export default function MarketingReportsPage() {
                     setMonthlyFormData({
                       ...monthlyFormData,
                       clientConclusion: e.target.value,
-                    })
+                      })
                   }
                 />
               </div>
