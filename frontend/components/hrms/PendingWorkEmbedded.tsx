@@ -31,6 +31,7 @@ export function PendingWorkEmbedded({
   const [otherWorkEntries, setOtherWorkEntries] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
+  const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [filterProject, setFilterProject] = useState<string>('all');
@@ -101,11 +102,12 @@ export function PendingWorkEmbedded({
       const storedUser = localStorage.getItem('user');
       const user = storedUser ? JSON.parse(storedUser) : null;
       
-      const [entriesRes, clientsRes, pRes, otherWorkRes] = await Promise.all([
+      const [entriesRes, clientsRes, pRes, otherWorkRes, employeesRes] = await Promise.all([
         fetch(`${API_URL}/content-calendar/all`),
         fetch(`${API_URL}/clients`),
         fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
-        fetch(`${API_URL}/other-work/all`)
+        fetch(`${API_URL}/other-work/all`),
+        fetch(`${API_URL}/employees`)
       ]);
       
       if (entriesRes.ok && clientsRes.ok) {
@@ -118,6 +120,11 @@ export function PendingWorkEmbedded({
       if (otherWorkRes.ok) {
         const fetchedOtherWork = await otherWorkRes.json();
         setOtherWorkEntries(fetchedOtherWork);
+      }
+      
+      if (employeesRes.ok) {
+        const fetchedEmployees = await employeesRes.json();
+        setEmployees(fetchedEmployees);
       }
       
       if (pRes.ok) {
@@ -152,15 +159,31 @@ export function PendingWorkEmbedded({
       const projectName = project.title;
       const displayName = `${projectName} (${clientName})`;
 
-      const enrich = (stage: string, deadline: string, type: string) => ({
-        ...entry,
-        clientDisplayName: displayName,
-        clientId: entry.clientId,
-        stage,
-        deadline,
-        type,
-        taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`)
-      });
+      const enrich = (stage: string, deadline: string, type: string) => {
+        let assigneeId = null;
+        let assignerId = project.teamLeaderId || client?.teamLeaderId;
+        
+        if (stage === 'Script') assigneeId = project.assignedScriptwriterId || client?.assignedScriptwriterId;
+        if (stage === 'Shoot') assigneeId = project.assignedShooterId || client?.assignedShooterId;
+        if (stage === 'Editing') assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
+        if (stage === 'Approval') assigneeId = project.assignedApproverId || client?.assignedApproverId;
+        if (stage === 'Posting') assigneeId = project.assignedPosterId || client?.assignedPosterId;
+
+        const assignee = employees.find((e: any) => e.id === assigneeId);
+        const assigner = employees.find((e: any) => e.id === assignerId);
+
+        return {
+          ...entry,
+          clientDisplayName: displayName,
+          clientId: entry.clientId,
+          stage,
+          deadline,
+          type,
+          taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`),
+          assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
+          assignerName: assigner ? `${assigner.firstName} ${assigner.lastName}` : null,
+        };
+      };
 
       const canSeeTask = (stage: string) => {
         if (!isEmployeeOrIntern) return true;
@@ -294,7 +317,7 @@ export function PendingWorkEmbedded({
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, searchQuery, filterDate, type]);
+  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, searchQuery, filterDate, type, employees]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
@@ -439,7 +462,7 @@ export function PendingWorkEmbedded({
                             </span>
                           )}
                         </div>
-                        {item.isOtherWork && (item.assignerName || item.assigneeName) && (
+                        {(item.assignerName || item.assigneeName) && (
                           <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                             {item.assignerName && <div>Assigned by: <span className="font-medium text-slate-700">{item.assignerName}</span></div>}
                             {item.assigneeName && <div>Assigned to: <span className="font-medium text-slate-700">{item.assigneeName}</span></div>}
