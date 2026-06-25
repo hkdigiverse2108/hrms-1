@@ -20,7 +20,6 @@ export interface ProjectFormData {
   endDate: string;
   status: string;
   priority: string;
-  budget: string;
   // Creative fields
   services?: string;
   post?: number;
@@ -43,7 +42,6 @@ const defaultFormData: ProjectFormData = {
   endDate: "",
   status: "planning",
   priority: "medium",
-  budget: "0",
   // Creative fields defaults
   services: "",
   post: 0,
@@ -279,16 +277,6 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
               <SelectItem value="high">High</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="budget">Budget</Label>
-          <Input
-            id="budget"
-            type="number"
-            placeholder="0"
-            value={formData.budget || ""}
-            onChange={(e) => handleChange("budget", e.target.value)}
-          />
         </div>
       </div>
       
