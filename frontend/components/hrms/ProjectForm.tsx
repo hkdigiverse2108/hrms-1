@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { API_URL } from "@/lib/config";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export interface ProjectFormData {
@@ -30,6 +32,8 @@ export interface ProjectFormData {
   reelRequired?: string;
   assignedEmployeeId?: string;
   assignedEmployeeName?: string;
+  isPhaseWise?: boolean;
+  phases?: Array<{name: string, startDate: string, endDate: string}>;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -50,6 +54,8 @@ const defaultFormData: ProjectFormData = {
   graphicsRequired: "No",
   postRequired: "No",
   reelRequired: "No",
+  isPhaseWise: false,
+  phases: [],
 };
 
 interface ProjectFormProps {
@@ -63,6 +69,17 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
     ...defaultFormData,
     ...initialData,
   });
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        ...defaultFormData,
+        ...initialData,
+      });
+    } else {
+      setFormData(defaultFormData);
+    }
+  }, [initialData]);
   const [clients, setClients] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [allEmployees, setAllEmployees] = useState<any[]>([]);
@@ -96,8 +113,25 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
     }
   };
 
-  const handleChange = (field: keyof ProjectFormData, value: string) => {
+  const handleChange = (field: keyof ProjectFormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddPhase = () => {
+    const currentPhases = formData.phases || [];
+    handleChange("phases", [...currentPhases, { name: "", startDate: "", endDate: "" }]);
+  };
+
+  const handlePhaseChange = (index: number, field: string, value: string) => {
+    const newPhases = [...(formData.phases || [])];
+    newPhases[index] = { ...newPhases[index], [field]: value };
+    handleChange("phases", newPhases);
+  };
+
+  const handleRemovePhase = (index: number) => {
+    const newPhases = [...(formData.phases || [])];
+    newPhases.splice(index, 1);
+    handleChange("phases", newPhases);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -282,6 +316,88 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
           </Select>
         </div>
       </div>
+      
+      {formData.department === "Development" && (
+        <div className="space-y-4 pt-4 border-t border-slate-200 mt-4">
+          <div className="flex items-center justify-between">
+            <Label className="text-base font-semibold">Phase Wise Project</Label>
+            <Switch
+              checked={formData.isPhaseWise || false}
+              onCheckedChange={(checked) => handleChange("isPhaseWise", checked)}
+            />
+          </div>
+          
+          {formData.isPhaseWise && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-slate-700">Project Phases</h4>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleAddPhase}
+                  className="h-8 text-xs bg-slate-50"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Add Phase
+                </Button>
+              </div>
+              
+              {(formData.phases || []).length === 0 ? (
+                <div className="text-center py-4 text-slate-500 text-sm border rounded-lg bg-slate-50 border-dashed">
+                  No phases added yet. Click "Add Phase" to create one.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(formData.phases || []).map((phase, index) => (
+                    <div key={index} className="flex items-start gap-3 p-3 border rounded-lg bg-slate-50/50">
+                      <div className="flex-1 space-y-3">
+                        <div>
+                          <Label className="text-xs">Phase Name</Label>
+                          <Input 
+                            value={phase.name} 
+                            onChange={(e) => handlePhaseChange(index, "name", e.target.value)} 
+                            placeholder="e.g. Design Phase"
+                            className="h-8 text-sm mt-1"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Start Date</Label>
+                            <Input 
+                              type="date" 
+                              value={phase.startDate} 
+                              onChange={(e) => handlePhaseChange(index, "startDate", e.target.value)}
+                              className="h-8 text-sm mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">End Date</Label>
+                            <Input 
+                              type="date" 
+                              value={phase.endDate} 
+                              onChange={(e) => handlePhaseChange(index, "endDate", e.target.value)}
+                              className="h-8 text-sm mt-1"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => handleRemovePhase(index)}
+                        className="mt-6 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                        title="Remove Phase"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       
       {formData.department === "Creative" && (
         <div className="space-y-4 pt-4 border-t border-slate-200 mt-4">

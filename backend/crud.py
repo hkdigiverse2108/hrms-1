@@ -3135,7 +3135,7 @@ async def delete_task(db, task_id: str):
     return True
 
 # Work Management Task CRUD
-async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
+async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 1000):
     query = {}
     if role and role.lower() not in ["admin", "hr"] and userId:
         user = await get_employee(db, userId)
@@ -3143,14 +3143,22 @@ async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, 
             dept = user.get("department")
             
             if role.lower() == "team leader":
-                # TL sees tasks assigned to them OR tasks assigned to employees in their dept
+                # TL sees tasks assigned to them, tasks in their dept, unassigned tasks in their dept, or tasks they created
                 dept_employees = await db.employees.find({"department": dept}).to_list(length=1000)
                 dept_emp_ids = [str(e["_id"]) for e in dept_employees]
                 
-                query["assignedToId"] = {"$in": dept_emp_ids}
+                query["$or"] = [
+                    {"assignedToId": {"$in": dept_emp_ids}},
+                    {"department": dept},
+                    {"performedBy": userId}
+                ]
             else:
-                # Employee sees only their own tasks
-                query["assignedToId"] = userId
+                # Employee sees their own tasks, unassigned tasks in their dept, or tasks they created
+                query["$or"] = [
+                    {"assignedToId": userId},
+                    {"department": dept, "assignedToId": ""},
+                    {"performedBy": userId}
+                ]
                 
     cursor = db.wm_tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
@@ -3158,8 +3166,8 @@ async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, 
 
 async def create_wm_task(db, task: schemas.WMTaskCreate):
     task_dict = task.dict()
-    performedBy = task_dict.pop("performedBy", "Unknown")
-    userName = task_dict.pop("userName", "Unknown User")
+    performedBy = task_dict.get("performedBy", "Unknown")
+    userName = task_dict.get("userName", "Unknown User")
     
     if not task_dict.get("createdBy"):
         task_dict["createdBy"] = performedBy

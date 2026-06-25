@@ -83,6 +83,15 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
     fetchMetadata();
   }, []);
 
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setFormData({
+      ...defaultFormData,
+      dueDate: today,
+      ...initialData,
+    });
+  }, [initialData]);
+
   const fetchMetadata = async () => {
     try {
       const [pRes, eRes] = await Promise.all([
@@ -258,7 +267,9 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
             <SelectContent>
               <SelectItem value="todo">To Do</SelectItem>
               <SelectItem value="in-progress">In Progress</SelectItem>
-              <SelectItem value="review">Review</SelectItem>
+              <SelectItem value="bugs">Bugs</SelectItem>
+              <SelectItem value="onhold">On Hold</SelectItem>
+              <SelectItem value="fix-bugs">Fix Bugs</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>

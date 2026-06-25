@@ -3083,6 +3083,6 @@ async def delete_other_work(entry_id: str, db=Depends(get_db)):
     return {"message": "Entry deleted successfully"}
 
 if __name__ == "__main__":
-    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8001)))
+    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)
