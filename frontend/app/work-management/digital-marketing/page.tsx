@@ -971,7 +971,7 @@ export default function MarketingReportsPage() {
   ) => {
     if (type === "monthly" && !isAdmin) {
       if (field === "employeeConclusion") {
-        const report = clientReportsData.monthly.find((r: any) => r.id === id);
+        const report = monthlyReports.find((r: any) => r.id === id);
         const isAssigned = report && projects.some((p: any) => p.clientId === report.clientId && p.assignedEmployeeId === user?.id);
         if (!isAssigned) {
           toast.error("You do not have permission to edit this conclusion");
@@ -3293,7 +3293,7 @@ export default function MarketingReportsPage() {
 
                                       <TableCell className="font-medium text-slate-800">
                                         <div className="flex flex-col items-start gap-1">
-                                          <span>{getProjectNamesForReport(report)}</span>
+                                          <span>{getProjectNameForReport(report)}</span>
                                           {projects.find((p: any) => (p.id === report.projectId || p.clientId === report.clientId))?.status === 'on-hold' && (
                                             <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
                                           )}
@@ -3359,7 +3359,7 @@ export default function MarketingReportsPage() {
                                           key={povField}
                                           className={`text-sm text-slate-500 italic max-w-[200px] truncate ${canEditThisPOV ? "cursor-text hover:bg-slate-50" : ""}`}
                                           onClick={() => {
-                                            if (canEditThisPOV) {
+                                            if (canEditThisPOV && !(inlineEditing?.id === report.id && inlineEditing?.field === povField)) {
                                               setInlineEditing({
                                                 id: report.id,
                                                 field: povField,
@@ -3369,28 +3369,51 @@ export default function MarketingReportsPage() {
                                         >
                                           {inlineEditing?.id === report.id &&
                                           inlineEditing?.field === povField ? (
-                                            <Input
-                                              autoFocus
-                                              className="h-8 text-xs outline-none"
-                                              defaultValue={report[povField as keyof typeof report] as string}
-                                              onBlur={(e) =>
-                                                handleInlineUpdate(
-                                                  report.id,
-                                                  povField,
-                                                  e.target.value,
-                                                  "monthly",
-                                                )
-                                              }
-                                              onKeyDown={(e) =>
-                                                e.key === "Enter" &&
-                                                handleInlineUpdate(
-                                                  report.id,
-                                                  povField,
-                                                  e.currentTarget.value,
-                                                  "monthly",
-                                                )
-                                              }
-                                            />
+                                            <div className="flex items-center gap-1">
+                                              <Input
+                                                autoFocus
+                                                id={`monthly-pov-${report.id}-${povField}`}
+                                                className="h-8 text-xs outline-none"
+                                                defaultValue={report[povField as keyof typeof report] as string}
+                                                onBlur={(e) =>
+                                                  handleInlineUpdate(
+                                                    report.id,
+                                                    povField,
+                                                    e.target.value,
+                                                    "monthly",
+                                                  )
+                                                }
+                                                onKeyDown={(e) =>
+                                                  e.key === "Enter" &&
+                                                  handleInlineUpdate(
+                                                    report.id,
+                                                    povField,
+                                                    e.currentTarget.value,
+                                                    "monthly",
+                                                  )
+                                                }
+                                              />
+                                              <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 shrink-0"
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const inputEl = document.getElementById(`monthly-pov-${report.id}-${povField}`) as HTMLInputElement;
+                                                  if (inputEl) {
+                                                    handleInlineUpdate(
+                                                      report.id,
+                                                      povField,
+                                                      inputEl.value,
+                                                      "monthly",
+                                                    );
+                                                  }
+                                                }}
+                                              >
+                                                <Check className="w-4 h-4" />
+                                              </Button>
+                                            </div>
                                           ) : (
                                             (report[povField as keyof typeof report] as string) || "-"
                                           )}
