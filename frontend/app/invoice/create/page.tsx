@@ -369,7 +369,9 @@ export default function CreateInvoicePage() {
         otherBankIfsc: paymentMode === "Other Account" ? (otherBankIfsc || null) : null,
         otherUpiId: paymentMode === "Other Account" ? (otherUpiId || null) : null,
         otherQrUrl: paymentMode === "Other Account" ? (otherQrUrl || null) : null,
-        status: "Pending"
+        status: "Pending",
+        createdBy: typeof window !== 'undefined' && localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!).name : null,
+        createdById: typeof window !== 'undefined' && localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!).id : null,
       };
 
       const res = await fetch(`${API_URL}/invoices`, {

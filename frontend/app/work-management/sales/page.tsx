@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/select";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { useConfirm } from "@/context/ConfirmContext";
+import { DailyProgressView } from "@/components/hrms/DailyProgressView";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
@@ -1450,6 +1451,15 @@ export default function SalesPage() {
         </div>
       </PageHeader>
 
+      <Tabs defaultValue="main" className="w-full">
+        {!isAdmin && (
+          <TabsList className="mb-4">
+            <TabsTrigger value="main">Sales Board</TabsTrigger>
+            <TabsTrigger value="progress">Daily Progress</TabsTrigger>
+          </TabsList>
+        )}
+        <TabsContent value="main" className="space-y-6 m-0">
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, idx) => (
@@ -2418,6 +2428,11 @@ export default function SalesPage() {
           </div>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+        <TabsContent value="progress" className="m-0">
+          <DailyProgressView defaultDepartment="Sales" />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

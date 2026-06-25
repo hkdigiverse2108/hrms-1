@@ -1839,6 +1839,8 @@ class InvoiceBase(BaseModel):
     status: str = "Pending"  # Pending, Paid, Overdue
     invoiceType: str = "Tax Invoice"  # Tax Invoice, Proforma Invoice
     incentiveAmountBase: Optional[float] = None
+    createdBy: Optional[str] = None
+    createdById: Optional[str] = None
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1868,6 +1870,8 @@ class InvoiceUpdate(BaseModel):
     status: Optional[str] = None
     invoiceType: Optional[str] = None
     incentiveAmountBase: Optional[float] = None
+    createdBy: Optional[str] = None
+    createdById: Optional[str] = None
 
 class Invoice(InvoiceBase):
     id: str

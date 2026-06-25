@@ -307,7 +307,7 @@ export default function ProjectsPage() {
       <Dialog open={followupConfigOpen} onOpenChange={setFollowupConfigOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Follow-up Settings</DialogTitle>
+            <DialogTitle>Follow-ups</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -545,7 +545,7 @@ export default function ProjectsPage() {
                               setFollowupDatesOfMonthInput(project.followupDatesOfMonth || []);
                               setFollowupLastDateInput(project.lastFollowupDate || "");
                               setFollowupConfigOpen(true);
-                            }} title="Follow-up Settings">
+                            }} title="Follow-ups">
                               <CalendarClock className="w-4 h-4 text-slate-500" />
                             </Button>
                           )}

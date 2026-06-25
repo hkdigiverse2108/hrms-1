@@ -94,9 +94,41 @@ export default function AllInvoicesPage() {
     setIsLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_URL}/invoices`);
+      const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      const currentUser = userStr ? JSON.parse(userStr) : null;
+      const isAdmin = currentUser?.role?.toLowerCase() === "admin" || currentUser?.role?.toLowerCase() === "hr" || currentUser?.name === "Admin Admin";
+
+      const [res, leadsRes] = await Promise.all([
+        fetch(`${API_URL}/invoices`),
+        !isAdmin ? fetch(`${API_URL}/leads`) : Promise.resolve(null)
+      ]);
+
       if (res.ok) {
-        const data = await res.json();
+        let data = await res.json();
+
+        if (!isAdmin && leadsRes && leadsRes.ok) {
+          const leadsData = await leadsRes.json();
+          const userClientNames = leadsData
+            .filter((l: any) => {
+               if (l.status !== "Client Won") return false;
+               const assigned = Array.isArray(l.assignedTo) ? l.assignedTo : (l.assignedTo ? [l.assignedTo] : []);
+               return assigned.some((a: any) => {
+                 const aName = typeof a === 'object' ? (a.value || a.label || "") : a;
+                 return aName.toLowerCase() === currentUser?.name?.toLowerCase();
+               });
+            })
+            .flatMap((l: any) => [l.company?.toLowerCase(), l.contact?.toLowerCase()])
+            .filter(Boolean);
+
+          data = data.filter((inv: any) => {
+            if (inv.createdById) {
+              return inv.createdById === currentUser.id;
+            }
+            const cName = inv.clientName?.toLowerCase() || "";
+            return userClientNames.includes(cName);
+          });
+        }
+
         setInvoices(data);
       } else {
         setError("Failed to fetch invoices");
