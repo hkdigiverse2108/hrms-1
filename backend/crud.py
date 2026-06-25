@@ -3686,6 +3686,10 @@ async def generate_missing_daily_reports_for_yesterday(db):
                         "clientId": client_id_str,
                         "department": "Digital Marketing"
                     })
+                    
+                    if project and project.get("status") in ["on-hold", "On Hold", "on_hold"]:
+                        continue
+                        
                     project_id = str(project.get("_id")) if project else None
                     project_title = project.get("title") if project else None
 
