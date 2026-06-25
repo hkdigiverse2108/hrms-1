@@ -44,8 +44,9 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const router = useRouter()
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions()
 
-  const canViewDailyProgress = isUserAdmin || checkPermission('daily-progress', 'canView') || user?.role === 'Employee' || user?.role === 'Team Leader'
-  const canEditDailyProgress = isUserAdmin || checkPermission('daily-progress', 'canEdit')
+  const isHRRoleOrDept = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr'
+  const canViewDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canView') || user?.role === 'Employee' || user?.role === 'Team Leader'
+  const canEditDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canEdit')
 
   const employees = data?.employees || []
   const allReports = (data as any)?.employeeDailyReports || []
@@ -74,6 +75,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
   const isAdmin = user?.role?.toLowerCase() === 'admin'
   const isTeamLeader = user?.role === 'Team Leader'
+  const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr'
 
   useEffect(() => {
     if (isTeamLeader && user?.department && !activeDeptTab) {
@@ -85,7 +87,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const displayData = useMemo(() => {
     let filteredEmployees = [...employees]
     
-    if (!isAdmin && !isTeamLeader) {
+    if (!isAdmin && !isTeamLeader && !isHRUser) {
        filteredEmployees = filteredEmployees.filter(e => e.id === user?.id)
     } else {
        const deptToFilter = isTeamLeader ? user?.department : activeDeptTab
@@ -93,7 +95,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
          filteredEmployees = filteredEmployees.filter(e => e.department?.toLowerCase() === deptToFilter.toLowerCase())
        }
 
-        if (isAdmin) {
+        if (isAdmin || isHRUser) {
           if (activeRoleTab === 'Team Leaders') {
             filteredEmployees = filteredEmployees.filter(e => e.role === 'Team Leader' || e.department?.toLowerCase() === 'hr')
           } else {
@@ -119,7 +121,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         const report = allReports.find((r: any) => r.employeeId === emp.id && r.date === dateStr)
         let responsiblePerson = ''
         if (emp.role === 'Team Leader' || emp.role?.toLowerCase() === 'admin') {
-           responsiblePerson = 'Admin'
+           responsiblePerson = 'HR / Admin'
         } else {
            const tls = employees.filter(e => e.department?.toLowerCase() === emp.department?.toLowerCase() && e.role === 'Team Leader')
            if (tls.length > 0) {
@@ -134,6 +136,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
           employeeId: emp.id,
           employeeName: emp.name || `${emp.firstName} ${emp.lastName}`,
           department: emp.department,
+          role: emp.role,
           date: dateStr,
           status: report?.status || 'Pending Verification',
           reportId: report?.id,
@@ -320,7 +323,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
   const actions = (record: any) => {
     const isSelf = user?.id === record.employeeId
-    const canManage = (canEditDailyProgress || (isTeamLeader && user?.department === record.department)) && !isSelf
+    const canManage = (canEditDailyProgress || (isTeamLeader && user?.department === record.department) || (isHRUser && record.role === 'Team Leader')) && !isSelf
     
     if (!canManage) {
         return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">
@@ -424,7 +427,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         </div>
 
         {/* Department and Role Tabs */}
-        {(isAdmin || isTeamLeader) && (
+        {(isAdmin || isTeamLeader || isHRUser) && (
           <div className="flex items-center gap-4">
             {isTeamLeader && !isAdmin && (
               <div className="flex items-center gap-1 bg-slate-100/70 p-1 rounded-xl shadow-inner border border-slate-200/60">
@@ -450,7 +453,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
                 </button>
               </div>
             )}
-            {!defaultDepartment && !isAdmin && (
+            {!defaultDepartment && !isAdmin && !isHRUser && (
               <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">
                 <button className="px-4 py-2 rounded-lg text-[13px] font-bold flex items-center transition-all whitespace-nowrap bg-brand-teal text-white shadow-sm cursor-default">
                   {user?.department}
@@ -458,7 +461,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
               </div>
             )}
 
-            {isAdmin && (
+            {(isAdmin || isHRUser) && (
               <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">
                 <button
                   onClick={() => setActiveRoleTab('Team Leaders')}
