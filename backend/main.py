@@ -456,6 +456,7 @@ class SafeStaticFiles(StaticFiles):
         except Exception as ex:
             if hasattr(ex, "status_code") and ex.status_code == 404:
                 ext = os.path.splitext(path)[1].lower()
+                # Only return placeholder SVG for image files, NOT for binary/download files
                 if ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']:
                     placeholder_svg = (
                         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="%23cbd5e1" stroke-width="1.5">'
@@ -465,17 +466,13 @@ class SafeStaticFiles(StaticFiles):
                         '</svg>'
                     )
                     return Response(content=placeholder_svg, media_type="image/svg+xml")
+                # For .exe, .zip, .pdf and other binary files — re-raise so proper 404 is returned
             raise ex
 
 # Ensure uploads directory exists
-UPLOAD_DIR = os.path.abspath("uploads")
+UPLOAD_DIR = "uploads"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
-
-# Ensure desktop release directory exists
-DESKTOP_DIR = os.path.join(UPLOAD_DIR, "desktop")
-if not os.path.exists(DESKTOP_DIR):
-    os.makedirs(DESKTOP_DIR)
 
 app.mount("/uploads", SafeStaticFiles(directory=UPLOAD_DIR), name="uploads")
 
@@ -2731,6 +2728,23 @@ async def get_form_responses(form_id: str, db=Depends(get_db)):
 async def get_client_form_responses(client_id: str, db=Depends(get_db)):
     return await crud.get_client_form_responses(db, client_id)
 # --- Desktop Auto-Update Endpoints ---
+
+@app.get("/desktop/download/{filename}")
+async def download_desktop_file(filename: str):
+    """Serve desktop installer .exe with proper Content-Disposition download headers."""
+    from fastapi.responses import FileResponse
+    import re
+    if not re.match(r'^HRMS_Setup_[\w.\-]+\.exe$', filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    file_path = os.path.join(UPLOAD_DIR, "desktop", filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path=file_path,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
 @app.get("/desktop/version")
 async def get_desktop_version(db=Depends(get_db)):
     """Retrieve the latest desktop app version, download URL, and changelog."""
@@ -2761,23 +2775,22 @@ async def upload_desktop_release(
     import traceback
     
     try:
-        # DESKTOP_DIR is already created at startup (see module-level init above)
+        # Create directory uploads/desktop if it doesn't exist
+        desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
+        if not os.path.exists(desktop_dir):
+            os.makedirs(desktop_dir)
+            
+        # Standardize filename to prevent path traversal issues
         safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
         filename = f"HRMS_Setup_{safe_version}.exe"
-        file_path = os.path.join(DESKTOP_DIR, filename)
+        file_path = os.path.join(desktop_dir, filename)
         
         # Save the file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
-        # Verify file was saved
-        if not os.path.exists(file_path):
-            raise RuntimeError(f"File not found after save: {file_path}")
-        file_size = os.path.getsize(file_path)
-        print(f"[Desktop Release] Saved {filename} ({file_size} bytes)", flush=True)
             
         # Generate download URL (relative path)
-        download_url = f"/uploads/desktop/{filename}"
+        download_url = f"/api/desktop/download/{filename}"
         
         # Parse changelog
         changelog_list = []
@@ -2927,6 +2940,85 @@ async def get_form_responses(form_id: str, db=Depends(get_db)):
 @app.get("/forms/client/{client_id}/responses", response_model=List[schemas.FeedbackResponse])
 async def get_client_form_responses(client_id: str, db=Depends(get_db)):
     return await crud.get_client_form_responses(db, client_id)
+# --- Desktop Auto-Update Endpoints ---
+@app.get("/desktop/version")
+async def get_desktop_version(db=Depends(get_db)):
+    """Retrieve the latest desktop app version, download URL, and changelog."""
+    release = await db.desktop_releases.find_one(sort=[("created_at", -1)])
+    if not release:
+        return {
+            "version": "1.0.0",
+            "downloadUrl": "",
+            "changelog": []
+        }
+    return {
+        "version": release.get("version"),
+        "downloadUrl": release.get("downloadUrl"),
+        "changelog": release.get("changelog", [])
+    }
+
+@app.post("/desktop/release")
+async def upload_desktop_release(
+    version: str = Form(...),
+    changelog: str = Form(...),  # JSON string or comma-separated
+    file: UploadFile = File(...),
+    token_payload: dict = Depends(auth.require_admin),
+    db=Depends(get_db)
+):
+    """Admin-only endpoint to upload a new compiled desktop installer .exe and log its version."""
+    import shutil
+    import json
+    import traceback
+    
+    try:
+        # Create directory uploads/desktop if it doesn't exist
+        desktop_dir = os.path.join(UPLOAD_DIR, "desktop")
+        if not os.path.exists(desktop_dir):
+            os.makedirs(desktop_dir)
+            
+        # Standardize filename to prevent path traversal issues
+        safe_version = "".join([c for c in version if c.isalnum() or c in ".-_"])
+        filename = f"HRMS_Setup_{safe_version}.exe"
+        file_path = os.path.join(desktop_dir, filename)
+        
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Generate download URL (relative path)
+        download_url = f"/api/desktop/download/{filename}"
+        
+        # Parse changelog
+        changelog_list = []
+        try:
+            changelog_list = json.loads(changelog)
+            if not isinstance(changelog_list, list):
+                changelog_list = [str(changelog_list)]
+        except Exception:
+            # Fallback to newline separation
+            changelog_list = [line.strip() for line in changelog.split("\n") if line.strip()]
+            if not changelog_list:
+                changelog_list = [line.strip() for line in changelog.split(",") if line.strip()]
+                
+        # Insert new release into DB
+        from datetime import datetime
+        new_release = {
+            "version": version,
+            "downloadUrl": download_url,
+            "changelog": changelog_list,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        result = await db.desktop_releases.insert_one(new_release)
+        inserted_id = result.inserted_id
+        
+        return {
+            "message": "Release uploaded successfully",
+            "release": {**new_release, "_id": str(inserted_id)}
+        }
+    except Exception as e:
+        err_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
+        print("[Desktop Release Error]", err_msg, flush=True)
+        raise HTTPException(status_code=500, detail=err_msg)
 
 # --- Other Work API ---
 @app.get("/other-work/all", response_model=List[schemas.OtherWork])

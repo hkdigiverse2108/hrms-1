@@ -1091,7 +1091,12 @@ export default function SchedulePage() {
                   type="button"
                   onClick={() => {
                     if (user) {
-                      window.location.href = `${API_URL}/auth/google/url?employeeId=${user.id || user.employeeId}`;
+                      const authUrl = `${API_URL}/auth/google/url?employeeId=${user.id || user.employeeId}`;
+                      if (typeof window !== 'undefined' && (window as any).electronAPI?.openExternal) {
+                        (window as any).electronAPI.openExternal(authUrl);
+                      } else {
+                        window.open(authUrl, '_blank');
+                      }
                     }
                   }}
                   className="w-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:text-brand-teal font-semibold text-xs shadow-sm"
