@@ -286,19 +286,40 @@ export default function SchedulePage() {
       return;
     }
     // Check for overlap within currently loaded schedules
-    const isOverlap = schedules.some((s) => {
+    let overlapEmployee = false;
+    let overlapAttendee = false;
+
+    schedules.forEach((s) => {
       const sDate = typeof s.date === "string" ? s.date.split("T")[0] : dayjs(s.date).format("YYYY-MM-DD");
-      if (form.date !== sDate) return false;
-      if (editingScheduleId && s.id === editingScheduleId) return false;
-      if (s.employeeId !== form.employeeId) return false;
-      // Overlap condition: max(start1, start2) < min(end1, end2)
+      if (form.date !== sDate) return;
+      if (editingScheduleId && s.id === editingScheduleId) return;
+      
       const maxStart = form.startTime > s.startTime ? form.startTime : s.startTime;
       const minEnd = form.endTime < s.endTime ? form.endTime : s.endTime;
-      return maxStart < minEnd;
+      const overlaps = maxStart < minEnd;
+      
+      if (overlaps) {
+        // Check if this existing schedule involves the primary employee
+        if (String(s.employeeId) === String(form.employeeId) || (s.attendees || []).some((id: any) => String(id) === String(form.employeeId))) {
+          overlapEmployee = true;
+        }
+        // Check if this existing schedule involves any of the selected attendees
+        const involvesAnyAttendee = form.attendees.some(att => 
+          String(s.employeeId) === String(att) || (s.attendees || []).some((id: any) => String(id) === String(att))
+        );
+        if (involvesAnyAttendee) {
+          overlapAttendee = true;
+        }
+      }
     });
 
-    if (isOverlap) {
-      if (form.employeeId === (user?.id || user?.employeeId)) {
+    if (overlapAttendee) {
+      toast.error("Cannot schedule. One or more attendees have an overlapping event.");
+      return;
+    }
+
+    if (overlapEmployee) {
+      if (String(form.employeeId) === String(user?.id || user?.employeeId)) {
         toast.warning("Overlap detected in your schedule!");
       } else {
         toast.error("Cannot assign an overlapping schedule to someone else.");

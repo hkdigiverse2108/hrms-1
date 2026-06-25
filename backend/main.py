@@ -2147,15 +2147,24 @@ async def get_schedules(employeeId: Optional[str] = None, date: Optional[str] = 
 async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db), _token=Depends(auth.require_auth)):
     from datetime import datetime, date
     # Check for overlaps
-    existing_schedules = await crud.get_schedules(db, employee_id=schedule.employeeId, date_str=str(schedule.date))
-    if existing_schedules:
-        for existing in existing_schedules:
+    all_schedules = await crud.get_schedules(db, date_str=str(schedule.date))
+    check_ids = [str(schedule.employeeId)] + [str(x) for x in getattr(schedule, "attendees", []) or []]
+    
+    if all_schedules:
+        for existing in all_schedules:
+            existing_emp = str(existing.get("employeeId"))
+            existing_attendees = [str(x) for x in existing.get("attendees", []) or []]
+            
+            overlapping_check_ids = [cid for cid in check_ids if cid == existing_emp or cid in existing_attendees]
+            if not overlapping_check_ids:
+                continue
+                
             ex_start = existing.get("startTime")
             ex_end = existing.get("endTime")
             if ex_start and ex_end:
                 if max(schedule.startTime, ex_start) < min(schedule.endTime, ex_end):
-                    if schedule.employeeId != _token.get("sub"):
-                        raise HTTPException(status_code=400, detail="Schedule overlaps with an existing schedule for this employee on this date.")
+                    if any(cid != str(_token.get("sub")) for cid in overlapping_check_ids):
+                        raise HTTPException(status_code=400, detail="Cannot assign an overlapping schedule to someone else or an attendee.")
 
     schedule_data = schedule.model_dump()
     dt_val = schedule_data.get("date")
@@ -2173,17 +2182,27 @@ async def update_schedule(schedule_id: str, schedule: schemas.ScheduleUpdate, db
 
     # Check for overlaps if time is updated
     if update_data.get("startTime") and update_data.get("endTime"):
-        existing_schedules = await crud.get_schedules(db, employee_id=update_data.get("employeeId"), date_str=str(update_data.get("date")))
-        if existing_schedules:
-            for existing in existing_schedules:
+        all_schedules = await crud.get_schedules(db, date_str=str(update_data.get("date")))
+        check_ids = [str(update_data.get("employeeId"))] + [str(x) for x in update_data.get("attendees", []) or []]
+        
+        if all_schedules:
+            for existing in all_schedules:
                 if str(existing.get("_id")) == schedule_id or str(existing.get("id")) == schedule_id:
                     continue
+                
+                existing_emp = str(existing.get("employeeId"))
+                existing_attendees = [str(x) for x in existing.get("attendees", []) or []]
+                
+                overlapping_check_ids = [cid for cid in check_ids if cid == existing_emp or cid in existing_attendees]
+                if not overlapping_check_ids:
+                    continue
+                    
                 ex_start = existing.get("startTime")
                 ex_end = existing.get("endTime")
                 if ex_start and ex_end:
                     if max(update_data["startTime"], ex_start) < min(update_data["endTime"], ex_end):
-                        if update_data.get("employeeId") != _token.get("sub"):
-                            raise HTTPException(status_code=400, detail="Schedule overlaps with an existing schedule for this employee on this date.")
+                        if any(cid != str(_token.get("sub")) for cid in overlapping_check_ids):
+                            raise HTTPException(status_code=400, detail="Cannot assign an overlapping schedule to someone else or an attendee.")
 
     dt_val = update_data.get("date")
     if dt_val is not None:
