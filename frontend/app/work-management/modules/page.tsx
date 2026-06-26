@@ -98,7 +98,8 @@ export default function ModulesPage() {
     dueDate: "",
     assignedToId: "",
     stage: "todo",
-    priority: "medium"
+    priority: "medium",
+    estimatedHours: 0
   });
 
   // Module Details / Edit State
@@ -110,7 +111,8 @@ export default function ModulesPage() {
     dueDate: "",
     assignedToId: "",
     stage: "todo",
-    priority: "medium"
+    priority: "medium",
+    estimatedHours: 0
   });
 
   // Notebook & Comments State
@@ -254,6 +256,7 @@ export default function ModulesPage() {
         assignedToName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
         stage: formData.stage,
         priority: formData.priority,
+        estimatedHours: formData.estimatedHours || 0,
         researchWork: "",
         comments: []
       };
@@ -288,7 +291,8 @@ export default function ModulesPage() {
       dueDate: module.dueDate || "",
       assignedToId: module.assignedToId || "unassigned",
       stage: module.stage || "todo",
-      priority: module.priority || "medium"
+      priority: module.priority || "medium",
+      estimatedHours: module.estimatedHours || 0
     });
     setNotebookContent(module.researchWork || "");
     setIsEditingNotebook(false);
@@ -378,7 +382,8 @@ export default function ModulesPage() {
         assignedToId: editFormData.assignedToId === "unassigned" ? "" : editFormData.assignedToId,
         assignedToName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
         stage: editFormData.stage,
-        priority: editFormData.priority
+        priority: editFormData.priority,
+        estimatedHours: editFormData.estimatedHours || 0
       };
       
       const updatedModules = (project.modules || []).map((m: any) => 
@@ -634,6 +639,7 @@ export default function ModulesPage() {
                               )}
                               <TableHead className="font-bold text-slate-700 h-12">Stage</TableHead>
                               <TableHead className="font-bold text-slate-700 h-12">Priority</TableHead>
+                              <TableHead className="font-bold text-slate-700 h-12">Hours</TableHead>
                               <TableHead className="font-bold text-slate-700 h-12">Assigned To</TableHead>
                               <TableHead className="font-bold text-slate-700 h-12">Due Date</TableHead>
                               <TableHead className="font-bold text-slate-700 h-12 w-24 text-center">Actions</TableHead>
@@ -651,7 +657,7 @@ export default function ModulesPage() {
                               if (filteredModules.length === 0) {
                                 return (
                                   <TableRow>
-                                    <TableCell colSpan={selectedProject.phases?.length > 0 ? 7 : 6} className="h-24 text-center text-slate-500">
+                                    <TableCell colSpan={selectedProject.phases?.length > 0 ? 8 : 7} className="h-24 text-center text-slate-500">
                                       No modules match the selected filters.
                                     </TableCell>
                                   </TableRow>
@@ -689,6 +695,9 @@ export default function ModulesPage() {
                                     }`}>
                                       {m.priority || "Medium"}
                                     </span>
+                                  </TableCell>
+                                  <TableCell className="py-3 text-sm font-extrabold text-brand-teal">
+                                    {m.estimatedHours ? `${m.estimatedHours} hrs` : "—"}
                                   </TableCell>
                                   <TableCell className="text-slate-600 py-3">
                                     {m.assignedToName ? (
@@ -861,6 +870,22 @@ export default function ModulesPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="estimatedHours" className="text-brand-teal font-extrabold flex items-center gap-1">
+                ⏱️ Estimated Hours
+              </Label>
+              <Input
+                id="estimatedHours"
+                type="number"
+                min="0"
+                step="0.5"
+                placeholder="e.g. 8"
+                value={formData.estimatedHours || ""}
+                onChange={(e) => setFormData(prev => ({ ...prev, estimatedHours: parseFloat(e.target.value) || 0 }))}
+                className="font-bold text-brand-teal bg-brand-teal/5 border-brand-teal/30"
+              />
             </div>
 
             <div className="space-y-2">
@@ -1174,6 +1199,22 @@ export default function ModulesPage() {
                           </SelectContent>
                         </Select>
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-estimatedHours" className="text-xs font-bold text-brand-teal flex items-center gap-1">
+                        ⏱️ Estimated Hours
+                      </Label>
+                      <Input
+                        id="edit-estimatedHours"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        placeholder="e.g. 8"
+                        value={editFormData.estimatedHours || ""}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, estimatedHours: parseFloat(e.target.value) || 0 }))}
+                        className="text-xs h-9 font-bold text-brand-teal bg-brand-teal/5 border-brand-teal/30"
+                      />
                     </div>
 
                     <div className="space-y-2">

@@ -40,6 +40,7 @@ export interface ProjectFormData {
   // Development fields
   frontendLink?: string;
   thirdPartyIntegrations?: Array<{ name: string; credentials: string; notes?: string }>;
+  assignedTeamIds?: string[];
 }
 
 const defaultFormData: ProjectFormData = {
@@ -401,6 +402,20 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                 </Select>
               </div>
             )}
+          </div>
+
+          <div className="space-y-2 p-3 bg-brand-teal/5 border border-brand-teal/20 rounded-xl">
+            <Label className="text-xs font-extrabold text-brand-teal flex items-center gap-1.5 uppercase">
+              👥 Assigned Project Team Members (Select Multiple Employees)
+            </Label>
+            <PhaseMemberMultiSelect 
+              employees={formData.department ? allEmployees.filter(e => e.department?.toLowerCase() === formData.department?.toLowerCase()) : allEmployees}
+              selectedIds={formData.assignedTeamIds || []}
+              onChange={(val) => handleChange("assignedTeamIds", val)}
+            />
+            <p className="text-[11px] text-slate-500 font-medium">
+              Assign multiple employees to this project. They will be included in team task distributions and access controls.
+            </p>
           </div>
 
           <div className="space-y-2">

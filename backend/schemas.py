@@ -1026,6 +1026,7 @@ class ProjectBase(BaseModel):
     teamLeaderName: Optional[str] = None
     assignedEmployeeId: Optional[str] = None
     assignedEmployeeName: Optional[str] = None
+    assignedTeamIds: Optional[List[str]] = []
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
     teamDeadline: Optional[RobustDate] = None
@@ -1087,6 +1088,7 @@ class ProjectUpdate(BaseModel):
     teamLeaderName: Optional[str] = None
     assignedEmployeeId: Optional[str] = None
     assignedEmployeeName: Optional[str] = None
+    assignedTeamIds: Optional[List[str]] = None
     startDate: Optional[RobustDate] = None
     endDate: Optional[RobustDate] = None
     teamDeadline: Optional[RobustDate] = None
@@ -1208,6 +1210,7 @@ class WMTaskBase(BaseModel):
     moduleDeadline: Optional[RobustDate] = None
     status: Optional[str] = "todo" # todo, in-progress, review, completed
     priority: Optional[str] = "medium" # low, medium, high, urgent
+    estimatedHours: Optional[float] = 0
     remarks: Optional[str] = None
     createdBy: Optional[str] = None
     performedBy: Optional[str] = None
@@ -1252,6 +1255,7 @@ class WMTaskUpdate(BaseModel):
     moduleDeadline: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None
+    estimatedHours: Optional[float] = None
     remarks: Optional[str] = None
     
     # Phase & Hierarchy Fields

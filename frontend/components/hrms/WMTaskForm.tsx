@@ -38,6 +38,9 @@ export interface WMTaskFormData {
   reviewByTL?: string;
   finalLink?: string;
   postingStatus?: string;
+  estimatedHours?: number;
+  isBatchDistribution?: boolean;
+  distributedTasks?: any[];
 }
 
 const defaultFormData: WMTaskFormData = {
@@ -66,6 +69,7 @@ const defaultFormData: WMTaskFormData = {
   reviewByTL: "",
   finalLink: "",
   postingStatus: "No",
+  estimatedHours: 0,
 };
 
 interface WMTaskFormProps {
@@ -83,6 +87,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoadingMeta, setIsLoadingMeta] = useState(true);
+  const [distributedList, setDistributedList] = useState<any[]>([]);
 
   useEffect(() => {
     fetchMetadata();
@@ -171,6 +176,61 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
     userDepartment?.toLowerCase() === "creative" || 
     formData.department?.toLowerCase() === "creative";
 
+  const projectTeamMembers = React.useMemo(() => {
+    if (!selectedProject) return filteredEmployees;
+    const ids = new Set<string>();
+    if (selectedProject.assignedEmployeeId) ids.add(selectedProject.assignedEmployeeId);
+    if (Array.isArray(selectedProject.assignedTeamIds)) {
+      selectedProject.assignedTeamIds.forEach((id: string) => ids.add(id));
+    }
+    if (Array.isArray(selectedProject.phases)) {
+      selectedProject.phases.forEach((p: any) => {
+        if (p.assignedToId) ids.add(p.assignedToId);
+        if (Array.isArray(p.assignedToIds)) p.assignedToIds.forEach((id: string) => ids.add(id));
+      });
+    }
+    if (ids.size === 0) return filteredEmployees;
+    return employees.filter(e => ids.has(e.id));
+  }, [selectedProject, filteredEmployees, employees]);
+
+  const handleCalculateDistribution = () => {
+    if (!selectedProject || projectTeamMembers.length === 0) {
+      toast.error("No team members found for this project");
+      return;
+    }
+    const team = projectTeamMembers;
+    const totalHours = formData.estimatedHours || 10;
+    
+    if (distributedList.length === 0) {
+      const hoursPerMember = parseFloat((totalHours / team.length).toFixed(1));
+      const newList = team.map((emp, i) => ({
+        title: team.length > 1 ? `${formData.title || "Task"} (${emp.firstName})` : (formData.title || "Task"),
+        hours: hoursPerMember,
+        assignedToId: emp.id
+      }));
+      setDistributedList(newList);
+      toast.success(`Task split and auto-distributed across ${team.length} team members!`);
+    } else {
+      const allocated: Record<string, number> = {};
+      team.forEach(e => allocated[e.id] = 0);
+      
+      const newList = distributedList.map(row => {
+        let lowestEmp = team[0];
+        let lowestHrs = Infinity;
+        team.forEach(emp => {
+          if ((allocated[emp.id] || 0) < lowestHrs) {
+            lowestHrs = allocated[emp.id] || 0;
+            lowestEmp = emp;
+          }
+        });
+        allocated[lowestEmp.id] = (allocated[lowestEmp.id] || 0) + (row.hours || 0);
+        return { ...row, assignedToId: lowestEmp.id };
+      });
+      setDistributedList(newList);
+      toast.success("Workload auto-rebalanced across team!");
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedProject) {
@@ -185,6 +245,19 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           return;
         }
       }
+    }
+    if (formData.department?.toLowerCase() === "development" && distributedList.length > 0) {
+      onSubmit({
+        ...formData,
+        isBatchDistribution: true,
+        distributedTasks: distributedList.map(item => ({
+          ...formData,
+          title: item.title || formData.title,
+          estimatedHours: item.hours || 0,
+          assignedToId: item.assignedToId || formData.assignedToId
+        }))
+      });
+      return;
     }
     onSubmit(formData);
   };
@@ -362,6 +435,125 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           </Select>
         </div>
       </div>
+
+      {formData.department?.toLowerCase() === "development" && (
+        <div className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="estimatedHours" className="text-brand-teal font-extrabold flex items-center gap-1.5 text-xs uppercase">
+              ⏱️ Number of Hours (Total / Estimated)
+            </Label>
+            <Input
+              id="estimatedHours"
+              type="number"
+              min="0"
+              step="0.5"
+              placeholder="e.g. 12"
+              value={formData.estimatedHours || ""}
+              onChange={(e) => setFormData(prev => ({ ...prev, estimatedHours: parseFloat(e.target.value) || 0 }))}
+              className="font-extrabold border-brand-teal/40 bg-brand-teal/5 text-brand-teal h-9 text-xs max-w-[200px]"
+            />
+          </div>
+
+          {selectedProject && (
+            <div className="p-4 bg-slate-50 border border-brand-teal/30 rounded-xl space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5 uppercase">
+                    ⚡ Team Auto-Distribution & Manual Override
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Auto-distribute tasks amongst selected team members for this project ({projectTeamMembers.length} members).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCalculateDistribution}
+                    className="h-7 text-xs font-extrabold border-brand-teal text-brand-teal hover:bg-brand-teal/10 shadow-2xs"
+                  >
+                    🤖 Auto-Distribute Hours
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setDistributedList(prev => [...prev, { title: formData.title ? `${formData.title} (Part ${prev.length + 1})` : `Task ${prev.length + 1}`, hours: formData.estimatedHours || 4, assignedToId: projectTeamMembers[prev.length % (projectTeamMembers.length || 1)]?.id || formData.assignedToId || "" }])}
+                    className="h-7 text-xs font-bold bg-white text-slate-700 border-slate-200"
+                  >
+                    + Split / Add Deliverable
+                  </Button>
+                </div>
+              </div>
+
+              {distributedList.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-200">
+                  <Label className="text-[10px] uppercase font-extrabold text-slate-500">
+                    Distributed Tasks Table (Manual Override Assignee)
+                  </Label>
+                  <div className="space-y-2">
+                    {distributedList.map((dt, idx) => (
+                      <div key={idx} className="flex flex-wrap items-center gap-2 p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                        <Input
+                          value={dt.title}
+                          onChange={(e) => {
+                            const arr = [...distributedList];
+                            arr[idx].title = e.target.value;
+                            setDistributedList(arr);
+                          }}
+                          placeholder="Task item title"
+                          className="h-8 text-xs font-semibold flex-1 min-w-[140px]"
+                        />
+                        <div className="w-24 flex items-center gap-1 bg-slate-50 border rounded-lg px-2 h-8">
+                          <span className="text-[10px] text-slate-400 font-bold">Hrs:</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={dt.hours}
+                            onChange={(e) => {
+                              const arr = [...distributedList];
+                              arr[idx].hours = parseFloat(e.target.value) || 0;
+                              setDistributedList(arr);
+                            }}
+                            className="w-full bg-transparent text-xs font-bold outline-none border-none text-brand-teal"
+                          />
+                        </div>
+                        <Select
+                          value={dt.assignedToId || ""}
+                          onValueChange={(val) => {
+                            const arr = [...distributedList];
+                            arr[idx].assignedToId = val;
+                            setDistributedList(arr);
+                          }}
+                        >
+                          <SelectTrigger className="w-[170px] h-8 text-xs font-extrabold bg-brand-teal/5 border-brand-teal/20 text-brand-teal">
+                            <SelectValue placeholder="Assignee (Override)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {projectTeamMembers.map(emp => (
+                              <SelectItem key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setDistributedList(prev => prev.filter((_, i) => i !== idx))}
+                          className="h-7 w-7 text-red-500 hover:bg-red-50 shrink-0"
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="remarks">Remarks</Label>
