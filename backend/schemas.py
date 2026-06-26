@@ -1263,6 +1263,7 @@ class TaskLogBase(BaseModel):
     performedBy: str
     userName: str
     details: str
+    diffs: Optional[List[dict]] = []
     timestamp: Optional[RobustDatetime] = None
 
 class TaskLog(TaskLogBase):

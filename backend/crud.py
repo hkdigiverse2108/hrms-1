@@ -2712,16 +2712,8 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
             
         await db.clients.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
         
-        details = []
-        for key, value in update_data.items():
-            old_val = old_client.get(key, "N/A")
-            if old_val != value:
-                # Format key for readability (e.g. companyName -> Company Name)
-                formatted_key = ''.join([' ' + c if c.isupper() else c for c in key]).capitalize().strip()
-                details.append(f"{formatted_key} changed from '{old_val}' to '{value}'")
-        
-        log_details = f"Client '{old_client.get('companyName')}': " + (", ".join(details) if details else "Details updated")
-        await log_activity(db, "Updated", performedBy, userName, log_details, clientId=client_id)
+        log_details, diffs = format_field_changes(old_client, update_data, f"Client '{old_client.get('companyName')}'")
+        await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, clientId=client_id)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "clients"})
@@ -2954,43 +2946,8 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
 
         await db.projects.update_one({"_id": ObjectId(project_id)}, update_query)
         
-        details = []
-        if "status" in update_data and old_project.get("status") != update_data["status"]:
-            details.append(f"Status changed to {update_data['status']}")
-        if "teamLeaderName" in update_data and old_project.get("teamLeaderName") != update_data["teamLeaderName"]:
-            details.append(f"Team Leader changed to {update_data['teamLeaderName']}")
-        
-        # Creative Field Logging
-        creative_fields_map = {
-            "services": "Services",
-            "post": "Post Count",
-            "reel": "Reel Count",
-            "festivalPost": "Festival Post requirement",
-            "graphicsRequired": "Graphics requirement",
-            "postRequired": "Post requirement",
-            "reelRequired": "Reel requirement"
-        }
-        
-        for field, label in creative_fields_map.items():
-            if field in update_data and old_project.get(field) != update_data[field]:
-                details.append(f"{label} changed to '{update_data[field]}'")
-                
-        # Assignment Logging
-        if "assignedScriptwriterId" in update_data and old_project.get("assignedScriptwriterId") != update_data["assignedScriptwriterId"]:
-            details.append(f"Assigned Scriptwriter updated")
-        if "assignedReelEditorId" in update_data and old_project.get("assignedReelEditorId") != update_data["assignedReelEditorId"]:
-            details.append(f"Assigned Reel Editor updated")
-        if "assignedPostDesignerId" in update_data and old_project.get("assignedPostDesignerId") != update_data["assignedPostDesignerId"]:
-            details.append(f"Assigned Post Designer updated")
-        if "assignedShooterId" in update_data and old_project.get("assignedShooterId") != update_data["assignedShooterId"]:
-            details.append(f"Assigned Shooter updated")
-        if "assignedApproverId" in update_data and old_project.get("assignedApproverId") != update_data["assignedApproverId"]:
-            details.append(f"Assigned Approver updated")
-        if "assignedPosterId" in update_data and old_project.get("assignedPosterId") != update_data["assignedPosterId"]:
-            details.append(f"Assigned Poster updated")
-        
-        log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
-        await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)
+        log_details, diffs = format_field_changes(old_project, update_data, f"Project '{old_project.get('title')}'")
+        await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, projectId=project_id)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
@@ -3226,30 +3183,8 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                 
         await db.wm_tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
         
-        # Log the update
-        details = []
-        if "status" in update_data and old_task.get("status") != update_data["status"]:
-            details.append(f"Stage changed from '{old_task.get('status')}' to '{update_data['status']}'")
-        
-        if "title" in update_data and old_task.get("title") != update_data["title"]:
-            details.append(f"Title changed from '{old_task.get('title')}' to '{update_data['title']}'")
-            
-        if "assignedToName" in update_data and old_task.get("assignedToName") != update_data["assignedToName"]:
-            details.append(f"Assignee changed to '{update_data['assignedToName']}'")
-        elif "assignedToId" in update_data and old_task.get("assignedToId") != update_data["assignedToId"]:
-            details.append(f"Assignee ID updated")
-
-        if "projectName" in update_data and old_task.get("projectName") != update_data["projectName"]:
-            details.append(f"Project changed to '{update_data['projectName']}'")
-            
-        if "priority" in update_data and old_task.get("priority") != update_data["priority"]:
-            details.append(f"Priority changed from '{old_task.get('priority')}' to '{update_data['priority']}'")
-            
-        if "dueDate" in update_data and old_task.get("dueDate") != update_data["dueDate"]:
-            details.append(f"Due date changed from '{old_task.get('dueDate')}' to '{update_data['dueDate']}'")
-            
-        log_details = f"Task '{old_task.get('title')}': " + (", ".join(details) if details else "No visible changes")
-        await log_task_activity(db, task_id, "Updated", performedBy, userName, log_details)
+        log_details, diffs = format_field_changes(old_task, update_data, f"Task '{old_task.get('title')}'")
+        await log_task_activity(db, task_id, "Updated", performedBy, userName, log_details, diffs=diffs)
     
     doc = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
     return fix_id(doc)
@@ -3264,8 +3199,143 @@ async def delete_wm_task(db, task_id: str):
         
     return result.deleted_count > 0
 
+# Universal Field Diffing Helper
+def format_field_changes(old_doc: dict, update_data: dict, entity_prefix: str = "") -> tuple:
+    ignore_keys = {
+        "performedBy", "userName", "updated_at", "updatedAt", "_id", "id", 
+        "statusHistory", "createdDate", "createdAt", "createdBy", "timestamp",
+        "clientName", "teamLeaderName", "assignedToName", "projectName", "employeeName"
+    }
+    
+    field_labels = {
+        "title": "Title",
+        "description": "Description",
+        "status": "Status/Stage",
+        "priority": "Priority",
+        "startDate": "Start Date",
+        "endDate": "End Date",
+        "dueDate": "Due Date",
+        "teamDeadline": "Team Deadline",
+        "clientDeadline": "Client Deadline",
+        "moduleName": "Phase Name",
+        "moduleDeadline": "Phase Deadline",
+        "remarks": "Remarks",
+        "assignedToId": "Assignee",
+        "teamLeaderId": "Team Leader",
+        "clientId": "Client",
+        "companyName": "Company Name",
+        "firstName": "First Name",
+        "lastName": "Last Name",
+        "email": "Email",
+        "phone": "Phone",
+        "department": "Department",
+        "designation": "Designation",
+        "services": "Services Description",
+        "post": "Post Count",
+        "reel": "Reel Count",
+        "festivalPost": "Festival Post Requirement",
+        "graphicsRequired": "Graphics Requirement",
+        "postRequired": "Post Requirement",
+        "reelRequired": "Reel Requirement",
+        "isPhaseWise": "Phase Wise Project",
+        "phases": "Project Phases",
+        "modules": "Project Modules",
+        "postingDate": "Posting Date",
+        "postingDay": "Posting Day",
+        "reelPost": "Deliverable Type",
+        "concept": "Concept Notes",
+        "reference": "Reference Link",
+        "scriptLink": "Script Link",
+        "shootingLink": "Shooting Link",
+        "editingLink": "Editing Link",
+        "finalLink": "Final Deliverable Link",
+        "reviewByTL": "TL Review Remarks",
+        "postingStatus": "Posting Status",
+        "note": "Note",
+        "meetingDate": "Meeting Date",
+        "amount": "Amount",
+        "paymentStatus": "Payment Status",
+        "conclusion": "Conclusion",
+        "campaigns": "Campaigns",
+        "adSpend": "Ad Spend",
+        "leads": "Leads Count",
+        "reach": "Reach",
+        "impressions": "Impressions",
+        "clicks": "Clicks",
+        "conversions": "Conversions",
+        "salary": "Salary",
+    }
+    
+    details = []
+    diffs = []
+    for k, new_val in update_data.items():
+        if k in ignore_keys:
+            continue
+            
+        old_val = old_doc.get(k) if old_doc else None
+        
+        if k == "assignedToId":
+            new_disp = update_data.get("assignedToName", old_doc.get("assignedToName", str(new_val)) if old_doc else str(new_val))
+            old_disp = old_doc.get("assignedToName", str(old_val)) if old_doc else str(old_val)
+            if old_disp != new_disp:
+                details.append(f"Assignee changed from '{old_disp}' to '{new_disp}'")
+                diffs.append({"field": "Assignee", "old": old_disp, "new": new_disp})
+            continue
+        if k == "teamLeaderId":
+            new_disp = update_data.get("teamLeaderName", old_doc.get("teamLeaderName", str(new_val)) if old_doc else str(new_val))
+            old_disp = old_doc.get("teamLeaderName", str(old_val)) if old_doc else str(old_val)
+            if old_disp != new_disp:
+                details.append(f"Team Leader changed from '{old_disp}' to '{new_disp}'")
+                diffs.append({"field": "Team Leader", "old": old_disp, "new": new_disp})
+            continue
+        if k == "clientId":
+            new_disp = update_data.get("clientName", old_doc.get("clientName", str(new_val)) if old_doc else str(new_val))
+            old_disp = old_doc.get("clientName", str(old_val)) if old_doc else str(old_val)
+            if old_disp != new_disp:
+                details.append(f"Client changed from '{old_disp}' to '{new_disp}'")
+                diffs.append({"field": "Client", "old": old_disp, "new": new_disp})
+            continue
+            
+        if old_val is None: old_val = ""
+        if new_val is None: new_val = ""
+        
+        if isinstance(new_val, (list, dict)) or isinstance(old_val, (list, dict)):
+            if old_val != new_val:
+                label = field_labels.get(k, k[0].upper() + k[1:] if k else "Field")
+                details.append(f"Updated {label}")
+                diffs.append({"field": label, "old": str(old_val), "new": str(new_val)})
+            continue
+            
+        # We do NOT use .strip() so exact space changes are detected!
+        old_str = str(old_val)
+        new_str = str(new_val)
+        
+        if old_str.endswith(".0"): old_str = old_str[:-2]
+        if new_str.endswith(".0"): new_str = new_str[:-2]
+        
+        if old_str != new_str:
+            label = field_labels.get(k, ''.join([' ' + c if c.isupper() else c for c in k]).capitalize().strip() if k else "Field")
+            
+            diffs.append({"field": label, "old": old_str, "new": new_str})
+            
+            disp_old = (old_str[:40] + '...') if len(old_str) > 40 else old_str
+            disp_new = (new_str[:40] + '...') if len(new_str) > 40 else new_str
+            
+            if not old_str:
+                details.append(f"Set {label} to '{disp_new}'")
+            elif not new_str:
+                details.append(f"Removed {label} (was '{disp_old}')")
+            else:
+                details.append(f"{label} changed from '{disp_old}' to '{disp_new}'")
+                
+    prefix_str = f"{entity_prefix}: " if entity_prefix else ""
+    if not details:
+        return f"{prefix_str}Saved without changes", diffs
+        
+    return prefix_str + ", ".join(details), diffs
+
 # Activity Log CRUD
-async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None):
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, diffs: list = None, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None):
     log_entry = {
         "action": action,
         "performedBy": performedBy,
@@ -3273,6 +3343,7 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
         "details": details,
         "timestamp": get_now().strftime("%Y-%m-%d %H:%M:%S")
     }
+    if diffs: log_entry["diffs"] = diffs
     if taskId: log_entry["taskId"] = taskId
     if projectId: log_entry["projectId"] = projectId
     if clientId: log_entry["clientId"] = clientId
@@ -3342,8 +3413,8 @@ async def delete_task_log(db, log_id: str):
     return result.deleted_count > 0
 
 # Update existing log_task_activity calls to use the new log_activity
-async def log_task_activity(db, taskId: str, action: str, performedBy: str, userName: str, details: str):
-    await log_activity(db, action, performedBy, userName, details, taskId=taskId)
+async def log_task_activity(db, taskId: str, action: str, performedBy: str, userName: str, details: str, diffs: list = None):
+    await log_activity(db, action, performedBy, userName, details, diffs=diffs, taskId=taskId)
 
 
 # Sales Lead CRUD
@@ -3738,16 +3809,10 @@ async def update_marketing_daily_report(db, report_id: str, report: schemas.Mark
     await db.marketing_daily_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
     
     # Log details
-    changes = []
-    for field, val in update_data.items():
-        if old_report and old_report.get(field) != val:
-            changes.append(f"{field} changed to {val}")
-    
-    if changes:
-        log_details = f"Daily Report updated: " + ", ".join(changes)
-        client_id = old_report.get("clientId")
-        project_id = old_report.get("projectId")
-        await log_activity(db, "Updated", performedBy, userName, log_details, dailyReportId=report_id, clientId=client_id, projectId=project_id)
+    log_details, diffs = format_field_changes(old_report, update_data, "Daily Report")
+    client_id = old_report.get("clientId") if old_report else None
+    project_id = old_report.get("projectId") if old_report else None
+    await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, dailyReportId=report_id, clientId=client_id, projectId=project_id)
         
     doc = await db.marketing_daily_reports.find_one({"_id": ObjectId(report_id)})
     if doc:
@@ -4015,14 +4080,8 @@ async def update_marketing_monthly_report(db, report_id: str, report: schemas.Ma
     await db.marketing_monthly_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
     
     # Log details
-    changes = []
-    for field, val in update_data.items():
-        if old_report and old_report.get(field) != val:
-            changes.append(f"{field} changed to {val}")
-            
-    if changes:
-        log_details = f"Monthly Report updated: " + ", ".join(changes)
-        await log_activity(db, "Updated", performedBy, userName, log_details, monthlyReportId=report_id)
+    log_details, diffs = format_field_changes(old_report, update_data, "Monthly Report")
+    await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, monthlyReportId=report_id)
         
     doc = await db.marketing_monthly_reports.find_one({"_id": ObjectId(report_id)})
     if doc:
