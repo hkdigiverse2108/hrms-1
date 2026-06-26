@@ -15,22 +15,6 @@ from pathlib import Path
 from typing import Optional, List, Dict
 import re
 
-
-def _fire_and_forget(coro, loop, label=""):
-    """Schedule a coroutine on the event loop without blocking the calling thread."""
-    try:
-        future = asyncio.run_coroutine_threadsafe(coro, loop)
-        def _on_done(f):
-            try:
-                f.result()  # Surface exceptions for logging only
-            except Exception as e:
-                if str(e):  # Don't log empty exceptions
-                    print(f"[Tracker] Async error ({label}): {e}", flush=True)
-        future.add_done_callback(_on_done)
-    except Exception as e:
-        if str(e):
-            print(f"[Tracker] Failed to schedule ({label}): {e}", flush=True)
-
 IST = pytz.timezone('Asia/Kolkata')
 
 PLATFORM = platform.system()  # 'Windows', 'Darwin' (macOS), 'Linux'
@@ -211,10 +195,13 @@ def _run_permission_monitor():
 
             # Log to MongoDB so admin sees it
             if _db and _main_loop:
-                _fire_and_forget(
-                    _log_security_alert(_db, "accessibility_permission_revoked", msg),
-                    _main_loop, label="permission_revoked_alert"
-                )
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        _log_security_alert(_db, "accessibility_permission_revoked", msg),
+                        _main_loop
+                    ).result(timeout=5)
+                except Exception:
+                    pass
 
             # Open settings page to force employee to re-grant
             _open_macos_accessibility_settings()
@@ -227,10 +214,13 @@ def _run_permission_monitor():
             print(f"[Tracker Security] ✅ Permission restored: {msg}", flush=True)
 
             if _db and _main_loop:
-                _fire_and_forget(
-                    _log_security_alert(_db, "accessibility_permission_restored", msg),
-                    _main_loop, label="permission_restored_alert"
-                )
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        _log_security_alert(_db, "accessibility_permission_restored", msg),
+                        _main_loop
+                    ).result(timeout=5)
+                except Exception:
+                    pass
 
             _last_permission_state = True
 
@@ -764,13 +754,12 @@ def _run_restrictions_monitor():
                         _db.registered_pcs.find_one({"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}}),
                         _main_loop
                     )
-                    rule = future.result(timeout=3)
-                except asyncio.TimeoutError:
+                    rule = future.result(timeout=5)
+                except Exception:
                     try:
                         future.cancel()
                     except Exception:
                         pass
-                except Exception:
                     pass
 
         if not rule:
@@ -888,10 +877,14 @@ def _run_db_sync():
                 continue
 
         if _db and employee_id and _main_loop:
-            _fire_and_forget(
-                _sync_to_db(employee_id, current_clicks, current_keys, apps_to_flush, domains_to_flush),
-                _main_loop, label="db_sync"
-            )
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    _sync_to_db(employee_id, current_clicks, current_keys, apps_to_flush, domains_to_flush),
+                    _main_loop
+                )
+                future.result(timeout=10)
+            except Exception as e:
+                print(f"Error syncing input & app activity to DB: {e}", flush=True)
 
 async def _sync_to_db(employee_id, clicks, keystrokes, applications=None, domains=None):
     global _db
