@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, X, Check, Search } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 
 export interface ProjectFormData {
   title: string;
@@ -35,7 +36,7 @@ export interface ProjectFormData {
   assignedEmployeeId?: string;
   assignedEmployeeName?: string;
   isPhaseWise?: boolean;
-  phases?: Array<{name: string, assignedToId?: string, startDate: string, endDate: string}>;
+  phases?: Array<{name: string, assignedToId?: string, assignedToIds?: string[], startDate: string, endDate: string}>;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -66,6 +67,102 @@ interface ProjectFormProps {
   onSubmit: (data: ProjectFormData) => void;
   isSubmitting?: boolean;
   isAdmin?: boolean;
+}
+
+function PhaseMemberMultiSelect({ 
+  employees, 
+  selectedIds, 
+  onChange,
+}: { 
+  employees: any[]; 
+  selectedIds: string[]; 
+  onChange: (ids: string[]) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = employees.filter(emp => {
+    const fullName = `${emp.firstName || ""} ${emp.lastName || ""}`.toLowerCase();
+    return fullName.includes(search.toLowerCase());
+  });
+
+  const toggleEmployee = (id: string) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter(sid => sid !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  const selectedEmployees = employees.filter(e => selectedIds.includes(e.id));
+
+  return (
+    <div ref={containerRef} className="relative mt-1">
+      {selectedEmployees.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {selectedEmployees.map(emp => (
+            <Badge 
+              key={emp.id} 
+              variant="outline" 
+              className="bg-brand-teal/10 text-brand-teal border-brand-teal/30 text-[10px] py-0 px-1.5 pr-0.5 gap-1 font-medium"
+            >
+              {emp.firstName} {emp.lastName}
+              <button 
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleEmployee(emp.id); }}
+                className="ml-0.5 hover:bg-brand-teal/20 rounded-full p-0.5 transition-colors"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      <div className="relative">
+        <Input
+          placeholder="Select members..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setIsOpen(true); }}
+          onFocus={() => setIsOpen(true)}
+          className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs"
+        />
+        
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="p-2 text-xs text-slate-500 text-center">No members found</div>
+            ) : (
+              filtered.map(emp => {
+                const isSelected = selectedIds.includes(emp.id);
+                return (
+                  <div 
+                    key={emp.id}
+                    onClick={() => toggleEmployee(emp.id)}
+                    className="flex items-center justify-between p-2 text-xs hover:bg-slate-50 cursor-pointer"
+                  >
+                    <span>{emp.firstName} {emp.lastName}</span>
+                    {isSelected && <Check className="w-3 h-3 text-brand-teal" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true }: ProjectFormProps) {
@@ -123,10 +220,10 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
 
   const handleAddPhase = () => {
     const currentPhases = formData.phases || [];
-    handleChange("phases", [...currentPhases, { name: "", assignedToId: "", startDate: "", endDate: "" }]);
+    handleChange("phases", [...currentPhases, { name: "", assignedToId: "", assignedToIds: [], startDate: "", endDate: "" }]);
   };
 
-  const handlePhaseChange = (index: number, field: string, value: string) => {
+  const handlePhaseChange = (index: number, field: string, value: any) => {
     const newPhases = [...(formData.phases || [])];
     newPhases[index] = { ...newPhases[index], [field]: value };
     handleChange("phases", newPhases);
@@ -148,6 +245,21 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
       if (!formData.teamDeadline) {
         toast.error("Team Deadline is compulsory for Development projects.");
         return;
+      }
+
+      // Validate phase deadlines against client deadline
+      if (formData.isPhaseWise && formData.phases && formData.phases.length > 0 && formData.endDate) {
+        const clientDeadline = new Date(formData.endDate);
+        for (let i = 0; i < formData.phases.length; i++) {
+          const phase = formData.phases[i];
+          if (phase.endDate) {
+            const phaseDeadline = new Date(phase.endDate);
+            if (phaseDeadline > clientDeadline) {
+              toast.error(`Phase ${i + 1} deadline cannot be later than the Client Deadline (${formData.endDate}).`);
+              return;
+            }
+          }
+        }
       }
     }
     onSubmit(formData);
@@ -382,7 +494,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                   variant="outline" 
                   size="sm" 
                   onClick={handleAddPhase}
-                  className="h-8 text-xs bg-brand-teal text-white hover:bg-brand-teal-light"
+                  className="h-8 text-xs bg-brand-teal text-white hover:bg-brand-teal-light hover:text-white border-transparent"
                 >
                   <Plus className="w-3.5 h-3.5 mr-1" />
                   Add Phase
@@ -409,24 +521,12 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                             />
                           </div>
                           <div>
-                            <Label className="text-xs font-bold text-slate-600">Assign To Member</Label>
-                            <Select 
-                              value={phase.assignedToId || ""} 
-                              onValueChange={(val) => handlePhaseChange(index, "assignedToId", val)}
-                            >
-                              <SelectTrigger className="h-8 text-xs mt-1 bg-white">
-                                <SelectValue placeholder="Select Member" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {allEmployees
-                                  .filter(e => formData.department ? e.department?.toLowerCase() === formData.department.toLowerCase() : true)
-                                  .map((emp) => (
-                                    <SelectItem key={emp.id} value={emp.id}>
-                                      {emp.firstName} {emp.lastName}
-                                    </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Label className="text-xs font-bold text-slate-600">Assign To Members</Label>
+                            <PhaseMemberMultiSelect 
+                              employees={allEmployees.filter(e => formData.department ? e.department?.toLowerCase() === formData.department.toLowerCase() : true)}
+                              selectedIds={phase.assignedToIds || (phase.assignedToId ? [phase.assignedToId] : [])}
+                              onChange={(val) => handlePhaseChange(index, "assignedToIds", val)}
+                            />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
@@ -444,6 +544,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                             <Input 
                               type="date" 
                               value={phase.endDate || ""} 
+                              max={formData.endDate || undefined}
                               onChange={(e) => handlePhaseChange(index, "endDate", e.target.value)}
                               className="h-8 text-xs mt-1 bg-white"
                             />

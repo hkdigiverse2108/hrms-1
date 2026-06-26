@@ -1295,7 +1295,7 @@ async def delete_client(client_id: str, db=Depends(get_db)):
     return {"message": "Client deleted successfully"}
 
 # Project Endpoints
-@app.get("/projects", response_model=List[schemas.Project])
+@app.get("/projects")
 async def read_projects(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_projects(db, userId=userId, role=role, skip=skip, limit=limit)
 
