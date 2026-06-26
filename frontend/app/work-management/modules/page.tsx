@@ -379,10 +379,12 @@ export default function ModulesPage() {
                   </div>
                   
                   <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-2 mr-1">
-                      <Filter className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm font-medium text-slate-600">Filters:</span>
-                    </div>
+                    {((selectedProject?.phases?.length > 0) || (user?.role !== "Employee" && user?.role !== "Intern")) && (
+                      <div className="flex items-center gap-2 mr-1">
+                        <Filter className="w-4 h-4 text-slate-400" />
+                        <span className="text-sm font-medium text-slate-600">Filters:</span>
+                      </div>
+                    )}
                     
                     {selectedProject?.phases?.length > 0 && (
                       <Select value={filterPhase} onValueChange={setFilterPhase}>
@@ -398,22 +400,26 @@ export default function ModulesPage() {
                       </Select>
                     )}
 
-                    <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-                      <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
-                        <SelectValue placeholder="All Assignees" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Assignees</SelectItem>
-                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                        {employees.map(emp => (
-                          <SelectItem key={emp.id} value={emp.id}>
-                            {emp.firstName} {emp.lastName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {user?.role !== "Employee" && user?.role !== "Intern" && (
+                      <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+                        <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
+                          <SelectValue placeholder="All Assignees" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Assignees</SelectItem>
+                          <SelectItem value="unassigned">Unassigned</SelectItem>
+                          {employees.map(emp => (
+                            <SelectItem key={emp.id} value={emp.id}>
+                              {emp.firstName} {emp.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
 
-                    <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
+                    {((selectedProject?.phases?.length > 0) || (user?.role !== "Employee" && user?.role !== "Intern")) && (
+                      <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
+                    )}
 
                     <Button 
                       onClick={() => openAddModal(null)}
