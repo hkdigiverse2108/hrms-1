@@ -19,6 +19,7 @@ export interface WMTaskFormData {
   dueDate: string;
   status: string;
   priority: string;
+  moduleName?: string;
   remarks?: string;
   createdDate?: string;
   
@@ -49,6 +50,7 @@ const defaultFormData: WMTaskFormData = {
   dueDate: new Date().toISOString().split('T')[0],
   status: "todo",
   priority: "medium",
+  moduleName: "",
   remarks: "",
   postingDate: "",
   postingDay: "",
@@ -140,6 +142,15 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         if (currentEmployee && currentEmployee.department?.toLowerCase() !== value.toLowerCase()) {
           newData.assignedToId = "";
         }
+      }
+
+      // Reset module when project or phase changes
+      if (field === "projectId" || field === "phase") {
+        newData.moduleName = "";
+      }
+      
+      if (field === "moduleName" && value === "none") {
+        newData.moduleName = "";
       }
       
       return newData;
@@ -248,22 +259,48 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         </div>
       </div>
 
-      {selectedProject?.isPhaseWise && selectedProject?.phases && selectedProject.phases.length > 0 && (
-        <div className="space-y-2">
-          <Label htmlFor="phase">Project Phase</Label>
-          <Select 
-            value={formData.phase ?? ""} 
-            onValueChange={(v) => handleChange("phase", v)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select Phase" />
-            </SelectTrigger>
-            <SelectContent>
-              {selectedProject.phases.map((p: any) => (
-                <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {(selectedProject?.isPhaseWise || (selectedProject?.modules && selectedProject.modules.length > 0)) && (
+        <div className="grid grid-cols-2 gap-4">
+          {selectedProject?.isPhaseWise && selectedProject?.phases && selectedProject.phases.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="phase">Project Phase</Label>
+              <Select 
+                value={formData.phase ?? ""} 
+                onValueChange={(v) => handleChange("phase", v)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Phase" />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedProject.phases.map((p: any) => (
+                    <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {selectedProject?.modules && selectedProject.modules.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="moduleName">Module Name</Label>
+              <Select 
+                value={formData.moduleName || "none"} 
+                onValueChange={(v) => handleChange("moduleName", v)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Module" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Module</SelectItem>
+                  {selectedProject.modules
+                    .filter((m: any) => !formData.phase || m.phaseName === formData.phase)
+                    .map((m: any) => (
+                      <SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       )}
 

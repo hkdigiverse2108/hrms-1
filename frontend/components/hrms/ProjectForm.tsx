@@ -494,7 +494,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                   variant="outline" 
                   size="sm" 
                   onClick={handleAddPhase}
-                  className="h-8 text-xs bg-brand-teal text-white hover:bg-brand-teal-light"
+                  className="h-8 text-xs bg-brand-teal text-white hover:bg-brand-teal-light hover:text-white border-transparent"
                 >
                   <Plus className="w-3.5 h-3.5 mr-1" />
                   Add Phase
