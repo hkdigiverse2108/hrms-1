@@ -5,9 +5,9 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter } from "lucide-react";
+import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { API_URL } from "@/lib/config";
@@ -15,10 +15,12 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUser } from "@/hooks/useUser";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function ModulesPage() {
   const router = useRouter();
   const { user } = useUser();
+  const { confirm } = useConfirm();
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,18 +113,21 @@ export default function ModulesPage() {
     // Validation: Module deadline should not exceed Phase deadline or Project deadline
     if (formData.dueDate) {
       const moduleDate = new Date(formData.dueDate);
-      if (project.endDate) {
-        const projectDate = new Date(project.endDate);
-        if (moduleDate > projectDate) {
-          toast.error("Module deadline cannot exceed Project deadline");
-          return;
-        }
-      }
+      
       if (activePhase && activePhase.endDate) {
         const phaseDate = new Date(activePhase.endDate);
         if (moduleDate > phaseDate) {
           toast.error("Module deadline cannot exceed Phase deadline");
           return;
+        }
+      } else {
+        const referenceDeadlineStr = project.teamDeadline || project.endDate;
+        if (referenceDeadlineStr) {
+          const projectDate = new Date(referenceDeadlineStr);
+          if (moduleDate > projectDate) {
+            toast.error(`Module deadline cannot exceed Project ${project.teamDeadline ? 'Team' : 'Client'} deadline`);
+            return;
+          }
         }
       }
     }
@@ -164,21 +169,57 @@ export default function ModulesPage() {
     }
   };
 
-  const openModuleDetails = (module: any, phase: any) => {
+  const openEditModule = (module: any, phase: any) => {
     setSelectedModule({ ...module, phase });
-    setIsEditMode(false);
+    setEditFormData({
+      title: module.name,
+      dueDate: module.dueDate || "",
+      assignedToId: module.assignedToId || "unassigned",
+      stage: module.stage || "todo",
+      priority: module.priority || "medium"
+    });
+    setIsEditMode(true);
     setIsDetailsOpen(true);
   };
 
-  const handleEditMode = () => {
-    setEditFormData({
-      title: selectedModule.name,
-      dueDate: selectedModule.dueDate || "",
-      assignedToId: selectedModule.assignedToId || "unassigned",
-      stage: selectedModule.stage || "todo",
-      priority: selectedModule.priority || "medium"
+  const handleDeleteModule = async (e: React.MouseEvent, module: any) => {
+    e.stopPropagation();
+    const isConfirmed = await confirm({
+      title: "Delete Module",
+      message: "Are you sure you want to delete this module? This action cannot be undone.",
+      destructive: true,
+      confirmText: "Delete"
     });
-    setIsEditMode(true);
+    if (!isConfirmed) return;
+
+    const project = projects.find(p => p.id === selectedProjectId);
+    if (!project) return;
+
+    setIsSubmitting(true);
+    try {
+      const updatedModules = (project.modules || []).filter((m: any) => 
+        !(m.name === module.name && m.phaseName === module.phaseName)
+      );
+
+      const res = await fetch(`${API_URL}/projects/${project.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...project, modules: updatedModules })
+      });
+
+      if (res.ok) {
+        toast.success("Module deleted successfully!");
+        fetchData();
+        if (selectedModule?.name === module.name) setIsDetailsOpen(false);
+      } else {
+        toast.error("Failed to delete module");
+      }
+    } catch (err) {
+      console.error("Error deleting module:", err);
+      toast.error("An error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleUpdateModule = async (e: React.FormEvent) => {
@@ -191,18 +232,21 @@ export default function ModulesPage() {
     // Validation
     if (editFormData.dueDate) {
       const moduleDate = new Date(editFormData.dueDate);
-      if (project.endDate) {
-        const projectDate = new Date(project.endDate);
-        if (moduleDate > projectDate) {
-          toast.error("Module deadline cannot exceed Project deadline");
-          return;
-        }
-      }
+      
       if (selectedModule.phase && selectedModule.phase.endDate) {
         const phaseDate = new Date(selectedModule.phase.endDate);
         if (moduleDate > phaseDate) {
           toast.error("Module deadline cannot exceed Phase deadline");
           return;
+        }
+      } else {
+        const referenceDeadlineStr = project.teamDeadline || project.endDate;
+        if (referenceDeadlineStr) {
+          const projectDate = new Date(referenceDeadlineStr);
+          if (moduleDate > projectDate) {
+            toast.error(`Module deadline cannot exceed Project ${project.teamDeadline ? 'Team' : 'Client'} deadline`);
+            return;
+          }
         }
       }
     }
@@ -255,12 +299,12 @@ export default function ModulesPage() {
       <PageHeader
         title="Project Modules"
         description="Manage phase-wise modules for all Development projects."
-      >
-        <Button variant="outline" onClick={() => router.back()} className="gap-2">
-          <ArrowLeft className="w-4 h-4" />
-          Back to Tasks
-        </Button>
-      </PageHeader>
+        backButton={
+          <Button variant="outline" size="icon" onClick={() => router.back()} className="w-9 h-9 shrink-0" title="Back to Tasks">
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+        }
+      />
 
       {loading ? (
         <div className="flex items-center justify-center flex-1">
@@ -271,16 +315,16 @@ export default function ModulesPage() {
           <p className="text-slate-500 font-medium">No development projects found.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-1 min-h-0">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-1 min-h-0 h-[calc(100vh-160px)]">
           {/* Left Side: Project List */}
-          <div className="md:col-span-1 border border-slate-200 rounded-xl bg-white flex flex-col shadow-sm overflow-hidden">
+          <div className="md:col-span-1 border border-slate-200 rounded-xl bg-white flex flex-col shadow-sm overflow-hidden h-full">
             <div className="p-4 border-b border-slate-100 bg-slate-50">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-brand-teal" />
                 Projects
               </h3>
             </div>
-            <ScrollArea className="flex-1">
+            <div className="flex-1 overflow-y-auto min-h-0">
               <div className="p-2 space-y-1">
                 {projects.map(project => {
                   const isSelected = project.id === selectedProjectId;
@@ -307,11 +351,11 @@ export default function ModulesPage() {
                   );
                 })}
               </div>
-            </ScrollArea>
+            </div>
           </div>
 
           {/* Right Side: Modules Details */}
-          <div className="md:col-span-3 border border-slate-200 rounded-xl bg-slate-50 flex flex-col shadow-sm overflow-hidden">
+          <div className="md:col-span-3 border border-slate-200 rounded-xl bg-slate-50 flex flex-col shadow-sm overflow-hidden h-full">
             {selectedProject ? (
               <>
                 <div className="p-5 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-4">
@@ -367,7 +411,7 @@ export default function ModulesPage() {
                   </div>
                 </div>
 
-                <ScrollArea className="flex-1 bg-slate-50/30">
+                <div className="flex-1 bg-slate-50/30 overflow-y-auto min-h-0">
                   {(selectedProject.modules && selectedProject.modules.length > 0) ? (
                     <div className="p-6 pt-4">
                       <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
@@ -382,6 +426,7 @@ export default function ModulesPage() {
                               <TableHead className="font-bold text-slate-700 h-12">Priority</TableHead>
                               <TableHead className="font-bold text-slate-700 h-12">Assigned To</TableHead>
                               <TableHead className="font-bold text-slate-700 h-12">Due Date</TableHead>
+                              <TableHead className="font-bold text-slate-700 h-12 w-24 text-center">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -396,7 +441,7 @@ export default function ModulesPage() {
                               if (filteredModules.length === 0) {
                                 return (
                                   <TableRow>
-                                    <TableCell colSpan={selectedProject.phases?.length > 0 ? 6 : 5} className="h-24 text-center text-slate-500">
+                                    <TableCell colSpan={selectedProject.phases?.length > 0 ? 7 : 6} className="h-24 text-center text-slate-500">
                                       No modules match the selected filters.
                                     </TableCell>
                                   </TableRow>
@@ -408,8 +453,8 @@ export default function ModulesPage() {
                                 return (
                                   <TableRow 
                                     key={i}
-                                    className="cursor-pointer hover:bg-slate-50/80 transition-colors"
-                                    onClick={() => openModuleDetails(m, phase || null)}
+                                    className="cursor-pointer hover:bg-slate-50/80 transition-colors group"
+                                    onClick={() => openEditModule(m, phase || null)}
                                   >
                                     <TableCell className="font-semibold text-slate-800 py-3">
                                     <div className="flex items-center gap-2.5">
@@ -449,6 +494,12 @@ export default function ModulesPage() {
                                       <span className="text-slate-400 text-sm italic">Not set</span>
                                     )}
                                   </TableCell>
+                                  <TableCell className="py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button onClick={() => openEditModule(m, phase || null)} className="p-1.5 hover:bg-slate-200 rounded-md text-blue-600 transition-colors" title="Edit Module"><Pencil className="w-4 h-4" /></button>
+                                      <button onClick={(e) => handleDeleteModule(e, m)} className="p-1.5 hover:bg-red-100 rounded-md text-red-500 transition-colors" title="Delete Module"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                  </TableCell>
                                 </TableRow>
                                 )
                               });
@@ -473,7 +524,7 @@ export default function ModulesPage() {
                       </div>
                     </div>
                   )}
-                </ScrollArea>
+                </div>
               </>
             ) : (
               <div className="flex items-center justify-center h-full">
@@ -607,12 +658,12 @@ export default function ModulesPage() {
                 type="date"
                 value={formData.dueDate}
                 onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-                max={activePhase?.endDate || selectedProject?.endDate || undefined}
+                max={activePhase?.endDate || selectedProject?.teamDeadline || selectedProject?.endDate || undefined}
               />
               {activePhase ? (
                 <p className="text-xs text-slate-500">Deadline cannot exceed phase deadline: {activePhase.endDate || "N/A"}</p>
               ) : (
-                <p className="text-xs text-slate-500">Deadline cannot exceed project deadline: {selectedProject?.endDate || "N/A"}</p>
+                <p className="text-xs text-slate-500">Deadline cannot exceed project deadline: {selectedProject?.teamDeadline || selectedProject?.endDate || "N/A"}</p>
               )}
             </div>
 
@@ -629,60 +680,18 @@ export default function ModulesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Module Details & Edit Sheet */}
-      <Sheet open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <SheetContent className="sm:max-w-[450px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>
-              {isEditMode ? "Edit Module" : "Module Details"}
-            </SheetTitle>
-            <SheetDescription>
+      {/* Module Edit Dialog */}
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Edit Module</DialogTitle>
+            <DialogDescription>
               {selectedModule?.phase ? `${selectedModule.phase.name} Phase` : 'General Module'}
-            </SheetDescription>
-          </SheetHeader>
+            </DialogDescription>
+          </DialogHeader>
 
-          {selectedModule && !isEditMode && (
-            <div className="mt-6 space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">{selectedModule.name}</h3>
-                <p className="text-sm text-slate-500">Project: {selectedProject?.title}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <span className="text-xs text-slate-500 font-medium uppercase">Stage</span>
-                  <p className="text-sm font-semibold capitalize">{selectedModule.stage || 'To Do'}</p>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-slate-500 font-medium uppercase">Priority</span>
-                  <p className="text-sm font-semibold capitalize">{selectedModule.priority || 'Medium'}</p>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-slate-500 font-medium uppercase">Due Date</span>
-                  <div className="flex items-center gap-1.5 text-sm font-semibold">
-                    <Calendar className="w-4 h-4 text-slate-400" />
-                    {selectedModule.dueDate || 'Not set'}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-slate-500 font-medium uppercase">Assigned To</span>
-                  <div className="flex items-center gap-1.5 text-sm font-semibold">
-                    <User className="w-4 h-4 text-slate-400" />
-                    {selectedModule.assignedToName || 'Unassigned'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-6 border-t border-slate-100 flex gap-3">
-                <Button className="flex-1 bg-brand-teal hover:bg-brand-teal-light text-white" onClick={handleEditMode}>
-                  Edit Module
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {selectedModule && isEditMode && (
-            <form onSubmit={handleUpdateModule} className="space-y-4 mt-6">
+          {selectedModule && (
+            <form onSubmit={handleUpdateModule} className="space-y-4 mt-2">
               <div className="space-y-2">
                 <Label htmlFor="edit-title">Module Name <span className="text-red-500">*</span></Label>
                 <Input
@@ -761,12 +770,12 @@ export default function ModulesPage() {
                   type="date"
                   value={editFormData.dueDate}
                   onChange={(e) => setEditFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-                  max={selectedModule.phase?.endDate || selectedProject?.endDate || undefined}
+                  max={selectedModule.phase?.endDate || selectedProject?.teamDeadline || selectedProject?.endDate || undefined}
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <Button type="button" variant="outline" onClick={() => setIsEditMode(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsDetailsOpen(false)}>
                   Cancel
                 </Button>
                 <Button type="submit" className="bg-brand-teal hover:bg-brand-teal-light text-white" disabled={isSubmitting}>
@@ -776,8 +785,8 @@ export default function ModulesPage() {
               </div>
             </form>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
