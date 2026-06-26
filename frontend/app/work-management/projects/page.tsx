@@ -640,9 +640,15 @@ export default function ProjectsPage() {
 
 
                     <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
-                      <div className={`flex items-center gap-1.5 ${overdue ? "text-red-600 font-bold" : ""}`}>
-                        <Calendar className="w-3.5 h-3.5" />
-                        Ends: {project.endDate || project.startDate}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1 text-slate-600 font-medium text-[11px]">
+                          <Calendar className="w-3.5 h-3.5 text-brand-teal shrink-0" />
+                          <span>Start: <strong className="text-slate-800 font-semibold">{project.startDate || "-"}</strong></span>
+                        </div>
+                        <span className="text-slate-300">|</span>
+                        <div className={`flex items-center gap-1 text-[11px] ${overdue ? "text-red-600 font-bold" : "text-slate-600 font-medium"}`}>
+                          <span>End: <strong className={overdue ? "text-red-600 font-bold" : "text-slate-800 font-semibold"}>{project.endDate || "-"}</strong></span>
+                        </div>
                       </div>
                       <Badge variant="outline" className={`text-[10px] ${
                         project.priority === 'high' ? 'border-red-200 text-red-600 bg-red-50' : 
