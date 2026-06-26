@@ -1067,6 +1067,10 @@ class ProjectBase(BaseModel):
     isPhaseWise: Optional[bool] = False
     phases: Optional[List[dict]] = []
     modules: Optional[List[dict]] = []
+    
+    # Development Project Fields
+    frontendLink: Optional[str] = None
+    thirdPartyIntegrations: Optional[List[dict]] = []
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1123,6 +1127,10 @@ class ProjectUpdate(BaseModel):
     isPhaseWise: Optional[bool] = None
     phases: Optional[List[dict]] = None
     modules: Optional[List[dict]] = None
+    
+    # Development Project Fields
+    frontendLink: Optional[str] = None
+    thirdPartyIntegrations: Optional[List[dict]] = None
 
 class Project(ProjectBase):
     id: str

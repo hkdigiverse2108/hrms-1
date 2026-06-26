@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter, CalendarClock } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter, CalendarClock, Key, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProjectForm, ProjectFormData } from "@/components/hrms/ProjectForm";
@@ -65,6 +65,42 @@ export default function ProjectsPage() {
   const [followupDaysOfWeekInput, setFollowupDaysOfWeekInput] = useState<number[]>([]);
   const [followupDatesOfMonthInput, setFollowupDatesOfMonthInput] = useState<number[]>([]);
   const [followupLastDateInput, setFollowupLastDateInput] = useState("");
+
+  // Credentials & Links State
+  const [credModalOpen, setCredModalOpen] = useState(false);
+  const [credModalProject, setCredModalProject] = useState<any>(null);
+  const [credFrontendLink, setCredFrontendLink] = useState("");
+  const [credIntegrations, setCredIntegrations] = useState<any[]>([]);
+  const [isSavingCreds, setIsSavingCreds] = useState(false);
+
+  const handleSaveCreds = async () => {
+    if (!credModalProject) return;
+    setIsSavingCreds(true);
+    try {
+      const res = await fetch(`${API_URL}/projects/${credModalProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...credModalProject,
+          frontendLink: credFrontendLink,
+          thirdPartyIntegrations: credIntegrations,
+          performedBy: user?.id || "Unknown",
+          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown User"
+        })
+      });
+      if (res.ok) {
+        toast.success("Links & Credentials updated successfully!");
+        setCredModalOpen(false);
+        fetchData(false);
+      } else {
+        toast.error("Failed to update credentials");
+      }
+    } catch (err) {
+      toast.error("An error occurred");
+    } finally {
+      setIsSavingCreds(false);
+    }
+  };
 
   useEffect(() => {
     fetchData(true);
@@ -420,6 +456,109 @@ export default function ProjectsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Links & Credentials Dialog */}
+      <Dialog open={credModalOpen} onOpenChange={setCredModalOpen}>
+        <DialogContent className="max-w-xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Key className="w-5 h-5 text-brand-teal" /> Frontend Link & Third-Party Credentials
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-4 py-3 pr-1 custom-scrollbar">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700">Frontend Link</Label>
+              <Input
+                placeholder="e.g. https://staging.myapp.vercel.app or repo link"
+                value={credFrontendLink}
+                onChange={(e) => setCredFrontendLink(e.target.value)}
+                className="text-xs h-9"
+              />
+            </div>
+            <div className="space-y-2.5 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-slate-700">Third-Party Integrations & API Keys</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCredIntegrations(prev => [...prev, { name: "", credentials: "", notes: "" }])}
+                  className="h-7 text-xs font-bold border-brand-teal text-brand-teal hover:bg-brand-teal/5"
+                >
+                  + Add Integration
+                </Button>
+              </div>
+              {credIntegrations.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No third-party integrations added yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {credIntegrations.map((intg, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 relative shadow-2xs">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setCredIntegrations(prev => prev.filter((_, i) => i !== idx))}
+                        className="h-6 w-6 absolute top-2 right-2 text-red-500 hover:bg-red-100"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-7">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-slate-500">Service / Integration</Label>
+                          <Input
+                            placeholder="e.g. Stripe API, AWS S3, Firebase"
+                            value={intg.name || ""}
+                            onChange={(e) => {
+                              const arr = [...credIntegrations];
+                              arr[idx] = { ...arr[idx], name: e.target.value };
+                              setCredIntegrations(arr);
+                            }}
+                            className="h-8 text-xs font-semibold bg-white"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-slate-500">Credentials / Secret Key</Label>
+                          <Input
+                            placeholder="e.g. sk_live_xxx / API key"
+                            value={intg.credentials || ""}
+                            onChange={(e) => {
+                              const arr = [...credIntegrations];
+                              arr[idx] = { ...arr[idx], credentials: e.target.value };
+                              setCredIntegrations(arr);
+                            }}
+                            className="h-8 text-xs font-mono bg-white"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-500">Purpose / Scope Notes</Label>
+                        <Input
+                          placeholder="e.g. Payment gateway integration for checkout flow"
+                          value={intg.notes || ""}
+                          onChange={(e) => {
+                            const arr = [...credIntegrations];
+                            arr[idx] = { ...arr[idx], notes: e.target.value };
+                            setCredIntegrations(arr);
+                          }}
+                          className="h-8 text-xs bg-white"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="pt-3 border-t border-slate-100 flex justify-end gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={() => setCredModalOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveCreds} disabled={isSavingCreds} className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold">
+              {isSavingCreds && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              Save Links & Credentials
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       
       <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
         <div className="relative flex-1 min-w-[240px]">
@@ -550,6 +689,16 @@ export default function ProjectsPage() {
                       </Button>
                       {user && (
                         <>
+                          {project.department?.toLowerCase() === 'development' && (isManagementOrTL || canEditProjects) && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-brand-teal hover:text-indigo-600" onClick={() => {
+                              setCredModalProject(project);
+                              setCredFrontendLink(project.frontendLink || "");
+                              setCredIntegrations(project.thirdPartyIntegrations || []);
+                              setCredModalOpen(true);
+                            }} title="Frontend Link & Third-Party Credentials">
+                              <Key className="w-4 h-4 text-brand-teal" />
+                            </Button>
+                          )}
                           {(!project.department || project.department.toLowerCase() !== 'development') && (
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" onClick={() => {
                               setFollowupConfigProject(project);
@@ -648,6 +797,34 @@ export default function ProjectsPage() {
                             <Badge variant="outline" className="text-[9px] bg-purple-50 text-purple-600 border-purple-200">Daily Follow-up</Badge>
                           )}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Development Details */}
+                    {project.department?.toLowerCase() === 'development' && (project.frontendLink || (project.thirdPartyIntegrations && project.thirdPartyIntegrations.length > 0)) && (
+                      <div className="pt-3 border-t border-dashed border-border/60 space-y-2">
+                        {project.frontendLink && (
+                          <div className="flex flex-col gap-0.5 text-xs">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Frontend Link</span>
+                            <a href={project.frontendLink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-brand-teal font-medium hover:underline truncate">{project.frontendLink}</a>
+                          </div>
+                        )}
+                        {project.thirdPartyIntegrations && project.thirdPartyIntegrations.length > 0 && (
+                          <div className="flex flex-col gap-1 text-xs">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Third-Party Integrations ({project.thirdPartyIntegrations.length})</span>
+                            <div className="space-y-1 max-h-24 overflow-y-auto custom-scrollbar">
+                              {project.thirdPartyIntegrations.map((intg: any, i: number) => (
+                                <div key={i} className="p-1.5 bg-slate-50 border border-slate-100 rounded text-[11px] space-y-0.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-slate-700">{intg.name}:</span>
+                                    <span className="font-mono bg-slate-200/70 px-1.5 py-0.5 rounded text-slate-800 select-all">{intg.credentials}</span>
+                                  </div>
+                                  {intg.notes && <p className="text-[10px] text-slate-500">{intg.notes}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, X, Check, Search } from "lucide-react";
+import { Plus, Trash2, X, Check, Search, Link2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,9 @@ export interface ProjectFormData {
   assignedEmployeeName?: string;
   isPhaseWise?: boolean;
   phases?: Array<{name: string, assignedToId?: string, assignedToIds?: string[], startDate: string, endDate: string}>;
+  // Development fields
+  frontendLink?: string;
+  thirdPartyIntegrations?: Array<{ name: string; credentials: string; notes?: string }>;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -60,6 +63,8 @@ const defaultFormData: ProjectFormData = {
   reelRequired: "No",
   isPhaseWise: false,
   phases: [],
+  frontendLink: "",
+  thirdPartyIntegrations: [],
 };
 
 interface ProjectFormProps {
@@ -691,6 +696,104 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
         </div>
       )}
 
+      {formData.department === "Development" && (
+        <div className="space-y-4 pt-4 border-t border-slate-200 mt-4">
+          <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <Link2 className="w-4 h-4 text-brand-teal" /> Development Links & Third-Party Integrations
+          </h3>
+          
+          <div className="space-y-2">
+            <Label htmlFor="frontendLink">Frontend Link</Label>
+            <Input 
+              id="frontendLink"
+              placeholder="e.g. https://staging.myapp.vercel.app or GitHub repo"
+              value={formData.frontendLink || ""}
+              onChange={(e) => handleChange("frontendLink", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <div className="flex items-center justify-between">
+              <Label className="font-semibold text-slate-700">Third-Party Integrations & Credentials</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const current = formData.thirdPartyIntegrations || [];
+                  handleChange("thirdPartyIntegrations", [...current, { name: "", credentials: "", notes: "" }]);
+                }}
+                className="h-7 text-xs border-brand-teal text-brand-teal hover:bg-brand-teal/5"
+              >
+                + Add Integration
+              </Button>
+            </div>
+            {(!formData.thirdPartyIntegrations || formData.thirdPartyIntegrations.length === 0) ? (
+              <p className="text-xs text-slate-400 italic">No third-party integrations added yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {formData.thirdPartyIntegrations.map((intg: any, index: number) => (
+                  <div key={index} className="p-3 bg-white border border-slate-200 rounded-lg space-y-2 relative shadow-2xs">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        const updated = (formData.thirdPartyIntegrations || []).filter((_, i) => i !== index);
+                        handleChange("thirdPartyIntegrations", updated);
+                      }}
+                      className="h-6 w-6 absolute top-2 right-2 text-red-500 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-8">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-slate-500">Service / Tool Name</Label>
+                        <Input
+                          placeholder="e.g. Stripe API, Firebase, Twilio"
+                          value={intg.name || ""}
+                          onChange={(e) => {
+                            const updated = [...(formData.thirdPartyIntegrations || [])];
+                            updated[index] = { ...updated[index], name: e.target.value };
+                            handleChange("thirdPartyIntegrations", updated);
+                          }}
+                          className="h-8 text-xs font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-slate-500">Credentials / API Keys</Label>
+                        <Input
+                          placeholder="e.g. sk_live_xxx / client_id"
+                          value={intg.credentials || ""}
+                          onChange={(e) => {
+                            const updated = [...(formData.thirdPartyIntegrations || [])];
+                            updated[index] = { ...updated[index], credentials: e.target.value };
+                            handleChange("thirdPartyIntegrations", updated);
+                          }}
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-slate-500">Notes / Scope (Optional)</Label>
+                      <Input
+                        placeholder="e.g. Used for payment gateway on checkout page"
+                        value={intg.notes || ""}
+                        onChange={(e) => {
+                          const updated = [...(formData.thirdPartyIntegrations || [])];
+                          updated[index] = { ...updated[index], notes: e.target.value };
+                          handleChange("thirdPartyIntegrations", updated);
+                        }}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
         </div>
       </ScrollArea>

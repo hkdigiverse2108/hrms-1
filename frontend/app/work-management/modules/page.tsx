@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal } from "lucide-react";
+import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -123,6 +123,48 @@ export default function ModulesPage() {
   // Filters State
   const [filterPhase, setFilterPhase] = useState<string>("all");
   const [filterAssignee, setFilterAssignee] = useState<string>("all");
+
+  // Credentials & Links State
+  const [credModalOpen, setCredModalOpen] = useState(false);
+  const [credFrontendLink, setCredFrontendLink] = useState("");
+  const [credIntegrations, setCredIntegrations] = useState<any[]>([]);
+  const [isSavingCreds, setIsSavingCreds] = useState(false);
+
+  const handleOpenCreds = () => {
+    if (!selectedProj) return;
+    setCredFrontendLink(selectedProj.frontendLink || "");
+    setCredIntegrations(selectedProj.thirdPartyIntegrations || []);
+    setCredModalOpen(true);
+  };
+
+  const handleSaveCreds = async () => {
+    if (!selectedProj) return;
+    setIsSavingCreds(true);
+    try {
+      const res = await fetch(`${API_URL}/projects/${selectedProj.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...selectedProj,
+          frontendLink: credFrontendLink,
+          thirdPartyIntegrations: credIntegrations,
+          performedBy: user?.id || "Unknown",
+          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown User"
+        })
+      });
+      if (res.ok) {
+        toast.success("Links & Credentials updated successfully!");
+        setCredModalOpen(false);
+        fetchData();
+      } else {
+        toast.error("Failed to update credentials");
+      }
+    } catch (err) {
+      toast.error("An error occurred");
+    } finally {
+      setIsSavingCreds(false);
+    }
+  };
 
   useEffect(() => {
     setFilterPhase("all");
@@ -511,6 +553,23 @@ export default function ModulesPage() {
                   <div>
                     <h2 className="text-xl font-bold text-slate-800">{selectedProject.title}</h2>
                     <p className="text-sm text-slate-500 mt-1">{selectedProject.clientName} • {selectedProject.department}</p>
+                    {selectedProject.department?.toLowerCase() === 'development' && (
+                      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                        {selectedProject.frontendLink && (
+                          <a href={selectedProject.frontendLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand-teal/10 text-brand-teal text-xs font-bold hover:bg-brand-teal/20 transition-colors">
+                            <Link2 className="w-3.5 h-3.5" /> Frontend URL
+                          </a>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleOpenCreds}
+                          className="h-7 text-xs font-bold gap-1.5 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
+                        >
+                          <Key className="w-3.5 h-3.5 text-brand-teal" /> Integrations & Credentials {(selectedProject.thirdPartyIntegrations?.length || 0) > 0 && `(${selectedProject.thirdPartyIntegrations.length})`}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="flex flex-wrap items-center gap-3">
@@ -1143,6 +1202,119 @@ export default function ModulesPage() {
               </div>
             </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Links & Credentials Dialog */}
+      <Dialog open={credModalOpen} onOpenChange={setCredModalOpen}>
+        <DialogContent className="max-w-xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Key className="w-5 h-5 text-brand-teal" /> Frontend Link & Third-Party Credentials
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-4 py-3 pr-1 custom-scrollbar">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700">Frontend Link</Label>
+              <Input
+                placeholder="e.g. https://staging.myapp.vercel.app or repo link"
+                value={credFrontendLink}
+                onChange={(e) => setCredFrontendLink(e.target.value)}
+                disabled={!canManageModule}
+                className="text-xs h-9 disabled:bg-slate-50 disabled:text-slate-600"
+              />
+            </div>
+            <div className="space-y-2.5 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-slate-700">Third-Party Integrations & API Keys</Label>
+                {canManageModule && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCredIntegrations(prev => [...prev, { name: "", credentials: "", notes: "" }])}
+                    className="h-7 text-xs font-bold border-brand-teal text-brand-teal hover:bg-brand-teal/5"
+                  >
+                    + Add Integration
+                  </Button>
+                )}
+              </div>
+              {credIntegrations.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No third-party integrations added yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {credIntegrations.map((intg, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 relative shadow-2xs">
+                      {canManageModule && (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setCredIntegrations(prev => prev.filter((_, i) => i !== idx))}
+                          className="h-6 w-6 absolute top-2 right-2 text-red-500 hover:bg-red-100"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-7">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-slate-500">Service / Integration</Label>
+                          <Input
+                            placeholder="e.g. Stripe API, AWS S3, Firebase"
+                            value={intg.name || ""}
+                            onChange={(e) => {
+                              const arr = [...credIntegrations];
+                              arr[idx] = { ...arr[idx], name: e.target.value };
+                              setCredIntegrations(arr);
+                            }}
+                            disabled={!canManageModule}
+                            className="h-8 text-xs font-semibold bg-white disabled:bg-slate-100"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-slate-500">Credentials / Secret Key (Copyable)</Label>
+                          <Input
+                            placeholder="e.g. sk_live_xxx / API key"
+                            value={intg.credentials || ""}
+                            onChange={(e) => {
+                              const arr = [...credIntegrations];
+                              arr[idx] = { ...arr[idx], credentials: e.target.value };
+                              setCredIntegrations(arr);
+                            }}
+                            readOnly={!canManageModule}
+                            className="h-8 text-xs font-mono bg-white select-all"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-500">Purpose / Scope Notes</Label>
+                        <Input
+                          placeholder="e.g. Payment gateway integration for checkout flow"
+                          value={intg.notes || ""}
+                          onChange={(e) => {
+                            const arr = [...credIntegrations];
+                            arr[idx] = { ...arr[idx], notes: e.target.value };
+                            setCredIntegrations(arr);
+                          }}
+                          disabled={!canManageModule}
+                          className="h-8 text-xs bg-white disabled:bg-slate-100"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="pt-3 border-t border-slate-100 flex justify-end gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={() => setCredModalOpen(false)}>Close</Button>
+            {canManageModule && (
+              <Button size="sm" onClick={handleSaveCreds} disabled={isSavingCreds} className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold">
+                {isSavingCreds && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                Save Links & Credentials
+              </Button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
