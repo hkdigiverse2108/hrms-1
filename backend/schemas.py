@@ -1189,6 +1189,10 @@ class WMTaskBase(BaseModel):
     performedBy: Optional[str] = None
     userName: Optional[str] = None
     
+    # Phase & Hierarchy Fields
+    phase: Optional[str] = None
+    subtasks: Optional[List[dict]] = []
+    
     # Graphics specific fields
     postingDate: Optional[RobustDate] = None
     postingDay: Optional[str] = None
@@ -1225,6 +1229,10 @@ class WMTaskUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     remarks: Optional[str] = None
+    
+    # Phase & Hierarchy Fields
+    phase: Optional[str] = None
+    subtasks: Optional[List[dict]] = None
     
     # Graphics specific fields
     postingDate: Optional[RobustDate] = None

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Calendar } from "lucide-react";
 import { API_URL } from "@/lib/config";
+import { toast } from "sonner";
 
 export interface WMTaskFormData {
   title: string;
@@ -14,6 +15,7 @@ export interface WMTaskFormData {
   projectId: string;
   assignedToId: string;
   department?: string;
+  phase?: string;
   dueDate: string;
   status: string;
   priority: string;
@@ -42,7 +44,8 @@ const defaultFormData: WMTaskFormData = {
   description: "",
   projectId: "",
   assignedToId: "",
-  department: "",
+  department: "Development",
+  phase: "",
   dueDate: new Date().toISOString().split('T')[0],
   status: "todo",
   priority: "medium",
@@ -145,11 +148,11 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
 
   const filteredProjects = formData.department
     ? projects.filter(p => p.department?.toLowerCase() === formData.department?.toLowerCase())
-    : projects;
+    : projects.filter(p => p.department?.toLowerCase() === "development");
 
   const filteredEmployees = formData.department
     ? employees.filter(e => e.department?.toLowerCase() === formData.department?.toLowerCase())
-    : employees;
+    : employees.filter(e => e.department?.toLowerCase() === "development");
 
   const selectedProject = projects.find(p => p.id === formData.projectId);
   const isGraphicsProject = 
@@ -159,6 +162,19 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (selectedProject) {
+      if (formData.dueDate && selectedProject.endDate && new Date(formData.dueDate) > new Date(selectedProject.endDate)) {
+        toast.error("Task deadline cannot exceed Project deadline");
+        return;
+      }
+      if (formData.phase && selectedProject.phases) {
+        const selectedPhase = selectedProject.phases.find((p: any) => p.name === formData.phase);
+        if (selectedPhase && formData.dueDate && selectedPhase.endDate && new Date(formData.dueDate) > new Date(selectedPhase.endDate)) {
+          toast.error("Task deadline cannot exceed Phase deadline");
+          return;
+        }
+      }
+    }
     onSubmit(formData);
   };
 
@@ -171,10 +187,10 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         </div>
       )}
       <div className="space-y-2">
-        <Label htmlFor="title">Module Name / Task Title</Label>
+        <Label htmlFor="title">Task Title</Label>
         <Input
           id="title"
-          placeholder="e.g. User Authentication Module"
+          placeholder="e.g. Implement User Authentication"
           value={formData.title ?? ""}
           onChange={(e) => handleChange("title", e.target.value)}
           required
@@ -193,8 +209,6 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Development">Development</SelectItem>
-              <SelectItem value="Creative">Creative</SelectItem>
-              <SelectItem value="Marketing">Marketing</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -234,6 +248,25 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         </div>
       </div>
 
+      {selectedProject?.isPhaseWise && selectedProject?.phases && selectedProject.phases.length > 0 && (
+        <div className="space-y-2">
+          <Label htmlFor="phase">Project Phase</Label>
+          <Select 
+            value={formData.phase ?? ""} 
+            onValueChange={(v) => handleChange("phase", v)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select Phase" />
+            </SelectTrigger>
+            <SelectContent>
+              {selectedProject.phases.map((p: any) => (
+                <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
         <textarea
@@ -247,7 +280,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
 
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="dueDate">Module Deadline</Label>
+          <Label htmlFor="dueDate">Task Deadline</Label>
           <Input
             id="dueDate"
             type="date"
@@ -399,7 +432,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
       <div className="flex justify-end gap-3 pt-4">
         <Button type="submit" className="bg-brand-teal hover:bg-brand-teal-light text-white" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {initialData ? "Update Module" : "Assign Module"}
+          {initialData ? "Update Task" : "Assign Task"}
         </Button>
       </div>
     </form>
