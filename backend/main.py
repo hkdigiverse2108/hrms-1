@@ -201,101 +201,7 @@ async def monthly_report_scheduler_task():
         except Exception as e:
             print(f"[Monthly Report Scheduler] Error: {e}", flush=True)
             
-async def daily_workflow_reminders_task():
-    from database import db
-    import crud
-    import schemas
-    
-    print("[Daily Reminders] Task started.", flush=True)
-    await asyncio.sleep(25) # wait for startup
-    
-    while True:
-        try:
-            now = datetime.now(pytz.timezone('Asia/Kolkata'))
-            today_str = now.strftime("%Y-%m-%d")
-            
-            # Check morning 9:00 AM window
-            if now.hour == 9 and now.minute < 10:
-                start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                
-                # 1. Overdue WM Tasks
-                overdue_tasks = await db.wm_tasks.find({
-                    "dueDate": {"$lt": today_str},
-                    "status": {"$nin": ["completed", "Completed"]}
-                }).to_list(length=1000)
-                
-                for t in overdue_tasks:
-                    emp_id = t.get("assignedToId")
-                    if emp_id:
-                        task_id = str(t["_id"]) if "_id" in t else t.get("id")
-                        existing = await db.notifications.find_one({
-                            "employee_id": emp_id,
-                            "type": "task_overdue",
-                            "reference_id": task_id,
-                            "created_at": {"$gte": start_of_day}
-                        })
-                        if not existing:
-                            await crud.create_notification(db, schemas.NotificationCreate(
-                                employee_id=emp_id,
-                                title="Task Overdue",
-                                message=f"Task '{t.get('title')}' in project '{t.get('projectName', 'General')}' is overdue (Due: {t.get('dueDate')}).",
-                                type="task_overdue",
-                                reference_id=task_id
-                            ))
-
-                # 2. Birthdays & Work Anniversaries
-                all_staff = await db.employees.find({"status": "active"}).to_list(length=2000)
-                for s in all_staff:
-                    s_id = str(s["_id"]) if "_id" in s else s.get("id")
-                    name = s.get("name") or f"{s.get('firstName', '')} {s.get('lastName', '')}".strip()
-                    
-                    # Birthday check
-                    dob_val = s.get("dob")
-                    if dob_val:
-                        try:
-                            dob_str = str(dob_val)[:10]
-                            if len(dob_str) >= 10 and dob_str[5:10] == today_str[5:10]:
-                                existing = await db.notifications.find_one({
-                                    "employee_id": s_id,
-                                    "type": "birthday_greeting",
-                                    "created_at": {"$gte": start_of_day}
-                                })
-                                if not existing:
-                                    await crud.create_notification(db, schemas.NotificationCreate(
-                                        employee_id=s_id,
-                                        title="Happy Birthday! 🎉",
-                                        message=f"Wishing you a fantastic birthday and a wonderful year ahead, {name}!",
-                                        type="birthday_greeting",
-                                        reference_id=s_id
-                                    ))
-                        except Exception: pass
-
-                    # Work Anniversary check
-                    join_val = s.get("joinDate")
-                    if join_val:
-                        try:
-                            join_str = str(join_val)[:10]
-                            if len(join_str) >= 10 and join_str[5:10] == today_str[5:10] and join_str[:4] < today_str[:4]:
-                                years = int(today_str[:4]) - int(join_str[:4])
-                                existing = await db.notifications.find_one({
-                                    "employee_id": s_id,
-                                    "type": "anniversary_greeting",
-                                    "created_at": {"$gte": start_of_day}
-                                })
-                                if not existing:
-                                    await crud.create_notification(db, schemas.NotificationCreate(
-                                        employee_id=s_id,
-                                        title=f"Happy Work Anniversary! 🌟",
-                                        message=f"Congratulations on completing {years} year{'s' if years > 1 else ''} with us, {name}! Thank you for your dedication.",
-                                        type="anniversary_greeting",
-                                        reference_id=s_id
-                                    ))
-                        except Exception: pass
-
-        except Exception as e:
-            print(f"[Daily Reminders] Error: {e}", flush=True)
-            
-        await asyncio.sleep(300)
+        await asyncio.sleep(300) # Sleep for 5 minutes
 
 @asynccontextmanager
 async def lifespan(app):
@@ -503,7 +409,6 @@ async def lifespan(app):
     reminder_task = asyncio.create_task(content_calendar_reminder_task())
     feedback_task = asyncio.create_task(feedback_reminder_task())
     monthly_report_task = asyncio.create_task(monthly_report_scheduler_task())
-    daily_workflow_task = asyncio.create_task(daily_workflow_reminders_task())
     yield
     # --- Shutdown ---
     try:
@@ -519,8 +424,6 @@ async def lifespan(app):
             feedback_task.cancel()
         if not monthly_report_task.done():
             monthly_report_task.cancel()
-        if not daily_workflow_task.done():
-            daily_workflow_task.cancel()
     except Exception:
         pass
     # Reload trigger: 1
