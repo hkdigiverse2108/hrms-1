@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Calendar } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
+import { useUser } from "@/hooks/useUser";
 
 export interface WMTaskFormData {
   title: string;
@@ -83,6 +84,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoadingMeta, setIsLoadingMeta] = useState(true);
+  const { user } = useUser();
 
   useEffect(() => {
     fetchMetadata();
@@ -280,6 +282,10 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
                   <SelectItem value="none">No Module</SelectItem>
                   {selectedProject.modules
                     .filter((m: any) => !formData.phase || m.phaseName === formData.phase)
+                    .filter((m: any) => {
+                      const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
+                      return !isEmployeeOrIntern || m.assignedToId === user?.id;
+                    })
                     .map((m: any) => (
                       <SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>
                     ))}

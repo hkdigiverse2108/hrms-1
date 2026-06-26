@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -292,7 +292,21 @@ export default function ModulesPage() {
     }
   };
 
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const visibleProjects = useMemo(() => {
+    const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
+    return projects.filter(project => {
+      if (!isEmployeeOrIntern) return true;
+      return project.modules?.some((m: any) => m.assignedToId === user?.id);
+    });
+  }, [projects, user]);
+
+  useEffect(() => {
+    if (visibleProjects.length > 0 && !visibleProjects.find(p => p.id === selectedProjectId)) {
+      setSelectedProjectId(visibleProjects[0].id);
+    }
+  }, [visibleProjects, selectedProjectId]);
+
+  const selectedProject = visibleProjects.find(p => p.id === selectedProjectId) || visibleProjects[0];
 
   return (
     <div className="space-y-4 h-[calc(100vh-140px)] flex flex-col">
@@ -310,9 +324,9 @@ export default function ModulesPage() {
         <div className="flex items-center justify-center flex-1">
           <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
         </div>
-      ) : projects.length === 0 ? (
+      ) : visibleProjects.length === 0 ? (
         <div className="flex items-center justify-center flex-1 border border-dashed border-slate-300 rounded-xl bg-slate-50">
-          <p className="text-slate-500 font-medium">No development projects found.</p>
+          <p className="text-slate-500 font-medium">No assigned projects found.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-1 min-h-0 h-[calc(100vh-160px)]">
@@ -326,7 +340,7 @@ export default function ModulesPage() {
             </div>
             <div className="flex-1 overflow-y-auto min-h-0">
               <div className="p-2 space-y-1">
-                {projects.map(project => {
+                {visibleProjects.map(project => {
                   const isSelected = project.id === selectedProjectId;
                   return (
                     <button
@@ -435,7 +449,9 @@ export default function ModulesPage() {
                                 const matchPhase = filterPhase === "all" || m.phaseName === filterPhase;
                                 const matchAssignee = filterAssignee === "all" || 
                                   (filterAssignee === "unassigned" ? !m.assignedToId : m.assignedToId === filterAssignee);
-                                return matchPhase && matchAssignee;
+                                const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
+                                const isAssignedToUser = !isEmployeeOrIntern || m.assignedToId === user?.id;
+                                return matchPhase && matchAssignee && isAssignedToUser;
                               });
 
                               if (filteredModules.length === 0) {
