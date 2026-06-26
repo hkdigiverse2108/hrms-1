@@ -114,6 +114,8 @@ export default function ProjectsPage() {
   const [newBugTitle, setNewBugTitle] = useState("");
   const [newBugDesc, setNewBugDesc] = useState("");
   const [newBugSeverity, setNewBugSeverity] = useState("Medium");
+  const [newBugAssignee, setNewBugAssignee] = useState("none");
+  const [employees, setEmployees] = useState<any[]>([]);
   const [isSubmittingBug, setIsSubmittingBug] = useState(false);
   const [newTestLinkTitle, setNewTestLinkTitle] = useState("");
   const [newTestLinkUrl, setNewTestLinkUrl] = useState("");
@@ -157,12 +159,16 @@ export default function ProjectsPage() {
     }
     setIsSubmittingBug(true);
     try {
+      const emp = employees.find(e => String(e.id) === newBugAssignee);
+      const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name : "";
       const currentBugs = testingModalProject.testingBugs || [];
       const newBug = {
         id: "bug_" + Date.now(),
         title: newBugTitle.trim(),
         description: newBugDesc.trim(),
         severity: newBugSeverity,
+        assignedToId: newBugAssignee === "none" ? "" : newBugAssignee,
+        assignedToName: newBugAssignee === "none" ? "" : empName,
         reportedBy: user?.id || "anon",
         reportedByName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Employee",
         date: new Date().toISOString().split('T')[0],
@@ -185,6 +191,7 @@ export default function ProjectsPage() {
         setTestingModalProject(updated);
         setNewBugTitle("");
         setNewBugDesc("");
+        setNewBugAssignee("none");
         toast.success("Bug reported successfully!");
       }
     } catch (err) {
@@ -192,6 +199,36 @@ export default function ProjectsPage() {
       toast.error("Failed to report bug");
     } finally {
       setIsSubmittingBug(false);
+    }
+  };
+
+  const handleAssignBug = async (bugId: string, empId: string) => {
+    if (!testingModalProject) return;
+    try {
+      const emp = employees.find(e => String(e.id) === empId);
+      const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name : "";
+      const currentBugs = testingModalProject.testingBugs || [];
+      const updatedBugs = currentBugs.map((b: any) => 
+        b.id === bugId ? { ...b, assignedToId: empId === "none" ? "" : empId, assignedToName: empId === "none" ? "" : empName } : b
+      );
+      const res = await fetch(`${API_URL}/projects/${testingModalProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...testingModalProject,
+          testingBugs: updatedBugs,
+          performedBy: user?.id,
+          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+        setTestingModalProject(updated);
+        toast.success("Bug assignee updated!");
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -258,17 +295,19 @@ export default function ProjectsPage() {
     if (!user) return;
     if (showLoading) setIsLoading(true);
     try {
-      const [pRes, tRes, lRes, cRes] = await Promise.all([
+      const [pRes, tRes, lRes, cRes, eRes] = await Promise.all([
         fetch(`${API_URL}/projects?userId=${user.id}&role=${user.role}`),
         fetch(`${API_URL}/wm-tasks?userId=${user.id}&role=${user.role}`),
         fetch(`${API_URL}/leads`),
-        fetch(`${API_URL}/clients`)
+        fetch(`${API_URL}/clients`),
+        fetch(`${API_URL}/employees`)
       ]);
       
       if (pRes.ok) setProjects(await pRes.json());
       if (tRes.ok) setTasks(await tRes.json());
       if (lRes.ok) setLeads(await lRes.json());
       if (cRes.ok) setClients(await cRes.json());
+      if (eRes.ok) setEmployees(await eRes.json());
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -855,10 +894,10 @@ export default function ProjectsPage() {
                 🐞 Report New Bug (Open to All Employees)
               </h4>
               <div className="space-y-2.5">
-                <div className="flex gap-2">
-                  <Input placeholder="Bug Summary / Title..." value={newBugTitle} onChange={e=>setNewBugTitle(e.target.value)} className="h-9 text-xs font-bold bg-white flex-1" />
+                <div className="flex gap-2 flex-wrap">
+                  <Input placeholder="Bug Summary / Title..." value={newBugTitle} onChange={e=>setNewBugTitle(e.target.value)} className="h-9 text-xs font-bold bg-white flex-1 min-w-[200px]" />
                   <Select value={newBugSeverity} onValueChange={setNewBugSeverity}>
-                    <SelectTrigger className="w-[120px] h-9 bg-white text-xs font-bold">
+                    <SelectTrigger className="w-[110px] h-9 bg-white text-xs font-bold">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -868,6 +907,21 @@ export default function ProjectsPage() {
                       <SelectItem value="Critical">Critical</SelectItem>
                     </SelectContent>
                   </Select>
+                  {(isAdmin || user?.role?.toLowerCase() === 'cto' || testingModalProject?.teamLeaderId === user?.id) && (
+                    <Select value={newBugAssignee} onValueChange={setNewBugAssignee}>
+                      <SelectTrigger className="w-[150px] h-9 bg-white text-xs font-semibold text-slate-700">
+                        <SelectValue placeholder="Assign To..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">👤 Unassigned</SelectItem>
+                        {employees.map((emp: any) => (
+                          <SelectItem key={emp.id} value={String(emp.id)}>
+                            {emp.firstName ? `${emp.firstName} ${emp.lastName || ""}`.trim() : emp.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <Input placeholder="Steps to reproduce / description..." value={newBugDesc} onChange={e=>setNewBugDesc(e.target.value)} className="h-9 text-xs bg-white" />
                 <div className="flex justify-end">
@@ -889,20 +943,48 @@ export default function ProjectsPage() {
                 {testingModalProject?.testingBugs?.length > 0 ? (
                   testingModalProject.testingBugs.map((bug: any) => (
                     <div key={bug.id} className={`p-3 rounded-xl border transition-all flex items-start justify-between gap-3 ${bug.status==='fixed' ? 'bg-emerald-50/40 border-emerald-200 opacity-75' : 'bg-white border-slate-200 shadow-2xs'}`}>
-                      <div className="flex items-start gap-3 min-w-0">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
                         <input
                           type="checkbox"
                           checked={bug.status === 'fixed'}
                           onChange={() => handleToggleBugStatus(bug.id)}
                           className="mt-1 w-4 h-4 text-emerald-600 rounded cursor-pointer shrink-0"
                         />
-                        <div className="space-y-1 min-w-0">
+                        <div className="space-y-1.5 min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={`text-[10px] font-black px-1.5 py-0.5 rounded uppercase ${bug.severity==='Critical'||bug.severity==='High' ? 'bg-red-100 text-red-700' : bug.severity==='Medium' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>{bug.severity}</span>
                             <span className={`text-[10px] font-extrabold ${bug.status==='fixed' ? 'text-emerald-700 line-through' : 'text-slate-900'}`}>{bug.title}</span>
                           </div>
                           {bug.description && <p className="text-xs text-slate-600 break-words">{bug.description}</p>}
-                          <p className="text-[10px] text-slate-400">Reported by <strong className="text-slate-600">{bug.reportedByName}</strong> on {bug.date}</p>
+                          <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] text-slate-400 pt-0.5">
+                            <span>Reported by <strong className="text-slate-600">{bug.reportedByName}</strong> on {bug.date}</span>
+                            
+                            {/* Assignee Control / Badge */}
+                            {(isAdmin || user?.role?.toLowerCase() === 'cto' || testingModalProject?.teamLeaderId === user?.id) ? (
+                              <div className="flex items-center gap-1.5 bg-slate-100/80 px-2 py-0.5 rounded-md border border-slate-200">
+                                <span className="font-bold text-slate-500">Assignee:</span>
+                                <Select value={bug.assignedToId ? String(bug.assignedToId) : "none"} onValueChange={(val) => handleAssignBug(bug.id, val)}>
+                                  <SelectTrigger className="h-6 text-[10px] font-bold border-0 bg-transparent px-1 focus:ring-0 w-[130px] shadow-none text-indigo-700">
+                                    <SelectValue placeholder="Unassigned" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">👤 Unassigned</SelectItem>
+                                    {employees.map((emp: any) => (
+                                      <SelectItem key={emp.id} value={String(emp.id)}>
+                                        {emp.firstName ? `${emp.firstName} ${emp.lastName || ""}`.trim() : emp.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ) : bug.assignedToName ? (
+                              <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded border border-indigo-100">
+                                👤 Assigned to: {bug.assignedToName}
+                              </span>
+                            ) : (
+                              <span className="italic text-slate-400">Unassigned</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <Badge variant={bug.status==='fixed' ? 'success' : 'destructive'} className="text-[10px] font-bold shrink-0 uppercase">{bug.status}</Badge>
