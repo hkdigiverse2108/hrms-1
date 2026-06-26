@@ -829,7 +829,7 @@ export default function ProjectsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between text-lg font-black text-indigo-700 pr-4">
               <span>🐞 Testing & Bug Board: {testingModalProject?.title}</span>
-              {(isAdmin || user?.role?.toLowerCase() === 'cto' || testingModalProject?.teamLeaderId === user?.id) && (
+              {(isAdmin || user?.role?.toLowerCase() === 'cto') ? (
                 <Button
                   size="sm"
                   onClick={async () => {
@@ -849,10 +849,14 @@ export default function ProjectsPage() {
                       }
                     } catch(e) { console.error(e); }
                   }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs h-8 px-3 shadow-sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs h-8 px-3 shadow-sm animate-pulse"
                 >
                   ✅ Approve & Mark Completed
                 </Button>
+              ) : (
+                <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                  🔒 Final Approval by CTO/Admin Only
+                </span>
               )}
             </DialogTitle>
           </DialogHeader>
