@@ -761,8 +761,12 @@ export default function TasksPage() {
                         </Draggable>
                       ))}
                     {provided.placeholder}
-                    {canAddTask && (
-                      <div className="pt-2">
+                  </div>
+                </div>
+              )}
+            </Droppable>
+            {canAddTask && (
+              <div className="p-3 bg-slate-50/50 border-t border-slate-200/60 shrink-0">
                         {quickAddStage === stage.id ? (
                           <div className="bg-white p-3 rounded-xl border border-brand-teal/30 shadow-sm space-y-3">
                             <textarea
@@ -850,12 +854,8 @@ export default function TasksPage() {
                             </div>
                           </button>
                         )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </Droppable>
+              </div>
+            )}
           </div>
         ))}
       </div>

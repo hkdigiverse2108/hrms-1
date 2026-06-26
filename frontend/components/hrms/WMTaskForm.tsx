@@ -208,21 +208,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="department">Department</Label>
-          <Select 
-            value={formData.department ?? ""} 
-            onValueChange={(v) => handleChange("department", v)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select Department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Development">Development</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="projectId">Project</Label>
           <Select 
