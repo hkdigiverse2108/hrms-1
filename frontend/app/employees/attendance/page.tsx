@@ -89,6 +89,12 @@ export default function EmployeeAttendanceListPage() {
   const [view, setView] = useState<"list" | "calendar">("list");
   const [attendance, setAttendance] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+
+  // Filter out admin employees from the attendance list
+  const nonAdminEmployees = useMemo(() => 
+    employees.filter(emp => emp.role?.toLowerCase() !== 'admin'),
+    [employees]
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDept, setSelectedDept] = useState("all");
@@ -301,7 +307,9 @@ export default function EmployeeAttendanceListPage() {
   };
 
   const filteredAttendance = useMemo(() => {
-    let baseRecords = [...attendance];
+    // Start with attendance records that don't belong to admin employees
+    const adminIds = new Set(employees.filter(e => e.role?.toLowerCase() === 'admin').map(e => e.id));
+    let baseRecords = attendance.filter(a => !adminIds.has(a.employeeId));
     const todayStr = dayjs().format('YYYY-MM-DD');
     
     // Determine the range of dates to synthesize based on filter
@@ -349,7 +357,7 @@ export default function EmployeeAttendanceListPage() {
 
     // Synthesize missing records for each employee and each date in the range
     datesToSynthesize.forEach(dateStr => {
-      employees.forEach(emp => {
+      nonAdminEmployees.forEach(emp => {
         // We use employeeId for the check because some records might use emp.id or emp.employeeId
         const existing = baseRecords.find(a => {
           const aDateStr = a.date?.split('T')[0]?.split(' ')[0];
@@ -443,7 +451,7 @@ export default function EmployeeAttendanceListPage() {
       const bDateStr = b.date?.split('T')[0]?.split(' ')[0];
       return dayjs(bDateStr).valueOf() - dayjs(aDateStr).valueOf() || a.employeeName?.localeCompare(b.employeeName);
     });
-  }, [attendance, employees, leaveRequests, dateFilter, specificDate, selectedStatus, selectedDept, searchQuery]);
+  }, [attendance, employees, nonAdminEmployees, leaveRequests, dateFilter, specificDate, selectedStatus, selectedDept, searchQuery]);
 
   const paginatedAttendance = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -523,7 +531,7 @@ export default function EmployeeAttendanceListPage() {
               });
               
               const totalLogged = p + l + lv;
-              const a = Math.max(0, employees.length - totalLogged);
+              const a = Math.max(0, nonAdminEmployees.length - totalLogged);
               
               return { present: p, late: l, absent: a, leave: lv };
             })();
@@ -541,7 +549,7 @@ export default function EmployeeAttendanceListPage() {
               >
                 <div className="flex justify-between items-start mb-1">
                   <span className={`text-xs font-bold ${!d.currentMonth ? 'text-slate-300' : 'text-slate-600'}`}>{d.day}</span>
-                  {d.currentMonth && <span className="text-[9px] font-medium text-slate-400">{employees.length} Total</span>}
+                  {d.currentMonth && <span className="text-[9px] font-medium text-slate-400">{nonAdminEmployees.length} Total</span>}
                 </div>
 
                 {isSunday ? (
@@ -576,7 +584,7 @@ export default function EmployeeAttendanceListPage() {
     if (!selectedDay) return null;
     
     const dayAttendance = attendance.filter(a => a.date === selectedDay);
-    const dayEmployees = employees.map(emp => {
+    const dayEmployees = nonAdminEmployees.map(emp => {
       const existing = dayAttendance.find(a => a.employeeId === emp.id || a.employeeId === emp.employeeId);
       if (existing) return existing;
       
@@ -608,7 +616,7 @@ export default function EmployeeAttendanceListPage() {
       absent: dayEmployees.filter(a => a.status === "Absent").length,
       records: filteredRecords
     };
-  }, [selectedDay, attendance, employees, modalSearchQuery, recoveryRequests, sysSettings]);
+  }, [selectedDay, attendance, employees, nonAdminEmployees, modalSearchQuery, recoveryRequests, sysSettings]);
 
   if (permissionsLoading) {
     return (
@@ -738,7 +746,7 @@ export default function EmployeeAttendanceListPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Employees</SelectItem>
-              {employees.map(emp => (
+              {nonAdminEmployees.map(emp => (
                 <SelectItem key={emp.id} value={emp.id}>
                   {emp.name} {emp.employeeId ? `(${emp.employeeId})` : ""}
                 </SelectItem>
