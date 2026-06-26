@@ -46,11 +46,11 @@ export default function TasksPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
 
-  const canViewTasks = isUserAdmin || checkPermission('tasks', 'canView');
-  const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id);
+  const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id) || user?.role?.toLowerCase() === "team leader" || user?.designation?.toLowerCase() === "team leader";
+  const canViewTasks = isUserAdmin || checkPermission('tasks', 'canView') || isTeamLeader;
   const canAddTask = isUserAdmin || checkPermission('tasks', 'canAdd') || isTeamLeader;
   const canEditTask = isUserAdmin || checkPermission('tasks', 'canEdit') || isTeamLeader;
-  const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete');
+  const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete') || isTeamLeader;
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -340,10 +340,11 @@ export default function TasksPage() {
 
   const filteredTasks = tasks.filter(t => {
     const assignee = employees.find(e => e.id === t.assignedToId);
-    const taskDept = assignee?.department;
+    const taskDept = assignee?.department || t.department;
+    const isProjectTL = projects.some(p => p.id === t.projectId && p.teamLeaderId === user?.id);
 
     // Strict Department Isolation for non-Admins
-    if (!isAdmin) {
+    if (!isAdmin && !isProjectTL) {
       if (taskDept && user?.department && taskDept.toLowerCase() !== user.department.toLowerCase()) {
         return false;
       }
@@ -352,11 +353,10 @@ export default function TasksPage() {
     let isVisible = false;
     if (isAdmin) {
       isVisible = true;
-    } else if (user?.role === "Team Leader") {
-      const project = projects.find(p => p.id === t.projectId);
-      isVisible = project?.teamLeaderId === user?.id || t.assignedToId === user?.id || !t.assignedToId;
+    } else if (isTeamLeader) {
+      isVisible = true;
     } else {
-      isVisible = t.assignedToId === user?.id || !t.assignedToId;
+      isVisible = t.assignedToId === user?.id || t.performedBy === user?.id;
     }
 
     if (!isVisible) return false;

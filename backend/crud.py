@@ -3210,7 +3210,13 @@ async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = N
         if user:
             dept = user.get("department")
             
-            if role.lower() == "team leader":
+            user_role = str(user.get("role", "")).lower().strip()
+            user_desig = str(user.get("designation", "")).lower().strip()
+            is_tl = (role and role.lower() == "team leader") or (user_role == "team leader") or (user_desig == "team leader")
+            
+            tl_proj = await db.projects.find_one({"teamLeaderId": userId})
+            
+            if is_tl or tl_proj:
                 # TL sees tasks assigned to them, tasks in their dept, unassigned tasks in their dept, or tasks they created
                 dept_employees = await db.employees.find({"department": dept}).to_list(length=1000)
                 dept_emp_ids = [str(e["_id"]) for e in dept_employees]
@@ -3221,10 +3227,9 @@ async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = N
                     {"performedBy": userId}
                 ]
             else:
-                # Employee sees their own tasks, unassigned tasks in their dept, or tasks they created
+                # Employee sees their own tasks or tasks they created
                 query["$or"] = [
                     {"assignedToId": userId},
-                    {"department": dept, "assignedToId": ""},
                     {"performedBy": userId}
                 ]
                 

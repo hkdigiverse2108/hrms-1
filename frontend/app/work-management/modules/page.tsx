@@ -79,6 +79,14 @@ export default function ModulesPage() {
   const [loading, setLoading] = useState(true);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
+  const selectedProj = projects.find(p => p.id === selectedProjectId);
+  const canManageModule = Boolean(user && (
+    ['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') ||
+    user.designation?.toLowerCase() === 'team leader' ||
+    selectedProj?.teamLeaderId === user.id ||
+    projects.some((p: any) => p.teamLeaderId === user.id)
+  ));
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activePhase, setActivePhase] = useState<any>(null);
@@ -542,13 +550,15 @@ export default function ModulesPage() {
 
                     <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
 
-                    <Button 
-                      onClick={() => openAddModal(null)}
-                      className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
-                    >
-                      <Plus className="w-4 h-4 mr-1.5" />
-                      Add Module
-                    </Button>
+                    {canManageModule && (
+                      <Button 
+                        onClick={() => openAddModal(null)}
+                        className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
+                      >
+                        <Plus className="w-4 h-4 mr-1.5" />
+                        Add Module
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -636,10 +646,12 @@ export default function ModulesPage() {
                                     )}
                                   </TableCell>
                                   <TableCell className="py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center justify-center gap-2">
-                                      <button onClick={() => openEditModule(m, phase || null)} className="p-1.5 hover:bg-slate-200 rounded-md text-blue-600 transition-colors" title="Edit Module"><Pencil className="w-4 h-4" /></button>
-                                      <button onClick={(e) => handleDeleteModule(e, m)} className="p-1.5 hover:bg-red-100 rounded-md text-red-500 transition-colors" title="Delete Module"><Trash2 className="w-4 h-4" /></button>
-                                    </div>
+                                    {canManageModule && (
+                                      <div className="flex items-center justify-center gap-2">
+                                        <button onClick={() => openEditModule(m, phase || null)} className="p-1.5 hover:bg-slate-200 rounded-md text-blue-600 transition-colors" title="Edit Module"><Pencil className="w-4 h-4" /></button>
+                                        <button onClick={(e) => handleDeleteModule(e, m)} className="p-1.5 hover:bg-red-100 rounded-md text-red-500 transition-colors" title="Delete Module"><Trash2 className="w-4 h-4" /></button>
+                                      </div>
+                                    )}
                                   </TableCell>
                                 </TableRow>
                                 )
@@ -860,9 +872,11 @@ export default function ModulesPage() {
                 <TabsTrigger value="notebook" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
                   <BookOpen className="w-3.5 h-3.5" /> Research Notebook
                 </TabsTrigger>
-                <TabsTrigger value="settings" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
-                  <SlidersHorizontal className="w-3.5 h-3.5" /> Stage & Details
-                </TabsTrigger>
+                {canManageModule && (
+                  <TabsTrigger value="settings" className="flex items-center gap-2 font-bold text-xs px-4 h-8 rounded-lg data-[state=active]:bg-brand-teal data-[state=active]:text-white data-[state=active]:shadow-sm transition-all cursor-pointer">
+                    <SlidersHorizontal className="w-3.5 h-3.5" /> Stage & Details
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
@@ -873,7 +887,7 @@ export default function ModulesPage() {
                   selectedModule.assignedToId === (user as any).employeeId
                 );
                 const isUnassigned = selectedModule && !selectedModule.assignedToId;
-                const isAdminOrTL = user && ['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '');
+                const isAdminOrTL = canManageModule;
                 const canEditResearch = Boolean(isAssignee || isUnassigned || isAdminOrTL);
 
                 return (
