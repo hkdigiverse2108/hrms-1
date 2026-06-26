@@ -289,6 +289,12 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
             name = f"{first} {middle} {last}"
         update_data["name"] = name
 
+    # Check if resulting employee is admin
+    resulting_role = update_data.get("role", existing.get("role", ""))
+    if resulting_role and bool(ADMIN_ROLES_REGEX.match(resulting_role.strip())):
+        update_data["department"] = ""
+        update_data["designation"] = ""
+
     await db.employees.update_one(
         {"_id": ObjectId(employee_id)},
         {"$set": update_data}
@@ -1217,6 +1223,9 @@ async def create_employee(db, employee: schemas.EmployeeCreate):
     
     employee_dict = employee.dict()
     employee_dict["name"] = name
+    if is_admin:
+        employee_dict["department"] = ""
+        employee_dict["designation"] = ""
     
     if next_id:
         employee_dict["employeeId"] = next_id # Override frontend generation unless it's admin with no ID provided

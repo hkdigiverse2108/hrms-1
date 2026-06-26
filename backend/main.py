@@ -206,6 +206,25 @@ async def monthly_report_scheduler_task():
 @asynccontextmanager
 async def lifespan(app):
     # --- Startup ---
+    # Database migration: clean up department and designation for admin users
+    try:
+        from database import db
+        print("[Admin Migration] Cleaning up department and designation for admin users...", flush=True)
+        admin_roles_list = ["admin", "super admin", "superadmin", "administrator", "founder"]
+        admin_query = {
+            "$or": [
+                {"role": {"$regex": r"^(admin|super\s*admin|superadmin|administrator|founder)$", "$options": "i"}},
+                {"role": {"$in": admin_roles_list}}
+            ]
+        }
+        await db.employees.update_many(
+            admin_query,
+            {"$set": {"department": "", "designation": ""}}
+        )
+        print("[Admin Migration] Completed admin cleanup.", flush=True)
+    except Exception as e:
+        print(f"[Admin Migration] Error: {e}", flush=True)
+
     # Database migration: clean up registered_pcs duplicate hostnames and restore raw/original casing
     try:
         from database import db
