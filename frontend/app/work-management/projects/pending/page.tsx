@@ -207,7 +207,8 @@ export default function PendingProjectsPage() {
           <ProjectForm 
             initialData={editingProject} 
             onSubmit={handleSubmit} 
-            isSubmitting={isSubmitting} 
+            isSubmitting={isSubmitting}
+            isAdmin={isAdmin} 
           />
         </DialogContent>
       </Dialog>

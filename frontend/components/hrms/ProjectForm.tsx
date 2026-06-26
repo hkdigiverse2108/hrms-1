@@ -10,6 +10,7 @@ import { API_URL } from "@/lib/config";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
 
 export interface ProjectFormData {
   title: string;
@@ -20,6 +21,7 @@ export interface ProjectFormData {
   teamLeaderId: string;
   startDate: string;
   endDate: string;
+  teamDeadline?: string;
   status: string;
   priority: string;
   // Creative fields
@@ -33,7 +35,7 @@ export interface ProjectFormData {
   assignedEmployeeId?: string;
   assignedEmployeeName?: string;
   isPhaseWise?: boolean;
-  phases?: Array<{name: string, startDate: string, endDate: string}>;
+  phases?: Array<{name: string, assignedToId?: string, startDate: string, endDate: string}>;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -44,6 +46,7 @@ const defaultFormData: ProjectFormData = {
   teamLeaderId: "",
   startDate: new Date().toISOString().split('T')[0],
   endDate: "",
+  teamDeadline: "",
   status: "planning",
   priority: "medium",
   // Creative fields defaults
@@ -62,9 +65,10 @@ interface ProjectFormProps {
   initialData?: Partial<ProjectFormData>;
   onSubmit: (data: ProjectFormData) => void;
   isSubmitting?: boolean;
+  isAdmin?: boolean;
 }
 
-export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectFormProps) {
+export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true }: ProjectFormProps) {
   const [formData, setFormData] = useState<ProjectFormData>({
     ...defaultFormData,
     ...initialData,
@@ -119,7 +123,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
 
   const handleAddPhase = () => {
     const currentPhases = formData.phases || [];
-    handleChange("phases", [...currentPhases, { name: "", startDate: "", endDate: "" }]);
+    handleChange("phases", [...currentPhases, { name: "", assignedToId: "", startDate: "", endDate: "" }]);
   };
 
   const handlePhaseChange = (index: number, field: string, value: string) => {
@@ -136,6 +140,16 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.department === "Development") {
+      if (isAdmin && !formData.endDate) {
+        toast.error("Client Deadline (End Date) is compulsory for Development projects.");
+        return;
+      }
+      if (!formData.teamDeadline) {
+        toast.error("Team Deadline is compulsory for Development projects.");
+        return;
+      }
+    }
     onSubmit(formData);
   };
 
@@ -265,7 +279,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${formData.department === "Development" ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
         <div className="space-y-2">
           <Label htmlFor="startDate">Start Date</Label>
           <Input
@@ -276,15 +290,38 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="endDate">End Date (Optional)</Label>
-          <Input
-            id="endDate"
-            type="date"
-            value={formData.endDate || ""}
-            onChange={(e) => handleChange("endDate", e.target.value)}
-          />
-        </div>
+        {isAdmin && (
+          <div className="space-y-2">
+            <Label htmlFor="endDate">
+              {formData.department === "Development" ? (
+                <>Client Deadline <span className="text-red-500">*</span></>
+              ) : (
+                "End Date (Optional)"
+              )}
+            </Label>
+            <Input
+              id="endDate"
+              type="date"
+              value={formData.endDate || ""}
+              onChange={(e) => handleChange("endDate", e.target.value)}
+              required={formData.department === "Development"}
+            />
+          </div>
+        )}
+        {formData.department === "Development" && (
+          <div className="space-y-2">
+            <Label htmlFor="teamDeadline">
+              Team Deadline <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="teamDeadline"
+              type="date"
+              value={formData.teamDeadline || ""}
+              onChange={(e) => handleChange("teamDeadline", e.target.value)}
+              required
+            />
+          </div>
+        )}
       </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -326,7 +363,10 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
       {formData.department === "Development" && (
         <div className="space-y-4 pt-4 border-t border-slate-200 mt-4">
           <div className="flex items-center justify-between">
-            <Label className="text-base font-semibold">Phase Wise Project</Label>
+            <div>
+              <Label className="text-base font-semibold text-slate-800">Phase Wise Project</Label>
+              <p className="text-xs text-slate-500">Assign phase deadlines and team members</p>
+            </div>
             <Switch
               checked={formData.isPhaseWise || false}
               onCheckedChange={(checked) => handleChange("isPhaseWise", checked)}
@@ -336,13 +376,13 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
           {formData.isPhaseWise && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-slate-700">Project Phases</h4>
+                <h4 className="text-sm font-medium text-slate-700">Project Phases & Deadlines</h4>
                 <Button 
                   type="button" 
                   variant="outline" 
                   size="sm" 
                   onClick={handleAddPhase}
-                  className="h-8 text-xs bg-slate-50"
+                  className="h-8 text-xs bg-brand-teal text-white hover:bg-brand-teal-light"
                 >
                   <Plus className="w-3.5 h-3.5 mr-1" />
                   Add Phase
@@ -350,52 +390,76 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
               </div>
               
               {(formData.phases || []).length === 0 ? (
-                <div className="text-center py-4 text-slate-500 text-sm border rounded-lg bg-slate-50 border-dashed">
-                  No phases added yet. Click "Add Phase" to create one.
+                <div className="text-center py-6 text-slate-500 text-sm border rounded-lg bg-slate-50 border-dashed">
+                  No phases added yet. Click "Add Phase" to assign deadlines.
                 </div>
               ) : (
                 <div className="space-y-3">
                   {(formData.phases || []).map((phase, index) => (
-                    <div key={index} className="flex items-start gap-3 p-3 border rounded-lg bg-slate-50/50">
+                    <div key={index} className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50/60 shadow-sm">
                       <div className="flex-1 space-y-3">
-                        <div>
-                          <Label className="text-xs">Phase Name</Label>
-                          <Input 
-                            value={phase.name} 
-                            onChange={(e) => handlePhaseChange(index, "name", e.target.value)} 
-                            placeholder="e.g. Design Phase"
-                            className="h-8 text-sm mt-1"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <Label className="text-xs">Start Date</Label>
+                            <Label className="text-xs font-bold text-slate-600">Phase Name</Label>
                             <Input 
-                              type="date" 
-                              value={phase.startDate} 
-                              onChange={(e) => handlePhaseChange(index, "startDate", e.target.value)}
-                              className="h-8 text-sm mt-1"
+                              value={phase.name || ""} 
+                              onChange={(e) => handlePhaseChange(index, "name", e.target.value)} 
+                              placeholder="e.g. Design Phase"
+                              className="h-8 text-xs mt-1 bg-white"
                             />
                           </div>
                           <div>
-                            <Label className="text-xs">End Date</Label>
+                            <Label className="text-xs font-bold text-slate-600">Assign To Member</Label>
+                            <Select 
+                              value={phase.assignedToId || ""} 
+                              onValueChange={(val) => handlePhaseChange(index, "assignedToId", val)}
+                            >
+                              <SelectTrigger className="h-8 text-xs mt-1 bg-white">
+                                <SelectValue placeholder="Select Member" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {allEmployees
+                                  .filter(e => formData.department ? e.department?.toLowerCase() === formData.department.toLowerCase() : true)
+                                  .map((emp) => (
+                                    <SelectItem key={emp.id} value={emp.id}>
+                                      {emp.firstName} {emp.lastName}
+                                    </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs font-bold text-slate-600">Start Date</Label>
                             <Input 
                               type="date" 
-                              value={phase.endDate} 
+                              value={phase.startDate || ""} 
+                              onChange={(e) => handlePhaseChange(index, "startDate", e.target.value)}
+                              className="h-8 text-xs mt-1 bg-white"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs font-bold text-slate-600">Phase Deadline</Label>
+                            <Input 
+                              type="date" 
+                              value={phase.endDate || ""} 
                               onChange={(e) => handlePhaseChange(index, "endDate", e.target.value)}
-                              className="h-8 text-sm mt-1"
+                              className="h-8 text-xs mt-1 bg-white"
                             />
                           </div>
                         </div>
                       </div>
-                      <button 
+                      <Button 
                         type="button"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => handleRemovePhase(index)}
-                        className="mt-6 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                        className="mt-6 h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50"
                         title="Remove Phase"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -404,7 +468,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
           )}
         </div>
       )}
-      
+
       {formData.department === "Creative" && (
         <div className="space-y-4 pt-4 border-t border-slate-200 mt-4">
           <h3 className="text-sm font-semibold text-slate-800">Creative Deliverables</h3>

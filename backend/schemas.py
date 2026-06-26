@@ -1028,6 +1028,7 @@ class ProjectBase(BaseModel):
     assignedEmployeeName: Optional[str] = None
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
+    teamDeadline: Optional[RobustDate] = None
     status: Optional[str] = "planning"
     statusHistory: Optional[List[dict]] = []
     priority: Optional[str] = "medium"
@@ -1065,6 +1066,7 @@ class ProjectBase(BaseModel):
     # Phase Wise Project Fields
     isPhaseWise: Optional[bool] = False
     phases: Optional[List[dict]] = []
+    modules: Optional[List[dict]] = []
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1083,6 +1085,7 @@ class ProjectUpdate(BaseModel):
     assignedEmployeeName: Optional[str] = None
     startDate: Optional[RobustDate] = None
     endDate: Optional[RobustDate] = None
+    teamDeadline: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None
     budget: Optional[float] = None
@@ -1119,6 +1122,7 @@ class ProjectUpdate(BaseModel):
     # Phase Wise Project Fields
     isPhaseWise: Optional[bool] = None
     phases: Optional[List[dict]] = None
+    modules: Optional[List[dict]] = None
 
 class Project(ProjectBase):
     id: str
@@ -1176,6 +1180,8 @@ class WMTaskBase(BaseModel):
     assignedToName: Optional[str] = None
     department: Optional[str] = None
     dueDate: Optional[RobustDate] = None
+    moduleName: Optional[str] = None
+    moduleDeadline: Optional[RobustDate] = None
     status: Optional[str] = "todo" # todo, in-progress, review, completed
     priority: Optional[str] = "medium" # low, medium, high, urgent
     remarks: Optional[str] = None
@@ -1214,6 +1220,8 @@ class WMTaskUpdate(BaseModel):
     assignedToName: Optional[str] = None
     department: Optional[str] = None
     dueDate: Optional[RobustDate] = None
+    moduleName: Optional[str] = None
+    moduleDeadline: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None
     remarks: Optional[str] = None
@@ -1255,6 +1263,7 @@ class TaskLogBase(BaseModel):
     performedBy: str
     userName: str
     details: str
+    diffs: Optional[List[dict]] = []
     timestamp: Optional[RobustDatetime] = None
 
 class TaskLog(TaskLogBase):

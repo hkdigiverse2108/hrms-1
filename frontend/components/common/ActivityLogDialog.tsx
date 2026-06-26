@@ -65,7 +65,7 @@ export function ActivityLogDialog({
 
     if (!log.details) return { ...log, processedDetails: [], derivedAction };
     
-    let detailsStr = log.details.replace(/^Client '[^']+': /, '');
+    let detailsStr = log.details.replace(/^(Client|Project|Task|Asset|Lead|Candidate|Report|Daily Report|Monthly Report) ('[^']+'|[^:]+):\s*/i, '');
     
     // Custom split function that ignores commas inside quotes or brackets
     const splitDetails = (str: string) => {
@@ -165,11 +165,57 @@ export function ActivityLogDialog({
 
     return { ...log, processedDetails: detailsList, derivedAction };
   }).filter(log => {
-    if (log.details && log.processedDetails.length === 0 && log.action === "Updated") {
+    if (log.details && log.processedDetails.length === 0 && !(log as any).diffs?.length && log.action === "Updated") {
       return false;
     }
     return true;
   });
+
+  const renderDiffContent = (oldStr: string, newStr: string) => {
+    if (!oldStr && newStr) {
+      return <span className="bg-emerald-100 text-emerald-900 px-1.5 py-0.5 rounded font-mono text-[12px] whitespace-pre-wrap break-all border border-emerald-300">{newStr}</span>;
+    }
+    if (oldStr && !newStr) {
+      return <span className="bg-red-100 text-red-900 line-through px-1.5 py-0.5 rounded font-mono text-[12px] whitespace-pre-wrap break-all border border-red-300">{oldStr}</span>;
+    }
+    if (oldStr === newStr) {
+      return <span className="font-mono text-[12px] whitespace-pre-wrap break-all text-slate-700">{newStr}</span>;
+    }
+
+    let p = 0;
+    while (p < oldStr.length && p < newStr.length && oldStr[p] === newStr[p]) {
+      p++;
+    }
+
+    let sOld = oldStr.length - 1;
+    let sNew = newStr.length - 1;
+    while (sOld >= p && sNew >= p && oldStr[sOld] === newStr[sNew]) {
+      sOld--;
+      sNew--;
+    }
+
+    const prefix = oldStr.slice(0, p);
+    const removed = oldStr.slice(p, sOld + 1);
+    const added = newStr.slice(p, sNew + 1);
+    const suffix = oldStr.slice(sOld + 1);
+
+    return (
+      <div className="font-mono text-[12px] leading-relaxed bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 whitespace-pre-wrap break-all">
+        {prefix}
+        {removed ? (
+          <span className="bg-red-100 text-red-900 line-through px-1 mx-0.5 rounded border border-red-300 font-bold">
+            {removed}
+          </span>
+        ) : null}
+        {added ? (
+          <span className="bg-emerald-200 text-emerald-950 px-1 mx-0.5 rounded border border-emerald-400 font-bold shadow-sm">
+            {added}
+          </span>
+        ) : null}
+        {suffix}
+      </div>
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -221,8 +267,17 @@ export function ActivityLogDialog({
                         </div>
                       )}
                       
-                      <div className="text-[13px] text-[#4B5563] leading-[1.6] font-medium space-y-1.5">
-                        {log.processedDetails && log.processedDetails.length > 0 ? (
+                      <div className="text-[13px] text-[#4B5563] leading-[1.6] font-medium space-y-2">
+                        {(log as any).diffs && (log as any).diffs.length > 0 ? (
+                          <div className="space-y-2.5 mt-1">
+                            {(log as any).diffs.map((df: any, idx: number) => (
+                              <div key={idx} className="space-y-1">
+                                <span className="text-[11px] font-bold text-slate-600 tracking-wider uppercase block">{df.field}:</span>
+                                {renderDiffContent(df.old, df.new)}
+                              </div>
+                            ))}
+                          </div>
+                        ) : log.processedDetails && log.processedDetails.length > 0 ? (
                           log.processedDetails.map((detail: string, i: number) => (
                             <p key={i}>{detail.replace(/ 00:00:00/g, "")}</p>
                           ))
