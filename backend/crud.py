@@ -2526,12 +2526,42 @@ async def delete_leave_request(db, leave_id: str):
     result = await db.leave_requests.delete_one({"_id": ObjectId(leave_id)})
     return result.deleted_count > 0
 
+# Helper for checking full entity access permission
+async def user_has_full_entity_access(db, user_id: str, role: str, target_module: str = None) -> bool:
+    if not role and not user_id:
+        return False
+    role_lower = str(role or "").lower().strip()
+    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing"}
+    if role_lower in full_roles or "social media" in role_lower or "digital marketing" in role_lower:
+        return True
+        
+    if user_id:
+        user = await get_employee(db, user_id)
+        if user:
+            ur = str(user.get("role", "")).lower().strip()
+            udes = str(user.get("designation", "")).lower().strip()
+            udept = str(user.get("department", "")).lower().strip()
+            if ur in full_roles or udes in full_roles or "social media" in ur or "social media" in udes or "digital marketing" in ur or "digital marketing" in udes:
+                return True
+                
+        # Check permissions table
+        perm_doc = await db.user_permissions.find_one({"employeeId": user_id})
+        if perm_doc:
+            modules_to_check = {"projects", "smm", "clients", "digital-marketing", "work-management"}
+            if target_module:
+                modules_to_check.add(target_module)
+            for p in perm_doc.get("permissions", []):
+                if p.get("moduleName") in modules_to_check and (p.get("canView") or p.get("canEdit") or p.get("canAdd")):
+                    return True
+    return False
+
 # Client CRUD
 async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = None):
     query = {}
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin", "manager"]:
+        user_id = user_info.get("sub")
+        if not await user_has_full_entity_access(db, user_id, role, "clients"):
             user_id = user_info.get("sub")
             # Fetch user's projects to get associated clients
             user_projects = await get_projects(db, userId=user_id, role=role, skip=0, limit=10000)
@@ -2845,7 +2875,7 @@ async def delete_client(db, client_id: str):
 # Project CRUD
 async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "projects"):
         # Fetch user to get department
         user = await get_employee(db, userId)
         if user:
@@ -3016,7 +3046,7 @@ async def delete_project(db, project_id: str):
 # General Task CRUD
 async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "tasks"):
         # User sees tasks assigned to them, or tasks they assigned
         query["$or"] = [
             {"assignedToId": userId},
@@ -3137,7 +3167,7 @@ async def delete_task(db, task_id: str):
 # Work Management Task CRUD
 async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "wm-tasks"):
         user = await get_employee(db, userId)
         if user:
             dept = user.get("department")
@@ -3596,7 +3626,8 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
     query = {}
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin"]:
+        user_id = user_info.get("sub")
+        if user_id and not await user_has_full_entity_access(db, user_id, role, "digital-marketing"):
             user_id = user_info.get("sub")
             # Get allowed clients
             allowed_clients = await db.clients.find({"assignedEmployeeId": user_id}).to_list(length=None)
@@ -3786,7 +3817,8 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: list =
     
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin"]:
+        user_id = user_info.get("sub")
+        if user_id and not await user_has_full_entity_access(db, user_id, role, "digital-marketing"):
             is_restricted = True
             user_id = user_info.get("sub")
             # Get allowed clients
