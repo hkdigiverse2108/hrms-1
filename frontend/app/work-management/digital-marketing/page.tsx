@@ -1351,6 +1351,11 @@ export default function MarketingReportsPage() {
       }
     }
 
+    const assocProject = projects.find((p: any) => String(p.id) === String(r.projectId) || String(p.clientId) === String(r.clientId));
+    if (assocProject && (assocProject.status === "on-hold" || assocProject.status === "onhold" || assocProject.status?.toLowerCase() === "on-hold")) {
+      isCurrentlyActive = false;
+    }
+
     const reportDate = normalizeDate(r.date);
     const todayStr = getTodayStr();
 
@@ -1370,8 +1375,8 @@ export default function MarketingReportsPage() {
       isZeroOrEmpty(r.cpl) &&
       isZeroOrEmpty(r.remarks);
 
-    // Hide inactive rows for today or future dates, regardless of whether they are empty
-    if (!isCurrentlyActive && reportDate >= todayStr) {
+    // Hide inactive or on-hold rows for today or future dates, OR if they are unsubmitted empty placeholder rows for past dates
+    if (!isCurrentlyActive && (reportDate >= todayStr || isTrulyEmpty)) {
       return false;
     }
 
