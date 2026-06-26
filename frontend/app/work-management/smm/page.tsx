@@ -164,7 +164,7 @@ export default function CreativeClientsPage() {
   const router = useRouter();
   const { confirm } = useConfirm();
   const { user } = useUser();
-  const hasFullSmmAccess = useMemo(() => {
+  const hasFullSmmAccess = React.useMemo(() => {
     if (!user) return false;
     const r = (user.role || "").toLowerCase();
     const d = (user.designation || "").toLowerCase();
