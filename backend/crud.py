@@ -5606,7 +5606,12 @@ def recalculate_attendance_seconds(punches: list, breaks: list) -> tuple:
         
         # If the last punch has no punchOut, it's active.
         if not last.get("punchOut"):
-            merged_punches.append(p_copy)
+            if p_copy.get("punchOut") and parse_time(p_copy["punchIn"]) >= parse_time(last["punchIn"]):
+                last["punchOut"] = p_copy["punchOut"]
+                if p_copy.get("type"):
+                    last["type"] = p_copy["type"]
+            else:
+                merged_punches.append(p_copy)
             continue
             
         last_out_sec = parse_time(last["punchOut"])
@@ -5731,76 +5736,79 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     breaks = attn.get('breaks') or []
                     breaks = [dict(b) for b in breaks]
                     
+                    old_accumulated = attn.get('accumulatedWorkSeconds', 0.0)
+                    
                     fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
                     fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
 
-                    if recovery_type in ['meeting', 'work']:
-                        # Fix: Trim or remove breaks that overlap with this recovery
-                        def parse_t(t_str):
-                            if not t_str: return 0
-                            pts = t_str.split(':')
-                            try:
-                                return int(pts[0])*3600 + int(pts[1])*60 + (int(pts[2]) if len(pts)>2 else 0)
-                            except: return 0
+                    # The recover time logic is to add time to the production hour
+                    def parse_t(t_str):
+                        if not t_str: return 0
+                        pts = t_str.split(':')
+                        try:
+                            return int(pts[0])*3600 + int(pts[1])*60 + (int(pts[2]) if len(pts)>2 else 0)
+                        except: return 0
+                    
+                    def format_t(sec):
+                        sec = sec % 86400
+                        return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
                         
-                        def format_t(sec):
-                            sec = sec % 86400
-                            return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
+                    rec_in = parse_t(fmt_start)
+                    rec_out = parse_t(fmt_end)
+                    if rec_out < rec_in:
+                        rec_out += 86400
+                        
+                    new_breaks = []
+                    for b in breaks:
+                        b_start = b.get("startTime")
+                        b_end = b.get("endTime")
+                        if not b_start or not b_end:
+                            new_breaks.append(b)
+                            continue
                             
-                        rec_in = parse_t(fmt_start)
-                        rec_out = parse_t(fmt_end)
-                        if rec_out < rec_in:
-                            rec_out += 86400
+                        b_in = parse_t(b_start)
+                        b_out = parse_t(b_end)
+                        if b_out < b_in:
+                            b_out += 86400
                             
-                        new_breaks = []
-                        for b in breaks:
-                            b_start = b.get("startTime")
-                            b_end = b.get("endTime")
-                            if not b_start or not b_end:
-                                new_breaks.append(b)
-                                continue
-                                
-                            b_in = parse_t(b_start)
-                            b_out = parse_t(b_end)
-                            if b_out < b_in:
-                                b_out += 86400
-                                
-                            overlap_start = max(rec_in, b_in)
-                            overlap_end = min(rec_out, b_out)
+                        overlap_start = max(rec_in, b_in)
+                        overlap_end = min(rec_out, b_out)
+                        
+                        if overlap_start < overlap_end:
+                            # There is overlap
+                            if rec_in <= b_in and rec_out >= b_out:
+                                continue # fully engulfed, remove break
+                            elif b_in < rec_in and b_out > rec_out:
+                                # Split into two
+                                new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                                new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                            elif b_in >= rec_in and b_out > rec_out:
+                                # Trim start
+                                new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                            elif b_in < rec_in and b_out <= rec_out:
+                                # Trim end
+                                new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                        else:
+                            new_breaks.append(b)
                             
-                            if overlap_start < overlap_end:
-                                # There is overlap
-                                if rec_in <= b_in and rec_out >= b_out:
-                                    continue # fully engulfed, remove break
-                                elif b_in < rec_in and b_out > rec_out:
-                                    # Split into two
-                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
-                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
-                                elif b_in >= rec_in and b_out > rec_out:
-                                    # Trim start
-                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
-                                elif b_in < rec_in and b_out <= rec_out:
-                                    # Trim end
-                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
-                            else:
-                                new_breaks.append(b)
-                                
-                        breaks = new_breaks
+                    breaks = new_breaks
 
-                        punches.append({
-                            "punchIn": fmt_start,
-                            "punchOut": fmt_end,
-                            "type": recovery_type
-                        })
-                    elif recovery_type == 'break':
-                        breaks.append({
-                            "startTime": fmt_start,
-                            "endTime": fmt_end,
-                            "duration": str(int(duration_seconds // 60))
-                        })
+                    punches.append({
+                        "punchIn": fmt_start,
+                        "punchOut": fmt_end,
+                        "type": recovery_type or "work"
+                    })
                     
                     # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
                     merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
+                    
+                    expected_rec_sec = int(doc.get('recovery_minutes', 0)) * 60
+                    if expected_rec_sec <= 0 and duration_seconds > 0:
+                        expected_rec_sec = duration_seconds
+                    
+                    actual_inc = new_accumulated - old_accumulated
+                    if actual_inc < expected_rec_sec:
+                        new_accumulated += (expected_rec_sec - actual_inc)
                     
                     # Recalculate workHours string
                     hours, remainder = divmod(int(new_accumulated), 3600)
@@ -5883,28 +5891,31 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                             has_active_break = True
                             break
 
-                    if not has_active and attn_record.get('checkIn') and attn_record.get('checkOut'):
-                        try:
-                            ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
-                            co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
-                            diff = co - ci
-                            h, r = divmod(diff.total_seconds(), 3600)
-                            m, _ = divmod(r, 60)
-                            attn_record['workHours'] = f"{int(h)}h {int(m)}m"
-                        except Exception: pass
-                    
+                    old_acc = attn_record.get('accumulatedWorkSeconds', 0.0)
+                    added_sec = int(doc.get('recovery_minutes', 0)) * 60
+                    new_acc = old_acc + added_sec
+                    if new_acc > 0:
+                        h, r = divmod(int(new_acc), 3600)
+                        m, _ = divmod(r, 60)
+                        attn_record['workHours'] = f"{int(h)}h {int(m)}m"
+                        attn_record['accumulatedWorkSeconds'] = new_acc
+
                     new_status = 'On Break' if (has_active and has_active_break) else ('Active' if has_active else 'Logged')
                     new_checkout = None if has_active else attn_record.get('checkOut')
                     
+                    set_data = {
+                        'breaks': updated_breaks,
+                        'checkIn': attn_record.get('checkIn'),
+                        'checkOut': new_checkout,
+                        'workHours': attn_record.get('workHours'),
+                        'status': new_status
+                    }
+                    if 'accumulatedWorkSeconds' in attn_record:
+                        set_data['accumulatedWorkSeconds'] = attn_record['accumulatedWorkSeconds']
+
                     await db.attendance.update_one(
                         {'_id': attn_record['_id']},
-                        {'$set': {
-                            'breaks': updated_breaks,
-                            'checkIn': attn_record.get('checkIn'),
-                            'checkOut': new_checkout,
-                            'workHours': attn_record.get('workHours'),
-                            'status': new_status
-                        }}
+                        {'$set': set_data}
                     )
     
                 # Case 1: Break Timing Correction
