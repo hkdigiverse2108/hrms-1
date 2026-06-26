@@ -144,11 +144,11 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
   };
 
   const filteredProjects = formData.department
-    ? projects.filter(p => p.department?.toLowerCase() === formData.department.toLowerCase())
+    ? projects.filter(p => p.department?.toLowerCase() === formData.department?.toLowerCase())
     : projects;
 
   const filteredEmployees = formData.department
-    ? employees.filter(e => e.department?.toLowerCase() === formData.department.toLowerCase())
+    ? employees.filter(e => e.department?.toLowerCase() === formData.department?.toLowerCase())
     : employees;
 
   const selectedProject = projects.find(p => p.id === formData.projectId);
@@ -171,10 +171,10 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         </div>
       )}
       <div className="space-y-2">
-        <Label htmlFor="title">Task Title</Label>
+        <Label htmlFor="title">Module Name / Task Title</Label>
         <Input
           id="title"
-          placeholder="e.g. Design Login Page"
+          placeholder="e.g. User Authentication Module"
           value={formData.title ?? ""}
           onChange={(e) => handleChange("title", e.target.value)}
           required
@@ -216,14 +216,14 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="assignedToId">Assign To</Label>
+          <Label htmlFor="assignedToId">Assign Member</Label>
           <Select 
             value={formData.assignedToId ?? ""} 
             onValueChange={(v) => handleChange("assignedToId", v)}
             disabled={isLoadingMeta}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Employee"} />
+              <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Member"} />
             </SelectTrigger>
             <SelectContent>
               {filteredEmployees.map((e) => (
@@ -247,7 +247,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
 
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="dueDate">Due Date</Label>
+          <Label htmlFor="dueDate">Module Deadline</Label>
           <Input
             id="dueDate"
             type="date"
@@ -399,7 +399,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
       <div className="flex justify-end gap-3 pt-4">
         <Button type="submit" className="bg-brand-teal hover:bg-brand-teal-light text-white" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {initialData ? "Update Task" : "Create Task"}
+          {initialData ? "Update Module" : "Assign Module"}
         </Button>
       </div>
     </form>

@@ -42,14 +42,15 @@ export default function TasksPage() {
   const router = useRouter();
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions();
 
-  const canViewTasks = isUserAdmin || checkPermission('tasks', 'canView');
-  const canAddTask = isUserAdmin || checkPermission('tasks', 'canAdd');
-  const canEditTask = isUserAdmin || checkPermission('tasks', 'canEdit');
-  const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete');
-
   const [tasks, setTasks] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+
+  const canViewTasks = isUserAdmin || checkPermission('tasks', 'canView');
+  const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id);
+  const canAddTask = isUserAdmin || checkPermission('tasks', 'canAdd') || isTeamLeader;
+  const canEditTask = isUserAdmin || checkPermission('tasks', 'canEdit') || isTeamLeader;
+  const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -397,6 +398,12 @@ export default function TasksPage() {
         description="Manage software & web development sprints. Click any card to update details."
       >
         <div className="flex gap-2">
+          {canAddTask && (
+            <Button onClick={() => { setEditingTask(null); setModalOpen(true); }} className="bg-brand-teal text-white hover:bg-brand-teal-light font-bold">
+              <Plus className="w-4 h-4 mr-2" />
+              Assign Module
+            </Button>
+          )}
 
           <Dialog open={modalOpen} onOpenChange={(open) => {
             setModalOpen(open);
@@ -406,7 +413,7 @@ export default function TasksPage() {
             <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto custom-scrollbar">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">
-                  {editingTask ? "Edit Development Task" : "Create Development Task"}
+                  {editingTask ? "Edit Module / Task" : "Assign New Module"}
                 </DialogTitle>
               </DialogHeader>
               <WMTaskForm 
@@ -793,7 +800,7 @@ export default function TasksPage() {
                                   >
                                     <div className="flex items-center gap-2.5">
                                       <Plus className="w-5 h-5 text-slate-400 group-hover:text-brand-teal transition-colors" />
-                                      <span className="text-[14.5px] font-medium">Add a task</span>
+                                      <span className="text-[14.5px] font-medium">Add a module</span>
                                     </div>
                                   </button>
                               )}
