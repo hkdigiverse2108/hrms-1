@@ -45,7 +45,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions()
 
   const isHRRoleOrDept = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr'
-  const canViewDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canView') || user?.role === 'Employee' || user?.role === 'Team Leader'
+  const canViewDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canView') || ['Employee', 'Team Leader', 'Manager', 'Social Media Manager'].includes(user?.role)
   const canEditDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canEdit')
 
   const employees = data?.employees || []

@@ -223,7 +223,7 @@ export function PendingWorkEmbedded({
       else if (ow.status === 'Ready for Review') canSee = isAssigner || isAssignee;
       else if (ow.status === 'Approved') canSee = isAssignee || isAssigner; // Show in completed
 
-      const isManagerOrAdmin = user?.role === 'Team Leader' || user?.role?.toLowerCase() === 'admin' || user?.role === 'HR';
+      const isManagerOrAdmin = ['Team Leader', 'Admin', 'HR', 'Manager', 'Social Media Manager'].includes(user?.role) || user?.role?.toLowerCase() === 'admin';
       if (isManagerOrAdmin || isAssignee || isAssigner) {
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
           

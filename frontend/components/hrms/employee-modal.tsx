@@ -232,9 +232,11 @@ export function EmployeeModal({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Admin">Admin</SelectItem>
+                    <SelectItem value="Manager">Manager</SelectItem>
+                    <SelectItem value="Social Media Manager">Social Media Manager</SelectItem>
                     <SelectItem value="HR">HR</SelectItem>
-                    <SelectItem value="Employee">Employee</SelectItem>
                     <SelectItem value="Team Leader">Team Leader</SelectItem>
+                    <SelectItem value="Employee">Employee</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
