@@ -1217,6 +1217,21 @@ async def delete_project(project_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
     return {"message": "Project deleted successfully"}
 
+@app.put("/projects/{project_id}/modules/notebook", response_model=schemas.Project)
+async def update_module_notebook(project_id: str, payload: schemas.ModuleNotebookUpdate, db=Depends(get_db)):
+    updated = await crud.update_module_notebook(db, project_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project or module not found")
+    return updated
+
+@app.post("/projects/{project_id}/modules/comments", response_model=schemas.Project)
+async def add_module_comment(project_id: str, payload: schemas.ModuleCommentCreate, db=Depends(get_db)):
+    updated = await crud.add_module_comment(db, project_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project or module not found")
+    return updated
+
+
 # WM Task Endpoints
 # General Task Endpoints
 @app.get("/tasks", response_model=List[schemas.Task])

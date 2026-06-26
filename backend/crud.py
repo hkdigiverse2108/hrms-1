@@ -3014,6 +3014,73 @@ async def delete_project(db, project_id: str):
         await log_activity(db, "Deleted", "Admin", "N/A", f"Project '{project.get('title')}' was deleted.", projectId=project_id)
     return True
 
+async def update_module_notebook(db, project_id: str, payload: schemas.ModuleNotebookUpdate):
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return None
+    modules = project.get("modules") or []
+    updated = False
+    for m in modules:
+        m_phase = m.get("phaseName") or ""
+        p_phase = payload.phaseName or ""
+        if m.get("name") == payload.moduleName and m_phase == p_phase:
+            m["researchWork"] = payload.researchWork
+            updated = True
+            break
+            
+    if updated:
+        await db.projects.update_one(
+            {"_id": ObjectId(project_id)},
+            {"$set": {"modules": modules}}
+        )
+        await log_activity(db, "Module Research Updated", payload.performedBy or "Unknown", payload.userName or "User", f"Updated research work for module '{payload.moduleName}'", projectId=project_id)
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+        except Exception:
+            pass
+            
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc) if doc else None
+
+async def add_module_comment(db, project_id: str, payload: schemas.ModuleCommentCreate):
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return None
+    modules = project.get("modules") or []
+    updated = False
+    new_comment = {
+        "id": str(int(time.time() * 1000)),
+        "userId": payload.userId,
+        "userName": payload.userName,
+        "userRole": payload.userRole,
+        "content": payload.content,
+        "createdAt": get_now().strftime("%d %b %Y, %I:%M %p")
+    }
+    for m in modules:
+        m_phase = m.get("phaseName") or ""
+        p_phase = payload.phaseName or ""
+        if m.get("name") == payload.moduleName and m_phase == p_phase:
+            if "comments" not in m or not isinstance(m["comments"], list):
+                m["comments"] = []
+            m["comments"].append(new_comment)
+            updated = True
+            break
+            
+    if updated:
+        await db.projects.update_one(
+            {"_id": ObjectId(project_id)},
+            {"$set": {"modules": modules}}
+        )
+        await log_activity(db, "Module Comment Added", payload.userId, payload.userName, f"Added comment on module '{payload.moduleName}'", projectId=project_id)
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+        except Exception:
+            pass
+            
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc) if doc else None
+
+
 # General Task CRUD
 async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}

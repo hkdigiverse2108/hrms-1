@@ -1130,6 +1130,22 @@ class Project(ProjectBase):
     class Config:
         from_attributes = True
 
+class ModuleNotebookUpdate(BaseModel):
+    moduleName: str
+    phaseName: Optional[str] = None
+    researchWork: str
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class ModuleCommentCreate(BaseModel):
+    moduleName: str
+    phaseName: Optional[str] = None
+    content: str
+    userId: str
+    userName: str
+    userRole: Optional[str] = None
+
+
 # General Task Schemas
 class TaskBase(BaseModel):
     title: str
