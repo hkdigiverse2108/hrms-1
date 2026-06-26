@@ -393,8 +393,8 @@ export default function TasksPage() {
   return (
     <div className="space-y-4 flex flex-col h-[calc(100vh-140px)]">
       <PageHeader
-        title="Tasks Board"
-        description="Manage your team's workflow. Click any task card to update details."
+        title="Development Board"
+        description="Manage software & web development sprints. Click any card to update details."
       >
         <div className="flex gap-2">
 
@@ -406,7 +406,7 @@ export default function TasksPage() {
             <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto custom-scrollbar">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">
-                  {editingTask ? "Edit Task Details" : "Create New Task"}
+                  {editingTask ? "Edit Development Task" : "Create Development Task"}
                 </DialogTitle>
               </DialogHeader>
               <WMTaskForm 
