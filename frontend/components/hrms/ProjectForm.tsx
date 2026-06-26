@@ -41,6 +41,8 @@ export interface ProjectFormData {
   frontendLink?: string;
   thirdPartyIntegrations?: Array<{ name: string; credentials: string; notes?: string }>;
   assignedTeamIds?: string[];
+  testingLinks?: Array<{ title: string; url: string; notes?: string }>;
+  testingBugs?: Array<{ id: string; title: string; description: string; reportedBy: string; reportedByName: string; date: string; status: "open" | "fixed" }>;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -66,6 +68,8 @@ const defaultFormData: ProjectFormData = {
   phases: [],
   frontendLink: "",
   thirdPartyIntegrations: [],
+  testingLinks: [],
+  testingBugs: [],
 };
 
 interface ProjectFormProps {
@@ -73,6 +77,7 @@ interface ProjectFormProps {
   onSubmit: (data: ProjectFormData) => void;
   isSubmitting?: boolean;
   isAdmin?: boolean;
+  currentUser?: any;
 }
 
 function PhaseMemberMultiSelect({ 
@@ -171,7 +176,7 @@ function PhaseMemberMultiSelect({
   );
 }
 
-export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true }: ProjectFormProps) {
+export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true, currentUser }: ProjectFormProps) {
   const [formData, setFormData] = useState<ProjectFormData>({
     ...defaultFormData,
     ...initialData,
@@ -487,9 +492,15 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="planning">Planning</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
               <SelectItem value="in-progress">In Progress</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="on-hold">On Hold</SelectItem>
+              {(isAdmin || currentUser?.role?.toLowerCase() === "cto" || formData.teamLeaderId === currentUser?.id || formData.status === "testing" || formData.status === "completed") && (
+                <>
+                  <SelectItem value="testing" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto" && formData.teamLeaderId !== currentUser?.id}>🧪 Testing Phase</SelectItem>
+                  <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto" && formData.teamLeaderId !== currentUser?.id}>✅ Completed</SelectItem>
+                </>
+              )}
             </SelectContent>
           </Select>
         </div>

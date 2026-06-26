@@ -1072,6 +1072,8 @@ class ProjectBase(BaseModel):
     # Development Project Fields
     frontendLink: Optional[str] = None
     thirdPartyIntegrations: Optional[List[dict]] = []
+    testingLinks: Optional[List[dict]] = []
+    testingBugs: Optional[List[dict]] = []
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -1133,6 +1135,8 @@ class ProjectUpdate(BaseModel):
     # Development Project Fields
     frontendLink: Optional[str] = None
     thirdPartyIntegrations: Optional[List[dict]] = None
+    testingLinks: Optional[List[dict]] = None
+    testingBugs: Optional[List[dict]] = None
 
 class Project(ProjectBase):
     id: str

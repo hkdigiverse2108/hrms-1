@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter, CalendarClock, Key, Link2 } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Calendar, Shield, Loader2, Search, AlertTriangle, History, ClipboardList, Filter, CalendarClock, Key, Link2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProjectForm, ProjectFormData } from "@/components/hrms/ProjectForm";
@@ -99,6 +99,154 @@ export default function ProjectsPage() {
       toast.error("An error occurred");
     } finally {
       setIsSavingCreds(false);
+    }
+  };
+
+  // Shift to Testing State
+  const [shiftModalOpen, setShiftModalOpen] = useState(false);
+  const [shiftModalProject, setShiftModalProject] = useState<any>(null);
+  const [shiftTestingLinks, setShiftTestingLinks] = useState<any[]>([]);
+  const [isShifting, setIsShifting] = useState(false);
+
+  // Testing & Bug Tracker State
+  const [testingModalOpen, setTestingModalOpen] = useState(false);
+  const [testingModalProject, setTestingModalProject] = useState<any>(null);
+  const [newBugTitle, setNewBugTitle] = useState("");
+  const [newBugDesc, setNewBugDesc] = useState("");
+  const [newBugSeverity, setNewBugSeverity] = useState("Medium");
+  const [isSubmittingBug, setIsSubmittingBug] = useState(false);
+  const [newTestLinkTitle, setNewTestLinkTitle] = useState("");
+  const [newTestLinkUrl, setNewTestLinkUrl] = useState("");
+
+  const handleConfirmShiftToTesting = async () => {
+    if (!shiftModalProject) return;
+    setIsShifting(true);
+    try {
+      const validLinks = shiftTestingLinks.filter(l => l.url?.trim());
+      const res = await fetch(`${API_URL}/projects/${shiftModalProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...shiftModalProject,
+          status: "testing",
+          testingLinks: validLinks,
+          performedBy: user?.id,
+          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+        toast.success("Project shifted to Testing Phase!");
+        setShiftModalOpen(false);
+      } else {
+        toast.error("Failed to update project status");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error shifting project");
+    } finally {
+      setIsShifting(false);
+    }
+  };
+
+  const handleAddBug = async () => {
+    if (!testingModalProject || !newBugTitle.trim()) {
+      toast.error("Please enter a bug title");
+      return;
+    }
+    setIsSubmittingBug(true);
+    try {
+      const currentBugs = testingModalProject.testingBugs || [];
+      const newBug = {
+        id: "bug_" + Date.now(),
+        title: newBugTitle.trim(),
+        description: newBugDesc.trim(),
+        severity: newBugSeverity,
+        reportedBy: user?.id || "anon",
+        reportedByName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Employee",
+        date: new Date().toISOString().split('T')[0],
+        status: "open"
+      };
+      const updatedBugs = [newBug, ...currentBugs];
+      const res = await fetch(`${API_URL}/projects/${testingModalProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...testingModalProject,
+          testingBugs: updatedBugs,
+          performedBy: user?.id,
+          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+        setTestingModalProject(updated);
+        setNewBugTitle("");
+        setNewBugDesc("");
+        toast.success("Bug reported successfully!");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to report bug");
+    } finally {
+      setIsSubmittingBug(false);
+    }
+  };
+
+  const handleToggleBugStatus = async (bugId: string) => {
+    if (!testingModalProject) return;
+    try {
+      const currentBugs = testingModalProject.testingBugs || [];
+      const updatedBugs = currentBugs.map((b: any) => 
+        b.id === bugId ? { ...b, status: b.status === "open" ? "fixed" : "open" } : b
+      );
+      const res = await fetch(`${API_URL}/projects/${testingModalProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...testingModalProject,
+          testingBugs: updatedBugs,
+          performedBy: user?.id,
+          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+        setTestingModalProject(updated);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddTestingLink = async () => {
+    if (!testingModalProject || !newTestLinkUrl.trim()) return;
+    try {
+      const currentLinks = testingModalProject.testingLinks || [];
+      const updatedLinks = [...currentLinks, { title: newTestLinkTitle.trim() || "Testing Link", url: newTestLinkUrl.trim() }];
+      const res = await fetch(`${API_URL}/projects/${testingModalProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...testingModalProject,
+          testingLinks: updatedLinks,
+          performedBy: user?.id,
+          userName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Unknown"
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+        setTestingModalProject(updated);
+        setNewTestLinkTitle("");
+        setNewTestLinkUrl("");
+        toast.success("Link added!");
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -336,7 +484,8 @@ export default function ProjectsPage() {
                 initialData={editingProject} 
                 onSubmit={handleSubmit} 
                 isSubmitting={isSubmitting}
-                isAdmin={isAdmin} 
+                isAdmin={isAdmin}
+                currentUser={user}
               />
             </DialogContent>
           </Dialog>
@@ -556,6 +705,220 @@ export default function ProjectsPage() {
               {isSavingCreds && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
               Save Links & Credentials
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shift to Testing Dialog */}
+      <Dialog open={shiftModalOpen} onOpenChange={setShiftModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-black text-purple-700">
+              🧪 Shift to Testing Phase
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-xs text-slate-600">
+              All tasks for <strong className="text-slate-900">{shiftModalProject?.title}</strong> are completed. Add testing / staging environment links below before shifting the project to Testing Phase.
+            </p>
+            <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar">
+              {shiftTestingLinks.map((link, idx) => (
+                <div key={idx} className="p-2.5 bg-purple-50/50 border border-purple-100 rounded-xl space-y-2 relative">
+                  {shiftTestingLinks.length > 1 && (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setShiftTestingLinks(prev => prev.filter((_, i) => i !== idx))}
+                      className="h-6 w-6 absolute top-1.5 right-1.5 text-red-500 hover:bg-red-100"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-slate-500">Environment Name</Label>
+                    <Input
+                      placeholder="e.g. Staging App / Test Server"
+                      value={link.title || ""}
+                      onChange={(e) => {
+                        const arr = [...shiftTestingLinks];
+                        arr[idx] = { ...arr[idx], title: e.target.value };
+                        setShiftTestingLinks(arr);
+                      }}
+                      className="h-8 text-xs font-bold bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-slate-500">URL Link</Label>
+                    <Input
+                      placeholder="https://staging.company.com"
+                      value={link.url || ""}
+                      onChange={(e) => {
+                        const arr = [...shiftTestingLinks];
+                        arr[idx] = { ...arr[idx], url: e.target.value };
+                        setShiftTestingLinks(arr);
+                      }}
+                      className="h-8 text-xs font-mono bg-white"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShiftTestingLinks(prev => [...prev, { title: "Testing Link", url: "" }])}
+              className="w-full text-xs font-bold border-dashed border-purple-300 text-purple-700 hover:bg-purple-50"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add Another Link
+            </Button>
+          </div>
+          <div className="pt-2 border-t border-slate-100 flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShiftModalOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleConfirmShiftToTesting} disabled={isShifting} className="bg-purple-600 hover:bg-purple-700 text-white font-black">
+              {isShifting && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              Confirm & Start Testing
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Testing & Bug Tracker Dialog */}
+      <Dialog open={testingModalOpen} onOpenChange={setTestingModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between text-lg font-black text-indigo-700 pr-4">
+              <span>🐞 Testing & Bug Board: {testingModalProject?.title}</span>
+              {(isAdmin || user?.role?.toLowerCase() === 'cto' || testingModalProject?.teamLeaderId === user?.id) && (
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    const openCount = testingModalProject?.testingBugs?.filter((b:any)=>b.status==='open').length || 0;
+                    if (openCount > 0 && !window.confirm(`There are still ${openCount} open bugs. Mark project as completed anyway?`)) return;
+                    try {
+                      const res = await fetch(`${API_URL}/projects/${testingModalProject?.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ...testingModalProject, status: "completed", performedBy: user?.id })
+                      });
+                      if (res.ok) {
+                        const updated = await res.json();
+                        setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+                        setTestingModalOpen(false);
+                        toast.success("Project marked as Completed!");
+                      }
+                    } catch(e) { console.error(e); }
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs h-8 px-3 shadow-sm"
+                >
+                  ✅ Approve & Mark Completed
+                </Button>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-6 py-3 px-1 custom-scrollbar">
+            {/* Section 1: Testing Links */}
+            <div className="space-y-2 bg-indigo-50/50 p-3.5 rounded-2xl border border-indigo-100">
+              <h4 className="text-xs font-black uppercase text-indigo-900 tracking-wider flex items-center gap-1.5">
+                🔗 Environment & Testing Links
+              </h4>
+              {testingModalProject?.testingLinks?.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {testingModalProject.testingLinks.map((l: any, idx: number) => (
+                    <a key={idx} href={l.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-white border border-indigo-200/80 rounded-xl hover:shadow-sm transition-all flex items-center justify-between gap-2 group">
+                      <div className="truncate">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">{l.title || "Staging"}</p>
+                        <p className="text-xs font-semibold text-indigo-600 truncate group-hover:underline">{l.url}</p>
+                      </div>
+                      <ExternalLink className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic">No testing links added yet.</p>
+              )}
+              
+              {(isAdmin || user?.role?.toLowerCase() === 'cto' || testingModalProject?.teamLeaderId === user?.id) && (
+                <div className="pt-2 flex items-center gap-2">
+                  <Input placeholder="Link Title (e.g. Test iOS App)" value={newTestLinkTitle} onChange={e=>setNewTestLinkTitle(e.target.value)} className="h-8 text-xs bg-white w-1/3 font-semibold" />
+                  <Input placeholder="https://..." value={newTestLinkUrl} onChange={e=>setNewTestLinkUrl(e.target.value)} className="h-8 text-xs font-mono bg-white flex-1" />
+                  <Button size="sm" type="button" onClick={handleAddTestingLink} className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">Add Link</Button>
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Report Bug */}
+            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <h4 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
+                🐞 Report New Bug (Open to All Employees)
+              </h4>
+              <div className="space-y-2.5">
+                <div className="flex gap-2">
+                  <Input placeholder="Bug Summary / Title..." value={newBugTitle} onChange={e=>setNewBugTitle(e.target.value)} className="h-9 text-xs font-bold bg-white flex-1" />
+                  <Select value={newBugSeverity} onValueChange={setNewBugSeverity}>
+                    <SelectTrigger className="w-[120px] h-9 bg-white text-xs font-bold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Low">Low</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="High">High</SelectItem>
+                      <SelectItem value="Critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Input placeholder="Steps to reproduce / description..." value={newBugDesc} onChange={e=>setNewBugDesc(e.target.value)} className="h-9 text-xs bg-white" />
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={handleAddBug} disabled={isSubmittingBug} className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 h-8">
+                    {isSubmittingBug ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Plus className="w-3.5 h-3.5 mr-1" />}
+                    Submit Bug Report
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Reported Bugs List */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center justify-between">
+                <span>📋 Reported Bugs ({testingModalProject?.testingBugs?.length || 0})</span>
+                <span className="text-[10px] text-slate-500 font-normal">Click checkbox to toggle Fixed status</span>
+              </h4>
+              <div className="space-y-2">
+                {testingModalProject?.testingBugs?.length > 0 ? (
+                  testingModalProject.testingBugs.map((bug: any) => (
+                    <div key={bug.id} className={`p-3 rounded-xl border transition-all flex items-start justify-between gap-3 ${bug.status==='fixed' ? 'bg-emerald-50/40 border-emerald-200 opacity-75' : 'bg-white border-slate-200 shadow-2xs'}`}>
+                      <div className="flex items-start gap-3 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={bug.status === 'fixed'}
+                          onChange={() => handleToggleBugStatus(bug.id)}
+                          className="mt-1 w-4 h-4 text-emerald-600 rounded cursor-pointer shrink-0"
+                        />
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded uppercase ${bug.severity==='Critical'||bug.severity==='High' ? 'bg-red-100 text-red-700' : bug.severity==='Medium' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>{bug.severity}</span>
+                            <span className={`text-[10px] font-extrabold ${bug.status==='fixed' ? 'text-emerald-700 line-through' : 'text-slate-900'}`}>{bug.title}</span>
+                          </div>
+                          {bug.description && <p className="text-xs text-slate-600 break-words">{bug.description}</p>}
+                          <p className="text-[10px] text-slate-400">Reported by <strong className="text-slate-600">{bug.reportedByName}</strong> on {bug.date}</p>
+                        </div>
+                      </div>
+                      <Badge variant={bug.status==='fixed' ? 'success' : 'destructive'} className="text-[10px] font-bold shrink-0 uppercase">{bug.status}</Badge>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs font-semibold">
+                    🎉 No bugs reported yet!
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 flex justify-end shrink-0">
+            <Button variant="outline" size="sm" onClick={() => setTestingModalOpen(false)}>Close Bug Board</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -828,7 +1191,42 @@ export default function ProjectsPage() {
                       </div>
                     )}
 
-
+                    {/* Testing Phase / Shift to Testing Action */}
+                    {project.status === "testing" ? (
+                      <div className="pt-3 border-t border-dashed border-indigo-200">
+                        <Button 
+                          type="button"
+                          variant="outline"
+                          className="w-full bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 font-extrabold border-indigo-300 flex items-center justify-center gap-2 text-xs h-9 shadow-xs transition-all"
+                          onClick={() => {
+                            setTestingModalProject(project);
+                            setTestingModalOpen(true);
+                          }}
+                        >
+                          🐞 Testing Environment & Bug Tracker ({project.testingBugs?.filter((b:any)=>b.status==='open').length || 0} Open Bugs)
+                        </Button>
+                      </div>
+                    ) : progress === 100 && project.status !== "completed" ? (
+                      <div className="pt-3 border-t border-dashed border-purple-200">
+                        {(isAdmin || user?.role?.toLowerCase() === 'cto' || project.teamLeaderId === user?.id) ? (
+                          <Button 
+                            type="button"
+                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black flex items-center justify-center gap-2 text-xs h-9 shadow-md transition-all animate-pulse"
+                            onClick={() => {
+                              setShiftModalProject(project);
+                              setShiftTestingLinks([{ title: "Staging URL", url: project.frontendLink || "" }]);
+                              setShiftModalOpen(true);
+                            }}
+                          >
+                            🚀 Shift Project to Testing Phase
+                          </Button>
+                        ) : (
+                          <div className="w-full text-center py-1.5 text-[11px] font-bold text-slate-500 bg-purple-50/50 rounded-lg border border-purple-100">
+                            ⏳ 100% Tasks Done · Awaiting TL/CTO to Shift to Testing
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
 
                     <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       {isAdmin ? (

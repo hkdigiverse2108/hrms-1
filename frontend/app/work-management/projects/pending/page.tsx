@@ -208,7 +208,8 @@ export default function PendingProjectsPage() {
             initialData={editingProject} 
             onSubmit={handleSubmit} 
             isSubmitting={isSubmitting}
-            isAdmin={isAdmin} 
+            isAdmin={isAdmin}
+            currentUser={user}
           />
         </DialogContent>
       </Dialog>
