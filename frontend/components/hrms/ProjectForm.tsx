@@ -247,16 +247,34 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
         return;
       }
 
-      // Validate phase deadlines against client deadline
-      if (formData.isPhaseWise && formData.phases && formData.phases.length > 0 && formData.endDate) {
-        const clientDeadline = new Date(formData.endDate);
-        for (let i = 0; i < formData.phases.length; i++) {
-          const phase = formData.phases[i];
-          if (phase.endDate) {
-            const phaseDeadline = new Date(phase.endDate);
-            if (phaseDeadline > clientDeadline) {
-              toast.error(`Phase ${i + 1} deadline cannot be later than the Client Deadline (${formData.endDate}).`);
-              return;
+      if (formData.endDate && formData.teamDeadline) {
+        if (new Date(formData.teamDeadline) > new Date(formData.endDate)) {
+          toast.error("Team Deadline cannot be later than the Client Deadline.");
+          return;
+        }
+      }
+
+      // Validate phase deadlines against team deadline (or client deadline)
+      if (formData.isPhaseWise && formData.phases && formData.phases.length > 0) {
+        const referenceDeadlineStr = formData.teamDeadline || formData.endDate;
+        if (referenceDeadlineStr) {
+          const referenceDeadline = new Date(referenceDeadlineStr);
+          const deadlineLabel = formData.teamDeadline ? 'Team Deadline' : 'Client Deadline';
+          for (let i = 0; i < formData.phases.length; i++) {
+            const phase = formData.phases[i];
+            if (phase.startDate) {
+              const phaseStartDate = new Date(phase.startDate);
+              if (phaseStartDate > referenceDeadline) {
+                toast.error(`Phase ${i + 1} start date cannot be later than the ${deadlineLabel}.`);
+                return;
+              }
+            }
+            if (phase.endDate) {
+              const phaseDeadline = new Date(phase.endDate);
+              if (phaseDeadline > referenceDeadline) {
+                toast.error(`Phase ${i + 1} deadline cannot be later than the ${deadlineLabel}.`);
+                return;
+              }
             }
           }
         }
@@ -430,6 +448,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
               type="date"
               value={formData.teamDeadline || ""}
               onChange={(e) => handleChange("teamDeadline", e.target.value)}
+              max={formData.endDate || ""}
               required
             />
           </div>
@@ -535,6 +554,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                             <Input 
                               type="date" 
                               value={phase.startDate || ""} 
+                              max={formData.teamDeadline || formData.endDate || undefined}
                               onChange={(e) => handlePhaseChange(index, "startDate", e.target.value)}
                               className="h-8 text-xs mt-1 bg-white"
                             />
@@ -544,7 +564,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                             <Input 
                               type="date" 
                               value={phase.endDate || ""} 
-                              max={formData.endDate || undefined}
+                              max={formData.teamDeadline || formData.endDate || undefined}
                               onChange={(e) => handlePhaseChange(index, "endDate", e.target.value)}
                               className="h-8 text-xs mt-1 bg-white"
                             />
