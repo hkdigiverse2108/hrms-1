@@ -100,9 +100,16 @@ async function spawnDetachedWithRetry(exePath, args = [], attempts = 6) {
   throw lastError;
 }
 
+let isUpdateInProgress = false;
+
 // Downloads an installer .exe and runs it silently (NSIS /S), then quits the app.
 // Shared by the manual "start-update" IPC handler and the automatic background checker.
 async function performSilentInstall(downloadUrl) {
+  if (isUpdateInProgress) {
+    log(`[Update] An update is already in progress. Hooking into existing progress.`);
+    return { success: true };
+  }
+  isUpdateInProgress = true;
   log(`[Update] Starting silent install from: ${downloadUrl}`);
   const http = require('http');
   const https = require('https');
@@ -110,7 +117,11 @@ async function performSilentInstall(downloadUrl) {
   let absoluteUrl = downloadUrl;
   if (downloadUrl.startsWith('/')) {
     const backendUrl = (process.env.BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
-    absoluteUrl = backendUrl + downloadUrl;
+    if (backendUrl.endsWith('/api') && downloadUrl.startsWith('/api/')) {
+      absoluteUrl = backendUrl.slice(0, -4) + downloadUrl;
+    } else {
+      absoluteUrl = backendUrl + downloadUrl;
+    }
   }
 
   const tempPath = path.join(app.getPath('temp'), `HRMS_Setup_Update_${Date.now()}.exe`);
@@ -210,9 +221,7 @@ async function performSilentInstall(downloadUrl) {
     // /S = fully silent NSIS install, no UI, no prompts.
     await spawnDetachedWithRetry(tempPath, ['/S']);
 
-    // Give the NSIS installer time to finish writing files before killing processes
-    await wait(3000);
-
+    // Kill subprocesses and exit immediately so the installer can overwrite files without locks.
     killSubprocesses();
     isQuitting = true;
     app.quit();
@@ -220,6 +229,7 @@ async function performSilentInstall(downloadUrl) {
     return { success: true };
   } catch (err) {
     log(`[Update] Error during silent install: ${err.message}`);
+    isUpdateInProgress = false;
     return { success: false, error: err.message };
   }
 }
@@ -697,7 +707,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: false
     }
   });
 
@@ -823,6 +834,14 @@ function createWindow() {
       });
     } catch (err) {
       log(`Error displaying notification: ${err.message}`);
+    }
+  });
+
+  ipcMain.on('open-external', (event, url) => {
+    if (url && (url.startsWith('http:') || url.startsWith('https:'))) {
+      const { shell } = require('electron');
+      shell.openExternal(url);
+      log(`Opened external URL: ${url}`);
     }
   });
 

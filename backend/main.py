@@ -456,6 +456,7 @@ class SafeStaticFiles(StaticFiles):
         except Exception as ex:
             if hasattr(ex, "status_code") and ex.status_code == 404:
                 ext = os.path.splitext(path)[1].lower()
+                # Only return placeholder SVG for image files, NOT for binary/download files
                 if ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']:
                     placeholder_svg = (
                         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="%23cbd5e1" stroke-width="1.5">'
@@ -465,6 +466,7 @@ class SafeStaticFiles(StaticFiles):
                         '</svg>'
                     )
                     return Response(content=placeholder_svg, media_type="image/svg+xml")
+                # For .exe, .zip, .pdf and other binary files — re-raise so proper 404 is returned
             raise ex
 
 # Ensure uploads directory exists
@@ -2139,17 +2141,27 @@ async def get_schedules(employeeId: Optional[str] = None, date: Optional[str] = 
     return await crud.get_schedules(db, employee_id=employeeId, date_str=date, date_from=date_from, date_to=date_to)
 
 @app.post("/schedules", response_model=schemas.Schedule)
-async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
+async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db), _token=Depends(auth.require_auth)):
     from datetime import datetime, date
     # Check for overlaps
-    existing_schedules = await crud.get_schedules(db, employee_id=schedule.employeeId, date_str=str(schedule.date))
-    if existing_schedules:
-        for existing in existing_schedules:
+    all_schedules = await crud.get_schedules(db, date_str=str(schedule.date))
+    check_ids = [str(schedule.employeeId)] + [str(x) for x in getattr(schedule, "attendees", []) or []]
+    
+    if all_schedules:
+        for existing in all_schedules:
+            existing_emp = str(existing.get("employeeId"))
+            existing_attendees = [str(x) for x in existing.get("attendees", []) or []]
+            
+            overlapping_check_ids = [cid for cid in check_ids if cid == existing_emp or cid in existing_attendees]
+            if not overlapping_check_ids:
+                continue
+                
             ex_start = existing.get("startTime")
             ex_end = existing.get("endTime")
             if ex_start and ex_end:
                 if max(schedule.startTime, ex_start) < min(schedule.endTime, ex_end):
-                    raise HTTPException(status_code=400, detail="Schedule overlaps with an existing schedule for this employee on this date.")
+                    if any(cid != str(_token.get("sub")) for cid in overlapping_check_ids):
+                        raise HTTPException(status_code=400, detail="Cannot assign an overlapping schedule to someone else or an attendee.")
 
     schedule_data = schedule.model_dump()
     dt_val = schedule_data.get("date")
@@ -2161,9 +2173,34 @@ async def create_schedule(schedule: schemas.ScheduleCreate, db=Depends(get_db)):
     return await crud.create_schedule(db, schedule_data)
 
 @app.put("/schedules/{schedule_id}", response_model=schemas.Schedule)
-async def update_schedule(schedule_id: str, schedule: schemas.ScheduleUpdate, db=Depends(get_db)):
+async def update_schedule(schedule_id: str, schedule: schemas.ScheduleUpdate, db=Depends(get_db), _token=Depends(auth.require_auth)):
     from datetime import datetime, date
     update_data = schedule.model_dump(exclude_unset=True)
+
+    # Check for overlaps if time is updated
+    if update_data.get("startTime") and update_data.get("endTime"):
+        all_schedules = await crud.get_schedules(db, date_str=str(update_data.get("date")))
+        check_ids = [str(update_data.get("employeeId"))] + [str(x) for x in update_data.get("attendees", []) or []]
+        
+        if all_schedules:
+            for existing in all_schedules:
+                if str(existing.get("_id")) == schedule_id or str(existing.get("id")) == schedule_id:
+                    continue
+                
+                existing_emp = str(existing.get("employeeId"))
+                existing_attendees = [str(x) for x in existing.get("attendees", []) or []]
+                
+                overlapping_check_ids = [cid for cid in check_ids if cid == existing_emp or cid in existing_attendees]
+                if not overlapping_check_ids:
+                    continue
+                    
+                ex_start = existing.get("startTime")
+                ex_end = existing.get("endTime")
+                if ex_start and ex_end:
+                    if max(update_data["startTime"], ex_start) < min(update_data["endTime"], ex_end):
+                        if any(cid != str(_token.get("sub")) for cid in overlapping_check_ids):
+                            raise HTTPException(status_code=400, detail="Cannot assign an overlapping schedule to someone else or an attendee.")
+
     dt_val = update_data.get("date")
     if dt_val is not None:
         if type(dt_val) is date:
@@ -2227,9 +2264,13 @@ async def get_free_slots(request: dict, db=Depends(get_db)):
         else:
             merged.append((start, end))
 
-    # Office hours: 09:30 to 18:30
-    office_start = time_to_mins("09:30")
-    office_end = time_to_mins("18:30")
+    # Office hours: get from settings, default to 09:30 to 18:30
+    sys_settings = await crud.get_system_settings(db)
+    office_start_str = sys_settings.get("officeStartTime", "09:30")
+    office_end_str = sys_settings.get("officeEndTime", "18:30")
+    
+    office_start = time_to_mins(office_start_str)
+    office_end = time_to_mins(office_end_str)
 
     # If the requested date is today, do not allow past time slots
     now = crud.get_now()
@@ -2261,10 +2302,11 @@ async def get_free_slots(request: dict, db=Depends(get_db)):
 from fastapi.responses import RedirectResponse
 
 @app.get("/auth/google/url")
-async def get_google_auth_url(employeeId: str):
+async def get_google_auth_url(employeeId: str, desktop: bool = False):
     """Generates the Google OAuth URL to link a user's account."""
     try:
-        url = google_auth.get_authorization_url(state=employeeId)
+        state_str = f"{employeeId}:desktop" if desktop else employeeId
+        url = google_auth.get_authorization_url(state=state_str)
         return RedirectResponse(url=url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2274,8 +2316,11 @@ async def get_google_auth_url(employeeId: str):
 async def google_auth_callback(code: str, state: str, db=Depends(get_db)):
     """Handles the OAuth callback, exchanges code for tokens, and saves them."""
     try:
-        # State parameter carries the employeeId
-        employee_id = state
+        # State parameter carries the employeeId and optional desktop flag
+        parts = state.split(":")
+        employee_id = parts[0]
+        is_desktop = len(parts) > 1 and parts[1] == "desktop"
+        
         tokens = google_auth.fetch_tokens(code, state)
         
         from bson import ObjectId
@@ -2291,6 +2336,32 @@ async def google_auth_callback(code: str, state: str, db=Depends(get_db)):
         
         if result.modified_count == 0:
             print(f"Warning: Failed to update Google Calendar Tokens for user {employee_id}. User not found.")
+            
+        if is_desktop:
+            from fastapi.responses import HTMLResponse
+            html_content = """
+            <html>
+            <head>
+              <title>Google Calendar Connected</title>
+              <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f3f4f6; }
+                .card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; max-width: 400px; }
+                h1 { color: #0d9488; margin-top: 0; font-size: 24px; }
+                p { color: #4b5563; font-size: 15px; line-height: 1.5; margin: 10px 0; }
+                .success-icon { font-size: 54px; margin-bottom: 15px; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <div class="success-icon">✅</div>
+                <h1>Google Calendar Connected!</h1>
+                <p>Your Google Calendar has been successfully linked to your HRMS account.</p>
+                <p>You can now close this browser tab and return to the HRMS Desktop Application.</p>
+              </div>
+            </body>
+            </html>
+            """
+            return HTMLResponse(content=html_content, status_code=200)
             
         # Redirect the user back to the frontend schedule page
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3535")
@@ -2691,6 +2762,23 @@ async def get_form_responses(form_id: str, db=Depends(get_db)):
 async def get_client_form_responses(client_id: str, db=Depends(get_db)):
     return await crud.get_client_form_responses(db, client_id)
 # --- Desktop Auto-Update Endpoints ---
+
+@app.get("/desktop/download/{filename}")
+async def download_desktop_file(filename: str):
+    """Serve desktop installer .exe with proper Content-Disposition download headers."""
+    from fastapi.responses import FileResponse
+    import re
+    if not re.match(r'^HRMS_Setup_[\w.\-]+\.exe$', filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    file_path = os.path.join(UPLOAD_DIR, "desktop", filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path=file_path,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
 @app.get("/desktop/version")
 async def get_desktop_version(db=Depends(get_db)):
     """Retrieve the latest desktop app version, download URL, and changelog."""
@@ -2736,7 +2824,7 @@ async def upload_desktop_release(
             shutil.copyfileobj(file.file, buffer)
             
         # Generate download URL (relative path)
-        download_url = f"/uploads/desktop/{filename}"
+        download_url = f"/api/desktop/download/{filename}"
         
         # Parse changelog
         changelog_list = []
@@ -2932,7 +3020,7 @@ async def upload_desktop_release(
             shutil.copyfileobj(file.file, buffer)
             
         # Generate download URL (relative path)
-        download_url = f"/uploads/desktop/{filename}"
+        download_url = f"/api/desktop/download/{filename}"
         
         # Parse changelog
         changelog_list = []

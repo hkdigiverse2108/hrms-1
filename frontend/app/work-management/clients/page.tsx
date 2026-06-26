@@ -571,6 +571,61 @@ export default function ClientsPage() {
                             </span>
                           </div>
                         )}
+                        
+                        {/* Additional Details */}
+                        {(client.services || client.assignedEmployeeName || Number(client.post) > 0 || Number(client.reel) > 0 || Number(client.dailyBudget) > 0 || client.festivalPost === "Yes" || client.salesFocused) && (
+                          <div className="pt-3 mt-3 border-t border-dashed border-border/60 space-y-2">
+                            {client.services && (
+                              <div className="flex flex-col gap-0.5 text-xs">
+                                <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Services</span>
+                                <span className="text-slate-700 font-medium">{client.services}</span>
+                              </div>
+                            )}
+                            {client.assignedEmployeeName && (
+                              <div className="flex flex-col gap-0.5 text-xs">
+                                <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Assigned Employee / Team Leader</span>
+                                <span className="text-brand-teal font-semibold">{client.assignedEmployeeName}</span>
+                              </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-2">
+                              {Number(client.post) > 0 && (
+                                <div className="flex flex-col gap-0.5 text-xs">
+                                  <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Posts</span>
+                                  <span className="text-slate-700 font-medium">{client.post}</span>
+                                </div>
+                              )}
+                              {Number(client.reel) > 0 && (
+                                <div className="flex flex-col gap-0.5 text-xs">
+                                  <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Reels</span>
+                                  <span className="text-slate-700 font-medium">{client.reel}</span>
+                                </div>
+                              )}
+                              {Number(client.dailyBudget) > 0 && (
+                                <div className="flex flex-col gap-0.5 text-xs">
+                                  <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Daily Budget</span>
+                                  <span className="text-slate-700 font-medium">₹{client.dailyBudget}</span>
+                                </div>
+                              )}
+                              {client.salesFocused && (
+                                <div className="flex flex-col gap-0.5 text-xs">
+                                  <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Sales Focused</span>
+                                  <span className="text-slate-700 font-medium">{client.salesFocused}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {client.festivalPost === "Yes" && (
+                                <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-600 border-amber-200">Festival Post</Badge>
+                              )}
+                              {client.graphicsRequired === "Yes" && (
+                                <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-600 border-blue-200">Graphics Req</Badge>
+                              )}
+                              {client.dailyFollowup === "Yes" && (
+                                <Badge variant="outline" className="text-[9px] bg-purple-50 text-purple-600 border-purple-200">Daily Follow-up</Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between pt-2">

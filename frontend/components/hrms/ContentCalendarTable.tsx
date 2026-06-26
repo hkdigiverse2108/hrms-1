@@ -541,10 +541,20 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     doc.setLineWidth(0.5);
     doc.line(14, 38, pageWidth - 14, 38);
 
-    const columnsToRender = selectedColumnsForPdf;
+    const columnsToRender = [...selectedColumnsForPdf].sort((a, b) => tableHeaders.indexOf(a) - tableHeaders.indexOf(b));
     const indicesToRender = columnsToRender.map(col => tableHeaders.indexOf(col));
 
-    const tableData = entries.map(entry => {
+    const filteredEntries = entries.filter(entry => {
+      if (!entry.postingDate) return false;
+      return entry.postingDate.startsWith(monthYear);
+    });
+
+    if (filteredEntries.length === 0) {
+      toast.error(`No entries with posting dates in ${monthYear} to download`);
+      return;
+    }
+
+    const tableData = filteredEntries.map(entry => {
       return indicesToRender.map(idx => {
         const key = fieldKeys[idx];
         let val = entry[key] || "";
@@ -843,9 +853,11 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
             <History className="w-4 h-4 mr-1" />
             Common Logs
           </Button>
-          <Button onClick={() => { setSettingsForm(settings); setIsSettingsOpen(true); }} size="icon" variant="outline" title="Settings">
-            <Settings2 className="w-4 h-4 text-slate-600" />
-          </Button>
+          {user?.role?.toLowerCase() === 'admin' && (
+            <Button onClick={() => { setSettingsForm(settings); setIsSettingsOpen(true); }} size="icon" variant="outline" title="Settings">
+              <Settings2 className="w-4 h-4 text-slate-600" />
+            </Button>
+          )}
           <Button onClick={() => setIsPdfDialogOpen(true)} size="sm" variant="outline" className="text-slate-700">
             <Download className="w-4 h-4 mr-1" />
             PDF
@@ -967,9 +979,9 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                 Clear All
               </Button>
             </div>
-            <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto p-1">
+            <div className="columns-2 gap-4 p-1">
               {tableHeaders.filter(h => h !== "").map((header, idx) => (
-                <div key={idx} className="flex items-center space-x-2">
+                <div key={idx} className="flex items-center space-x-2 mb-3 break-inside-avoid">
                   <input
                     type="checkbox"
                     id={`col-${idx}`}
@@ -1087,13 +1099,13 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                   <th 
                     key={i} 
                     className={`px-3 py-2 font-semibold text-slate-600 text-xs uppercase tracking-wider border border-slate-200 ${
-                      i <= 2 ? "sticky z-20 bg-slate-50" : ""
+                      i <= 2 ? "sticky z-20 bg-slate-50" : i === tableHeaders.length - 1 ? "sticky right-0 z-20 bg-slate-50" : ""
                     }`}
                     style={{
                       left: i === 0 ? 0 : i === 1 ? '140px' : i === 2 ? '260px' : 'auto',
-                      minWidth: i === 0 ? '140px' : i === 1 ? '120px' : i === 2 ? '100px' : 'auto',
-                      maxWidth: i === 0 ? '140px' : i === 1 ? '120px' : i === 2 ? '100px' : 'auto',
-                      boxShadow: i === 2 ? 'inset -1px 0 0 0 #e2e8f0, 2px 0 4px -2px rgba(0,0,0,0.1)' : (i < 2 ? 'inset -1px 0 0 0 #e2e8f0' : undefined)
+                      minWidth: i === 0 ? '140px' : i === 1 ? '120px' : i === 2 ? '100px' : i === tableHeaders.length - 1 ? '80px' : 'auto',
+                      maxWidth: i === 0 ? '140px' : i === 1 ? '120px' : i === 2 ? '100px' : i === tableHeaders.length - 1 ? '80px' : 'auto',
+                      boxShadow: i === 2 ? 'inset -1px 0 0 0 #e2e8f0, 2px 0 4px -2px rgba(0,0,0,0.1)' : (i < 2 ? 'inset -1px 0 0 0 #e2e8f0' : i === tableHeaders.length - 1 ? 'inset 1px 0 0 0 #e2e8f0, -2px 0 4px -2px rgba(0,0,0,0.1)' : undefined)
                     }}
                   >
                     {h}
@@ -1225,7 +1237,13 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                           )}
                         </td>
                       ))}
-                      <td className="px-2 py-1 border border-slate-200 min-w-[80px]">
+                      <td 
+                        className="px-2 py-1 border border-slate-200 min-w-[80px] sticky right-0 z-10"
+                        style={{
+                          backgroundColor: 'inherit',
+                          boxShadow: 'inset 1px 0 0 0 #e2e8f0, -2px 0 4px -2px rgba(0,0,0,0.1)'
+                        }}
+                      >
                         <div className="flex items-center justify-center gap-1">
                           {isEditing ? (
                             <>

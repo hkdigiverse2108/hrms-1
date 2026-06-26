@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
+import { TIME_OPTIONS } from "@/lib/constants";
 
 interface SmmMeetingDialogProps {
   client: any;
@@ -347,15 +348,17 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
 
   // Watch for changes in add mode
   useEffect(() => {
-    fetchFreeSlots(selectedEmployeeIds, meetingDate);
-  }, [selectedEmployeeIds, meetingDate, fetchFreeSlots]);
+    const idsToCheck = userId ? Array.from(new Set([...selectedEmployeeIds, userId])) : selectedEmployeeIds;
+    fetchFreeSlots(idsToCheck, meetingDate);
+  }, [selectedEmployeeIds, meetingDate, fetchFreeSlots, userId]);
 
   // Watch for changes in edit mode
   useEffect(() => {
     if (editingIdx !== null) {
-      fetchEditFreeSlots(editSelectedEmployeeIds, editDate);
+      const idsToCheck = userId ? Array.from(new Set([...editSelectedEmployeeIds, userId])) : editSelectedEmployeeIds;
+      fetchEditFreeSlots(idsToCheck, editDate);
     }
-  }, [editSelectedEmployeeIds, editDate, editingIdx, fetchEditFreeSlots]);
+  }, [editSelectedEmployeeIds, editDate, editingIdx, fetchEditFreeSlots, userId]);
 
   // Sync selected employee IDs to attendees string
   useEffect(() => {
@@ -647,23 +650,25 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
             <div className="grid grid-cols-2 gap-3 mt-3">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Start Time *</Label>
-                <Input 
-                  type="time" 
-                  value={startTime}
-                  min={isAddToday ? nowTimeStr : undefined}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs"
-                />
+                <Select value={startTime} onValueChange={setStartTime}>
+                  <SelectTrigger className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs">
+                    <SelectValue placeholder="Start Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">End Time *</Label>
-                <Input 
-                  type="time" 
-                  value={endTime}
-                  min={startTime || (isAddToday ? nowTimeStr : undefined)}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs"
-                />
+                <Select value={endTime} onValueChange={setEndTime}>
+                  <SelectTrigger className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs">
+                    <SelectValue placeholder="End Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             
@@ -869,20 +874,22 @@ export function SmmMeetingDialog({ client, onUpdate, userId, userName }: SmmMeet
                               )}
 
                               <div className="grid grid-cols-2 gap-2">
-                                <Input 
-                                  type="time" 
-                                  value={editStartTime}
-                                  min={isEditToday ? nowTimeStr : undefined}
-                                  onChange={(e) => setEditStartTime(e.target.value)}
-                                  className="h-8 text-xs"
-                                />
-                                <Input 
-                                  type="time" 
-                                  value={editEndTime}
-                                  min={editStartTime || (isEditToday ? nowTimeStr : undefined)}
-                                  onChange={(e) => setEditEndTime(e.target.value)}
-                                  className="h-8 text-xs"
-                                />
+                                <Select value={editStartTime} onValueChange={setEditStartTime}>
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue placeholder="Start Time" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-[250px]">
+                                    {TIME_OPTIONS.map(opt => <SelectItem key={`edit-start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                <Select value={editEndTime} onValueChange={setEditEndTime}>
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue placeholder="End Time" />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-[250px]">
+                                    {TIME_OPTIONS.map(opt => <SelectItem key={`edit-end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
                               </div>
                               <Input 
                                 placeholder="Meeting Link" 

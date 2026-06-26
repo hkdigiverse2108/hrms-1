@@ -32,9 +32,22 @@ import {
   Banknote, 
   Clock, 
   X,
-  Save
+  Save,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import { API_URL, getAvatarUrl } from '@/lib/config'
+import { useUserContext } from "@/context/UserContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { toast } from 'sonner'
+
+import { TIME_OPTIONS } from "@/lib/constants";
 
 // Utility helpers for time input conversions
 function convertTo24Hour(timeStr: string): string {
@@ -84,6 +97,13 @@ export default function ProfilePage() {
   const [formData, setFormData] = useState<any>({})
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const departments = apiData?.departments || []
   const designations = apiData?.designations || []
@@ -234,6 +254,43 @@ export default function ProfilePage() {
     }
   }
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match')
+      return
+    }
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters')
+      return
+    }
+    
+    setIsChangingPassword(true)
+    try {
+      const response = await fetch(`${API_URL}/employees/${user.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password: newPassword }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update password')
+      }
+      
+      toast.success('Password changed successfully')
+      setIsPasswordModalOpen(false)
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (error) {
+      console.error('Password update error:', error)
+      toast.error('Failed to update password')
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
+
   const handleAvatarClick = () => {
     fileInputRef.current?.click()
   }
@@ -361,6 +418,18 @@ export default function ProfilePage() {
                     <Building2 className="h-3.5 w-3.5 text-gray-400" />
                   </div>
                   <span className="font-semibold text-[11px]">{user.department}</span>
+                </div>
+                
+                <div className="pt-2 w-full">
+                  <Button 
+                    type="button"
+                    onClick={() => setIsPasswordModalOpen(true)}
+                    variant="outline"
+                    className="w-full text-brand-teal border-brand-teal/20 hover:bg-brand-teal/5 font-bold h-10 text-xs rounded-xl transition-all"
+                  >
+                    <Lock className="h-4 w-4 mr-2" />
+                    Change Password
+                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -582,24 +651,24 @@ export default function ProfilePage() {
                     <ProfileField 
                       label="Start Time" 
                       id="startTime" 
-                      type="time" 
                       value={isEditing ? formData.startTime : (user.startTime ? convertTo12Hour(user.startTime) : '—')} 
                       isEditing={isEditing} 
                       onChange={(v) => handleFieldChange('startTime', v)} 
                       disabled={!isAdmin} 
                       icon={Clock} 
+                      options={TIME_OPTIONS.map(opt => ({ label: opt.label, value: opt.valueNoSec }))}
                       onEditInitiate={handleEditClick}
                       focusedField={focusedField}
                     />
                     <ProfileField 
                       label="End Time" 
                       id="endTime" 
-                      type="time" 
                       value={isEditing ? formData.endTime : (user.endTime ? convertTo12Hour(user.endTime) : '—')} 
                       isEditing={isEditing} 
                       onChange={(v) => handleFieldChange('endTime', v)} 
                       disabled={!isAdmin} 
                       icon={Clock} 
+                      options={TIME_OPTIONS.map(opt => ({ label: opt.label, value: opt.valueNoSec }))}
                       onEditInitiate={handleEditClick}
                       focusedField={focusedField}
                     />
@@ -755,6 +824,74 @@ export default function ProfilePage() {
           </Card>
         </div>
       </form>
+
+      {/* Password Change Dialog */}
+      <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleChangePassword} className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="new-password"
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  required
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  required
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <DialogFooter className="pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsPasswordModalOpen(false)}
+                disabled={isChangingPassword}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isChangingPassword} className="bg-brand-teal hover:bg-brand-teal-light text-white">
+                {isChangingPassword ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Updating...</>
+                ) : 'Update Password'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

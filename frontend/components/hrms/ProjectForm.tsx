@@ -22,7 +22,6 @@ export interface ProjectFormData {
   endDate: string;
   status: string;
   priority: string;
-  budget: string;
   // Creative fields
   services?: string;
   post?: number;
@@ -47,7 +46,6 @@ const defaultFormData: ProjectFormData = {
   endDate: "",
   status: "planning",
   priority: "medium",
-  budget: "0",
   // Creative fields defaults
   services: "",
   post: 0,
@@ -169,11 +167,14 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
                 <SelectContent>
                   {clients
                     .filter(client => !formData.department || client.department === formData.department)
-                    .map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.companyName}
-                    </SelectItem>
-                  ))}
+                    .map((client) => {
+                      const displayName = client.companyName || client.name || "Unknown Client";
+                      return (
+                        <SelectItem key={client.id} value={client.id}>
+                          {displayName} {client.name && client.companyName ? `(${client.name})` : ""}
+                        </SelectItem>
+                      );
+                    })}
                 </SelectContent>
               </Select>
             </div>
@@ -313,16 +314,6 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
               <SelectItem value="high">High</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="budget">Budget</Label>
-          <Input
-            id="budget"
-            type="number"
-            placeholder="0"
-            value={formData.budget || ""}
-            onChange={(e) => handleChange("budget", e.target.value)}
-          />
         </div>
       </div>
       

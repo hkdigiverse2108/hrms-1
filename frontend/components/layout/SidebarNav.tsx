@@ -89,7 +89,8 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('tasks', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"));
     }
-    if (isAdmin || checkPermission('daily-progress', 'canView')) {
+    const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
+    if (isAdmin || isHRUser || checkPermission('daily-progress', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
     }
     if (isAdmin || checkPermission('sales', 'canView')) {
@@ -102,7 +103,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       workManagementChildren.push(getItem(<Link href="/work-management/digital-marketing">Digital Marketing</Link>, "/work-management/digital-marketing"));
     }
     if (isAdmin || checkPermission('creative', 'canView')) {
-      workManagementChildren.push(getItem(<Link href="/work-management/smm">SMM</Link>, "/work-management/smm"));
+      workManagementChildren.push(getItem(<Link href="/work-management/smm">Social Media Management</Link>, "/work-management/smm"));
     }
 
     const employeeChildren: MenuItem[] = [];

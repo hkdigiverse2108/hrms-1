@@ -319,7 +319,7 @@ export default function ProjectsPage() {
       <Dialog open={followupConfigOpen} onOpenChange={setFollowupConfigOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Follow-up Settings</DialogTitle>
+            <DialogTitle>Follow-ups</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -557,7 +557,7 @@ export default function ProjectsPage() {
                               setFollowupDatesOfMonthInput(project.followupDatesOfMonth || []);
                               setFollowupLastDateInput(project.lastFollowupDate || "");
                               setFollowupConfigOpen(true);
-                            }} title="Follow-up Settings">
+                            }} title="Follow-ups">
                               <CalendarClock className="w-4 h-4 text-slate-500" />
                             </Button>
                           )}
@@ -595,10 +595,59 @@ export default function ProjectsPage() {
                         <Building2 className="w-4 h-4 text-brand-teal" />
                         {project.clientName || "Unknown Client"}
                       </div>
-                      <div className="text-muted-foreground font-mono font-bold">
-                        ₹{project.budget?.toLocaleString() || '0'}
+                      <div className="text-xs uppercase font-bold tracking-tight text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                        {project.department || "No Department"}
                       </div>
                     </div>
+
+                    {/* Additional Details */}
+                    {(project.services || Number(project.post) > 0 || Number(project.reel) > 0 || Number(project.dailyBudget) > 0 || project.festivalPost === "Yes" || project.salesFocused) && (
+                      <div className="pt-3 border-t border-dashed border-border/60 space-y-2">
+                        {project.services && (
+                          <div className="flex flex-col gap-0.5 text-xs">
+                            <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Services</span>
+                            <span className="text-slate-700 font-medium">{project.services}</span>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                          {Number(project.post) > 0 && (
+                            <div className="flex flex-col gap-0.5 text-xs">
+                              <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Posts</span>
+                              <span className="text-slate-700 font-medium">{project.post}</span>
+                            </div>
+                          )}
+                          {Number(project.reel) > 0 && (
+                            <div className="flex flex-col gap-0.5 text-xs">
+                              <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Reels</span>
+                              <span className="text-slate-700 font-medium">{project.reel}</span>
+                            </div>
+                          )}
+                          {Number(project.dailyBudget) > 0 && (
+                            <div className="flex flex-col gap-0.5 text-xs">
+                              <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Daily Budget</span>
+                              <span className="text-slate-700 font-medium">₹{project.dailyBudget}</span>
+                            </div>
+                          )}
+                          {project.salesFocused && (
+                            <div className="flex flex-col gap-0.5 text-xs">
+                              <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Sales Focused</span>
+                              <span className="text-slate-700 font-medium">{project.salesFocused}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {project.festivalPost === "Yes" && (
+                            <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-600 border-amber-200">Festival Post</Badge>
+                          )}
+                          {project.graphicsRequired === "Yes" && (
+                            <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-600 border-blue-200">Graphics Req</Badge>
+                          )}
+                          {project.dailyFollowup === "Yes" && (
+                            <Badge variant="outline" className="text-[9px] bg-purple-50 text-purple-600 border-purple-200">Daily Follow-up</Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
 
 

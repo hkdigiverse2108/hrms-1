@@ -34,6 +34,16 @@ import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/context/ConfirmContext";
  
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hour = Math.floor(i / 4);
+  const minute = (i % 4) * 15;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:00`;
+  const displayString = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  return { value: timeString, label: displayString };
+});
+
 export default function AttendancePage() {
   const { confirm } = useConfirm();
   const { user, getISTNow } = useUserContext();
@@ -164,11 +174,11 @@ export default function AttendancePage() {
     if (getISTNow().getTime() !== new Date().getTime()) {
       const now = getISTNow();
 
-      setCreateForm(prev => ({
+      setCreateForm((prev: any) => ({
         ...prev,
         date: dayjs(now).format("YYYY-MM-DD")
       }));
-      setRecoveryForm(prev => ({
+      setRecoveryForm((prev: any) => ({
         ...prev,
         date: dayjs(now).format("YYYY-MM-DD")
       }));
@@ -194,7 +204,7 @@ export default function AttendancePage() {
         const data = await res.json();
         setSysSettings(data);
         // Update createForm defaults if needed
-        setCreateForm(prev => ({
+        setCreateForm((prev: any) => ({
           ...prev,
           checkIn: data.officeStartTime ? `${data.officeStartTime}:00` : "09:30:00",
           checkOut: data.officeEndTime ? `${data.officeEndTime}:00` : "18:30:00"
@@ -592,27 +602,29 @@ export default function AttendancePage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2 flex flex-col">
                       <label className="text-sm font-medium text-foreground">Recorded Break-In</label>
-                      <TimePicker 
-                        className="w-full h-9" 
-                        format="hh:mm A" 
-                        use12Hours 
-                        showNow={false}
-                        value={recoveryForm.recordedBreakIn ? dayjs(`2000-01-01 ${recoveryForm.recordedBreakIn}`, "YYYY-MM-DD HH:mm:ss") : null}
-                        onChange={(time) => setRecoveryForm({...recoveryForm, recordedBreakIn: time ? time.format("HH:mm:ss") : ""})}
-                        getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                      />
+                      <Select value={recoveryForm.recordedBreakIn} onValueChange={(v) => setRecoveryForm({...recoveryForm, recordedBreakIn: v})}>
+                        <SelectTrigger className="w-full h-9">
+                          <SelectValue placeholder="Recorded Break-In" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[250px]">
+                          {TIME_OPTIONS.map(opt => (
+                            <SelectItem key={`breakin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2 flex flex-col">
                       <label className="text-sm font-medium text-foreground">Actual Break-Out Time</label>
-                      <TimePicker 
-                        className="w-full h-9" 
-                        format="hh:mm A" 
-                        use12Hours 
-                        showNow={false}
-                        value={recoveryForm.actualBreakOut ? dayjs(`2000-01-01 ${recoveryForm.actualBreakOut}`, "YYYY-MM-DD HH:mm:ss") : null}
-                        onChange={(time) => setRecoveryForm({...recoveryForm, actualBreakOut: time ? time.format("HH:mm:ss") : ""})}
-                        getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                      />
+                      <Select value={recoveryForm.actualBreakOut} onValueChange={(v) => setRecoveryForm({...recoveryForm, actualBreakOut: v})}>
+                        <SelectTrigger className="w-full h-9">
+                          <SelectValue placeholder="Actual Break-Out Time" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[250px]">
+                          {TIME_OPTIONS.map(opt => (
+                            <SelectItem key={`breakout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 <div className="space-y-2 flex flex-col">
@@ -686,23 +698,29 @@ export default function AttendancePage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Check In</label>
-                      <input 
-                        type="time" 
-                        step="1"
-                        className="w-full p-2 border rounded-md" 
-                        value={createForm.checkIn}
-                        onChange={(e) => setCreateForm({...createForm, checkIn: e.target.value})}
-                      />
+                      <Select value={createForm.checkIn} onValueChange={(v) => setCreateForm({...createForm, checkIn: v})}>
+                        <SelectTrigger className="w-full h-10">
+                          <SelectValue placeholder="Check In" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[250px]">
+                          {TIME_OPTIONS.map(opt => (
+                            <SelectItem key={`checkin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Check Out</label>
-                      <input 
-                        type="time" 
-                        step="1"
-                        className="w-full p-2 border rounded-md" 
-                        value={createForm.checkOut}
-                        onChange={(e) => setCreateForm({...createForm, checkOut: e.target.value})}
-                      />
+                      <Select value={createForm.checkOut} onValueChange={(v) => setCreateForm({...createForm, checkOut: v})}>
+                        <SelectTrigger className="w-full h-10">
+                          <SelectValue placeholder="Check Out" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[250px]">
+                          {TIME_OPTIONS.map(opt => (
+                            <SelectItem key={`checkout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
@@ -930,21 +948,43 @@ export default function AttendancePage() {
                         : "-";
                       
                       const shiftDurationMinutes = (() => {
-                        const officeStartTime = sysSettings?.officeStartTime || "09:30";
-                        const officeEndTime = sysSettings?.officeEndTime || "18:30";
-                        let [sh, sm] = officeStartTime.split(':').map(Number);
-                        let [eh, em] = officeEndTime.split(':').map(Number);
-                        if (sh >= 8 && sh <= 16 && eh >= 1 && eh <= 8) {
-                          eh += 12;
-                        }
-                        let diff = (eh * 60 + em) - (sh * 60 + sm);
+                        const emp = allEmployees.find(e => e.id === row.employeeId || e.employeeId === row.employeeId);
+                        const officeStartTime = emp?.startTime || sysSettings?.officeStartTime || "09:30";
+                        const officeEndTime = emp?.endTime || sysSettings?.officeEndTime || "18:30";
+                        
+                        const parseTimeToMinutes = (timeStr: string): number => {
+                          if (!timeStr) return 0;
+                          const cleaned = timeStr.trim().toUpperCase();
+                          let hours = 0;
+                          let minutes = 0;
+                          const ampmMatch = cleaned.match(/(\d+):(\d+)(?::\d+)?\s*(AM|PM)/);
+                          if (ampmMatch) {
+                            hours = parseInt(ampmMatch[1], 10);
+                            minutes = parseInt(ampmMatch[2], 10);
+                            const ampm = ampmMatch[3];
+                            if (ampm === "PM" && hours < 12) hours += 12;
+                            if (ampm === "AM" && hours === 12) hours = 0;
+                          } else {
+                            const parts = cleaned.split(':');
+                            hours = parseInt(parts[0] || '0', 10);
+                            minutes = parseInt(parts[1] || '0', 10);
+                            if (hours >= 1 && hours <= 8) {
+                              hours += 12;
+                            }
+                          }
+                          return hours * 60 + minutes;
+                        };
+
+                        const startMinutes = parseTimeToMinutes(officeStartTime);
+                        const endMinutes = parseTimeToMinutes(officeEndTime);
+                        let diff = endMinutes - startMinutes;
                         if (diff < 0) {
                           diff += 24 * 60;
                         }
                         return diff;
                       })();
                       
-                      const overtimeMinutes = Math.max(0, productionMinutes - shiftDurationMinutes);
+                      const overtimeMinutes = productionMinutes > 0 ? Math.max(0, productionMinutes - shiftDurationMinutes) : 0;
                       const overtimeStr = formatToHhMm(overtimeMinutes);
  
                       let statusLabel = row.status === "Leave" ? "Leave" : (row.checkIn && row.checkIn !== "--" && row.checkIn !== "--:--" ? "Present" : "Absent");
@@ -1222,23 +1262,29 @@ export default function AttendancePage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check In</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={editForm.checkIn}
-                  onChange={(e) => setEditForm({...editForm, checkIn: e.target.value})}
-                />
+                <Select value={editForm.checkIn} onValueChange={(v) => setEditForm({...editForm, checkIn: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check In" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`edit-checkin-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Check Out</label>
-                <input 
-                  type="time" 
-                  step="1"
-                  className="w-full p-2 border rounded-md" 
-                  value={editForm.checkOut}
-                  onChange={(e) => setEditForm({...editForm, checkOut: e.target.value})}
-                />
+                <Select value={editForm.checkOut} onValueChange={(v) => setEditForm({...editForm, checkOut: v})}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Check Out" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => (
+                      <SelectItem key={`edit-checkout-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">

@@ -1335,6 +1335,7 @@ class Lead(LeadBase):
 class SystemSettingsBase(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = True
     latePunchDeductionEnabled: Optional[bool] = True
+    dailyProgressRejectDeductionEnabled: Optional[bool] = False
     officeStartTime: Optional[str] = "09:30"
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
@@ -1361,6 +1362,7 @@ class SystemSettingsBase(BaseModel):
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
     latePunchDeductionEnabled: Optional[bool] = None
+    dailyProgressRejectDeductionEnabled: Optional[bool] = None
     officeStartTime: Optional[str] = None
     officeEndTime: Optional[str] = None
     lateBufferMins: Optional[int] = None
@@ -1476,6 +1478,9 @@ class MarketingMonthlyReportBase(BaseModel):
     totalRevenue: float = 0
     overallROAS: float = 0
     conclusion: Optional[str] = None
+    employeeConclusion: Optional[str] = None
+    adminConclusion: Optional[str] = None
+    clientConclusion: Optional[str] = None
 
 class MarketingMonthlyReportCreate(MarketingMonthlyReportBase):
     clientId: Optional[str] = None
@@ -1849,6 +1854,8 @@ class InvoiceBase(BaseModel):
     status: str = "Pending"  # Pending, Paid, Overdue
     invoiceType: str = "Tax Invoice"  # Tax Invoice, Proforma Invoice
     incentiveAmountBase: Optional[float] = None
+    createdBy: Optional[str] = None
+    createdById: Optional[str] = None
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1878,6 +1885,8 @@ class InvoiceUpdate(BaseModel):
     status: Optional[str] = None
     invoiceType: Optional[str] = None
     incentiveAmountBase: Optional[float] = None
+    createdBy: Optional[str] = None
+    createdById: Optional[str] = None
 
 class Invoice(InvoiceBase):
     id: str

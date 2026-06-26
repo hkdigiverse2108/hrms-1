@@ -28,16 +28,58 @@ const EMPLOYEE_COLORS = [
   { bg: "#e4c441", bgLight: "rgba(228,196,65,0.18)", border: "#e4c441", text: "#b89e00" },
 ];
 
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hour = Math.floor(i / 4);
+  const minute = (i % 4) * 15;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+  const displayString = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  return { value: timeString, label: displayString };
+});
+
 type ViewMode = "day" | "week";
 
 export default function SchedulePage() {
-  const { user, getISTNow } = useUserContext();
+  const { user, getISTNow, updateUser } = useUserContext();
   const { checkPermission, isAdmin } = usePermissions();
+  const [isSyncing, setIsSyncing] = useState(false);
   const canAdd = isAdmin || checkPermission('schedule', 'canAdd');
   const canDeletePerm = isAdmin || checkPermission('schedule', 'canDelete');
   const [currentDate, setCurrentDate] = useState(dayjs(getISTNow()));
   const [calendarMonth, setCalendarMonth] = useState<Date>(dayjs(getISTNow()).toDate());
   const [schedules, setSchedules] = useState<any[]>([]);
+
+  // Sync user profile from server to detect Google Calendar tokens
+  const syncUserProfile = React.useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/employees/${user.id}`);
+      if (res.ok) {
+        const freshUser = await res.json();
+        if (freshUser && !freshUser.detail) {
+          const pRes = await fetch(`${API_URL}/user-permissions/${user.id}`);
+          const pData = pRes.ok ? await pRes.json() : { permissions: [] };
+          if (updateUser) {
+            updateUser({
+              ...freshUser,
+              permissions: pData?.permissions || []
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to sync user profile in schedule:", err);
+    }
+  }, [user?.id, updateUser]);
+
+  useEffect(() => {
+    syncUserProfile();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', syncUserProfile);
+      return () => window.removeEventListener('focus', syncUserProfile);
+    }
+  }, [syncUserProfile]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
@@ -64,6 +106,10 @@ export default function SchedulePage() {
 
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  /* ───── free slots state ───── */
+  const [freeSlots, setFreeSlots] = useState<{start: string, end: string}[]>([]);
+  const [isCheckingSlots, setIsCheckingSlots] = useState(false);
 
   const resetForm = () => {
     setEditingScheduleId(null);
@@ -120,6 +166,44 @@ export default function SchedulePage() {
     }
   }, [user, employees, selectedEmployeeIds.length]);
 
+  /* ───── fetch free slots ───── */
+  useEffect(() => {
+    const fetchFreeSlots = async () => {
+      if (!form.date || !form.employeeId || !createModalOpen) return;
+      const attendeeIds = [form.employeeId, ...(form.attendees || [])];
+      
+      setIsCheckingSlots(true);
+      try {
+        const res = await fetch(`${API_URL}/schedules/free-slots`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            employeeIds: attendeeIds,
+            date: form.date,
+            durationMins: 30
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setFreeSlots(data.freeSlots || []);
+        } else {
+          setFreeSlots([]);
+        }
+      } catch (err) {
+        console.error("Error fetching free slots:", err);
+        setFreeSlots([]);
+      } finally {
+        setIsCheckingSlots(false);
+      }
+    };
+    
+    // Use a small debounce to avoid spamming the API while selecting attendees
+    const timeoutId = setTimeout(() => {
+      fetchFreeSlots();
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [form.date, form.employeeId, form.attendees, createModalOpen]);
+
   /* scroll to current time on mount */
   useEffect(() => {
     if (!isLoading && timelineRef.current) {
@@ -140,8 +224,6 @@ export default function SchedulePage() {
       setIsLoading(false);
     }
   };
-
-  const [isSyncing, setIsSyncing] = useState(false);
 
   const handleDisconnectGoogle = async () => {
     if (!user) return;
@@ -233,18 +315,44 @@ export default function SchedulePage() {
       toast.error("End time must be after start time");
       return;
     }
-    // Check for overlap within current schedules if creating for the current date
-    if (form.date === currentDate.format("YYYY-MM-DD")) {
-      const isOverlap = schedules.some((s) => {
-        if (s.employeeId !== form.employeeId) return false;
-        // Overlap condition: max(start1, start2) < min(end1, end2)
-        const maxStart = form.startTime > s.startTime ? form.startTime : s.startTime;
-        const minEnd = form.endTime < s.endTime ? form.endTime : s.endTime;
-        return maxStart < minEnd;
-      });
+    // Check for overlap within currently loaded schedules
+    let overlapEmployee = false;
+    let overlapAttendee = false;
 
-      if (isOverlap) {
-        toast.error("This schedule overlaps with an existing schedule for this employee.");
+    schedules.forEach((s) => {
+      const sDate = typeof s.date === "string" ? s.date.split("T")[0] : dayjs(s.date).format("YYYY-MM-DD");
+      if (form.date !== sDate) return;
+      if (editingScheduleId && s.id === editingScheduleId) return;
+      
+      const maxStart = form.startTime > s.startTime ? form.startTime : s.startTime;
+      const minEnd = form.endTime < s.endTime ? form.endTime : s.endTime;
+      const overlaps = maxStart < minEnd;
+      
+      if (overlaps) {
+        // Check if this existing schedule involves the primary employee
+        if (String(s.employeeId) === String(form.employeeId) || (s.attendees || []).some((id: any) => String(id) === String(form.employeeId))) {
+          overlapEmployee = true;
+        }
+        // Check if this existing schedule involves any of the selected attendees
+        const involvesAnyAttendee = form.attendees.some(att => 
+          String(s.employeeId) === String(att) || (s.attendees || []).some((id: any) => String(id) === String(att))
+        );
+        if (involvesAnyAttendee) {
+          overlapAttendee = true;
+        }
+      }
+    });
+
+    if (overlapAttendee) {
+      toast.error("Cannot schedule. One or more attendees have an overlapping event.");
+      return;
+    }
+
+    if (overlapEmployee) {
+      if (String(form.employeeId) === String(user?.id || user?.employeeId)) {
+        toast.warning("Overlap detected in your schedule!");
+      } else {
+        toast.error("Cannot assign an overlapping schedule to someone else.");
         return;
       }
     }
@@ -522,7 +630,7 @@ export default function SchedulePage() {
     const canSeeDetails = isAdminUser || isOwner || isCreator || isAttendee;
     
     const displayTitle = canSeeDetails ? event.title : "Busy";
-    const canEditOrDelete = isCreator || isOwner || isAdminUser;
+    const canEditOrDelete = isOwner;
     
     const colWidth = 100 / totalColumns;
     const leftPercent = column * colWidth;
@@ -734,6 +842,37 @@ export default function SchedulePage() {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* ───── Common Free Slots ───── */}
+                {form.employeeId && (form.attendees.length > 0) && form.date && (
+                  <div className="mt-3">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">Common Free Slots</label>
+                    {isCheckingSlots ? (
+                      <div className="text-xs text-slate-500 animate-pulse">Finding available times...</div>
+                    ) : freeSlots.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1 custom-scrollbar">
+                        {freeSlots.slice(0, 10).map((slot, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => {
+                              const s = slot.start.length === 5 ? slot.start + ":00" : slot.start;
+                              const e = slot.end.length === 5 ? slot.end + ":00" : slot.end;
+                              setForm({ ...form, startTime: s, endTime: e });
+                            }}
+                            className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-1 rounded cursor-pointer hover:bg-indigo-600 hover:text-white transition-colors"
+                          >
+                            {format12Hour(slot.start)} - {format12Hour(slot.end)}
+                          </div>
+                        ))}
+                        {freeSlots.length === 0 && <span className="text-xs text-slate-400">No common slots found.</span>}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1.5 rounded border border-amber-100">
+                        No common free slots available on this date.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -764,36 +903,37 @@ export default function SchedulePage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Start Time</label>
-                    <TimePicker
-                      className="w-full h-10"
-                      format="h:mm a"
-                      use12Hours
-                      value={dayjs(`2000-01-01 ${form.startTime}`)}
-                      onChange={t => {
-                        if (!t) { setForm({ ...form, startTime: "" }); return; }
-                        const newStart = t.format("HH:mm");
-                        if (form.endTime && newStart >= form.endTime) {
-                          const newEnd = t.add(1, 'hour').format("HH:mm");
-                          setForm({ ...form, startTime: newStart, endTime: newEnd });
-                        } else {
-                          setForm({ ...form, startTime: newStart });
-                        }
-                      }}
-                      minuteStep={15}
-                      getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                    />
+                    <Select value={form.startTime} onValueChange={v => {
+                      if (!v) { setForm({ ...form, startTime: "" }); return; }
+                      if (form.endTime && v >= form.endTime) {
+                        const newEnd = dayjs(`2000-01-01 ${v}`).add(1, 'hour').format("HH:mm");
+                        setForm({ ...form, startTime: v, endTime: newEnd });
+                      } else {
+                        setForm({ ...form, startTime: v });
+                      }
+                    }}>
+                      <SelectTrigger className="w-full h-10">
+                        <SelectValue placeholder="Start Time" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[250px]">
+                        {TIME_OPTIONS.map(opt => (
+                          <SelectItem key={`start-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">End Time</label>
-                    <TimePicker
-                      className="w-full h-10"
-                      format="h:mm a"
-                      use12Hours
-                      value={dayjs(`2000-01-01 ${form.endTime}`)}
-                      onChange={t => setForm({ ...form, endTime: t ? t.format("HH:mm") : "" })}
-                      minuteStep={15}
-                      getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                    />
+                    <Select value={form.endTime} onValueChange={v => setForm({ ...form, endTime: v })}>
+                      <SelectTrigger className="w-full h-10">
+                        <SelectValue placeholder="End Time" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[250px]">
+                        {TIME_OPTIONS.map(opt => (
+                          <SelectItem key={`end-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -981,7 +1121,15 @@ export default function SchedulePage() {
                   type="button"
                   onClick={() => {
                     if (user) {
-                      window.location.href = `${API_URL}/auth/google/url?employeeId=${user.id || user.employeeId}`;
+                      const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+                      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                      const baseApi = API_URL.startsWith('http') ? API_URL : `${origin}${API_URL}`;
+                      const authUrl = `${baseApi}/auth/google/url?employeeId=${user.id || user.employeeId}${isDesktop ? '&desktop=true' : ''}`;
+                      if (typeof window !== 'undefined' && (window as any).electronAPI?.openExternal) {
+                        (window as any).electronAPI.openExternal(authUrl);
+                      } else {
+                        window.open(authUrl, '_blank');
+                      }
                     }
                   }}
                   className="w-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:text-brand-teal font-semibold text-xs shadow-sm"

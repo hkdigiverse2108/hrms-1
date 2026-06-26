@@ -14,10 +14,16 @@ import { toast } from 'sonner';
 
 export function PendingWorkEmbedded({ 
   type = "pending-work",
-  defaultTaskType = "all"
+  defaultTaskType = "all",
+  hideTaskTypeFilter = false,
+  hideStageFilter = false,
+  hideProjectFilter = false
 }: { 
   type?: "pending-work" | "todays-work" | "upcoming-work" | "completed-work" | "all",
-  defaultTaskType?: string
+  defaultTaskType?: string,
+  hideTaskTypeFilter?: boolean,
+  hideStageFilter?: boolean,
+  hideProjectFilter?: boolean
 }) {
   const router = useRouter();
   
@@ -25,16 +31,20 @@ export function PendingWorkEmbedded({
   const [otherWorkEntries, setOtherWorkEntries] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
+  const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterStage, setFilterStage] = useState<string>('all');
   const [filterTaskType, setFilterTaskType] = useState<string>(defaultTaskType);
+  const [filterAssigner, setFilterAssigner] = useState<string>('all');
+  const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDate, setFilterDate] = useState<string>('');
 
   const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null);
   const [editingRemarkValue, setEditingRemarkValue] = useState<string>('');
+  const [editingIsClientIssue, setEditingIsClientIssue] = useState<boolean>(false);
   
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<any[]>([]);
@@ -50,13 +60,15 @@ export function PendingWorkEmbedded({
       const user = storedUser ? JSON.parse(storedUser) : null;
       const userName = user?.name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || "Unknown User";
 
+      const finalRemark = editingIsClientIssue ? `[CLIENT ISSUE] ${editingRemarkValue}` : editingRemarkValue;
+
       const response = await fetch(`${API_URL}/content-calendar/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remark: editingRemarkValue, updatedBy: userName, remarkStage: stage }),
+        body: JSON.stringify({ remark: finalRemark, updatedBy: userName, remarkStage: stage }),
       });
       if (response.ok) {
-        setEntries(entries.map(e => e.id === id ? { ...e, remark: editingRemarkValue, remarkStage: stage } : e));
+        setEntries(entries.map(e => e.id === id ? { ...e, remark: finalRemark, remarkStage: stage } : e));
         setEditingRemarkId(null);
       }
     } catch (err) {
@@ -95,11 +107,12 @@ export function PendingWorkEmbedded({
       const storedUser = localStorage.getItem('user');
       const user = storedUser ? JSON.parse(storedUser) : null;
       
-      const [entriesRes, clientsRes, pRes, otherWorkRes] = await Promise.all([
+      const [entriesRes, clientsRes, pRes, otherWorkRes, employeesRes] = await Promise.all([
         fetch(`${API_URL}/content-calendar/all`),
         fetch(`${API_URL}/clients`),
         fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
-        fetch(`${API_URL}/other-work/all`)
+        fetch(`${API_URL}/other-work/all`),
+        fetch(`${API_URL}/employees`)
       ]);
       
       if (entriesRes.ok && clientsRes.ok) {
@@ -112,6 +125,11 @@ export function PendingWorkEmbedded({
       if (otherWorkRes.ok) {
         const fetchedOtherWork = await otherWorkRes.json();
         setOtherWorkEntries(fetchedOtherWork);
+      }
+      
+      if (employeesRes.ok) {
+        const fetchedEmployees = await employeesRes.json();
+        setEmployees(fetchedEmployees);
       }
       
       if (pRes.ok) {
@@ -146,15 +164,31 @@ export function PendingWorkEmbedded({
       const projectName = project.title;
       const displayName = `${projectName} (${clientName})`;
 
-      const enrich = (stage: string, deadline: string, type: string) => ({
-        ...entry,
-        clientDisplayName: displayName,
-        clientId: entry.clientId,
-        stage,
-        deadline,
-        type,
-        taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`)
-      });
+      const enrich = (stage: string, deadline: string, type: string) => {
+        let assigneeId = null;
+        let assignerId = project.teamLeaderId || client?.teamLeaderId;
+        
+        if (stage === 'Script') assigneeId = project.assignedScriptwriterId || client?.assignedScriptwriterId;
+        if (stage === 'Shoot') assigneeId = project.assignedShooterId || client?.assignedShooterId;
+        if (stage === 'Editing') assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
+        if (stage === 'Approval') assigneeId = project.assignedApproverId || client?.assignedApproverId;
+        if (stage === 'Posting') assigneeId = project.assignedPosterId || client?.assignedPosterId;
+
+        const assignee = employees.find((e: any) => e.id === assigneeId);
+        const assigner = employees.find((e: any) => e.id === assignerId);
+
+        return {
+          ...entry,
+          clientDisplayName: displayName,
+          clientId: entry.clientId,
+          stage,
+          deadline,
+          type,
+          taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`),
+          assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
+          assignerName: assigner ? `${assigner.firstName} ${assigner.lastName}` : null,
+        };
+      };
 
       const canSeeTask = (stage: string) => {
         if (!isEmployeeOrIntern) return true;
@@ -189,8 +223,13 @@ export function PendingWorkEmbedded({
       else if (ow.status === 'Ready for Review') canSee = isAssigner || isAssignee;
       else if (ow.status === 'Approved') canSee = isAssignee || isAssigner; // Show in completed
 
-      if (!isEmployeeOrIntern || canSee || type === 'all') {
+      const isManagerOrAdmin = user?.role === 'Team Leader' || user?.role?.toLowerCase() === 'admin' || user?.role === 'HR';
+      if (isManagerOrAdmin || isAssignee || isAssigner) {
         if (type === 'all' || (type === 'completed-work' ? ow.status === 'Approved' : ow.status !== 'Approved')) {
+          
+          const assignee = employees.find((e: any) => e.id === ow.assigneeId);
+          const assigner = employees.find((e: any) => e.id === ow.assignerId);
+
           tasks.push({
             ...ow,
             clientDisplayName: ow.taskType === 'digital-marketing' ? 'Digital Marketing' : 'Other Work',
@@ -199,6 +238,8 @@ export function PendingWorkEmbedded({
             deadline: ow.deadline,
             type: ow.taskType || 'other-work',
             taskName: ow.title,
+            assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : (ow.assigneeName || null),
+            assignerName: assigner ? `${assigner.firstName} ${assigner.lastName}` : (ow.assignerName || null),
             isOtherWork: true
           });
         }
@@ -225,6 +266,16 @@ export function PendingWorkEmbedded({
     // Apply Stage Filter
     if (filterStage !== 'all') {
       filteredTasks = filteredTasks.filter(t => t.stage.toLowerCase() === filterStage.toLowerCase());
+    }
+
+    // Apply Assigner Filter
+    if (filterAssigner !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.assignerName && t.assignerName === filterAssigner);
+    }
+
+    // Apply Assignee Filter
+    if (filterAssignee !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.assigneeName && t.assigneeName === filterAssignee);
     }
 
     // Apply Search Query
@@ -268,14 +319,19 @@ export function PendingWorkEmbedded({
         }
 
         const hasApplicableRemark = t.remark && t.remark.trim() !== '' && (!t.remarkStage || t.stage === t.remarkStage);
+        const isClientIssue = hasApplicableRemark && t.remark.startsWith('[CLIENT ISSUE] ');
 
         if (type === 'pending-work') {
+          if (isClientIssue) return true;
           return hasApplicableRemark;
         }
         
         if (type === 'completed-work') {
           return false; // For now, only Other Work is shown in completed work
         }
+
+        // If it's a client issue, it should ONLY show in pending work!
+        if (isClientIssue) return false;
         
         const deadlineDate = new Date(t.deadline);
         deadlineDate.setHours(0, 0, 0, 0);
@@ -288,90 +344,135 @@ export function PendingWorkEmbedded({
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, searchQuery, filterDate, type]);
+  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
       {/* Filters Bar */}
-      <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-50/50">
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <ClipboardList className="w-5 h-5 text-brand-teal" />
-          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : type === 'all' ? 'All Tasks' : 'Pending Work'}
-          </h2>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          <div className="relative w-full sm:w-48">
+      <div className="flex flex-col border-b border-slate-200 bg-slate-50/50">
+        {/* Top Header Row */}
+        <div className="p-4 pb-3 flex flex-col sm:flex-row gap-4 items-center justify-between">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <ClipboardList className="w-5 h-5 text-brand-teal" />
+            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+              {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : type === 'all' ? 'All Tasks' : 'Pending Work'}
+            </h2>
+          </div>
+          
+          <div className="relative w-full sm:w-72">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <Input 
-              placeholder="Search tasks..." 
+              placeholder="Search tasks, clients, or stages..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 text-sm bg-white"
+              className="pl-9 h-9 text-sm bg-white border-slate-200 shadow-sm rounded-full focus-visible:ring-brand-teal"
             />
           </div>
+        </div>
 
-          <div className="relative w-full sm:w-[160px]">
-            <Input 
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="h-9 text-sm bg-white pr-8 text-slate-600"
-            />
-            {filterDate && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="absolute right-0 top-0 h-9 w-9 hover:bg-transparent"
-                onClick={() => setFilterDate('')}
-              >
-                <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
-              </Button>
+        {/* Bottom Filters Row */}
+        <div className="px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div className="flex items-center gap-2 min-w-max">
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm mr-2">
+              <Filter className="w-4 h-4 text-slate-400 mx-2" />
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider pr-2">Filters</span>
+            </div>
+
+            <div className="relative w-[150px]">
+              <Input 
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="h-9 text-sm bg-white pr-8 text-slate-600 rounded-md border-slate-200 focus-visible:ring-brand-teal"
+              />
+              {filterDate && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute right-0 top-0 h-9 w-9 hover:bg-transparent"
+                  onClick={() => setFilterDate('')}
+                >
+                  <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+                </Button>
+              )}
+            </div>
+
+            {!hideTaskTypeFilter && (
+              <Select value={filterTaskType} onValueChange={setFilterTaskType}>
+                <SelectTrigger className="w-[150px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                  <SelectValue placeholder="Task Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="content-calendar">Content Calendar</SelectItem>
+                  <SelectItem value="other-work">Other Work</SelectItem>
+                  <SelectItem value="digital-marketing">Digital Marketing</SelectItem>
+                </SelectContent>
+              </Select>
             )}
+
+            {!hideStageFilter && (
+              <Select value={filterStage} onValueChange={setFilterStage}>
+                <SelectTrigger className="w-[140px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                  <SelectValue placeholder="Stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Stages</SelectItem>
+                  <SelectItem value="script">Script</SelectItem>
+                  <SelectItem value="shoot">Shoot</SelectItem>
+                  <SelectItem value="editing">Editing</SelectItem>
+                  <SelectItem value="approval">Approval</SelectItem>
+                  <SelectItem value="posting">Posting</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            {!hideProjectFilter && (
+              <Select value={filterProject} onValueChange={setFilterProject}>
+                <SelectTrigger className="w-[180px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                  <SelectValue placeholder="Filter by Project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  {Object.entries(clientProjects).map(([cId, project]) => {
+                    const client = clients.find(c => c.id === cId);
+                    const cName = client ? (client.companyName || client.clientName) : '';
+                    return (
+                      <SelectItem key={cId} value={cId}>{project.title} ({cName})</SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Select value={filterAssigner} onValueChange={setFilterAssigner}>
+              <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                <SelectValue placeholder="Assigned By" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Assigned By: All</SelectItem>
+                {employees.map(emp => (
+                  <SelectItem key={`assigner-${emp.id}`} value={`${emp.firstName} ${emp.lastName}`}>
+                    {emp.firstName} {emp.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+              <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                <SelectValue placeholder="Assigned To" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Assigned To: All</SelectItem>
+                {employees.map(emp => (
+                  <SelectItem key={`assignee-${emp.id}`} value={`${emp.firstName} ${emp.lastName}`}>
+                    {emp.firstName} {emp.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-
-          <Select value={filterTaskType} onValueChange={setFilterTaskType}>
-            <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
-              <SelectValue placeholder="Task Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="content-calendar">Content Calendar</SelectItem>
-              <SelectItem value="other-work">Other Work</SelectItem>
-              <SelectItem value="digital-marketing">Digital Marketing</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={filterStage} onValueChange={setFilterStage}>
-            <SelectTrigger className="w-full sm:w-[150px] h-9 text-sm bg-white">
-              <SelectValue placeholder="Stage" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stages</SelectItem>
-              <SelectItem value="script">Script</SelectItem>
-              <SelectItem value="shoot">Shoot</SelectItem>
-              <SelectItem value="editing">Editing</SelectItem>
-              <SelectItem value="approval">Approval</SelectItem>
-              <SelectItem value="posting">Posting</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={filterProject} onValueChange={setFilterProject}>
-            <SelectTrigger className="w-full sm:w-[200px] h-9 text-sm bg-white">
-              <SelectValue placeholder="Filter by Project" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Projects</SelectItem>
-              {Object.entries(clientProjects).map(([cId, project]) => {
-                const client = clients.find(c => c.id === cId);
-                const cName = client ? (client.companyName || client.clientName) : '';
-                return (
-                  <SelectItem key={cId} value={cId}>{project.title} ({cName})</SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
         </div>
       </div>
       {loading ? (
@@ -427,7 +528,7 @@ export function PendingWorkEmbedded({
                             </span>
                           )}
                         </div>
-                        {item.isOtherWork && (item.assignerName || item.assigneeName) && (
+                        {(item.assignerName || item.assigneeName) && (
                           <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                             {item.assignerName && <div>Assigned by: <span className="font-medium text-slate-700">{item.assignerName}</span></div>}
                             {item.assigneeName && <div>Assigned to: <span className="font-medium text-slate-700">{item.assigneeName}</span></div>}
@@ -441,35 +542,64 @@ export function PendingWorkEmbedded({
                         const displayRemark = isApplicable ? item.remark : null;
 
                         return editingRemarkId === `${item.id}-${item.stage}` ? (
-                          <div className="flex items-center gap-1.5 min-w-[150px]">
-                            <Input 
-                              value={editingRemarkValue}
-                              onChange={(e) => setEditingRemarkValue(e.target.value)}
-                              className="h-8 text-xs px-2 py-1 w-full focus-visible:ring-brand-teal"
-                              autoFocus
-                              placeholder="Type reason..."
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveRemark(item.id, item.stage);
-                                if (e.key === 'Escape') setEditingRemarkId(null);
-                              }}
-                            />
-                            <button onClick={() => handleSaveRemark(item.id, item.stage)} className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors" title="Save">
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => setEditingRemarkId(null)} className="text-slate-400 hover:bg-slate-100 p-1.5 rounded transition-colors" title="Cancel">
-                              <X className="w-4 h-4" />
-                            </button>
+                          <div className="flex flex-col gap-1.5 min-w-[150px]">
+                            <div className="flex items-center gap-1.5">
+                              <Input 
+                                value={editingRemarkValue}
+                                onChange={(e) => setEditingRemarkValue(e.target.value)}
+                                className="h-8 text-xs px-2 py-1 w-full focus-visible:ring-brand-teal"
+                                autoFocus
+                                placeholder="Type reason..."
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveRemark(item.id, item.stage);
+                                  if (e.key === 'Escape') setEditingRemarkId(null);
+                                }}
+                              />
+                              <button onClick={() => handleSaveRemark(item.id, item.stage)} className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors" title="Save">
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => setEditingRemarkId(null)} className="text-slate-400 hover:bg-slate-100 p-1.5 rounded transition-colors" title="Cancel">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer mt-0.5">
+                              <input 
+                                type="checkbox" 
+                                className="w-3 h-3 text-red-500 rounded border-slate-300 focus:ring-red-500 cursor-pointer"
+                                checked={editingIsClientIssue}
+                                onChange={(e) => setEditingIsClientIssue(e.target.checked)}
+                              />
+                              <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Issue from client</span>
+                            </label>
                           </div>
                         ) : (
                           <div 
-                            className="cursor-pointer py-1 px-1 -mx-1 rounded hover:bg-slate-100 truncate flex-1 text-slate-600"
+                            className="cursor-pointer py-1 px-1 -mx-1 rounded hover:bg-slate-100 truncate flex-1 flex flex-col gap-0.5"
                             onClick={() => {
                               setEditingRemarkId(`${item.id}-${item.stage}`);
-                              setEditingRemarkValue(displayRemark || '');
+                              const remarkText = displayRemark || '';
+                              if (remarkText.startsWith('[CLIENT ISSUE] ')) {
+                                setEditingIsClientIssue(true);
+                                setEditingRemarkValue(remarkText.replace('[CLIENT ISSUE] ', ''));
+                              } else {
+                                setEditingIsClientIssue(false);
+                                setEditingRemarkValue(remarkText);
+                              }
                             }}
                             title={displayRemark || ""}
                           >
-                            {displayRemark || "-"}
+                            {displayRemark ? (
+                                displayRemark.startsWith('[CLIENT ISSUE] ') ? (
+                                  <>
+                                    <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Client Issue</span>
+                                    <span className="text-slate-600 truncate">{displayRemark.replace('[CLIENT ISSUE] ', '')}</span>
+                                  </>
+                                ) : (
+                                  <span className="text-slate-600 truncate">{displayRemark}</span>
+                                )
+                            ) : (
+                                "-"
+                            )}
                           </div>
                         );
                       })()}

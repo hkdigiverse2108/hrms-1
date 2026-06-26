@@ -248,7 +248,7 @@ export function FeedbackReviewsEmbedded() {
 
             <div className="space-y-4">
               <h4 className="font-semibold text-slate-800 border-b pb-2">Responses</h4>
-              {selectedResponse && Object.entries(selectedResponse.responses).map(([questionId, answer]: [string, any], i) => (
+              {selectedResponse && selectedResponse.responses && Object.entries(selectedResponse.responses).map(([questionId, answer]: [string, any], i) => (
                 <div key={i} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                   <p className="text-sm font-medium text-slate-800 mb-2">
                     {getQuestionLabel(selectedResponse.formDetails, questionId)}

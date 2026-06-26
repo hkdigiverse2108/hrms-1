@@ -3,27 +3,6 @@
   nsExec::ExecToLog 'cmd.exe /c taskkill /F /IM HRMS.exe /T'
   nsExec::ExecToLog 'cmd.exe /c taskkill /F /IM backend.exe /T'
   nsExec::ExecToLog 'cmd.exe /c taskkill /F /IM watchdog.exe /T'
-
-  # Read UninstallString from registry (check HKCU first, then HKLM)
-  ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.hrms.app" "UninstallString"
-  StrCmp $0 "" check_hrms_hkcu
-    Goto run_uninstaller
-  check_hrms_hkcu:
-  ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\HRMS" "UninstallString"
-  StrCmp $0 "" check_app_hklm
-    Goto run_uninstaller
-  check_app_hklm:
-  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.hrms.app" "UninstallString"
-  StrCmp $0 "" check_hrms_hklm
-    Goto run_uninstaller
-  check_hrms_hklm:
-  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\HRMS" "UninstallString"
-  StrCmp $0 "" done
-
-  run_uninstaller:
-    DetailPrint "Silent uninstall of previous version: $0"
-    ExecWait '$0 /S _?=$INSTDIR'
-  done:
 !macroend
 
 !macro customUnInit
@@ -44,6 +23,11 @@
 !macroend
 
 !macro customUnInstall
+  ${if} ${isUpdated}
+    # Skip deleting shortcuts and directory during upgrade to preserve taskbar pins
+    Goto done_uninstall
+  ${endif}
+
   # Remove Start Menu and Desktop shortcuts
   RMDir /r "$SMPROGRAMS\HRMS"
   Delete "$DESKTOP\HRMS.lnk"
@@ -51,4 +35,6 @@
   
   # Remove installation directory
   RMDir /r "$INSTDIR"
+
+  done_uninstall:
 !macroend
