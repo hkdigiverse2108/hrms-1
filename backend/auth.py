@@ -83,15 +83,16 @@ async def require_admin(token_payload: dict = Depends(get_current_user_token)):
     This prevents employees from calling sensitive endpoints even if they
     somehow know the API URL.
     """
-    role = str(token_payload.get("role", "")).lower()
-    if role != "admin":
+    admin_roles = {"admin", "super admin", "superadmin", "administrator", "founder"}
+    role = str(token_payload.get("role", "")).lower().strip()
+    if role not in admin_roles:
         # Fallback: query database in case token doesn't contain role
         from database import db
         user_id = token_payload.get("sub")
         if user_id:
             from bson import ObjectId
             user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
-            if user and str(user.get("role", "")).lower() == "admin":
+            if user and str(user.get("role", "")).lower().strip() in admin_roles:
                 return token_payload
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -13,6 +13,10 @@ from websocket import manager as ws_manager
 import time
 import urllib.request
 import threading
+import re
+
+ADMIN_ROLES_REGEX = re.compile(r"^(admin|super\s*admin|superadmin|administrator|founder)$", re.IGNORECASE)
+NON_ADMIN_FILTER = {"role": {"$not": ADMIN_ROLES_REGEX}}
 
 IST = pytz.timezone('Asia/Kolkata')
 _real_time_anchor = None
@@ -336,7 +340,7 @@ async def get_dashboard_stats(db):
             "lateToday": 0
         }
         
-    total_employees = await db.employees.count_documents({"status": "active"})
+    total_employees = await db.employees.count_documents({"status": "active", **NON_ADMIN_FILTER})
     
     today = get_now()
     today_str = today.strftime("%Y-%m-%d")
@@ -379,7 +383,7 @@ async def get_analytics_overview(db, months: int = 6):
     
     # Department Distribution
     dept_pipeline = [
-        {"$match": {"status": "active"}},
+        {"$match": {"status": "active", **NON_ADMIN_FILTER}},
         {"$group": {"_id": "$department", "employees": {"$sum": 1}}}
     ]
     dept_data = await db.employees.aggregate(dept_pipeline).to_list(length=100)
@@ -452,12 +456,14 @@ async def get_analytics_overview(db, months: int = 6):
         
         # Hiring Trend
         hires = await db.employees.count_documents({
-            "joinDate": {"$gte": start_dt, "$lt": end_dt}
+            "joinDate": {"$gte": start_dt, "$lt": end_dt},
+            **NON_ADMIN_FILTER
         })
         # Simplified exits (employees who are inactive and updated in that month)
         exits = await db.employees.count_documents({
             "status": "inactive",
-            "updated_at": {"$gte": start_dt, "$lt": end_dt}
+            "updated_at": {"$gte": start_dt, "$lt": end_dt},
+            **NON_ADMIN_FILTER
         })
         hiring_trend.append({
             "month": month_name,
@@ -466,7 +472,7 @@ async def get_analytics_overview(db, months: int = 6):
         })
 
     # Summary Stats
-    total_employees = await db.employees.count_documents({"status": "active"})
+    total_employees = await db.employees.count_documents({"status": "active", **NON_ADMIN_FILTER})
     total_attendance = sum([t["present"] + t["absent"] for t in attendance_trend])
     avg_attendance = (sum([t["present"] for t in attendance_trend]) / total_attendance * 100) if total_attendance > 0 else 0
     
@@ -755,7 +761,8 @@ async def run_payroll_processing(db, month: str, year: int):
     for emp in employees:
         emp_id = emp["id"]
         # Skip inactive and admin employees to avoid generating unnecessary payroll records
-        if emp.get("status", "").lower() == "inactive" or emp.get("role", "").lower() == "admin":
+        admin_role_set = {"admin", "super admin", "superadmin", "administrator", "founder"}
+        if emp.get("status", "").lower() == "inactive" or emp.get("role", "").lower().strip() in admin_role_set:
             await db.payroll.delete_many({"employeeId": emp_id, "month": month, "year": year})
             continue
         # Get salary structure
@@ -1188,7 +1195,8 @@ async def run_payroll_processing(db, month: str, year: int):
     return payroll_results
 
 async def create_employee(db, employee: schemas.EmployeeCreate):
-    is_admin = employee.role and employee.role.lower() == "admin"
+    admin_roles = {"admin", "super admin", "superadmin", "administrator", "founder"}
+    is_admin = employee.role and employee.role.lower().strip() in admin_roles
     
     if not is_admin:
         # Atomic counter to prevent duplicate IDs under concurrent requests
@@ -1240,7 +1248,7 @@ async def get_departments(db, skip: int = 0, limit: int = 100):
     for row in rows:
         row = fix_id(row)
         # Automatic employee count based on department name
-        row["employeeCount"] = await db.employees.count_documents({"department": row["name"]})
+        row["employeeCount"] = await db.employees.count_documents({"department": row["name"], "status": "active", **NON_ADMIN_FILTER})
         results.append(row)
     return results
 

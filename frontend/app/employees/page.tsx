@@ -230,12 +230,18 @@ export default function EmployeeListPage() {
   };
 
   // Calculate counts for tabs
-  const activeCount = employees.filter(emp => emp.role?.toLowerCase() !== 'admin' && emp.status?.toLowerCase() !== 'inactive').length;
-  const inactiveCount = employees.filter(emp => emp.role?.toLowerCase() !== 'admin' && emp.status?.toLowerCase() === 'inactive').length;
-  const adminCount = employees.filter(emp => emp.role?.toLowerCase() === 'admin').length;
+  const isRoleAdmin = (r?: string) => {
+    if (!r) return false;
+    const clean = r.toLowerCase().trim();
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+  };
+
+  const activeCount = employees.filter(emp => !isRoleAdmin(emp.role) && emp.status?.toLowerCase() !== 'inactive').length;
+  const inactiveCount = employees.filter(emp => !isRoleAdmin(emp.role) && emp.status?.toLowerCase() === 'inactive').length;
+  const adminCount = employees.filter(emp => isRoleAdmin(emp.role)).length;
 
   const filteredEmployees = employees.filter(emp => {
-    const isAdminUser = emp.role?.toLowerCase() === 'admin';
+    const isAdminUser = isRoleAdmin(emp.role);
     if (viewType === "employees" && isAdminUser) return false;
     if (viewType === "admins" && !isAdminUser) return false;
 

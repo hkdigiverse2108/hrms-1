@@ -500,7 +500,7 @@ export default function DashboardPage() {
   }
  
   const userRole = user?.role?.toLowerCase() || "employee";
-  const isAdmin = userRole === "admin";
+  const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
   const isHR = userRole === "hr";
   const isEmployee = userRole === "employee";
  
@@ -681,7 +681,12 @@ function UpcomingApprovedLeavesCard({ leaves }: { leaves: any[] }) {
 function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow }: { user: any, leaves: any[], employees: any[], interns: any[], allAttendance: any[], getISTNow: () => Date }) {
 
   // Exclude admin employees from attendance-related calculations
-  const nonAdminEmployees = employees?.filter(e => e.role?.toLowerCase() !== 'admin') || [];
+  const isRoleAdmin = (r?: string) => {
+    if (!r) return false;
+    const clean = r.toLowerCase().trim();
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+  };
+  const nonAdminEmployees = employees?.filter(e => !isRoleAdmin(e.role)) || [];
 
   const todayStr = dayjs(getISTNow()).format('YYYY-MM-DD');
   const todayAttendance = allAttendance?.filter(a => a.date === todayStr) || [];
@@ -715,7 +720,7 @@ function AdminView({ user, leaves, employees, interns, allAttendance, getISTNow 
         <StatCard 
           title="Total Employees" 
           value={totalEmployeesCount.toString()} 
-          trend={`+${employees?.filter(e => dayjs(e.joinDate).isAfter(dayjs().subtract(1, 'month'))).length || 0}`} 
+          trend={`+${nonAdminEmployees?.filter(e => dayjs(e.joinDate).isAfter(dayjs().subtract(1, 'month'))).length || 0}`} 
           trendLabel="new this month" 
           icon={<Users className="w-5 h-5 text-muted-foreground" />} 
         />

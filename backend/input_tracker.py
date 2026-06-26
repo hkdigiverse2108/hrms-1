@@ -765,6 +765,10 @@ def _run_restrictions_monitor():
         if not rule:
             continue
 
+        with _state_lock:
+            if _active_user_is_admin:
+                continue
+
         try:
             title, proc_name, pid = get_active_window_info()
         except Exception:
@@ -996,7 +1000,8 @@ async def set_active_user(employee_id: str):
             )
             print(f"[Tracker] User doc in tracker: {user_doc}", flush=True)
             with _state_lock:
-                if user_doc and str(user_doc.get("role", "")).lower() == "admin":
+                admin_roles = {"admin", "super admin", "superadmin", "administrator", "founder"}
+                if user_doc and str(user_doc.get("role", "")).lower().strip() in admin_roles:
                     _active_user_is_admin = True
                 else:
                     _active_user_is_admin = False
