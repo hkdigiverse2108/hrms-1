@@ -10,6 +10,7 @@ import { API_URL } from "@/lib/config";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
 
 export interface ProjectFormData {
   title: string;
@@ -20,6 +21,7 @@ export interface ProjectFormData {
   teamLeaderId: string;
   startDate: string;
   endDate: string;
+  teamDeadline?: string;
   status: string;
   priority: string;
   // Creative fields
@@ -44,6 +46,7 @@ const defaultFormData: ProjectFormData = {
   teamLeaderId: "",
   startDate: new Date().toISOString().split('T')[0],
   endDate: "",
+  teamDeadline: "",
   status: "planning",
   priority: "medium",
   // Creative fields defaults
@@ -62,9 +65,10 @@ interface ProjectFormProps {
   initialData?: Partial<ProjectFormData>;
   onSubmit: (data: ProjectFormData) => void;
   isSubmitting?: boolean;
+  isAdmin?: boolean;
 }
 
-export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectFormProps) {
+export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true }: ProjectFormProps) {
   const [formData, setFormData] = useState<ProjectFormData>({
     ...defaultFormData,
     ...initialData,
@@ -136,6 +140,16 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.department === "Development") {
+      if (isAdmin && !formData.endDate) {
+        toast.error("Client Deadline (End Date) is compulsory for Development projects.");
+        return;
+      }
+      if (!formData.teamDeadline) {
+        toast.error("Team Deadline is compulsory for Development projects.");
+        return;
+      }
+    }
     onSubmit(formData);
   };
 
@@ -259,7 +273,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${formData.department === "Development" ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
         <div className="space-y-2">
           <Label htmlFor="startDate">Start Date</Label>
           <Input
@@ -270,15 +284,38 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="endDate">End Date (Optional)</Label>
-          <Input
-            id="endDate"
-            type="date"
-            value={formData.endDate || ""}
-            onChange={(e) => handleChange("endDate", e.target.value)}
-          />
-        </div>
+        {isAdmin && (
+          <div className="space-y-2">
+            <Label htmlFor="endDate">
+              {formData.department === "Development" ? (
+                <>Client Deadline <span className="text-red-500">*</span></>
+              ) : (
+                "End Date (Optional)"
+              )}
+            </Label>
+            <Input
+              id="endDate"
+              type="date"
+              value={formData.endDate || ""}
+              onChange={(e) => handleChange("endDate", e.target.value)}
+              required={formData.department === "Development"}
+            />
+          </div>
+        )}
+        {formData.department === "Development" && (
+          <div className="space-y-2">
+            <Label htmlFor="teamDeadline">
+              Team Deadline <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="teamDeadline"
+              type="date"
+              value={formData.teamDeadline || ""}
+              onChange={(e) => handleChange("teamDeadline", e.target.value)}
+              required
+            />
+          </div>
+        )}
       </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

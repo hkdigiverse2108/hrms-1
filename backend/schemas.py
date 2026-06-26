@@ -1028,6 +1028,7 @@ class ProjectBase(BaseModel):
     assignedEmployeeName: Optional[str] = None
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
+    teamDeadline: Optional[RobustDate] = None
     status: Optional[str] = "planning"
     statusHistory: Optional[List[dict]] = []
     priority: Optional[str] = "medium"
@@ -1083,6 +1084,7 @@ class ProjectUpdate(BaseModel):
     assignedEmployeeName: Optional[str] = None
     startDate: Optional[RobustDate] = None
     endDate: Optional[RobustDate] = None
+    teamDeadline: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None
     budget: Optional[float] = None

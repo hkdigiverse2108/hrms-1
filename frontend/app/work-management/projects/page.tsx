@@ -299,7 +299,8 @@ export default function ProjectsPage() {
               <ProjectForm 
                 initialData={editingProject} 
                 onSubmit={handleSubmit} 
-                isSubmitting={isSubmitting} 
+                isSubmitting={isSubmitting}
+                isAdmin={isAdmin} 
               />
             </DialogContent>
           </Dialog>
@@ -521,6 +522,7 @@ export default function ProjectsPage() {
           {filteredProjects.map((project) => {
             const progress = calculateProgress(project.id);
             const overdue = isOverdue(project.endDate, project.status, progress);
+            const isManagementOrTL = isAdmin || user?.role === "HR" || project.teamLeaderId === user?.id;
             
             return (
               <Card key={project.id} className={`group hover:shadow-md transition-shadow border-border ${
@@ -652,10 +654,33 @@ export default function ProjectsPage() {
 
 
                     <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
-                      <div className={`flex items-center gap-1.5 ${overdue ? "text-red-600 font-bold" : ""}`}>
-                        <Calendar className="w-3.5 h-3.5" />
-                        Ends: {project.endDate || project.startDate}
-                      </div>
+                      {isAdmin ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px]">
+                            <Calendar className="w-3.5 h-3.5 text-brand-teal" />
+                            Start: {project.startDate || "-"} | <span className={overdue ? "text-red-600 font-bold" : ""}>Client Deadline: {project.endDate || "-"}</span>
+                          </div>
+                          {project.teamDeadline && (
+                            <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[11px]">
+                              <CalendarClock className="w-3.5 h-3.5" />
+                              Team Deadline: {project.teamDeadline}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          {(user?.role === "HR" || project.teamLeaderId === user?.id) && (
+                            <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px]">
+                              <Calendar className="w-3.5 h-3.5 text-brand-teal" />
+                              Start: {project.startDate || "-"}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[11px]">
+                            <CalendarClock className="w-3.5 h-3.5" />
+                            Team Deadline: {project.teamDeadline || project.endDate || project.startDate || "-"}
+                          </div>
+                        </div>
+                      )}
                       <Badge variant="outline" className={`text-[10px] ${
                         project.priority === 'high' ? 'border-red-200 text-red-600 bg-red-50' : 
                         project.priority === 'medium' ? 'border-amber-200 text-amber-600 bg-amber-50' : 
