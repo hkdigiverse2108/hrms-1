@@ -1185,6 +1185,20 @@ async def run_payroll_processing(db, month: str, year: int):
         doc = await db.payroll.find_one({"employeeId": emp_id, "month": month, "year": year})
         payroll_results.append(fix_id(doc))
         
+    try:
+        for p_doc in payroll_results:
+            target_emp_id = p_doc.get("employeeId")
+            if target_emp_id:
+                await create_notification(db, schemas.NotificationCreate(
+                    employee_id=target_emp_id,
+                    title="Payslip Released",
+                    message=f"Your payroll for {month} {year} has been processed. You can view your payslip in the Payroll section.",
+                    type="payroll",
+                    reference_id=p_doc.get("id")
+                ))
+    except Exception as e_notif:
+        print(f"Error sending payslip notifications: {e_notif}")
+
     return payroll_results
 
 async def create_employee(db, employee: schemas.EmployeeCreate):
@@ -2526,12 +2540,42 @@ async def delete_leave_request(db, leave_id: str):
     result = await db.leave_requests.delete_one({"_id": ObjectId(leave_id)})
     return result.deleted_count > 0
 
+# Helper for checking full entity access permission
+async def user_has_full_entity_access(db, user_id: str, role: str, target_module: str = None) -> bool:
+    if not role and not user_id:
+        return False
+    role_lower = str(role or "").lower().strip()
+    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing"}
+    if role_lower in full_roles or "social media" in role_lower or "digital marketing" in role_lower:
+        return True
+        
+    if user_id:
+        user = await get_employee(db, user_id)
+        if user:
+            ur = str(user.get("role", "")).lower().strip()
+            udes = str(user.get("designation", "")).lower().strip()
+            udept = str(user.get("department", "")).lower().strip()
+            if ur in full_roles or udes in full_roles or "social media" in ur or "social media" in udes or "digital marketing" in ur or "digital marketing" in udes:
+                return True
+                
+        # Check permissions table
+        perm_doc = await db.user_permissions.find_one({"employeeId": user_id})
+        if perm_doc:
+            modules_to_check = {"projects", "smm", "clients", "digital-marketing", "work-management"}
+            if target_module:
+                modules_to_check.add(target_module)
+            for p in perm_doc.get("permissions", []):
+                if p.get("moduleName") in modules_to_check and (p.get("canView") or p.get("canEdit") or p.get("canAdd")):
+                    return True
+    return False
+
 # Client CRUD
 async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = None):
     query = {}
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin", "manager"]:
+        user_id = user_info.get("sub")
+        if not await user_has_full_entity_access(db, user_id, role, "clients"):
             user_id = user_info.get("sub")
             # Fetch user's projects to get associated clients
             user_projects = await get_projects(db, userId=user_id, role=role, skip=0, limit=10000)
@@ -2837,7 +2881,7 @@ async def delete_client(db, client_id: str):
 # Project CRUD
 async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "projects"):
         # Fetch user to get department
         user = await get_employee(db, userId)
         if user:
@@ -2973,7 +3017,7 @@ async def delete_project(db, project_id: str):
 # General Task CRUD
 async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "tasks"):
         # User sees tasks assigned to them, or tasks they assigned
         query["$or"] = [
             {"assignedToId": userId},
@@ -3094,7 +3138,7 @@ async def delete_task(db, task_id: str):
 # Work Management Task CRUD
 async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 1000):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "wm-tasks"):
         user = await get_employee(db, userId)
         if user:
             dept = user.get("department")
@@ -3156,6 +3200,19 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
     except Exception:
         pass
         
+    try:
+        assignee_id = task_dict.get("assignedToId")
+        if assignee_id and assignee_id != performedBy and assignee_id != "System":
+            await create_notification(db, schemas.NotificationCreate(
+                employee_id=assignee_id,
+                title="New Task Assigned",
+                message=f"You have been assigned task '{task_dict.get('title')}' in project '{task_dict.get('projectName', 'General')}'.",
+                type="task",
+                reference_id=taskId
+            ))
+    except Exception as e_notif:
+        print(f"Error notifying assignee on task create: {e_notif}")
+
     doc = await db.wm_tasks.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
@@ -3185,6 +3242,40 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
         
         log_details, diffs = format_field_changes(old_task, update_data, f"Task '{old_task.get('title')}'")
         await log_task_activity(db, task_id, "Updated", performedBy, userName, log_details, diffs=diffs)
+
+        try:
+            new_assignee_id = update_data.get("assignedToId")
+            old_assignee_id = old_task.get("assignedToId") if old_task else None
+            if new_assignee_id and new_assignee_id != old_assignee_id and new_assignee_id != performedBy:
+                await create_notification(db, schemas.NotificationCreate(
+                    employee_id=new_assignee_id,
+                    title="Task Re-assigned",
+                    message=f"You have been assigned task '{update_data.get('title') or (old_task.get('title') if old_task else '')}' in project '{update_data.get('projectName') or (old_task.get('projectName') if old_task else 'General')}'.",
+                    type="task",
+                    reference_id=task_id
+                ))
+        except Exception as e_notif:
+            print(f"Error notifying assignee on task update: {e_notif}")
+
+        try:
+            new_status = str(update_data.get("status") or "").strip().lower()
+            old_status = str(old_task.get("status") or "").strip().lower() if old_task else ""
+            if new_status in ["review", "ready for review"] and new_status != old_status:
+                creator_id = old_task.get("createdBy") or old_task.get("reviewByTL") if old_task else None
+                if not creator_id and old_task and old_task.get("projectId") and len(str(old_task.get("projectId"))) == 24:
+                    project = await db.projects.find_one({"_id": ObjectId(old_task["projectId"])})
+                    if project:
+                        creator_id = project.get("teamLeaderId")
+                if creator_id and creator_id != performedBy and creator_id != (old_task.get("assignedToId") if old_task else None):
+                    await create_notification(db, schemas.NotificationCreate(
+                        employee_id=creator_id,
+                        title="Task Ready for Review",
+                        message=f"{(old_task.get('assignedToName') if old_task else 'An employee')} has submitted task '{(old_task.get('title') if old_task else '')}' for your review.",
+                        type="task",
+                        reference_id=task_id
+                    ))
+        except Exception as e_notif:
+            print(f"Error notifying reviewer on task stage update: {e_notif}")
     
     doc = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
     return fix_id(doc)
@@ -3444,6 +3535,31 @@ async def create_lead(db, lead: schemas.LeadCreate):
     # Log the creation
     await log_activity(db, "Lead Created", performedBy, userName, f"Lead for '{lead_dict['company']}' was created.", leadId=lead_id)
     
+    try:
+        assigned_to = lead_dict.get("assignedTo", [])
+        if not isinstance(assigned_to, list):
+            assigned_to = [assigned_to] if assigned_to else []
+        for emp_name in assigned_to:
+            if not emp_name: continue
+            if isinstance(emp_name, dict):
+                emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+            if not emp_name: continue
+            import re
+            emp_name_escaped = re.escape(str(emp_name).strip())
+            emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
+            if emp:
+                emp_id_str = str(emp["_id"]) if "_id" in emp else emp.get("id")
+                if emp_id_str and emp_id_str != performedBy:
+                    await create_notification(db, schemas.NotificationCreate(
+                        employee_id=emp_id_str,
+                        title="New Lead Assigned",
+                        message=f"You have been assigned sales lead '{lead_dict.get('company') or lead_dict.get('contact', 'Unknown')}'.",
+                        type="lead",
+                        reference_id=lead_id
+                    ))
+    except Exception as e_notif:
+        print(f"Error notifying lead assignee on create: {e_notif}")
+
     doc = await db.leads.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
@@ -3571,6 +3687,32 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
                         await run_payroll_processing(db, month_name, ld.year)
                 except Exception as e:
                     print(f"Error auto-processing payroll on lead won for {emp_name}: {e}")
+                    
+        if "assignedTo" in update_data:
+            try:
+                assigned_to = update_data.get("assignedTo", [])
+                if not isinstance(assigned_to, list):
+                    assigned_to = [assigned_to] if assigned_to else []
+                for emp_name in assigned_to:
+                    if not emp_name: continue
+                    if isinstance(emp_name, dict):
+                        emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+                    if not emp_name: continue
+                    import re
+                    emp_name_escaped = re.escape(str(emp_name).strip())
+                    emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
+                    if emp:
+                        emp_id_str = str(emp["_id"]) if "_id" in emp else emp.get("id")
+                        if emp_id_str and emp_id_str != performedBy:
+                            await create_notification(db, schemas.NotificationCreate(
+                                employee_id=emp_id_str,
+                                title="Lead Re-assigned",
+                                message=f"You have been assigned sales lead '{update_data.get('company') or (old_lead.get('company') if old_lead else '') or 'Unknown'}'.",
+                                type="lead",
+                                reference_id=lead_id
+                            ))
+            except Exception as e_notif:
+                print(f"Error notifying lead assignee on update: {e_notif}")
         
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
@@ -3675,7 +3817,8 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
     query = {}
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin"]:
+        user_id = user_info.get("sub")
+        if user_id and not await user_has_full_entity_access(db, user_id, role, "digital-marketing"):
             user_id = user_info.get("sub")
             # Get allowed clients
             allowed_clients = await db.clients.find({"assignedEmployeeId": user_id}).to_list(length=None)
@@ -3859,7 +4002,8 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: list =
     
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin"]:
+        user_id = user_info.get("sub")
+        if user_id and not await user_has_full_entity_access(db, user_id, role, "digital-marketing"):
             is_restricted = True
             user_id = user_info.get("sub")
             # Get allowed clients

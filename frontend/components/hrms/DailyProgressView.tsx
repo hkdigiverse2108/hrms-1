@@ -45,7 +45,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions()
 
   const isHRRoleOrDept = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr'
-  const canViewDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canView') || user?.role === 'Employee' || user?.role === 'Team Leader'
+  const canViewDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canView') || ['Employee', 'Team Leader', 'Manager', 'Social Media Manager'].includes(user?.role)
   const canEditDailyProgress = isUserAdmin || isHRRoleOrDept || checkPermission('daily-progress', 'canEdit')
 
   const employees = data?.employees || []
@@ -97,12 +97,12 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
         if (isAdmin || isHRUser) {
           if (activeRoleTab === 'Team Leaders') {
-            filteredEmployees = filteredEmployees.filter(e => e.role === 'Team Leader' || e.department?.toLowerCase() === 'hr')
+            filteredEmployees = filteredEmployees.filter(e => ['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role) || e.department?.toLowerCase() === 'hr')
           } else {
-            filteredEmployees = filteredEmployees.filter(e => e.role !== 'Team Leader' && e.department?.toLowerCase() !== 'hr' && e.role?.toLowerCase() !== 'admin')
+            filteredEmployees = filteredEmployees.filter(e => !['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role) && e.department?.toLowerCase() !== 'hr' && e.role?.toLowerCase() !== 'admin')
           }
         } else if (isTeamLeader) {
-         filteredEmployees = filteredEmployees.filter(e => e.id === user?.id || (e.role !== 'Team Leader' && e.role?.toLowerCase() !== 'admin'))
+         filteredEmployees = filteredEmployees.filter(e => e.id === user?.id || (!['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role) && e.role?.toLowerCase() !== 'admin'))
        }
     }
 
@@ -120,7 +120,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
       return filteredEmployees.map(emp => {
         const report = allReports.find((r: any) => r.employeeId === emp.id && r.date === dateStr)
         let responsiblePerson = ''
-        if (emp.role === 'Team Leader' || emp.role?.toLowerCase() === 'admin') {
+        if (['Team Leader', 'Manager', 'Social Media Manager'].includes(emp.role) || emp.role?.toLowerCase() === 'admin') {
            responsiblePerson = 'HR / Admin'
         } else {
            const tls = employees.filter(e => e.department?.toLowerCase() === emp.department?.toLowerCase() && e.role === 'Team Leader')
@@ -323,7 +323,8 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
   const actions = (record: any) => {
     const isSelf = user?.id === record.employeeId
-    const canManage = (canEditDailyProgress || (isTeamLeader && user?.department === record.department) || (isHRUser && record.role === 'Team Leader')) && !isSelf
+    const isHighLevelRole = ['Team Leader', 'Manager', 'Social Media Manager'].includes(record.role);
+    const canManage = (canEditDailyProgress || (isTeamLeader && user?.department === record.department && !isHighLevelRole) || (isHRUser && isHighLevelRole)) && !isSelf
     
     if (!canManage) {
         return <span className="text-[10px] text-slate-400 italic font-medium tracking-tighter">

@@ -176,7 +176,20 @@ export default function MarketingReportsPage() {
     loading: permissionsLoading,
   } = usePermissions();
 
-  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role);
+  const hasFullDMAccess = React.useMemo(() => {
+    if (!user) return false;
+    const r = (user.role || "").toLowerCase();
+    const d = (user.designation || "").toLowerCase();
+    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "hr"];
+    if (fullRoles.includes(r) || fullRoles.includes(d) || r.includes("social media") || d.includes("social media") || r.includes("digital marketing") || d.includes("digital marketing")) {
+      return true;
+    }
+    const perms = (user as any).permissions || [];
+    const dmPerms = ["projects", "smm", "clients", "digital-marketing", "work-management", "marketing"];
+    return perms.some((p: any) => dmPerms.includes(p.moduleName) && (p.canView || p.canEdit || p.canAdd));
+  }, [user]);
+
+  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role) && !hasFullDMAccess;
 
   const getLocalDateString = () => {
     const d = new Date();

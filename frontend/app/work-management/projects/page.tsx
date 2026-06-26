@@ -656,27 +656,27 @@ export default function ProjectsPage() {
                     <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       {isAdmin ? (
                         <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px]">
-                            <Calendar className="w-3.5 h-3.5 text-brand-teal" />
-                            Start: {project.startDate || "-"} | <span className={overdue ? "text-red-600 font-bold" : ""}>Client Deadline: {project.endDate || "-"}</span>
+                          <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px] flex-wrap">
+                            <Calendar className="w-3.5 h-3.5 text-brand-teal shrink-0" />
+                            <span>Start: <strong className="text-slate-800 font-semibold">{project.startDate || "-"}</strong></span>
+                            <span className="text-slate-300">|</span>
+                            <span className={overdue ? "text-red-600 font-bold" : ""}>Client Deadline: <strong className={overdue ? "text-red-600 font-bold" : "text-slate-800 font-semibold"}>{project.endDate || "-"}</strong></span>
                           </div>
                           {project.teamDeadline && (
                             <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[11px]">
-                              <CalendarClock className="w-3.5 h-3.5" />
+                              <CalendarClock className="w-3.5 h-3.5 shrink-0" />
                               Team Deadline: {project.teamDeadline}
                             </div>
                           )}
                         </div>
                       ) : (
                         <div className="flex flex-col gap-1">
-                          {(user?.role === "HR" || project.teamLeaderId === user?.id) && (
-                            <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px]">
-                              <Calendar className="w-3.5 h-3.5 text-brand-teal" />
-                              Start: {project.startDate || "-"}
-                            </div>
-                          )}
+                          <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px]">
+                            <Calendar className="w-3.5 h-3.5 text-brand-teal shrink-0" />
+                            <span>Start: <strong className="text-slate-800 font-semibold">{project.startDate || "-"}</strong></span>
+                          </div>
                           <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[11px]">
-                            <CalendarClock className="w-3.5 h-3.5" />
+                            <CalendarClock className="w-3.5 h-3.5 shrink-0" />
                             Team Deadline: {project.teamDeadline || project.endDate || project.startDate || "-"}
                           </div>
                         </div>

@@ -180,7 +180,13 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
                 </SelectTrigger>
                 <SelectContent>
                   {clients
-                    .filter(client => !formData.department || client.department === formData.department)
+                    .filter(client => {
+                      if (!formData.department) return true;
+                      const clientDepts = client.department 
+                        ? client.department.split(',').map((d: string) => d.trim()).filter(Boolean) 
+                        : ["Development"];
+                      return clientDepts.includes(formData.department);
+                    })
                     .map((client) => {
                       const displayName = client.companyName || client.name || "Unknown Client";
                       return (

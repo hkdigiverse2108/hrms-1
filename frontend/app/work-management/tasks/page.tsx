@@ -80,7 +80,20 @@ export default function TasksPage() {
     }
   }, [router, permissionsLoading, canViewTasks]);
 
-  const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
+  const hasFullTasksAccess = React.useMemo(() => {
+    if (!user) return false;
+    const r = (user.role || "").toLowerCase();
+    const d = (user.designation || "").toLowerCase();
+    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing"];
+    if (fullRoles.includes(r) || fullRoles.includes(d) || r.includes("social media") || d.includes("social media") || r.includes("digital marketing") || d.includes("digital marketing")) {
+      return true;
+    }
+    const perms = (user as any).permissions || [];
+    const smmPerms = ["projects", "smm", "clients", "digital-marketing", "work-management", "tasks"];
+    return perms.some((p: any) => smmPerms.includes(p.moduleName) && (p.canView || p.canEdit || p.canAdd));
+  }, [user]);
+
+  const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin" || hasFullTasksAccess;
 
   useEffect(() => {
     if (user && !isAdmin && user.department) {
@@ -325,14 +338,14 @@ export default function TasksPage() {
     const taskDept = assignee?.department;
 
     // Strict Department Isolation for non-Admins
-    if (user?.role !== "Admin") {
+    if (!isAdmin) {
       if (taskDept && user?.department && taskDept.toLowerCase() !== user.department.toLowerCase()) {
         return false;
       }
     }
 
     let isVisible = false;
-    if (user?.role === "Admin") {
+    if (isAdmin) {
       isVisible = true;
     } else if (user?.role === "Team Leader") {
       const project = projects.find(p => p.id === t.projectId);

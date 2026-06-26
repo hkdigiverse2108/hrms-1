@@ -164,8 +164,22 @@ export default function CreativeClientsPage() {
   const router = useRouter();
   const { confirm } = useConfirm();
   const { user } = useUser();
-  const isAdmin = user?.role?.toLowerCase() === "admin";
-  const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
+  const hasFullSmmAccess = React.useMemo(() => {
+    if (!user) return false;
+    const r = (user.role || "").toLowerCase();
+    const d = (user.designation || "").toLowerCase();
+    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing"];
+    if (fullRoles.includes(r) || fullRoles.includes(d) || r.includes("social media") || d.includes("social media") || r.includes("digital marketing") || d.includes("digital marketing")) {
+      return true;
+    }
+    const perms = (user as any).permissions || [];
+    const smmPerms = ["projects", "smm", "clients", "digital-marketing", "work-management"];
+    return perms.some((p: any) => smmPerms.includes(p.moduleName) && (p.canView || p.canEdit || p.canAdd));
+  }, [user]);
+
+  const isRealAdmin = user?.role?.toLowerCase() === "admin";
+  const isAdmin = isRealAdmin || hasFullSmmAccess;
+  const isEmployeeOrIntern = (user?.role === "Employee" || user?.role === "Intern") && !hasFullSmmAccess;
   const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -958,7 +972,7 @@ export default function CreativeClientsPage() {
           </Select>
         </div>
 
-        {!isAdmin && (
+        {!isRealAdmin && (
           <Button 
             variant="default" 
             className="h-10 shrink-0 gap-2 bg-brand-teal text-white hover:bg-brand-teal-light"
