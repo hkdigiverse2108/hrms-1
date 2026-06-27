@@ -92,8 +92,18 @@ export default function EmployeeListPage() {
       doc.line(14, 26, 283, 26)
 
       // Prepare Table Data
-      const headers = [["Employee Name", "Email ID", "Employee ID", "Gender", "Department", "Designation", "Status", "Join Date"]]
-      const rows = filteredEmployees.map(emp => [
+      const isAdminsTab = viewType === "admins";
+      const headers = [isAdminsTab 
+        ? ["Employee Name", "Email ID", "Employee ID", "Gender", "Status", "Join Date"]
+        : ["Employee Name", "Email ID", "Employee ID", "Gender", "Department", "Designation", "Status", "Join Date"]]
+      const rows = filteredEmployees.map(emp => isAdminsTab ? [
+        emp.name || "",
+        emp.email || "",
+        emp.employeeId || "",
+        emp.gender || "Male",
+        emp.status || "",
+        emp.joinDate || ""
+      ] : [
         emp.name || "",
         emp.email || "",
         emp.employeeId || "",
@@ -230,12 +240,18 @@ export default function EmployeeListPage() {
   };
 
   // Calculate counts for tabs
-  const activeCount = employees.filter(emp => emp.role?.toLowerCase() !== 'admin' && emp.status?.toLowerCase() !== 'inactive').length;
-  const inactiveCount = employees.filter(emp => emp.role?.toLowerCase() !== 'admin' && emp.status?.toLowerCase() === 'inactive').length;
-  const adminCount = employees.filter(emp => emp.role?.toLowerCase() === 'admin').length;
+  const isRoleAdmin = (r?: string) => {
+    if (!r) return false;
+    const clean = r.toLowerCase().trim();
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+  };
+
+  const activeCount = employees.filter(emp => !isRoleAdmin(emp.role) && emp.status?.toLowerCase() !== 'inactive').length;
+  const inactiveCount = employees.filter(emp => !isRoleAdmin(emp.role) && emp.status?.toLowerCase() === 'inactive').length;
+  const adminCount = employees.filter(emp => isRoleAdmin(emp.role)).length;
 
   const filteredEmployees = employees.filter(emp => {
-    const isAdminUser = emp.role?.toLowerCase() === 'admin';
+    const isAdminUser = isRoleAdmin(emp.role);
     if (viewType === "employees" && isAdminUser) return false;
     if (viewType === "admins" && !isAdminUser) return false;
 
@@ -328,45 +344,49 @@ export default function EmployeeListPage() {
         {/* Filters and Search */}
         <div className="p-4 border-b border-border bg-gray-50/30 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full xl:w-auto">
-            <select 
-              className="w-full sm:w-auto px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-            >
-              <option>All Departments</option>
-              {departments.map(dept => (
-                <option key={dept}>{dept}</option>
-              ))}
-            </select>
-            <div className="grid grid-cols-2 gap-3 w-full sm:w-auto">
-              <select 
-                className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
-                value={filterRole}
-                onChange={(e) => setFilterRole(e.target.value)}
-              >
-                <option>All Roles</option>
-                {roles.map(role => (
-                  <option key={role}>{role}</option>
-                ))}
-              </select>
-              <div className="flex items-center space-x-2 px-3 py-2.5 sm:py-2 bg-white border border-border rounded-md sm:h-[38px]">
-                <Switch 
-                  id="status-toggle" 
-                  checked={filterStatus === "inactive"}
-                  onCheckedChange={(checked) => setFilterStatus(checked ? "inactive" : "active")}
-                  className="data-[state=checked]:bg-brand-teal"
-                />
-                <Label htmlFor="status-toggle" className="text-sm font-medium cursor-pointer text-muted-foreground whitespace-nowrap flex items-center gap-1.5">
-                  Show Inactive
-                  <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full text-[10px] font-bold">{inactiveCount}</span>
-                </Label>
-              </div>
-            </div>
+            {viewType !== "admins" && (
+              <>
+                <select 
+                  className="w-full sm:w-auto px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
+                  value={filterDept}
+                  onChange={(e) => setFilterDept(e.target.value)}
+                >
+                  <option>All Departments</option>
+                  {departments.map(dept => (
+                    <option key={dept}>{dept}</option>
+                  ))}
+                </select>
+                <div className="grid grid-cols-2 gap-3 w-full sm:w-auto">
+                  <select 
+                    className="px-3 py-2.5 sm:py-2 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer"
+                    value={filterRole}
+                    onChange={(e) => setFilterRole(e.target.value)}
+                  >
+                    <option>All Roles</option>
+                    {roles.map(role => (
+                      <option key={role}>{role}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center space-x-2 px-3 py-2.5 sm:py-2 bg-white border border-border rounded-md sm:h-[38px]">
+                    <Switch 
+                      id="status-toggle" 
+                      checked={filterStatus === "inactive"}
+                      onCheckedChange={(checked) => setFilterStatus(checked ? "inactive" : "active")}
+                      className="data-[state=checked]:bg-brand-teal"
+                    />
+                    <Label htmlFor="status-toggle" className="text-sm font-medium cursor-pointer text-muted-foreground whitespace-nowrap flex items-center gap-1.5">
+                      Show Inactive
+                      <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full text-[10px] font-bold">{inactiveCount}</span>
+                    </Label>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
           <SearchBar 
             placeholder="Search employees..." 
             className="w-full" 
-            containerClassName="w-full xl:w-64" 
+            containerClassName={viewType === "admins" ? "w-full" : "w-full xl:w-64"} 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -381,8 +401,8 @@ export default function EmployeeListPage() {
                 <th className="px-6 py-4 font-medium">Employee ID</th>
                 <th className="px-6 py-4 font-medium">Gender</th>
                 <th className="px-6 py-4 font-medium">Password</th>
-                <th className="px-6 py-4 font-medium">Department</th>
-                <th className="px-6 py-4 font-medium">Role</th>
+                {viewType !== "admins" && <th className="px-6 py-4 font-medium">Department</th>}
+                {viewType !== "admins" && <th className="px-6 py-4 font-medium">Role</th>}
                 <th className="px-6 py-4 font-medium">Status</th>
                 <th className="px-6 py-4 font-medium">Join Date</th>
                 <th className="px-6 py-4 font-medium text-right">Actions</th>
@@ -391,7 +411,7 @@ export default function EmployeeListPage() {
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-20 text-center">
+                  <td colSpan={viewType === "admins" ? 7 : 9} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3 text-muted-foreground">
                       <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
                       <p>Loading employees...</p>
@@ -400,13 +420,13 @@ export default function EmployeeListPage() {
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-20 text-center text-destructive">
+                  <td colSpan={viewType === "admins" ? 7 : 9} className="px-6 py-20 text-center text-destructive">
                     {error}
                   </td>
                 </tr>
               ) : filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-20 text-center text-muted-foreground">
+                  <td colSpan={viewType === "admins" ? 7 : 9} className="px-6 py-20 text-center text-muted-foreground">
                     No employees found matching your criteria.
                   </td>
                 </tr>
@@ -450,16 +470,20 @@ export default function EmployeeListPage() {
                         <span className="text-gray-400 italic text-xs">Not set</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-muted-foreground hover:text-brand-teal transition-colors">
-                      <Link href="/employees/organization/departments">
-                        {emp.department}
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground hover:text-brand-teal transition-colors">
-                      <Link href="/employees/organization/designations">
-                        {emp.designation}
-                      </Link>
-                    </td>
+                    {viewType !== "admins" && (
+                      <td className="px-6 py-4 text-muted-foreground hover:text-brand-teal transition-colors">
+                        <Link href="/employees/organization/departments">
+                          {emp.department}
+                        </Link>
+                      </td>
+                    )}
+                    {viewType !== "admins" && (
+                      <td className="px-6 py-4 text-muted-foreground hover:text-brand-teal transition-colors">
+                        <Link href="/employees/organization/designations">
+                          {emp.designation}
+                        </Link>
+                      </td>
+                    )}
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-md border ${
                         emp.status === 'active' 

@@ -178,9 +178,15 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   }, [initialData])
 
 
+  const isRoleAdmin = (r?: string) => {
+    if (!r) return false;
+    const clean = r.toLowerCase().trim();
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (formData.role !== 'Admin' && (!formData.startTime || !formData.endTime)) {
+    if (!isRoleAdmin(formData.role) && (!formData.startTime || !formData.endTime)) {
       toast.error('Please enter both Start Time and End Time.')
       return
     }
@@ -268,7 +274,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
 
         {/* Row 3 */}
         <FormField label="DOB" id="dob" type="date" required value={formData.dob} onChange={(v: string) => handleChange('dob', v)} />
-        {formData.role !== 'Admin' && (
+        {!isRoleAdmin(formData.role) && (
           <>
             <FormField label="Joining Date" id="joinDate" type="date" required value={formData.joinDate} onChange={(v: string) => handleChange('joinDate', v)} />
             <FormField label="Salary" id="salary" type="number" required value={formData.salary} onChange={(v: string) => handleChange('salary', v)} placeholder="Enter salary" />
@@ -308,7 +314,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
       </div>
  
       {/* Dynamic Conditional Sections */}
-      {formData.role !== 'Admin' && (
+      {!isRoleAdmin(formData.role) && (
         <>
           {/* Bank Details Card */}
           <Card className="relative pt-6 border border-gray-200 shadow-sm rounded-xl overflow-visible mt-12">
@@ -317,11 +323,11 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             </div>
             <CardContent className="pt-8 px-8 pb-10">
               <div className="grid gap-x-16 gap-y-6 md:grid-cols-2">
-                <FormField label="UPI ID" id="upiId" required={formData.role !== 'Admin'} value={formData.upiId} onChange={(v: string) => handleChange('upiId', v)} />
-                <FormField label="Account Number" id="accountNumber" required={formData.role !== 'Admin'} value={formData.accountNumber} onChange={(v: string) => handleChange('accountNumber', v)} />
-                <FormField label="IFSC Code" id="ifscCode" required={formData.role !== 'Admin'} value={formData.ifscCode} onChange={(v: string) => handleChange('ifscCode', v)} />
-                <FormField label="Bank Name" id="bankName" required={formData.role !== 'Admin'} value={formData.bankName} onChange={(v: string) => handleChange('bankName', v)} />
-                <FormField label="Account Holder Name" id="accountHolderName" required={formData.role !== 'Admin'} value={formData.accountHolderName} onChange={(v: string) => handleChange('accountHolderName', v)} />
+                <FormField label="UPI ID" id="upiId" required={!isRoleAdmin(formData.role)} value={formData.upiId} onChange={(v: string) => handleChange('upiId', v)} />
+                <FormField label="Account Number" id="accountNumber" required={!isRoleAdmin(formData.role)} value={formData.accountNumber} onChange={(v: string) => handleChange('accountNumber', v)} />
+                <FormField label="IFSC Code" id="ifscCode" required={!isRoleAdmin(formData.role)} value={formData.ifscCode} onChange={(v: string) => handleChange('ifscCode', v)} />
+                <FormField label="Bank Name" id="bankName" required={!isRoleAdmin(formData.role)} value={formData.bankName} onChange={(v: string) => handleChange('bankName', v)} />
+                <FormField label="Account Holder Name" id="accountHolderName" required={!isRoleAdmin(formData.role)} value={formData.accountHolderName} onChange={(v: string) => handleChange('accountHolderName', v)} />
               </div>
             </CardContent>
           </Card>
@@ -333,8 +339,8 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             </div>
             <CardContent className="pt-8 px-8 pb-10">
               <div className="grid gap-x-16 gap-y-6 md:grid-cols-2">
-                <FormField label="Parent Name" id="parentName" required={formData.role !== 'Admin'} value={formData.parentName} onChange={(v: string) => handleChange('parentName', v)} />
-                <FormField label="Parent Number" id="parentNumber" required={formData.role !== 'Admin'} value={formData.parentNumber} onChange={(v: string) => handleChange('parentNumber', v)} />
+                <FormField label="Parent Name" id="parentName" required={!isRoleAdmin(formData.role)} value={formData.parentName} onChange={(v: string) => handleChange('parentName', v)} />
+                <FormField label="Parent Number" id="parentNumber" required={!isRoleAdmin(formData.role)} value={formData.parentNumber} onChange={(v: string) => handleChange('parentNumber', v)} />
                 <FormSelect
                   key={`rel-${relations.length}`}
                   label="Relationship"
@@ -354,7 +360,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
       <div className="space-y-6 pt-6 max-w-4xl">
         <div className="flex items-center gap-4">
           <Label className="w-44 text-left font-medium text-gray-700">Employee ID:</Label>
-          {formData.role === 'Admin' ? (
+          {isRoleAdmin(formData.role) ? (
             <Input
               value={formData.employeeId}
               onChange={(e) => handleChange('employeeId', e.target.value)}
@@ -369,14 +375,14 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           )}
         </div>
         
-        {formData.role !== 'Admin' && (
+        {!isRoleAdmin(formData.role) && (
           <>
             <FormField label="Aadhar Card" id="aadharCard" value={formData.aadharCard} onChange={(v: string) => handleChange('aadharCard', v)} />
             <FormField label="PAN Card" id="panCard" value={formData.panCard} onChange={(v: string) => handleChange('panCard', v)} />
           </>
         )}
         
-        {formData.role !== 'Admin' && (
+        {!isRoleAdmin(formData.role) && (
           <>
             <FormSelect 
               key={`dept-${departments.length}`} 

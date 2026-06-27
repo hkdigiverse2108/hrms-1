@@ -845,6 +845,91 @@ function createWindow() {
     }
   });
 
+  ipcMain.handle('download-and-open', async (event, { url, filename }) => {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const http = require('http');
+      const https = require('https');
+      const { shell } = require('electron');
+
+      const cleanFilename = filename.replace(/^[a-f0-9]+_/, "");
+      const destDir = path.join(app.getPath('userData'), 'transfers');
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
+      }
+      const destPath = path.join(destDir, cleanFilename);
+
+      if (fs.existsSync(destPath)) {
+        log(`File already exists locally at: ${destPath}. Opening directly.`);
+        await shell.openPath(destPath);
+        return { success: true, path: destPath };
+      }
+
+      log(`Downloading file from ${url} to ${destPath}`);
+      const file = fs.createWriteStream(destPath);
+      const client = url.startsWith('https') ? https : http;
+
+      return new Promise((resolve, reject) => {
+        client.get(url, (response) => {
+          if (response.statusCode !== 200) {
+            reject(new Error(`Failed to download: Status Code ${response.statusCode}`));
+            return;
+          }
+          response.pipe(file);
+          file.on('finish', () => {
+            file.close(async () => {
+              log(`Download complete: ${destPath}. Opening.`);
+              try {
+                await shell.openPath(destPath);
+                resolve({ success: true, path: destPath });
+              } catch (openErr) {
+                reject(openErr);
+              }
+            });
+          });
+        }).on('error', (err) => {
+          fs.unlink(destPath, () => {});
+          reject(err);
+        });
+      });
+    } catch (err) {
+      log(`Error in download-and-open: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('save-and-open', async (event, { filename, arrayBuffer }) => {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const { shell } = require('electron');
+
+      const hash = filename.match(/^[a-f0-9]+/)?.[0] || "default";
+      const cleanFilename = filename.replace(/^[a-f0-9]+_/, "");
+      const destDir = path.join(app.getPath('userData'), 'transfers', hash);
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
+      }
+      const destPath = path.join(destDir, cleanFilename);
+
+      if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
+        log(`File already exists locally at: ${destPath}. Opening directly.`);
+        await shell.openPath(destPath);
+        return { success: true, path: destPath };
+      }
+
+      log(`Saving file buffer to ${destPath}`);
+      fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
+      log(`Save complete: ${destPath}. Opening.`);
+      await shell.openPath(destPath);
+      return { success: true, path: destPath };
+    } catch (err) {
+      log(`Error in save-and-open: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.on('save-session', (event, sessionData) => {
     try {
       const sessionPath = path.join(app.getPath('userData'), 'session.json');

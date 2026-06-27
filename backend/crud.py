@@ -13,6 +13,10 @@ from websocket import manager as ws_manager
 import time
 import urllib.request
 import threading
+import re
+
+ADMIN_ROLES_REGEX = re.compile(r"^(admin|super\s*admin|superadmin|administrator|founder)$", re.IGNORECASE)
+NON_ADMIN_FILTER = {"role": {"$not": ADMIN_ROLES_REGEX}}
 
 IST = pytz.timezone('Asia/Kolkata')
 _real_time_anchor = None
@@ -285,6 +289,12 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
             name = f"{first} {middle} {last}"
         update_data["name"] = name
 
+    # Check if resulting employee is admin
+    resulting_role = update_data.get("role", existing.get("role", ""))
+    if resulting_role and bool(ADMIN_ROLES_REGEX.match(resulting_role.strip())):
+        update_data["department"] = ""
+        update_data["designation"] = ""
+
     await db.employees.update_one(
         {"_id": ObjectId(employee_id)},
         {"$set": update_data}
@@ -336,7 +346,7 @@ async def get_dashboard_stats(db):
             "lateToday": 0
         }
         
-    total_employees = await db.employees.count_documents({"status": "active"})
+    total_employees = await db.employees.count_documents({"status": "active", **NON_ADMIN_FILTER})
     
     today = get_now()
     today_str = today.strftime("%Y-%m-%d")
@@ -379,7 +389,7 @@ async def get_analytics_overview(db, months: int = 6):
     
     # Department Distribution
     dept_pipeline = [
-        {"$match": {"status": "active"}},
+        {"$match": {"status": "active", **NON_ADMIN_FILTER}},
         {"$group": {"_id": "$department", "employees": {"$sum": 1}}}
     ]
     dept_data = await db.employees.aggregate(dept_pipeline).to_list(length=100)
@@ -452,12 +462,14 @@ async def get_analytics_overview(db, months: int = 6):
         
         # Hiring Trend
         hires = await db.employees.count_documents({
-            "joinDate": {"$gte": start_dt, "$lt": end_dt}
+            "joinDate": {"$gte": start_dt, "$lt": end_dt},
+            **NON_ADMIN_FILTER
         })
         # Simplified exits (employees who are inactive and updated in that month)
         exits = await db.employees.count_documents({
             "status": "inactive",
-            "updated_at": {"$gte": start_dt, "$lt": end_dt}
+            "updated_at": {"$gte": start_dt, "$lt": end_dt},
+            **NON_ADMIN_FILTER
         })
         hiring_trend.append({
             "month": month_name,
@@ -466,7 +478,7 @@ async def get_analytics_overview(db, months: int = 6):
         })
 
     # Summary Stats
-    total_employees = await db.employees.count_documents({"status": "active"})
+    total_employees = await db.employees.count_documents({"status": "active", **NON_ADMIN_FILTER})
     total_attendance = sum([t["present"] + t["absent"] for t in attendance_trend])
     avg_attendance = (sum([t["present"] for t in attendance_trend]) / total_attendance * 100) if total_attendance > 0 else 0
     
@@ -755,7 +767,8 @@ async def run_payroll_processing(db, month: str, year: int):
     for emp in employees:
         emp_id = emp["id"]
         # Skip inactive and admin employees to avoid generating unnecessary payroll records
-        if emp.get("status", "").lower() == "inactive" or emp.get("role", "").lower() == "admin":
+        admin_role_set = {"admin", "super admin", "superadmin", "administrator", "founder"}
+        if emp.get("status", "").lower() == "inactive" or emp.get("role", "").lower().strip() in admin_role_set:
             await db.payroll.delete_many({"employeeId": emp_id, "month": month, "year": year})
             continue
         # Get salary structure
@@ -1188,7 +1201,8 @@ async def run_payroll_processing(db, month: str, year: int):
     return payroll_results
 
 async def create_employee(db, employee: schemas.EmployeeCreate):
-    is_admin = employee.role and employee.role.lower() == "admin"
+    admin_roles = {"admin", "super admin", "superadmin", "administrator", "founder"}
+    is_admin = employee.role and employee.role.lower().strip() in admin_roles
     
     if not is_admin:
         # Atomic counter to prevent duplicate IDs under concurrent requests
@@ -1209,6 +1223,9 @@ async def create_employee(db, employee: schemas.EmployeeCreate):
     
     employee_dict = employee.dict()
     employee_dict["name"] = name
+    if is_admin:
+        employee_dict["department"] = ""
+        employee_dict["designation"] = ""
     
     if next_id:
         employee_dict["employeeId"] = next_id # Override frontend generation unless it's admin with no ID provided
@@ -1240,7 +1257,7 @@ async def get_departments(db, skip: int = 0, limit: int = 100):
     for row in rows:
         row = fix_id(row)
         # Automatic employee count based on department name
-        row["employeeCount"] = await db.employees.count_documents({"department": row["name"]})
+        row["employeeCount"] = await db.employees.count_documents({"department": row["name"], "status": "active", **NON_ADMIN_FILTER})
         results.append(row)
     return results
 
@@ -2526,12 +2543,42 @@ async def delete_leave_request(db, leave_id: str):
     result = await db.leave_requests.delete_one({"_id": ObjectId(leave_id)})
     return result.deleted_count > 0
 
+# Helper for checking full entity access permission
+async def user_has_full_entity_access(db, user_id: str, role: str, target_module: str = None) -> bool:
+    if not role and not user_id:
+        return False
+    role_lower = str(role or "").lower().strip()
+    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing"}
+    if role_lower in full_roles or "social media" in role_lower or "digital marketing" in role_lower:
+        return True
+        
+    if user_id:
+        user = await get_employee(db, user_id)
+        if user:
+            ur = str(user.get("role", "")).lower().strip()
+            udes = str(user.get("designation", "")).lower().strip()
+            udept = str(user.get("department", "")).lower().strip()
+            if ur in full_roles or udes in full_roles or "social media" in ur or "social media" in udes or "digital marketing" in ur or "digital marketing" in udes:
+                return True
+                
+        # Check permissions table
+        perm_doc = await db.user_permissions.find_one({"employeeId": user_id})
+        if perm_doc:
+            modules_to_check = {"projects", "smm", "clients", "digital-marketing", "work-management"}
+            if target_module:
+                modules_to_check.add(target_module)
+            for p in perm_doc.get("permissions", []):
+                if p.get("moduleName") in modules_to_check and (p.get("canView") or p.get("canEdit") or p.get("canAdd")):
+                    return True
+    return False
+
 # Client CRUD
 async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = None):
     query = {}
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin", "manager"]:
+        user_id = user_info.get("sub")
+        if not await user_has_full_entity_access(db, user_id, role, "clients"):
             user_id = user_info.get("sub")
             # Fetch user's projects to get associated clients
             user_projects = await get_projects(db, userId=user_id, role=role, skip=0, limit=10000)
@@ -2837,7 +2884,7 @@ async def delete_client(db, client_id: str):
 # Project CRUD
 async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "projects"):
         # Fetch user to get department
         user = await get_employee(db, userId)
         if user:
@@ -2946,8 +2993,54 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
 
         await db.projects.update_one({"_id": ObjectId(project_id)}, update_query)
         
-        log_details, diffs = format_field_changes(old_project, update_data, f"Project '{old_project.get('title')}'")
-        await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, projectId=project_id)
+        details = []
+        if "status" in update_data and old_project.get("status") != update_data["status"]:
+            details.append(f"Status changed to {update_data['status']}")
+        if "teamLeaderName" in update_data and old_project.get("teamLeaderName") != update_data["teamLeaderName"]:
+            details.append(f"Team Leader changed to {update_data['teamLeaderName']}")
+        
+        # Creative Field Logging
+        creative_fields_map = {
+            "services": "Services",
+            "post": "Post Count",
+            "reel": "Reel Count",
+            "festivalPost": "Festival Post requirement",
+            "graphicsRequired": "Graphics requirement",
+            "postRequired": "Post requirement",
+            "reelRequired": "Reel requirement"
+        }
+        
+        for field, label in creative_fields_map.items():
+            if field in update_data and old_project.get(field) != update_data[field]:
+                details.append(f"{label} changed to '{update_data[field]}'")
+                
+        # Assignment Logging
+        if "assignedScriptwriterId" in update_data and old_project.get("assignedScriptwriterId") != update_data["assignedScriptwriterId"]:
+            details.append(f"Assigned Scriptwriter updated")
+        if "assignedReelEditorId" in update_data and old_project.get("assignedReelEditorId") != update_data["assignedReelEditorId"]:
+            details.append(f"Assigned Reel Editor updated")
+        if "assignedPostDesignerId" in update_data and old_project.get("assignedPostDesignerId") != update_data["assignedPostDesignerId"]:
+            details.append(f"Assigned Post Designer updated")
+        if "assignedShooterId" in update_data and old_project.get("assignedShooterId") != update_data["assignedShooterId"]:
+            details.append(f"Assigned Shooter updated")
+        if "assignedApproverId" in update_data and old_project.get("assignedApproverId") != update_data["assignedApproverId"]:
+            details.append(f"Assigned Approver updated")
+        if "assignedPosterId" in update_data and old_project.get("assignedPosterId") != update_data["assignedPosterId"]:
+            details.append(f"Assigned Poster updated")
+            
+        # Payment Settings Logging
+        if "paymentStartDate" in update_data and old_project.get("paymentStartDate") != update_data["paymentStartDate"]:
+            details.append(f"Payment Start Date changed to {update_data['paymentStartDate']}")
+        if "paymentDurationMonths" in update_data and old_project.get("paymentDurationMonths") != update_data["paymentDurationMonths"]:
+            details.append(f"Payment Duration changed to {update_data['paymentDurationMonths']} months")
+        if "paymentEndDate" in update_data and old_project.get("paymentEndDate") != update_data["paymentEndDate"]:
+            details.append(f"Payment End Date changed to {update_data['paymentEndDate']}")
+        if "isPaymentReceived" in update_data and old_project.get("isPaymentReceived") != update_data["isPaymentReceived"]:
+            status = "Received" if update_data["isPaymentReceived"] else "Pending"
+            details.append(f"Payment status changed to {status}")
+        
+        log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
+        await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
@@ -2973,7 +3066,7 @@ async def delete_project(db, project_id: str):
 # General Task CRUD
 async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "tasks"):
         # User sees tasks assigned to them, or tasks they assigned
         query["$or"] = [
             {"assignedToId": userId},
@@ -3094,7 +3187,7 @@ async def delete_task(db, task_id: str):
 # Work Management Task CRUD
 async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 1000):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "wm-tasks"):
         user = await get_employee(db, userId)
         if user:
             dept = user.get("department")
@@ -3636,6 +3729,8 @@ async def get_system_settings(db):
             "officeStartTime": "09:30",
             "officeEndTime": "18:30",
             "lateBufferMins": 10,
+            "inactivityTimeoutEnabled": False,
+            "inactivityTimeoutMins": 5,
             "allowedMonthlyPaidLeaves": 1,
             "companyGstin": "24AAXFN3372M1ZK",
             "companyAddress": "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.",
@@ -3675,7 +3770,8 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
     query = {}
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin"]:
+        user_id = user_info.get("sub")
+        if user_id and not await user_has_full_entity_access(db, user_id, role, "digital-marketing"):
             user_id = user_info.get("sub")
             # Get allowed clients
             allowed_clients = await db.clients.find({"assignedEmployeeId": user_id}).to_list(length=None)
@@ -3707,7 +3803,21 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
         except Exception:
             query["date"] = date
     elif start_date and end_date:
-        query["date"] = {"$gte": start_date, "$lte": end_date}
+        query["$and"] = query.get("$and", []) + [
+            {"$or": [
+                {"date": {"$gte": start_date, "$lte": end_date}},
+                {
+                    "reach": {"$in": [0, "0", None]},
+                    "impression": {"$in": [0, "0", None]},
+                    "leads": {"$in": [0, "0", None]},
+                    "spend": {"$in": [0, "0", None]},
+                    "cpl": {"$in": [0, "0", None]},
+                    "revenue": {"$in": [0, "0", None]},
+                    "followers": {"$in": [0, "0", None]},
+                    "remarks": {"$in": ["", None, " "]}
+                }
+            ]}
+        ]
     cursor = db.marketing_daily_reports.find(query).sort("date", -1)
     reports = []
     async for doc in cursor:
@@ -3821,8 +3931,11 @@ async def update_marketing_daily_report(db, report_id: str, report: schemas.Mark
     return None
 
 async def delete_marketing_daily_report(db, report_id: str):
-    result = await db.marketing_daily_reports.delete_one({"_id": ObjectId(report_id)})
-    return result.deleted_count > 0
+    result = await db.marketing_daily_reports.update_one(
+        {"_id": ObjectId(report_id)},
+        {"$set": {"isDeleted": True}}
+    )
+    return result.modified_count > 0 or result.matched_count > 0
 
 async def bulk_clear_leads_files(db, ids: list, collection_name: str):
     object_ids = [ObjectId(id) for id in ids if ObjectId.is_valid(id)]
@@ -3859,7 +3972,8 @@ async def get_marketing_monthly_reports(db, client_id: str = None, month: list =
     
     if user_info:
         role = str(user_info.get("role", "")).lower()
-        if role not in ["admin"]:
+        user_id = user_info.get("sub")
+        if user_id and not await user_has_full_entity_access(db, user_id, role, "digital-marketing"):
             is_restricted = True
             user_id = user_info.get("sub")
             # Get allowed clients
@@ -5624,7 +5738,12 @@ def recalculate_attendance_seconds(punches: list, breaks: list) -> tuple:
         
         # If the last punch has no punchOut, it's active.
         if not last.get("punchOut"):
-            merged_punches.append(p_copy)
+            if p_copy.get("punchOut") and parse_time(p_copy["punchIn"]) >= parse_time(last["punchIn"]):
+                last["punchOut"] = p_copy["punchOut"]
+                if p_copy.get("type"):
+                    last["type"] = p_copy["type"]
+            else:
+                merged_punches.append(p_copy)
             continue
             
         last_out_sec = parse_time(last["punchOut"])
@@ -5749,35 +5868,38 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     breaks = attn.get('breaks') or []
                     breaks = [dict(b) for b in breaks]
                     
+                    old_accumulated = attn.get('accumulatedWorkSeconds', 0.0)
+                    
                     fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
                     fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
 
-                    if recovery_type in ['meeting', 'work']:
-                        # Fix: Trim or remove breaks that overlap with this recovery
-                        def parse_t(t_str):
-                            if not t_str: return 0
-                            pts = t_str.split(':')
-                            try:
-                                return int(pts[0])*3600 + int(pts[1])*60 + (int(pts[2]) if len(pts)>2 else 0)
-                            except: return 0
+                    # The recover time logic is to add time to the production hour
+                    def parse_t(t_str):
+                        if not t_str: return 0
+                        pts = t_str.split(':')
+                        try:
+                            return int(pts[0])*3600 + int(pts[1])*60 + (int(pts[2]) if len(pts)>2 else 0)
+                        except: return 0
+                    
+                    def format_t(sec):
+                        sec = sec % 86400
+                        return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
                         
-                        def format_t(sec):
-                            sec = sec % 86400
-                            return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
-                            
-                        rec_in = parse_t(fmt_start)
-                        rec_out = parse_t(fmt_end)
-                        if rec_out < rec_in:
-                            rec_out += 86400
-                            
-                        new_breaks = []
+                    rec_in = parse_t(fmt_start)
+                    rec_out = parse_t(fmt_end)
+                    if rec_out < rec_in:
+                        rec_out += 86400
+                        
+                    new_breaks = []
+                    if recovery_type == "break":
+                        updated_break = False
                         for b in breaks:
                             b_start = b.get("startTime")
                             b_end = b.get("endTime")
                             if not b_start or not b_end:
                                 new_breaks.append(b)
                                 continue
-                                
+                            
                             b_in = parse_t(b_start)
                             b_out = parse_t(b_end)
                             if b_out < b_in:
@@ -5785,40 +5907,66 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                                 
                             overlap_start = max(rec_in, b_in)
                             overlap_end = min(rec_out, b_out)
-                            
+                            if (overlap_start < overlap_end) or (abs(b_in - rec_in) < 60):
+                                b["startTime"] = fmt_start
+                                b["endTime"] = fmt_end
+                                b["duration"] = str(int((rec_out - rec_in) // 60))
+                                new_breaks.append(b)
+                                updated_break = True
+                            else:
+                                new_breaks.append(b)
+                        if not updated_break:
+                            new_breaks.append({
+                                "startTime": fmt_start,
+                                "endTime": fmt_end,
+                                "duration": str(int((rec_out - rec_in) // 60))
+                            })
+                    else:
+                        for b in breaks:
+                            b_start = b.get("startTime")
+                            b_end = b.get("endTime")
+                            if not b_start or not b_end:
+                                new_breaks.append(b)
+                                continue
+                            b_in = parse_t(b_start)
+                            b_out = parse_t(b_end)
+                            if b_out < b_in:
+                                b_out += 86400
+                                
+                            overlap_start = max(rec_in, b_in)
+                            overlap_end = min(rec_out, b_out)
                             if overlap_start < overlap_end:
-                                # There is overlap
                                 if rec_in <= b_in and rec_out >= b_out:
-                                    continue # fully engulfed, remove break
+                                    continue
                                 elif b_in < rec_in and b_out > rec_out:
-                                    # Split into two
                                     new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
                                     new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
                                 elif b_in >= rec_in and b_out > rec_out:
-                                    # Trim start
                                     new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
                                 elif b_in < rec_in and b_out <= rec_out:
-                                    # Trim end
                                     new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
                             else:
                                 new_breaks.append(b)
                                 
-                        breaks = new_breaks
+                    breaks = new_breaks
 
+                    if recovery_type != "break":
                         punches.append({
                             "punchIn": fmt_start,
                             "punchOut": fmt_end,
-                            "type": recovery_type
+                            "type": recovery_type or "work"
                         })
-                    elif recovery_type == 'break':
-                        breaks.append({
-                            "startTime": fmt_start,
-                            "endTime": fmt_end,
-                            "duration": str(int(duration_seconds // 60))
-                        })
-                    
+
                     # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
                     merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
+                    
+                    expected_rec_sec = int(doc.get('recovery_minutes', 0)) * 60
+                    if expected_rec_sec <= 0 and duration_seconds > 0:
+                        expected_rec_sec = duration_seconds
+                    
+                    actual_inc = new_accumulated - old_accumulated
+                    if actual_inc < expected_rec_sec:
+                        new_accumulated += (expected_rec_sec - actual_inc)
                     
                     # Recalculate workHours string
                     hours, remainder = divmod(int(new_accumulated), 3600)
@@ -5901,28 +6049,31 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                             has_active_break = True
                             break
 
-                    if not has_active and attn_record.get('checkIn') and attn_record.get('checkOut'):
-                        try:
-                            ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
-                            co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
-                            diff = co - ci
-                            h, r = divmod(diff.total_seconds(), 3600)
-                            m, _ = divmod(r, 60)
-                            attn_record['workHours'] = f"{int(h)}h {int(m)}m"
-                        except Exception: pass
-                    
+                    old_acc = attn_record.get('accumulatedWorkSeconds', 0.0)
+                    added_sec = int(doc.get('recovery_minutes', 0)) * 60
+                    new_acc = old_acc + added_sec
+                    if new_acc > 0:
+                        h, r = divmod(int(new_acc), 3600)
+                        m, _ = divmod(r, 60)
+                        attn_record['workHours'] = f"{int(h)}h {int(m)}m"
+                        attn_record['accumulatedWorkSeconds'] = new_acc
+
                     new_status = 'On Break' if (has_active and has_active_break) else ('Active' if has_active else 'Logged')
                     new_checkout = None if has_active else attn_record.get('checkOut')
                     
+                    set_data = {
+                        'breaks': updated_breaks,
+                        'checkIn': attn_record.get('checkIn'),
+                        'checkOut': new_checkout,
+                        'workHours': attn_record.get('workHours'),
+                        'status': new_status
+                    }
+                    if 'accumulatedWorkSeconds' in attn_record:
+                        set_data['accumulatedWorkSeconds'] = attn_record['accumulatedWorkSeconds']
+
                     await db.attendance.update_one(
                         {'_id': attn_record['_id']},
-                        {'$set': {
-                            'breaks': updated_breaks,
-                            'checkIn': attn_record.get('checkIn'),
-                            'checkOut': new_checkout,
-                            'workHours': attn_record.get('workHours'),
-                            'status': new_status
-                        }}
+                        {'$set': set_data}
                     )
     
                 # Case 1: Break Timing Correction

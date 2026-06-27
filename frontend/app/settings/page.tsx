@@ -21,7 +21,8 @@ import {
   Save,
   FileText,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Calendar
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -155,9 +156,11 @@ export default function SettingsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          officeStartTime: settings?.officeStartTime || "09:30",
+           officeStartTime: settings?.officeStartTime || "09:30",
           officeEndTime: settings?.officeEndTime || "18:30",
           lateBufferMins: settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10,
+          inactivityTimeoutEnabled: settings?.inactivityTimeoutEnabled ?? false,
+          inactivityTimeoutMins: settings?.inactivityTimeoutMins !== undefined ? settings.inactivityTimeoutMins : 5,
           allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1,
           companyGstin: settings?.companyGstin || "",
           companyAddress: settings?.companyAddress || "",
@@ -176,7 +179,12 @@ export default function SettingsPage() {
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
           invoiceColor2: settings?.invoiceColor2 || "#08304b",
-          defaultSac: settings?.defaultSac || ""
+          defaultSac: settings?.defaultSac || "",
+          defaultScriptDateOffset: settings?.defaultScriptDateOffset !== undefined ? settings.defaultScriptDateOffset : null,
+          defaultShootDateOffset: settings?.defaultShootDateOffset !== undefined ? settings.defaultShootDateOffset : null,
+          defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
+          defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
+          paymentDueDays: settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0
         })
       });
       if (res.ok) {
@@ -435,6 +443,42 @@ export default function SettingsPage() {
                       Employees punching in after <span className="font-bold text-foreground">{settings?.officeStartTime || "09:30"}</span> + this buffer will be automatically marked as <span className="text-amber-600 font-bold">Late Entry</span>.
                     </p>
                   </div>
+                </div>
+
+                <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-brand-teal" />
+                      <Label className="text-sm font-bold">Inactivity Auto-Punch-Out Recovery</Label>
+                    </div>
+                    <Switch
+                      checked={settings?.inactivityTimeoutEnabled ?? false}
+                      onCheckedChange={(checked) => setSettings({ ...settings, inactivityTimeoutEnabled: checked })}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    When enabled, the system will track user inactivity. If a user is inactive for the specified duration, they will be automatically punched out and shown the recovery popup.
+                  </p>
+                  
+                  {settings?.inactivityTimeoutEnabled && (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          className="w-20 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold bg-white"
+                          value={settings?.inactivityTimeoutMins !== undefined ? settings.inactivityTimeoutMins : 5}
+                          onChange={(e) => setSettings({ ...settings, inactivityTimeoutMins: parseInt(e.target.value) || 0 })}
+                          disabled={isUpdating || !canEditSettings}
+                          min={1}
+                        />
+                        <span className="text-xs text-muted-foreground font-medium">minutes</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Specify after how many minutes of inactivity the user should be prompted for recovery.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -782,6 +826,22 @@ export default function SettingsPage() {
                     />
                   </div>
                 </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Digital Marketing Payment Due Threshold (Days)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">Show "Payment Due" this many days before the actual payment date in the Digital Marketing module.</p>
+                    <input 
+                      type="number" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0}
+                      onChange={(e) => setSettings({...settings, paymentDueDays: parseInt(e.target.value) || 0})}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. 5"
+                      min="0"
+                    />
+                  </div>
+                </div>
                 
                 <div className="col-span-1 md:col-span-2 border-t border-slate-100 pt-6 mt-4">
                   <Label className="text-sm font-bold text-foreground block mb-2">Invoice Theme Gradient</Label>
@@ -837,6 +897,77 @@ export default function SettingsPage() {
                       style={{ background: `linear-gradient(135deg, ${settings?.invoiceColor1 || '#08304b'}, ${settings?.invoiceColor2 || '#08304b'})` }}>
                       TAX INVOICE GRADIENT PREVIEW
                     </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {canViewSettings && (
+            <Card className="bg-white border border-border/40 shadow-sm overflow-hidden mb-6">
+              <div className="border-b border-border/40 bg-slate-50/50 p-4 px-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800 text-sm">SMM Content Calendar Defaults</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Global default day offsets for automatic date calculations.</p>
+                  </div>
+                </div>
+                {canEditSettings && (
+                  <Button 
+                    size="sm" 
+                    className="h-8 text-xs bg-brand-teal hover:bg-brand-teal/90"
+                    onClick={handleSaveAllSettings}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Save className="w-3 h-3 mr-1.5" />}
+                    Save Changes
+                  </Button>
+                )}
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Script Date Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultScriptDateOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultScriptDateOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Shoot Date Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultShootDateOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultShootDateOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Editing Start Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultEditingStartOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultEditingStartOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Approval Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultApprovalOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultApprovalOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
                   </div>
                 </div>
               </div>

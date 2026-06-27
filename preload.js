@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   focusWindow: () => ipcRenderer.send('focus-window'),
   openExternal: (url) => ipcRenderer.send('open-external', url),
+  downloadAndOpen: (url, filename) => ipcRenderer.invoke('download-and-open', { url, filename }),
+  saveAndOpen: (filename, arrayBuffer) => ipcRenderer.invoke('save-and-open', { filename, arrayBuffer }),
   saveSession: (sessionData) => ipcRenderer.send('save-session', sessionData),
   clearSession: () => ipcRenderer.send('clear-session'),
   getSession: () => ipcRenderer.invoke('get-session'),

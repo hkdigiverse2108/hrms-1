@@ -1040,6 +1040,13 @@ class ProjectBase(BaseModel):
     lastFollowupDate: Optional[RobustDate] = None
     nextFollowupDate: Optional[RobustDate] = None
     
+    # Payment Settings
+    paymentStartDate: Optional[RobustDate] = None
+    paymentDurationMonths: Optional[int] = None
+    paymentEndDate: Optional[RobustDate] = None
+    paymentReminderDays: Optional[int] = None
+    isPaymentReceived: Optional[bool] = False
+    
     # Feedback Collection Fields
     feedbackType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
     feedbackIntervalDays: Optional[int] = None
@@ -1095,6 +1102,14 @@ class ProjectUpdate(BaseModel):
     followupDatesOfMonth: Optional[List[int]] = None
     lastFollowupDate: Optional[RobustDate] = None
     nextFollowupDate: Optional[RobustDate] = None
+    
+    # Payment Settings
+    paymentStartDate: Optional[RobustDate] = None
+    paymentDurationMonths: Optional[int] = None
+    paymentEndDate: Optional[RobustDate] = None
+    paymentReminderDays: Optional[int] = None
+    isPaymentReceived: Optional[bool] = None
+    
     feedbackType: Optional[str] = None
     feedbackIntervalDays: Optional[int] = None
     feedbackDaysOfWeek: Optional[List[int]] = None
@@ -1356,6 +1371,8 @@ class SystemSettingsBase(BaseModel):
     officeStartTime: Optional[str] = "09:30"
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
+    inactivityTimeoutEnabled: Optional[bool] = False
+    inactivityTimeoutMins: Optional[int] = 5
     allowedMonthlyPaidLeaves: Optional[int] = 1
     companyGstin: Optional[str] = "24AAXFN3372M1ZK"
     companyAddress: Optional[str] = "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA."
@@ -1375,6 +1392,11 @@ class SystemSettingsBase(BaseModel):
     companyLetterheadUrl: Optional[str] = None
     companySignatureUrl: Optional[str] = None
     defaultSac: Optional[str] = ""
+    defaultScriptDateOffset: Optional[int] = None
+    defaultShootDateOffset: Optional[int] = None
+    defaultEditingStartOffset: Optional[int] = None
+    defaultApprovalOffset: Optional[int] = None
+    paymentDueDays: Optional[int] = 0
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1383,6 +1405,8 @@ class SystemSettingsUpdate(BaseModel):
     officeStartTime: Optional[str] = None
     officeEndTime: Optional[str] = None
     lateBufferMins: Optional[int] = None
+    inactivityTimeoutEnabled: Optional[bool] = None
+    inactivityTimeoutMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
     companyGstin: Optional[str] = None
     companyAddress: Optional[str] = None
@@ -1402,6 +1426,11 @@ class SystemSettingsUpdate(BaseModel):
     companyLetterheadUrl: Optional[str] = None
     companySignatureUrl: Optional[str] = None
     defaultSac: Optional[str] = None
+    defaultScriptDateOffset: Optional[int] = None
+    defaultShootDateOffset: Optional[int] = None
+    defaultEditingStartOffset: Optional[int] = None
+    defaultApprovalOffset: Optional[int] = None
+    paymentDueDays: Optional[int] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1440,6 +1469,7 @@ class MarketingDailyReportBase(BaseModel):
     reason: Optional[str] = None
     campaignOptimization: bool = False
     leadsFileUrl: Optional[str] = None
+    isDeleted: Optional[bool] = False
 
 class MarketingDailyReportCreate(MarketingDailyReportBase):
     clientId: Optional[str] = None
@@ -2151,10 +2181,10 @@ class ContentCalendarEntry(ContentCalendarEntryBase):
 class ContentCalendarSettingsBase(BaseModel):
     clientId: str
     monthYear: str
-    scriptDateOffset: int = 14
-    shootDateOffset: int = 12
-    editingStartOffset: int = 6
-    approvalOffset: int = 5
+    scriptDateOffset: Optional[int] = None
+    shootDateOffset: Optional[int] = None
+    editingStartOffset: Optional[int] = None
+    approvalOffset: Optional[int] = None
     isApproved: bool = False
     approvalStatus: str = "Pending"
     statusLogs: Optional[List[dict]] = []

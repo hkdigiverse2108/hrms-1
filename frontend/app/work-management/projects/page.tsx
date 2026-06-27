@@ -43,6 +43,7 @@ export default function ProjectsPage() {
   const [selectedDept, setSelectedDept] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedPriority, setSelectedPriority] = useState("all");
+  const [selectedCompany, setSelectedCompany] = useState("all");
 
   useEffect(() => {
     if (!permissionsLoading && !canViewProjects) {
@@ -259,9 +260,12 @@ export default function ProjectsPage() {
     const matchesDept = selectedDept === "all" || p.department?.toLowerCase() === selectedDept.toLowerCase();
     const matchesStatus = selectedStatus === "all" || p.status?.toLowerCase() === selectedStatus.toLowerCase();
     const matchesPriority = selectedPriority === "all" || p.priority?.toLowerCase() === selectedPriority.toLowerCase();
+    const matchesCompany = selectedCompany === "all" || p.clientName === selectedCompany;
 
-    return matchesSearch && matchesDept && matchesStatus && matchesPriority;
+    return matchesSearch && matchesDept && matchesStatus && matchesPriority && matchesCompany;
   });
+
+  const uniqueCompanies = Array.from(new Set(projects.map(p => p.clientName).filter(Boolean))).sort();
 
   if (permissionsLoading) {
     return (
@@ -470,13 +474,26 @@ export default function ProjectsPage() {
             </SelectContent>
           </Select>
 
-          {(selectedDept !== "all" || selectedStatus !== "all" || selectedPriority !== "all" || searchTerm !== "") && (
+          <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+            <SelectTrigger className="w-[180px] h-10 font-medium">
+              <SelectValue placeholder="Brand" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Brands</SelectItem>
+              {uniqueCompanies.map((company: any) => (
+                <SelectItem key={company} value={company}>{company}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {(selectedDept !== "all" || selectedStatus !== "all" || selectedPriority !== "all" || selectedCompany !== "all" || searchTerm !== "") && (
             <Button 
               variant="ghost" 
               onClick={() => {
                 setSelectedDept("all");
                 setSelectedStatus("all");
                 setSelectedPriority("all");
+                setSelectedCompany("all");
                 setSearchTerm("");
               }}
               className="text-xs text-muted-foreground hover:text-rose-600 font-bold h-10 px-3"
@@ -654,33 +671,16 @@ export default function ProjectsPage() {
 
 
                     <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
-                      {isAdmin ? (
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px]">
-                            <Calendar className="w-3.5 h-3.5 text-brand-teal" />
-                            Start: {project.startDate || "-"} | <span className={overdue ? "text-red-600 font-bold" : ""}>Client Deadline: {project.endDate || "-"}</span>
-                          </div>
-                          {project.teamDeadline && (
-                            <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[11px]">
-                              <CalendarClock className="w-3.5 h-3.5" />
-                              Team Deadline: {project.teamDeadline}
-                            </div>
-                          )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1 text-slate-600 font-medium text-[11px]">
+                          <Calendar className="w-3.5 h-3.5 text-brand-teal shrink-0" />
+                          <span>Start: <strong className="text-slate-800 font-semibold">{project.startDate || "-"}</strong></span>
                         </div>
-                      ) : (
-                        <div className="flex flex-col gap-1">
-                          {(user?.role === "HR" || project.teamLeaderId === user?.id) && (
-                            <div className="flex items-center gap-1.5 text-slate-600 font-medium text-[11px]">
-                              <Calendar className="w-3.5 h-3.5 text-brand-teal" />
-                              Start: {project.startDate || "-"}
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[11px]">
-                            <CalendarClock className="w-3.5 h-3.5" />
-                            Team Deadline: {project.teamDeadline || project.endDate || project.startDate || "-"}
-                          </div>
+                        <span className="text-slate-300">|</span>
+                        <div className={`flex items-center gap-1 text-[11px] ${overdue ? "text-red-600 font-bold" : "text-slate-600 font-medium"}`}>
+                          <span>End: <strong className={overdue ? "text-red-600 font-bold" : "text-slate-800 font-semibold"}>{project.endDate || "-"}</strong></span>
                         </div>
-                      )}
+                      </div>
                       <Badge variant="outline" className={`text-[10px] ${
                         project.priority === 'high' ? 'border-red-200 text-red-600 bg-red-50' : 
                         project.priority === 'medium' ? 'border-amber-200 text-amber-600 bg-amber-50' : 

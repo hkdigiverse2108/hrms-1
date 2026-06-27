@@ -32,6 +32,7 @@ import {
   Upload,
   FileSpreadsheet,
   FileX,
+  Settings,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -176,7 +177,20 @@ export default function MarketingReportsPage() {
     loading: permissionsLoading,
   } = usePermissions();
 
-  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role);
+  const hasFullDMAccess = React.useMemo(() => {
+    if (!user) return false;
+    const r = (user.role || "").toLowerCase();
+    const d = (user.designation || "").toLowerCase();
+    const fullRoles = ["admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing", "hr"];
+    if (fullRoles.includes(r) || fullRoles.includes(d) || r.includes("social media") || d.includes("social media") || r.includes("digital marketing") || d.includes("digital marketing")) {
+      return true;
+    }
+    const perms = (user as any).permissions || [];
+    const dmPerms = ["projects", "smm", "clients", "digital-marketing", "work-management", "marketing"];
+    return perms.some((p: any) => dmPerms.includes(p.moduleName) && (p.canView || p.canEdit || p.canAdd));
+  }, [user]);
+
+  const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role) && !hasFullDMAccess;
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -258,7 +272,7 @@ export default function MarketingReportsPage() {
   });
 
   const analysisStats = React.useMemo(() => {
-    let filtered = dailyReports;
+    let filtered = dailyReports.filter(r => !r.isDeleted);
     if (dateRange?.from) {
       filtered = filtered.filter(r => new Date(r.date) >= dateRange.from!);
     }
@@ -361,6 +375,64 @@ export default function MarketingReportsPage() {
     [key: string]: string;
   }>({});
 
+  const [paymentProject, setPaymentProject] = useState<any>(null);
+  const [paymentSettingsOpen, setPaymentSettingsOpen] = useState(false);
+  const [paymentStartDate, setPaymentStartDate] = useState<string>("");
+  const [paymentDurationMonths, setPaymentDurationMonths] = useState<string>("");
+  const [isPaymentReceived, setIsPaymentReceived] = useState<boolean>(false);
+  
+  const [systemSettings, setSystemSettings] = useState<any>(null);
+
+  const handleSavePaymentSettings = async () => {
+    if (!paymentProject) return;
+    try {
+      const startDate = paymentStartDate ? new Date(paymentStartDate) : null;
+      let endDateStr = null;
+      
+      if (startDate && paymentDurationMonths) {
+        const months = parseInt(paymentDurationMonths, 10);
+        if (!isNaN(months) && months > 0) {
+           const endDate = new Date(startDate);
+           endDate.setMonth(endDate.getMonth() + months);
+           
+           // Calculate on-hold days using existing function
+           const days = calculateProjectDays(paymentProject);
+           if (days.onHold > 0) {
+             endDate.setDate(endDate.getDate() + days.onHold);
+           }
+           
+           endDateStr = endDate.toISOString().split('T')[0];
+        }
+      }
+      
+      const payload: any = {
+        paymentStartDate: paymentStartDate || null,
+        paymentDurationMonths: paymentDurationMonths ? parseInt(paymentDurationMonths, 10) : null,
+        paymentEndDate: endDateStr,
+        isPaymentReceived: isPaymentReceived,
+        performedBy: user?.id,
+        userName: user?.name
+      };
+      
+      const res = await fetch(`${API_URL}/projects/${paymentProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.ok) {
+        toast.success("Payment settings saved successfully");
+        fetchProjects();
+        setPaymentSettingsOpen(false);
+      } else {
+        toast.error("Failed to save payment settings");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("An error occurred while saving payment settings");
+    }
+  };
+
   const handleAddCampaign = async (clientId: string) => {
     const name = newCampaignName[clientId];
     const metric = newCampaignMetric[clientId] || "CPL";
@@ -377,7 +449,7 @@ export default function MarketingReportsPage() {
     }
     const updatedCampaigns = [
       ...currentCampaigns,
-      { name: name.trim(), isActive: true, metric },
+      { name: name.trim(), isActive: true, metric, createdAt: new Date().toISOString() },
     ];
     try {
       const res = await fetch(`${API_URL}/clients/${clientId}`, {
@@ -617,6 +689,14 @@ export default function MarketingReportsPage() {
               const campName = typeof camp === "string" ? camp : camp.name;
               const isActive = typeof camp === "string" ? true : camp.isActive;
               if (isActive && campName) {
+                const createdAt = typeof camp === "string" ? undefined : camp.createdAt;
+                if (createdAt) {
+                  const createdDateStr = createdAt.split("T")[0];
+                  if (checkDate < createdDateStr) {
+                    return; // skip generating for this campaign on dates prior to its creation
+                  }
+                }
+
                 const exists = dailyReports.some(
                   (r) =>
                     r.clientId === client.id &&
@@ -634,8 +714,33 @@ export default function MarketingReportsPage() {
                   // Try to find an associated project for this client
                   const project = projects.find(p => p.clientId === client.id);
                   
-                  // Do not add row if the associated project is on-hold
-                  if (project && project.status === "on-hold") {
+                  // Check if project was on-hold on the specific checkDate
+                  let wasOnHoldOnDate = false;
+                  if (project) {
+                    if (!project.statusHistory || project.statusHistory.length === 0) {
+                      wasOnHoldOnDate = project.status === "on-hold";
+                    } else {
+                      const history = [...project.statusHistory].sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                      const targetTime = new Date(`${checkDate}T23:59:59.999Z`).getTime();
+                      let statusAtDate = project.status;
+                      let found = false;
+                      for (let i = history.length - 1; i >= 0; i--) {
+                        const logTime = new Date(history[i].timestamp).getTime();
+                        if (logTime <= targetTime) {
+                          statusAtDate = history[i].status;
+                          found = true;
+                          break;
+                        }
+                      }
+                      if (found) {
+                        wasOnHoldOnDate = statusAtDate === "on-hold";
+                      } else {
+                        wasOnHoldOnDate = false;
+                      }
+                    }
+                  }
+                  
+                  if (wasOnHoldOnDate) {
                     return;
                   }
 
@@ -710,16 +815,26 @@ export default function MarketingReportsPage() {
   const fetchClients = async () => {
     try {
       const userParams = user ? `?userId=${user.id}&role=${user.role}` : "";
-      const res = await fetch(`${API_URL}/clients${userParams}`);
+      const [res, sysSetRes] = await Promise.all([
+        fetch(`${API_URL}/clients${userParams}`),
+        fetch(`${API_URL}/system-settings`)
+      ]);
+      
       if (res.ok) {
         const data = await res.json();
         setClients(
           data.filter(
-            (c: any) =>
-              c.department === "Marketing" ||
-              c.department === "Digital Marketing",
+            (c: any) => {
+              if (!c.department) return false;
+              const depts = c.department.split(',').map((d: string) => d.trim().toLowerCase());
+              return depts.includes("marketing") || depts.includes("digital marketing");
+            }
           ),
         );
+      }
+      
+      if (sysSetRes && sysSetRes.ok) {
+        setSystemSettings(await sysSetRes.json());
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -734,7 +849,7 @@ export default function MarketingReportsPage() {
         const data = await res.json();
         setProjects(
           data.filter(
-            (p: any) => p.department === "Digital Marketing"
+            (p: any) => p.department && p.department.trim().toLowerCase() === "digital marketing"
           )
         );
       }
@@ -1314,6 +1429,7 @@ export default function MarketingReportsPage() {
 
 
   const filteredDaily = dailyReports.filter((r) => {
+    if (r.isDeleted) return false;
     const isEmpty =
       !r.reach &&
       !r.impression &&
@@ -1322,7 +1438,7 @@ export default function MarketingReportsPage() {
       !r.spend &&
       !r.cpl &&
       (!r.remarks || r.remarks.trim() === "");
-    let isCurrentlyActive = true;
+    let isCurrentlyActive = false;
     const client = clients.find((c) => String(c.id) === String(r.clientId));
     if (client) {
       const camp = (client.campaigns || []).find(
@@ -1359,6 +1475,11 @@ export default function MarketingReportsPage() {
 
     // Hide inactive rows for today or future dates, regardless of whether they are empty
     if (!isCurrentlyActive && reportDate >= todayStr) {
+      return false;
+    }
+
+    // Hide empty rows if the campaign/project is no longer active or was deleted (orphaned)
+    if (!isCurrentlyActive && isTrulyEmpty) {
       return false;
     }
 
@@ -2162,12 +2283,48 @@ export default function MarketingReportsPage() {
                                 {clientProjects.map((p: any) => {
                                   const days = calculateProjectDays(p);
                                   return (
-                                    <div key={p.id} className="text-[10px] text-slate-500 truncate max-w-[160px]" title={`${p.title} (${days.active}d active)`}>
-                                      <span className="font-medium">{p.title}</span>: 
-                                      <span className="text-emerald-600 font-medium ml-1">{days.active}d active</span>
-                                      {days.onHold > 0 || p.status === 'on-hold' ? (
-                                        <span className="text-amber-600 font-medium ml-1">({days.onHold}d hold)</span>
-                                      ) : null}
+                                    <div key={p.id} className="text-[10px] text-slate-500 flex items-start group py-0.5 w-full">
+                                      <div className="flex-1 overflow-hidden" title={`${p.title} (${days.active}d active)`}>
+                                        <div className="flex items-center justify-between w-full pr-1">
+                                          <div className="truncate">
+                                            <span className="font-medium text-[11px]">{p.title}</span>: 
+                                            <span className="text-emerald-600 font-medium ml-1">{days.active}d active</span>
+                                            {days.onHold > 0 || p.status === 'on-hold' ? (
+                                              <span className="text-amber-600 font-medium ml-1">({days.onHold}d hold)</span>
+                                            ) : null}
+                                          </div>
+                                          {canEditMarketing && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPaymentProject(p);
+                                                setPaymentStartDate(p.paymentStartDate ? p.paymentStartDate.split('T')[0] : "");
+                                                setPaymentDurationMonths(p.paymentDurationMonths ? String(p.paymentDurationMonths) : "");
+                                                setIsPaymentReceived(p.isPaymentReceived || false);
+                                                setPaymentSettingsOpen(true);
+                                              }}
+                                              className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all shrink-0"
+                                              title="Payment Settings"
+                                            >
+                                              <Settings className="w-[18px] h-[18px]" />
+                                            </button>
+                                          )}
+                                        </div>
+                                        {p.paymentEndDate && (() => {
+                                          const paymentDate = new Date(p.paymentEndDate);
+                                          const thresholdDays = systemSettings?.paymentDueDays || 0;
+                                          paymentDate.setDate(paymentDate.getDate() - thresholdDays);
+                                          const isPaymentDue = paymentDate <= new Date() && !p.isPaymentReceived;
+
+                                          return (
+                                            <div className={`font-medium ${isPaymentDue ? 'text-rose-600 font-bold bg-rose-50 px-1 py-0.5 rounded inline-flex items-center gap-1 border border-rose-100' : 'text-brand-teal'}`} title="Auto-calculated Payment End Date">
+                                              Payment End: {format(new Date(p.paymentEndDate), 'dd MMM yyyy')}
+                                              {isPaymentDue && <span className="text-[9px] uppercase tracking-wider">(Due)</span>}
+                                              {p.isPaymentReceived && <span className="text-[9px] uppercase tracking-wider text-emerald-600 ml-1">(Done)</span>}
+                                            </div>
+                                          );
+                                        })()}
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -4015,6 +4172,81 @@ export default function MarketingReportsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={paymentSettingsOpen} onOpenChange={setPaymentSettingsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Payment Settings - {paymentProject?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Start Date</Label>
+              <Input
+                type="date"
+                value={paymentStartDate}
+                onChange={(e) => setPaymentStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Duration (Months)</Label>
+              <Input
+                type="number"
+                min="1"
+                placeholder="e.g. 6"
+                value={paymentDurationMonths}
+                onChange={(e) => setPaymentDurationMonths(e.target.value)}
+              />
+            </div>
+            {(() => {
+              if (!paymentProject || !paymentStartDate || !paymentDurationMonths) return null;
+              const months = parseInt(paymentDurationMonths, 10);
+              if (isNaN(months) || months <= 0) return null;
+              
+              const endDate = new Date(paymentStartDate);
+              endDate.setMonth(endDate.getMonth() + months);
+              
+              const days = calculateProjectDays(paymentProject);
+              let holdText = "";
+              if (days.onHold > 0) {
+                endDate.setDate(endDate.getDate() + days.onHold);
+                holdText = ` (+ ${days.onHold} days on hold)`;
+              }
+              
+              return (
+                <div className="space-y-2">
+                  <Label>Calculated End Date</Label>
+                  <Input
+                    type="text"
+                    readOnly
+                    className="bg-slate-50 cursor-not-allowed"
+                    value={`${format(endDate, 'dd MMM yyyy')}${holdText}`}
+                  />
+                </div>
+              );
+            })()}
+            <div className="flex items-center space-x-2 mt-4 pt-4 border-t border-slate-100">
+              <input
+                type="checkbox"
+                id="isPaymentReceived"
+                checked={isPaymentReceived}
+                onChange={(e) => setIsPaymentReceived(e.target.checked)}
+                className="w-4 h-4 text-brand-teal border-gray-300 rounded focus:ring-brand-teal cursor-pointer"
+              />
+              <Label htmlFor="isPaymentReceived" className="cursor-pointer font-medium text-slate-700">
+                Payment Received / Done
+              </Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentSettingsOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSavePaymentSettings} className="bg-brand-teal text-white hover:bg-brand-teal/90">
+              Save Settings
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
