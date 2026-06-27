@@ -761,9 +761,11 @@ export default function MarketingReportsPage() {
         const data = await res.json();
         setClients(
           data.filter(
-            (c: any) =>
-              c.department === "Marketing" ||
-              c.department === "Digital Marketing",
+            (c: any) => {
+              if (!c.department) return false;
+              const depts = c.department.split(',').map((d: string) => d.trim().toLowerCase());
+              return depts.includes("marketing") || depts.includes("digital marketing");
+            }
           ),
         );
       }
@@ -780,7 +782,7 @@ export default function MarketingReportsPage() {
         const data = await res.json();
         setProjects(
           data.filter(
-            (p: any) => p.department === "Digital Marketing"
+            (p: any) => p.department && p.department.trim().toLowerCase() === "digital marketing"
           )
         );
       }
