@@ -228,11 +228,12 @@
   align-items: center;
   gap: 3px;
   user-select: none;
-  margin-left: 16px;
+  margin-left: 8px;
   float: right;
   margin-top: 4px;
+  margin-bottom: -2px;
   position: relative;
-  bottom: -2px;
+  bottom: -1px;
 }
 
 /* Custom premium scrollbars */

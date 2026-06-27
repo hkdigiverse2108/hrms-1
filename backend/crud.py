@@ -3604,6 +3604,8 @@ async def get_system_settings(db):
             "officeStartTime": "09:30",
             "officeEndTime": "18:30",
             "lateBufferMins": 10,
+            "inactivityTimeoutEnabled": False,
+            "inactivityTimeoutMins": 5,
             "allowedMonthlyPaidLeaves": 1,
             "companyGstin": "24AAXFN3372M1ZK",
             "companyAddress": "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.",
@@ -5776,46 +5778,72 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                         rec_out += 86400
                         
                     new_breaks = []
-                    for b in breaks:
-                        b_start = b.get("startTime")
-                        b_end = b.get("endTime")
-                        if not b_start or not b_end:
-                            new_breaks.append(b)
-                            continue
+                    if recovery_type == "break":
+                        updated_break = False
+                        for b in breaks:
+                            b_start = b.get("startTime")
+                            b_end = b.get("endTime")
+                            if not b_start or not b_end:
+                                new_breaks.append(b)
+                                continue
                             
-                        b_in = parse_t(b_start)
-                        b_out = parse_t(b_end)
-                        if b_out < b_in:
-                            b_out += 86400
-                            
-                        overlap_start = max(rec_in, b_in)
-                        overlap_end = min(rec_out, b_out)
-                        
-                        if overlap_start < overlap_end:
-                            # There is overlap
-                            if rec_in <= b_in and rec_out >= b_out:
-                                continue # fully engulfed, remove break
-                            elif b_in < rec_in and b_out > rec_out:
-                                # Split into two
-                                new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
-                                new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
-                            elif b_in >= rec_in and b_out > rec_out:
-                                # Trim start
-                                new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
-                            elif b_in < rec_in and b_out <= rec_out:
-                                # Trim end
-                                new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
-                        else:
-                            new_breaks.append(b)
-                            
+                            b_in = parse_t(b_start)
+                            b_out = parse_t(b_end)
+                            if b_out < b_in:
+                                b_out += 86400
+                                
+                            overlap_start = max(rec_in, b_in)
+                            overlap_end = min(rec_out, b_out)
+                            if (overlap_start < overlap_end) or (abs(b_in - rec_in) < 60):
+                                b["startTime"] = fmt_start
+                                b["endTime"] = fmt_end
+                                b["duration"] = str(int((rec_out - rec_in) // 60))
+                                new_breaks.append(b)
+                                updated_break = True
+                            else:
+                                new_breaks.append(b)
+                        if not updated_break:
+                            new_breaks.append({
+                                "startTime": fmt_start,
+                                "endTime": fmt_end,
+                                "duration": str(int((rec_out - rec_in) // 60))
+                            })
+                    else:
+                        for b in breaks:
+                            b_start = b.get("startTime")
+                            b_end = b.get("endTime")
+                            if not b_start or not b_end:
+                                new_breaks.append(b)
+                                continue
+                            b_in = parse_t(b_start)
+                            b_out = parse_t(b_end)
+                            if b_out < b_in:
+                                b_out += 86400
+                                
+                            overlap_start = max(rec_in, b_in)
+                            overlap_end = min(rec_out, b_out)
+                            if overlap_start < overlap_end:
+                                if rec_in <= b_in and rec_out >= b_out:
+                                    continue
+                                elif b_in < rec_in and b_out > rec_out:
+                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                                elif b_in >= rec_in and b_out > rec_out:
+                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                                elif b_in < rec_in and b_out <= rec_out:
+                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                            else:
+                                new_breaks.append(b)
+                                
                     breaks = new_breaks
 
-                    punches.append({
-                        "punchIn": fmt_start,
-                        "punchOut": fmt_end,
-                        "type": recovery_type or "work"
-                    })
-                    
+                    if recovery_type != "break":
+                        punches.append({
+                            "punchIn": fmt_start,
+                            "punchOut": fmt_end,
+                            "type": recovery_type or "work"
+                        })
+
                     # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
                     merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
                     

@@ -156,9 +156,11 @@ export default function SettingsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          officeStartTime: settings?.officeStartTime || "09:30",
+           officeStartTime: settings?.officeStartTime || "09:30",
           officeEndTime: settings?.officeEndTime || "18:30",
           lateBufferMins: settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10,
+          inactivityTimeoutEnabled: settings?.inactivityTimeoutEnabled ?? false,
+          inactivityTimeoutMins: settings?.inactivityTimeoutMins !== undefined ? settings.inactivityTimeoutMins : 5,
           allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1,
           companyGstin: settings?.companyGstin || "",
           companyAddress: settings?.companyAddress || "",
@@ -440,6 +442,42 @@ export default function SettingsPage() {
                       Employees punching in after <span className="font-bold text-foreground">{settings?.officeStartTime || "09:30"}</span> + this buffer will be automatically marked as <span className="text-amber-600 font-bold">Late Entry</span>.
                     </p>
                   </div>
+                </div>
+
+                <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-brand-teal" />
+                      <Label className="text-sm font-bold">Inactivity Auto-Punch-Out Recovery</Label>
+                    </div>
+                    <Switch
+                      checked={settings?.inactivityTimeoutEnabled ?? false}
+                      onCheckedChange={(checked) => setSettings({ ...settings, inactivityTimeoutEnabled: checked })}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    When enabled, the system will track user inactivity. If a user is inactive for the specified duration, they will be automatically punched out and shown the recovery popup.
+                  </p>
+                  
+                  {settings?.inactivityTimeoutEnabled && (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          className="w-20 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold bg-white"
+                          value={settings?.inactivityTimeoutMins !== undefined ? settings.inactivityTimeoutMins : 5}
+                          onChange={(e) => setSettings({ ...settings, inactivityTimeoutMins: parseInt(e.target.value) || 0 })}
+                          disabled={isUpdating || !canEditSettings}
+                          min={1}
+                        />
+                        <span className="text-xs text-muted-foreground font-medium">minutes</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Specify after how many minutes of inactivity the user should be prompted for recovery.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

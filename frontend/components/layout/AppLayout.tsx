@@ -91,6 +91,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
     reason: ""
   });
   const [isSubmittingRecovery, setIsSubmittingRecovery] = useState(false);
+  const [systemSettings, setSystemSettings] = useState<any>(null);
+
+  useEffect(() => {
+    if (isPublicPage || !user) return;
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch(`${API_URL}/system-settings`);
+        if (res.ok) {
+          const data = await res.json();
+          setSystemSettings(data);
+        }
+      } catch (err) {
+        console.warn("Error fetching settings in AppLayout:", err);
+      }
+    };
+    fetchSettings();
+  }, [user, isPublicPage]);
 
   // Desktop auto-update states
   const [updateInfo, setUpdateInfo] = useState<{
@@ -192,6 +209,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Trigger retroactive punch-out due to inactivity
   const handleInactivityPunchOut = useCallback(async () => {
     if (!user || showRecoveryModal) return;
+    if (!systemSettings?.inactivityTimeoutEnabled) return;
+    const timeoutMs = (systemSettings?.inactivityTimeoutMins || 5) * 60 * 1000;
 
     // Double check if there was global PC activity (clicks/keypress/mouse movement)
     try {
@@ -200,7 +219,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         const activeData = await activeRes.json();
         if (activeData && typeof activeData.last_active === 'number') {
           const globalLastActiveMs = activeData.last_active * 1000;
-          if (Date.now() - globalLastActiveMs < INACTIVITY_TIMEOUT_MS) {
+          if (Date.now() - globalLastActiveMs < timeoutMs) {
             // User was active globally, skip punch out and reset timer
             localStorage.setItem("last_activity_timestamp", globalLastActiveMs.toString());
             lastActivityTimeRef.current = globalLastActiveMs;
@@ -315,16 +334,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn("Error during inactivity punch out:", err);
     }
-  }, [user, showRecoveryModal]);
+  }, [user, showRecoveryModal, systemSettings]);
 
   const resetInactivityTimer = useCallback(() => {
-    // Inactivity auto-punchout is disabled as requested by the user
-    return;
+    if (!systemSettings?.inactivityTimeoutEnabled) return;
     if (!user || showRecoveryModal) return;
     
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-    inactivityTimerRef.current = setTimeout(handleInactivityPunchOut, INACTIVITY_TIMEOUT_MS);
-  }, [user, handleInactivityPunchOut, showRecoveryModal]);
+    const timeoutMs = (systemSettings?.inactivityTimeoutMins || 5) * 60 * 1000;
+    inactivityTimerRef.current = setTimeout(handleInactivityPunchOut, timeoutMs);
+  }, [user, handleInactivityPunchOut, showRecoveryModal, systemSettings]);
 
   // Sync ref with the actual callback
   resetInactivityTimerRef.current = resetInactivityTimer;
@@ -463,8 +482,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
 
     // 3. Check if user went inactive while away/sleep
-    return; // Disabled inactivity check as requested by the user
-    if (Date.now() - resolvedLastActivityTs > INACTIVITY_TIMEOUT_MS) {
+    if (!systemSettings?.inactivityTimeoutEnabled) return;
+    const timeoutMs = (systemSettings?.inactivityTimeoutMins || 5) * 60 * 1000;
+    if (Date.now() - resolvedLastActivityTs > timeoutMs) {
       if (isCurrentlyPunchedIn) {
         try {
           // Check scheduled meeting overlap
@@ -519,7 +539,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [user, isPublicPage]);
+  }, [user, isPublicPage, systemSettings]);
 
   const handleRecoverySubmit = async () => {
     if (!user) return;
