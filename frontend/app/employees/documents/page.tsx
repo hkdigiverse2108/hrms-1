@@ -844,6 +844,7 @@ export default function EmployeeDocumentsPage() {
 
   const [filterType, setFilterType] = useState<string>('all')
   const [filterEmployee, setFilterEmployee] = useState<string>('all')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
 
   const allDocumentsWithPlaceholders = () => {
     const combined: any[] = [];
@@ -916,7 +917,21 @@ export default function EmployeeDocumentsPage() {
     }
     const matchesType = filterType === 'all' || doc.documentName?.includes(filterType)
     const matchesEmployee = filterEmployee === 'all' || doc.employeeId === filterEmployee
-    return matchesType && matchesEmployee
+    
+    let matchesStatus = true;
+    if (filterStatus !== 'all') {
+      if (filterStatus === 'pending') {
+        matchesStatus = doc.isPendingSubmit === true;
+      } else if (filterStatus === 'accepted') {
+        matchesStatus = doc.status === 'Accepted' && !doc.isPendingSubmit;
+      } else if (filterStatus === 'rejected') {
+        matchesStatus = doc.status === 'Rejected' && !doc.isPendingSubmit;
+      } else if (filterStatus === 'returned') {
+        matchesStatus = doc.status === 'Returned to Employee' && !doc.isPendingSubmit;
+      }
+    }
+
+    return matchesType && matchesEmployee && matchesStatus
   })
 
   // Official Letter Requests Columns & Render Actions
@@ -1132,6 +1147,21 @@ export default function EmployeeDocumentsPage() {
                       {documentTypes.map((t: string) => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-56">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Status</span>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="h-10 border-slate-200 bg-slate-50/50 font-semibold">
+                      <SelectValue placeholder="All Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="pending">Pending to Submit</SelectItem>
+                      <SelectItem value="accepted">Accepted</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="returned">Returned to Employee</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
