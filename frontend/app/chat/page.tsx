@@ -319,6 +319,16 @@ const parseFormatting = (text: string): React.ReactNode => {
   return parseMonospace(text);
 };
 
+const stripFormatting = (text: string | null | undefined): string => {
+  if (!text) return "";
+  return text
+    .replace(/```([\s\S]+?)```/g, "$1")
+    .replace(/`(?!\s)([^`]+?)(?<!\s)`/g, "$1")
+    .replace(/\*(?!\s)([^*]+?)(?<!\s)\*/g, "$1")
+    .replace(/_(?!\s)([^_]+?)(?<!\s)_/g, "$1")
+    .replace(/~(?!\s)([^~]+?)(?<!\s)~/g, "$1");
+};
+
 const highlightAndFormat = (text: string, searchQuery?: string): React.ReactNode => {
   const formatted = parseFormatting(text);
   if (!searchQuery) return formatted;
@@ -3409,7 +3419,7 @@ export default function ChatPage() {
                                 <span>{drafts[chat.id]}</span>
                               </>
                             ) : (
-                              employees.find(e => e.id === chat.id)?.customStatus || chat.lastMessage
+                              employees.find(e => e.id === chat.id)?.customStatus || stripFormatting(chat.lastMessage)
                             )}
                           </p>
                         </div>
@@ -3483,7 +3493,7 @@ export default function ChatPage() {
                               <span>{drafts[group.id]}</span>
                             </>
                           ) : (
-                            group.lastMessage || "No messages yet"
+                            stripFormatting(group.lastMessage) || "No messages yet"
                           )}
                         </p>
                         {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
@@ -3578,7 +3588,7 @@ export default function ChatPage() {
                               <span>{drafts[channel.id]}</span>
                             </>
                           ) : (
-                            channel.lastMessage || channel.description
+                            stripFormatting(channel.lastMessage) || channel.description
                           )}
                         </p>
                         {(user?.role === "Admin" || user?.role === "HR") && (
