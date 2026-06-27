@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus } from "lucide-react";
+import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Hand, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { WMTaskForm, WMTaskFormData } from "@/components/hrms/WMTaskForm";
@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TablePagination } from "@/components/common/TablePagination";
 import { toast } from "sonner";
@@ -56,10 +58,13 @@ export default function TasksPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<any>(null);
-  const [searchTerm, setSearchTerm] = useState("");
   const [taskLogs, setTaskLogs] = useState<any[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProjectId, setSelectedProjectId] = useState("all");
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState("all");
+
   const [logFilter, setLogFilter] = useState<{taskId?: string, taskTitle?: string}>({});
   const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -151,12 +156,15 @@ export default function TasksPage() {
       if (res.ok) {
         setTaskLogs(await res.json());
       }
+      
+      fetchAssignmentRequests();
     } catch (err) {
-      console.error("Error fetching logs:", err);
+      console.error("Error loading data:", err);
     } finally {
-      setIsLoadingLogs(false);
+      setIsLoading(false);
     }
   };
+
 
   const handleQuickAdd = async (stageId: string) => {
     if (!quickAddTitle.trim()) return;
@@ -740,9 +748,9 @@ export default function TasksPage() {
           </div>
         ) : (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex gap-4 h-full overflow-x-auto pb-4 items-start px-2">
+      <div className="flex gap-4 h-full overflow-x-auto pb-4 px-2">
         {STAGES.map(stage => (
-          <div key={stage.id} className="flex flex-col flex-1 min-w-[250px] h-full bg-slate-50/80 rounded-[20px] border border-slate-200 overflow-hidden shadow-sm">
+          <div key={stage.id} className="flex flex-col flex-1 min-w-[320px] max-w-[400px] h-full bg-slate-50/80 rounded-[20px] border border-slate-200 overflow-hidden shadow-sm">
             <div className="flex items-center justify-between p-4 pb-3">
               <h3 className={`font-semibold text-[15px] ${stage.color}`}>{stage.label}</h3>
               <div className="flex items-center gap-3 text-slate-500">
@@ -780,12 +788,12 @@ export default function TasksPage() {
                                 }
                               }}
                             >
-                              <div className={`p-4 rounded-xl transition-all cursor-pointer relative overflow-hidden ${
+                              <div className={`p-4 rounded-xl transition-all cursor-pointer relative overflow-hidden flex flex-col min-h-[140px] ${
                                 snapshot.isDragging ? "opacity-90 scale-[1.02] shadow-xl ring-2 ring-brand-teal/20 bg-white" : 
                                 "bg-white hover:bg-slate-50 shadow-sm hover:shadow-md border border-slate-200 hover:border-brand-teal/30"
                               }`}>
                                 
-                                <div className="min-h-[24px] relative">
+                                <div className="min-h-[24px] relative flex flex-col flex-1">
                                   <div className="float-right ml-2 -mt-1 flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-brand-teal" title="View Logs"><History className="w-3.5 h-3.5" /></button>
                                     {canDeleteTask && (
@@ -805,10 +813,11 @@ export default function TasksPage() {
                                           {task.phase}
                                         </span>
                                       )}
+
                                     </div>
                                   )}
                                   
-                                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+                                  <div className="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
                                     <div className="flex items-center gap-1.5 text-slate-600 font-semibold truncate">
                                       <div className="w-4 h-4 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[9px] font-black shrink-0">
                                         {(task.assignedToName || "U")[0].toUpperCase()}

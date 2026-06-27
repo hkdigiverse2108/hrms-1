@@ -3108,6 +3108,22 @@ async def delete_other_work(entry_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"message": "Entry deleted successfully"}
 
+# Assignment Requests
+@app.post("/assignment-requests", response_model=schemas.AssignmentRequest)
+async def create_assignment_request(request: schemas.AssignmentRequestCreate, db=Depends(get_db)):
+    return await crud.create_assignment_request(db, request)
+
+@app.get("/assignment-requests", response_model=List[schemas.AssignmentRequest])
+async def read_assignment_requests(projectId: Optional[str] = None, employeeId: Optional[str] = None, status: Optional[str] = None, db=Depends(get_db)):
+    return await crud.get_assignment_requests(db, projectId=projectId, employeeId=employeeId, status=status)
+
+@app.put("/assignment-requests/{request_id}/status", response_model=schemas.AssignmentRequest)
+async def update_assignment_request_status(request_id: str, request_update: schemas.AssignmentRequestUpdate, db=Depends(get_db)):
+    updated = await crud.update_assignment_request_status(db, request_id, request_update.status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Assignment request not found")
+    return updated
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")

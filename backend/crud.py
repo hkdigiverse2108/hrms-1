@@ -7375,3 +7375,30 @@ async def delete_other_work(db, work_id: str):
         return False
     res = await db.other_work.delete_one({"_id": ObjectId(work_id)})
     return res.deleted_count > 0
+
+# Assignment Requests
+async def create_assignment_request(db, request: schemas.AssignmentRequestCreate):
+    req_dict = request.dict()
+    if not req_dict.get("createdAt"):
+        req_dict["createdAt"] = get_now().isoformat()
+    result = await db.assignment_requests.insert_one(req_dict)
+    return fix_id(await db.assignment_requests.find_one({"_id": result.inserted_id}))
+
+async def get_assignment_requests(db, projectId: str = None, employeeId: str = None, status: str = None):
+    query = {}
+    if projectId:
+        query["projectId"] = projectId
+    if employeeId:
+        query["employeeId"] = employeeId
+    if status:
+        query["status"] = status
+    cursor = db.assignment_requests.find(query).sort("_id", -1)
+    rows = await cursor.to_list(length=1000)
+    return [fix_id(r) for r in rows]
+
+async def update_assignment_request_status(db, request_id: str, status: str):
+    from bson import ObjectId
+    if not ObjectId.is_valid(request_id):
+        return None
+    await db.assignment_requests.update_one({"_id": ObjectId(request_id)}, {"$set": {"status": status}})
+    return fix_id(await db.assignment_requests.find_one({"_id": ObjectId(request_id)}))

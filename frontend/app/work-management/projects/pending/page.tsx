@@ -16,7 +16,6 @@ import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Trash2, Search } from "lucide-react";
-import { toast } from "sonner";
 
 export default function PendingProjectsPage() {
   const { user } = useUser();

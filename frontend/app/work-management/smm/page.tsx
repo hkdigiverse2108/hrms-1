@@ -443,7 +443,7 @@ export default function CreativeClientsPage() {
       const [res, ccRes, pRes, settingsRes, empRes] = await Promise.all([
         fetch(`${API_URL}/clients`),
         fetch(`${API_URL}/content-calendar/all`),
-        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`),
+        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${encodeURIComponent(user.role || '')}` : ''}`),
         fetch(`${API_URL}/content-calendar-settings/all?monthYear=${calendarFilterMonth}`),
         fetch(`${API_URL}/employees`)
       ]);

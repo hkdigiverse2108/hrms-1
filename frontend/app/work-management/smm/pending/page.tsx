@@ -38,7 +38,7 @@ export default function PendingWorkPage() {
       const [entriesRes, clientsRes, pRes] = await Promise.all([
         fetch(`${API_URL}/content-calendar/all`),
         fetch(`${API_URL}/clients`),
-        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${user.role}` : ''}`)
+        fetch(`${API_URL}/projects${user ? `?userId=${user.id}&role=${encodeURIComponent(user.role || '')}` : ''}`)
       ]);
       
       if (entriesRes.ok && clientsRes.ok) {

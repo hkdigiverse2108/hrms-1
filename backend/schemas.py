@@ -1833,6 +1833,30 @@ class SalesTarget(SalesTargetBase):
     class Config:
         from_attributes = True
 
+# Assignment Request Schemas
+class AssignmentRequestBase(BaseModel):
+    projectId: str
+    projectName: str
+    entityType: str # "module" or "task"
+    entityId: str # module ID/name or task ID
+    entityName: str # display name
+    employeeId: str
+    employeeName: str
+    reason: str
+    status: str = "Pending" # "Pending", "Approved", "Rejected"
+    createdAt: Optional[str] = None
+
+class AssignmentRequestCreate(AssignmentRequestBase):
+    pass
+
+class AssignmentRequestUpdate(BaseModel):
+    status: Optional[str] = None
+
+class AssignmentRequest(AssignmentRequestBase):
+    id: str
+    class Config:
+        from_attributes = True
+
 # Permission Schemas
 class ModulePermission(BaseModel):
     moduleName: str

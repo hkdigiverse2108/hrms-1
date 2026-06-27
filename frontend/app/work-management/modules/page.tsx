@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2 } from "lucide-react";
+import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, Hand, CheckCircle, XCircle } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -132,6 +132,14 @@ export default function ModulesPage() {
   const [credIntegrations, setCredIntegrations] = useState<any[]>([]);
   const [isSavingCreds, setIsSavingCreds] = useState(false);
 
+  // Assignment Request State
+  const [assignmentRequests, setAssignmentRequests] = useState<any[]>([]);
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
+  const [assignmentTargetModule, setAssignmentTargetModule] = useState<any>(null);
+  const [assignmentReason, setAssignmentReason] = useState("");
+  const [isSubmittingAssignment, setIsSubmittingAssignment] = useState(false);
+  const [requestsSheetOpen, setRequestsSheetOpen] = useState(false);
+
   const handleOpenCreds = () => {
     if (!selectedProj) return;
     setCredFrontendLink(selectedProj.frontendLink || "");
@@ -181,7 +189,8 @@ export default function ModulesPage() {
       ]);
       
       if (pRes.ok) {
-        const data = await pRes.json();
+        let data = await pRes.json();
+        data = data.filter((p: any) => p.department === 'Development');
         setProjects(data);
         if (data.length > 0 && !selectedProjectId) {
           setSelectedProjectId(data[0].id);
@@ -192,11 +201,131 @@ export default function ModulesPage() {
         const emps = await eRes.json();
         setEmployees(emps.filter((e: any) => e.department === "Development"));
       }
+
+      fetchAssignmentRequests();
     } catch (err) {
       console.error("Error fetching data:", err);
-      toast.error("Failed to load data");
+      toast.error("Failed to load projects");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAssignmentRequests = async () => {
+    try {
+      const res = await fetch(`${API_URL}/assignment-requests?entityType=module`);
+      if (res.ok) {
+        const data = await res.json();
+        setAssignmentRequests(data);
+      }
+    } catch (err) {
+      console.error("Error fetching requests:", err);
+    }
+  };
+
+  const handleAssignmentRequest = async () => {
+    if (!assignmentTargetModule || !assignmentReason.trim()) {
+      toast.error("Reason is required");
+      return;
+    }
+    
+    setIsSubmittingAssignment(true);
+    try {
+      const res = await fetch(`${API_URL}/assignment-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: selectedProj?.id,
+          projectName: selectedProj?.title,
+          entityType: "module",
+          entityId: assignmentTargetModule.id,
+          entityName: assignmentTargetModule.title || assignmentTargetModule.name,
+          employeeId: user?.id,
+          employeeName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || "User",
+          reason: assignmentReason
+        })
+      });
+      if (res.ok) {
+        toast.success("Request sent successfully");
+        setAssignmentModalOpen(false);
+        setAssignmentReason("");
+        setAssignmentTargetModule(null);
+        fetchAssignmentRequests();
+      } else {
+        toast.error("Failed to send request");
+      }
+    } catch (err) {
+      console.error("Error sending assignment request:", err);
+      toast.error("An error occurred");
+    } finally {
+      setIsSubmittingAssignment(false);
+    }
+  };
+
+  const handleApproveRequest = async (request: any) => {
+    try {
+      // 1. Assign the module to the requested employee
+      const proj = projects.find(p => p.id === request.projectId);
+      if (!proj) return toast.error("Project not found");
+      
+      let updatedModules = [...(proj.modules || [])];
+      let updatedPhases = [...(proj.phases || [])];
+      
+      let targetMod = updatedModules.find(m => m.id === request.entityId);
+      if (targetMod) {
+        targetMod.assignedToId = request.employeeId;
+        targetMod.assignedToName = request.employeeName;
+      } else {
+        // Look in phases
+        let found = false;
+        for (const phase of updatedPhases) {
+          targetMod = phase.modules.find((m: any) => m.id === request.entityId);
+          if (targetMod) {
+            targetMod.assignedToId = request.employeeId;
+            targetMod.assignedToName = request.employeeName;
+            found = true;
+            break;
+          }
+        }
+        if (!found) return toast.error("Module not found");
+      }
+      
+      const pRes = await fetch(`${API_URL}/projects/${proj.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...proj, modules: updatedModules, phases: updatedPhases })
+      });
+      
+      if (!pRes.ok) throw new Error("Failed to update project");
+      
+      // 2. Approve Request
+      await fetch(`${API_URL}/assignment-requests/${request.id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Approved" })
+      });
+      
+      toast.success("Module assigned successfully");
+      fetchData();
+      fetchAssignmentRequests();
+    } catch (err) {
+      console.error("Error approving:", err);
+      toast.error("Failed to approve request");
+    }
+  };
+
+  const handleRejectRequest = async (request: any) => {
+    try {
+      await fetch(`${API_URL}/assignment-requests/${request.id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Rejected" })
+      });
+      toast.success("Request rejected");
+      fetchAssignmentRequests();
+    } catch (err) {
+      console.error("Error rejecting:", err);
+      toast.error("Failed to reject request");
     }
   };
 
@@ -489,6 +618,7 @@ export default function ModulesPage() {
   };
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const visibleProjects = projects;
 
   return (
     <div className="space-y-4 h-[calc(100vh-140px)] flex flex-col">
@@ -621,13 +751,27 @@ export default function ModulesPage() {
                     )}
 
                     {canManageModule && (
-                      <Button 
-                        onClick={() => openAddModal(null)}
-                        className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
-                      >
-                        <Plus className="w-4 h-4 mr-1.5" />
-                        Add Module
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          onClick={() => setRequestsSheetOpen(true)}
+                          variant="outline"
+                          className="h-9 border-brand-teal text-brand-teal hover:bg-brand-teal-light hover:text-white font-bold"
+                        >
+                          Requests
+                          {assignmentRequests.filter(r => r.projectId === selectedProject.id && r.status === 'Pending').length > 0 && (
+                            <span className="ml-2 bg-brand-teal text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                              {assignmentRequests.filter(r => r.projectId === selectedProject.id && r.status === 'Pending').length}
+                            </span>
+                          )}
+                        </Button>
+                        <Button 
+                          onClick={() => openAddModal(null)}
+                          className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-9"
+                        >
+                          <Plus className="w-4 h-4 mr-1.5" />
+                          Add Module
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -657,9 +801,7 @@ export default function ModulesPage() {
                                 const matchPhase = filterPhase === "all" || m.phaseName === filterPhase;
                                 const matchAssignee = filterAssignee === "all" || 
                                   (filterAssignee === "unassigned" ? !m.assignedToId : m.assignedToId === filterAssignee);
-                                const isEmployeeOrIntern = user?.role === "Employee" || user?.role === "Intern";
-                                const isAssignedToUser = !isEmployeeOrIntern || m.assignedToId === user?.id;
-                                return matchPhase && matchAssignee && isAssignedToUser;
+                                return matchPhase && matchAssignee;
                               });
 
                               if (filteredModules.length === 0) {
@@ -726,6 +868,21 @@ export default function ModulesPage() {
                                       <div className="flex items-center justify-center gap-2">
                                         <button onClick={() => openEditModule(m, phase || null)} className="p-1.5 hover:bg-slate-200 rounded-md text-blue-600 transition-colors" title="Edit Module"><Pencil className="w-4 h-4" /></button>
                                         <button onClick={(e) => handleDeleteModule(e, m)} className="p-1.5 hover:bg-red-100 rounded-md text-red-500 transition-colors" title="Delete Module"><Trash2 className="w-4 h-4" /></button>
+                                      </div>
+                                    )}
+                                    {(!m.assignedToId || m.assignedToId !== user?.id) && (
+                                      <div className="flex items-center justify-center mt-1">
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setAssignmentTargetModule(m);
+                                            setAssignmentModalOpen(true);
+                                          }} 
+                                          className="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-200 rounded-md text-brand-teal transition-colors text-[11px] font-bold" 
+                                          title="Request Assignment"
+                                        >
+                                          <Hand className="w-3.5 h-3.5" /> Request
+                                        </button>
                                       </div>
                                     )}
                                   </TableCell>
@@ -1366,6 +1523,92 @@ export default function ModulesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Assignment Request Modal */}
+      <Dialog open={assignmentModalOpen} onOpenChange={setAssignmentModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Request Assignment</DialogTitle>
+            <DialogDescription>
+              Request to be assigned to <strong>{assignmentTargetModule?.name}</strong>. Provide a reason below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Reason for requesting <span className="text-red-500">*</span></Label>
+              <textarea 
+                className="w-full border border-slate-200 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal focus:border-transparent min-h-[100px] resize-none"
+                placeholder="e.g., I have worked on a similar module in Project XYZ, it's easy for me."
+                value={assignmentReason}
+                onChange={(e) => setAssignmentReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setAssignmentModalOpen(false)}>Cancel</Button>
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal-light text-white" 
+              onClick={handleAssignmentRequest}
+              disabled={isSubmittingAssignment || !assignmentReason.trim()}
+            >
+              {isSubmittingAssignment && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Send Request
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      <Sheet open={requestsSheetOpen} onOpenChange={setRequestsSheetOpen}>
+        <SheetContent className="w-[400px] sm:w-[540px] sm:max-w-none overflow-y-auto custom-scrollbar">
+          <SheetHeader className="mb-6">
+            <SheetTitle className="text-xl font-bold flex items-center gap-2">
+              <Hand className="w-5 h-5 text-brand-teal" />
+              Assignment Requests
+            </SheetTitle>
+            <SheetDescription>
+              Manage module assignment requests for {selectedProject?.title}.
+            </SheetDescription>
+          </SheetHeader>
+          
+          <div className="space-y-4">
+            {assignmentRequests.filter(r => r.projectId === selectedProject?.id).length === 0 ? (
+              <div className="bg-slate-50 p-8 rounded-xl border border-dashed border-slate-300 text-center text-slate-500">
+                No pending assignment requests.
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {assignmentRequests.filter(r => r.projectId === selectedProject?.id).map((req, i) => (
+                  <div key={i} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-slate-800">{req.employeeName}</span>
+                        <span className="text-slate-500 text-sm">requested</span>
+                        <span className="font-bold text-brand-teal">{req.entityName}</span>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm text-slate-700 italic mt-2">
+                        "{req.reason}"
+                      </div>
+                      <div className="mt-2 text-xs text-slate-400">
+                        Status: <span className={`font-bold ${req.status === 'Approved' ? 'text-green-600' : req.status === 'Rejected' ? 'text-red-600' : 'text-orange-500'}`}>{req.status}</span>
+                      </div>
+                    </div>
+                    {req.status === 'Pending' && (
+                      <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+                        <Button onClick={() => handleApproveRequest(req)} size="sm" className="bg-green-600 hover:bg-green-700 flex-1 h-8">
+                          <CheckCircle className="w-4 h-4 mr-1.5" /> Approve
+                        </Button>
+                        <Button onClick={() => handleRejectRequest(req)} size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 flex-1 h-8">
+                          <XCircle className="w-4 h-4 mr-1.5" /> Reject
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
