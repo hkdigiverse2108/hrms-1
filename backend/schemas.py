@@ -1040,6 +1040,13 @@ class ProjectBase(BaseModel):
     lastFollowupDate: Optional[RobustDate] = None
     nextFollowupDate: Optional[RobustDate] = None
     
+    # Payment Settings
+    paymentStartDate: Optional[RobustDate] = None
+    paymentDurationMonths: Optional[int] = None
+    paymentEndDate: Optional[RobustDate] = None
+    paymentReminderDays: Optional[int] = None
+    isPaymentReceived: Optional[bool] = False
+    
     # Feedback Collection Fields
     feedbackType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
     feedbackIntervalDays: Optional[int] = None
@@ -1095,6 +1102,14 @@ class ProjectUpdate(BaseModel):
     followupDatesOfMonth: Optional[List[int]] = None
     lastFollowupDate: Optional[RobustDate] = None
     nextFollowupDate: Optional[RobustDate] = None
+    
+    # Payment Settings
+    paymentStartDate: Optional[RobustDate] = None
+    paymentDurationMonths: Optional[int] = None
+    paymentEndDate: Optional[RobustDate] = None
+    paymentReminderDays: Optional[int] = None
+    isPaymentReceived: Optional[bool] = None
+    
     feedbackType: Optional[str] = None
     feedbackIntervalDays: Optional[int] = None
     feedbackDaysOfWeek: Optional[List[int]] = None
@@ -1371,6 +1386,7 @@ class SystemSettingsBase(BaseModel):
     defaultShootDateOffset: Optional[int] = None
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
+    paymentDueDays: Optional[int] = 0
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1404,6 +1420,7 @@ class SystemSettingsUpdate(BaseModel):
     defaultShootDateOffset: Optional[int] = None
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
+    paymentDueDays: Optional[int] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str

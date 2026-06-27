@@ -844,6 +844,7 @@ export default function CreativeClientsPage() {
     const isOnHold = projectStatus.toLowerCase() === "on-hold";
     const isFollowupDue = clientProjects[c.id]?.nextFollowupDate && new Date(clientProjects[c.id].nextFollowupDate) <= new Date();
     const isPaymentDue = c.nextPaymentDueDate && new Date(c.nextPaymentDueDate) <= new Date();
+    
     const hasPendingWork = pendingCounts[c.id] > 0;
 
     switch(masterFilter) {
@@ -1242,6 +1243,13 @@ export default function CreativeClientsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
+                      <div className="flex flex-col gap-2 mt-3 text-xs border-t border-slate-100 pt-3">
+                        {client.nextPaymentDueDate && new Date(client.nextPaymentDueDate) <= new Date() && (
+                          <div className="flex items-center justify-between text-rose-600 bg-rose-50 px-2 py-1.5 rounded font-medium border border-rose-100">
+                            Payment Alert
+                          </div>
+                        )}
+                      </div>
                       <div className="flex items-center justify-center gap-2.5">
                         {(() => {
                           const projectStatus = clientProjects[client.id]?.status || "";
