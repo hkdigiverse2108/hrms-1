@@ -43,6 +43,7 @@ export default function ProjectsPage() {
   const [selectedDept, setSelectedDept] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedPriority, setSelectedPriority] = useState("all");
+  const [selectedCompany, setSelectedCompany] = useState("all");
 
   useEffect(() => {
     if (!permissionsLoading && !canViewProjects) {
@@ -247,9 +248,12 @@ export default function ProjectsPage() {
     const matchesDept = selectedDept === "all" || p.department?.toLowerCase() === selectedDept.toLowerCase();
     const matchesStatus = selectedStatus === "all" || p.status?.toLowerCase() === selectedStatus.toLowerCase();
     const matchesPriority = selectedPriority === "all" || p.priority?.toLowerCase() === selectedPriority.toLowerCase();
+    const matchesCompany = selectedCompany === "all" || p.clientName === selectedCompany;
 
-    return matchesSearch && matchesDept && matchesStatus && matchesPriority;
+    return matchesSearch && matchesDept && matchesStatus && matchesPriority && matchesCompany;
   });
+
+  const uniqueCompanies = Array.from(new Set(projects.map(p => p.clientName).filter(Boolean))).sort();
 
   if (permissionsLoading) {
     return (
@@ -457,13 +461,26 @@ export default function ProjectsPage() {
             </SelectContent>
           </Select>
 
-          {(selectedDept !== "all" || selectedStatus !== "all" || selectedPriority !== "all" || searchTerm !== "") && (
+          <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+            <SelectTrigger className="w-[180px] h-10 font-medium">
+              <SelectValue placeholder="Brand" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Brands</SelectItem>
+              {uniqueCompanies.map((company: any) => (
+                <SelectItem key={company} value={company}>{company}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {(selectedDept !== "all" || selectedStatus !== "all" || selectedPriority !== "all" || selectedCompany !== "all" || searchTerm !== "") && (
             <Button 
               variant="ghost" 
               onClick={() => {
                 setSelectedDept("all");
                 setSelectedStatus("all");
                 setSelectedPriority("all");
+                setSelectedCompany("all");
                 setSearchTerm("");
               }}
               className="text-xs text-muted-foreground hover:text-rose-600 font-bold h-10 px-3"

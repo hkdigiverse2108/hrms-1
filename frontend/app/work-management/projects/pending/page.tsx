@@ -11,11 +11,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/context/ConfirmContext";
+import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Trash2, Search } from "lucide-react";
 
 export default function PendingProjectsPage() {
   const { user } = useUser();
   const router = useRouter();
   const { checkPermission, isAdmin, loading: permissionsLoading } = usePermissions();
+  const { confirm } = useConfirm();
 
   const canViewProjects = isAdmin || checkPermission('projects', 'canView');
   const canAddProjects = isAdmin || checkPermission('projects', 'canAdd');
@@ -27,6 +33,9 @@ export default function PendingProjectsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any>(null);
+  
+  const [selectedDept, setSelectedDept] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -80,6 +89,14 @@ export default function PendingProjectsPage() {
     return missing;
   });
 
+  const filteredProjects = pendingProjects.filter(item => {
+    const matchesSearch = item.company.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          item.department.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDept = selectedDept === "all" || item.department.toLowerCase() === selectedDept.toLowerCase();
+    
+    return matchesSearch && matchesDept;
+  });
+
   const handleCreateFromClient = (pendingItem: any) => {
     setEditingProject({
       title: `${pendingItem.company} - ${pendingItem.department} Project`,
@@ -87,6 +104,44 @@ export default function PendingProjectsPage() {
       department: pendingItem.department,
     });
     setModalOpen(true);
+  };
+
+  const handleDeletePending = async (item: any) => {
+    if (!canAddProjects) return; // Need some permission, using add projects or we could check delete
+    
+    const isConfirmed = await confirm({
+      title: "Remove Pending Project",
+      message: `Are you sure you want to remove the pending project for ${item.company} (${item.department})? This will remove the department from the client.`,
+      destructive: true,
+      confirmText: "Remove",
+    });
+    
+    if (!isConfirmed) return;
+
+    try {
+      const currentDepts = item.originalClient.department 
+        ? item.originalClient.department.split(',').map((d: string) => d.trim()).filter(Boolean) 
+        : ["Development"];
+        
+      const newDepts = currentDepts.filter((d: string) => d.toLowerCase() !== item.department.toLowerCase());
+      const newDeptString = newDepts.join(', ');
+      
+      const res = await fetch(`${API_URL}/clients/${item.clientId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ department: newDeptString })
+      });
+      
+      if (res.ok) {
+        toast.success("Pending project removed successfully");
+        fetchData();
+      } else {
+        toast.error("Failed to remove pending project");
+      }
+    } catch (err) {
+      console.error("Error removing pending project:", err);
+      toast.error("An error occurred while removing");
+    }
   };
 
   const handleSubmit = async (formData: ProjectFormData) => {
@@ -141,19 +196,60 @@ export default function PendingProjectsPage() {
           <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
           <p className="text-muted-foreground font-medium">Loading pending projects...</p>
         </div>
-      ) : pendingProjects.length > 0 ? (
-        <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 border-b border-border text-slate-500 font-medium">
-                <tr>
-                  <th className="px-6 py-4">Company Name</th>
-                  <th className="px-6 py-4">Department</th>
-                  <th className="px-6 py-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {pendingProjects.map((item) => (
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search pending projects..." 
+                className="pl-10 h-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <Select value={selectedDept} onValueChange={setSelectedDept}>
+                <SelectTrigger className="w-[180px] h-10 font-medium">
+                  <SelectValue placeholder="Department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  <SelectItem value="Development">Development</SelectItem>
+                  <SelectItem value="Creative">Creative</SelectItem>
+                  <SelectItem value="Digital Marketing">Digital Marketing</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {(selectedDept !== "all" || searchTerm !== "") && (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => {
+                    setSelectedDept("all");
+                    setSearchTerm("");
+                  }}
+                  className="text-xs text-muted-foreground hover:text-rose-600 font-bold h-10 px-3"
+                >
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {filteredProjects.length > 0 ? (
+            <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 border-b border-border text-slate-500 font-medium">
+                    <tr>
+                      <th className="px-6 py-4">Company Name</th>
+                      <th className="px-6 py-4">Department</th>
+                      <th className="px-6 py-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredProjects.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="font-bold text-slate-800 text-base">{item.company}</div>
@@ -165,15 +261,27 @@ export default function PendingProjectsPage() {
                       {item.department}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Button 
-                        size="sm"
-                        className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold"
-                        onClick={() => handleCreateFromClient(item)}
-                        disabled={!canAddProjects}
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create Project
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button 
+                          size="sm"
+                          className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold"
+                          onClick={() => handleCreateFromClient(item)}
+                          disabled={!canAddProjects}
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Create Project
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-red-500 hover:bg-red-50 hover:text-red-600 h-9 w-9"
+                          onClick={() => handleDeletePending(item)}
+                          disabled={!canAddProjects}
+                          title="Remove Pending Project"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -183,13 +291,28 @@ export default function PendingProjectsPage() {
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-20 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-          <h2 className="text-xl font-bold text-slate-800">No Pending Projects</h2>
-          <p className="text-slate-500 mt-2 text-center max-w-md">All your won leads have successfully been converted into projects! Great job.</p>
-          <Button variant="outline" className="mt-6 font-bold" onClick={() => router.push('/work-management/projects')}>
-            Return to Projects
-          </Button>
+          <h2 className="text-xl font-bold text-slate-800">No Pending Projects Found</h2>
+          <p className="text-slate-500 mt-2 text-center max-w-md">
+            {searchTerm || selectedDept !== 'all' 
+              ? "No pending projects match your current filters." 
+              : "All your won leads have successfully been converted into projects! Great job."}
+          </p>
+          {(searchTerm || selectedDept !== 'all') ? (
+            <Button variant="outline" className="mt-6 font-bold" onClick={() => {
+              setSearchTerm("");
+              setSelectedDept("all");
+            }}>
+              Clear Filters
+            </Button>
+          ) : (
+            <Button variant="outline" className="mt-6 font-bold" onClick={() => router.push('/work-management/projects')}>
+              Return to Projects
+            </Button>
+          )}
         </div>
       )}
+      </div>
+    )}
 
       <Dialog open={modalOpen} onOpenChange={(open) => {
         setModalOpen(open);
