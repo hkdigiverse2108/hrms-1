@@ -3676,7 +3676,21 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
         except Exception:
             query["date"] = date
     elif start_date and end_date:
-        query["date"] = {"$gte": start_date, "$lte": end_date}
+        query["$and"] = query.get("$and", []) + [
+            {"$or": [
+                {"date": {"$gte": start_date, "$lte": end_date}},
+                {
+                    "reach": {"$in": [0, "0", None]},
+                    "impression": {"$in": [0, "0", None]},
+                    "leads": {"$in": [0, "0", None]},
+                    "spend": {"$in": [0, "0", None]},
+                    "cpl": {"$in": [0, "0", None]},
+                    "revenue": {"$in": [0, "0", None]},
+                    "followers": {"$in": [0, "0", None]},
+                    "remarks": {"$in": ["", None, " "]}
+                }
+            ]}
+        ]
     cursor = db.marketing_daily_reports.find(query).sort("date", -1)
     reports = []
     async for doc in cursor:
@@ -3796,8 +3810,11 @@ async def update_marketing_daily_report(db, report_id: str, report: schemas.Mark
     return None
 
 async def delete_marketing_daily_report(db, report_id: str):
-    result = await db.marketing_daily_reports.delete_one({"_id": ObjectId(report_id)})
-    return result.deleted_count > 0
+    result = await db.marketing_daily_reports.update_one(
+        {"_id": ObjectId(report_id)},
+        {"$set": {"isDeleted": True}}
+    )
+    return result.modified_count > 0 or result.matched_count > 0
 
 async def bulk_clear_leads_files(db, ids: list, collection_name: str):
     object_ids = [ObjectId(id) for id in ids if ObjectId.is_valid(id)]

@@ -271,7 +271,7 @@ export default function MarketingReportsPage() {
   });
 
   const analysisStats = React.useMemo(() => {
-    let filtered = dailyReports;
+    let filtered = dailyReports.filter(r => !r.isDeleted);
     if (dateRange?.from) {
       filtered = filtered.filter(r => new Date(r.date) >= dateRange.from!);
     }
@@ -390,7 +390,7 @@ export default function MarketingReportsPage() {
     }
     const updatedCampaigns = [
       ...currentCampaigns,
-      { name: name.trim(), isActive: true, metric },
+      { name: name.trim(), isActive: true, metric, createdAt: new Date().toISOString() },
     ];
     try {
       const res = await fetch(`${API_URL}/clients/${clientId}`, {
@@ -630,6 +630,14 @@ export default function MarketingReportsPage() {
               const campName = typeof camp === "string" ? camp : camp.name;
               const isActive = typeof camp === "string" ? true : camp.isActive;
               if (isActive && campName) {
+                const createdAt = typeof camp === "string" ? undefined : camp.createdAt;
+                if (createdAt) {
+                  const createdDateStr = createdAt.split("T")[0];
+                  if (checkDate < createdDateStr) {
+                    return; // skip generating for this campaign on dates prior to its creation
+                  }
+                }
+
                 const exists = dailyReports.some(
                   (r) =>
                     r.clientId === client.id &&
@@ -647,8 +655,33 @@ export default function MarketingReportsPage() {
                   // Try to find an associated project for this client
                   const project = projects.find(p => p.clientId === client.id);
                   
-                  // Do not add row if the associated project is on-hold
-                  if (project && project.status === "on-hold") {
+                  // Check if project was on-hold on the specific checkDate
+                  let wasOnHoldOnDate = false;
+                  if (project) {
+                    if (!project.statusHistory || project.statusHistory.length === 0) {
+                      wasOnHoldOnDate = project.status === "on-hold";
+                    } else {
+                      const history = [...project.statusHistory].sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                      const targetTime = new Date(`${checkDate}T23:59:59.999Z`).getTime();
+                      let statusAtDate = project.status;
+                      let found = false;
+                      for (let i = history.length - 1; i >= 0; i--) {
+                        const logTime = new Date(history[i].timestamp).getTime();
+                        if (logTime <= targetTime) {
+                          statusAtDate = history[i].status;
+                          found = true;
+                          break;
+                        }
+                      }
+                      if (found) {
+                        wasOnHoldOnDate = statusAtDate === "on-hold";
+                      } else {
+                        wasOnHoldOnDate = false;
+                      }
+                    }
+                  }
+                  
+                  if (wasOnHoldOnDate) {
                     return;
                   }
 
@@ -1327,6 +1360,7 @@ export default function MarketingReportsPage() {
 
 
   const filteredDaily = dailyReports.filter((r) => {
+    if (r.isDeleted) return false;
     const isEmpty =
       !r.reach &&
       !r.impression &&
@@ -1335,7 +1369,7 @@ export default function MarketingReportsPage() {
       !r.spend &&
       !r.cpl &&
       (!r.remarks || r.remarks.trim() === "");
-    let isCurrentlyActive = true;
+    let isCurrentlyActive = false;
     const client = clients.find((c) => String(c.id) === String(r.clientId));
     if (client) {
       const camp = (client.campaigns || []).find(
@@ -1372,6 +1406,11 @@ export default function MarketingReportsPage() {
 
     // Hide inactive rows for today or future dates, regardless of whether they are empty
     if (!isCurrentlyActive && reportDate >= todayStr) {
+      return false;
+    }
+
+    // Hide empty rows if the campaign/project is no longer active or was deleted (orphaned)
+    if (!isCurrentlyActive && isTrulyEmpty) {
       return false;
     }
 

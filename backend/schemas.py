@@ -1430,6 +1430,7 @@ class MarketingDailyReportBase(BaseModel):
     reason: Optional[str] = None
     campaignOptimization: bool = False
     leadsFileUrl: Optional[str] = None
+    isDeleted: Optional[bool] = False
 
 class MarketingDailyReportCreate(MarketingDailyReportBase):
     clientId: Optional[str] = None
