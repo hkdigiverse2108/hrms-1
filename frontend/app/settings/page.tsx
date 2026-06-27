@@ -21,7 +21,8 @@ import {
   Save,
   FileText,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Calendar
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -176,7 +177,11 @@ export default function SettingsPage() {
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
           invoiceColor2: settings?.invoiceColor2 || "#08304b",
-          defaultSac: settings?.defaultSac || ""
+          defaultSac: settings?.defaultSac || "",
+          defaultScriptDateOffset: settings?.defaultScriptDateOffset !== undefined ? settings.defaultScriptDateOffset : null,
+          defaultShootDateOffset: settings?.defaultShootDateOffset !== undefined ? settings.defaultShootDateOffset : null,
+          defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
+          defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null
         })
       });
       if (res.ok) {
@@ -837,6 +842,77 @@ export default function SettingsPage() {
                       style={{ background: `linear-gradient(135deg, ${settings?.invoiceColor1 || '#08304b'}, ${settings?.invoiceColor2 || '#08304b'})` }}>
                       TAX INVOICE GRADIENT PREVIEW
                     </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {canViewSettings && (
+            <Card className="bg-white border border-border/40 shadow-sm overflow-hidden mb-6">
+              <div className="border-b border-border/40 bg-slate-50/50 p-4 px-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800 text-sm">SMM Content Calendar Defaults</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Global default day offsets for automatic date calculations.</p>
+                  </div>
+                </div>
+                {canEditSettings && (
+                  <Button 
+                    size="sm" 
+                    className="h-8 text-xs bg-brand-teal hover:bg-brand-teal/90"
+                    onClick={handleSaveAllSettings}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Save className="w-3 h-3 mr-1.5" />}
+                    Save Changes
+                  </Button>
+                )}
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Script Date Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultScriptDateOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultScriptDateOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Shoot Date Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultShootDateOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultShootDateOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Editing Start Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultEditingStartOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultEditingStartOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Approval Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultApprovalOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultApprovalOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
                   </div>
                 </div>
               </div>

@@ -1365,6 +1365,10 @@ class SystemSettingsBase(BaseModel):
     companyLetterheadUrl: Optional[str] = None
     companySignatureUrl: Optional[str] = None
     defaultSac: Optional[str] = ""
+    defaultScriptDateOffset: Optional[int] = None
+    defaultShootDateOffset: Optional[int] = None
+    defaultEditingStartOffset: Optional[int] = None
+    defaultApprovalOffset: Optional[int] = None
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1392,6 +1396,10 @@ class SystemSettingsUpdate(BaseModel):
     companyLetterheadUrl: Optional[str] = None
     companySignatureUrl: Optional[str] = None
     defaultSac: Optional[str] = None
+    defaultScriptDateOffset: Optional[int] = None
+    defaultShootDateOffset: Optional[int] = None
+    defaultEditingStartOffset: Optional[int] = None
+    defaultApprovalOffset: Optional[int] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -2142,10 +2150,10 @@ class ContentCalendarEntry(ContentCalendarEntryBase):
 class ContentCalendarSettingsBase(BaseModel):
     clientId: str
     monthYear: str
-    scriptDateOffset: int = 14
-    shootDateOffset: int = 12
-    editingStartOffset: int = 6
-    approvalOffset: int = 5
+    scriptDateOffset: Optional[int] = None
+    shootDateOffset: Optional[int] = None
+    editingStartOffset: Optional[int] = None
+    approvalOffset: Optional[int] = None
     isApproved: bool = False
     approvalStatus: str = "Pending"
     statusLogs: Optional[List[dict]] = []
