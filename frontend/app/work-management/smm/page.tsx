@@ -1133,7 +1133,7 @@ export default function CreativeClientsPage() {
             <table className="w-full text-left text-sm text-slate-600">
               <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                 <tr>
-                  <th className="px-6 py-4 whitespace-nowrap">Company</th>
+                  <th className="px-6 py-4 whitespace-nowrap sticky left-0 z-20 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Company</th>
                   <th className="px-6 py-4 whitespace-nowrap">Project</th>
                   <th className="px-6 py-4 whitespace-nowrap">Contact Name</th>
                   <th className="px-6 py-4 whitespace-nowrap">Phone</th>
@@ -1146,7 +1146,7 @@ export default function CreativeClientsPage() {
               <tbody className="divide-y divide-slate-100">
                 {filteredClients.map((client) => (
                   <tr key={client.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-10 bg-white group-hover:bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] transition-colors">
                       <div className="flex items-center gap-3">
                         <div 
                           className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
