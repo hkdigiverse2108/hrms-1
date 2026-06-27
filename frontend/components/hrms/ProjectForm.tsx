@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, X, Check, Search } from "lucide-react";
+import { Plus, Trash2, X, Check, Search, Link2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,12 @@ export interface ProjectFormData {
   assignedEmployeeName?: string;
   isPhaseWise?: boolean;
   phases?: Array<{name: string, assignedToId?: string, assignedToIds?: string[], startDate: string, endDate: string}>;
+  // Development fields
+  frontendLink?: string;
+  thirdPartyIntegrations?: Array<{ name: string; credentials: string; notes?: string }>;
+  assignedTeamIds?: string[];
+  testingLinks?: Array<{ title: string; url: string; notes?: string }>;
+  testingBugs?: Array<{ id: string; title: string; description: string; reportedBy: string; reportedByName: string; date: string; status: "open" | "fixed" }>;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -60,6 +66,10 @@ const defaultFormData: ProjectFormData = {
   reelRequired: "No",
   isPhaseWise: false,
   phases: [],
+  frontendLink: "",
+  thirdPartyIntegrations: [],
+  testingLinks: [],
+  testingBugs: [],
 };
 
 interface ProjectFormProps {
@@ -67,6 +77,7 @@ interface ProjectFormProps {
   onSubmit: (data: ProjectFormData) => void;
   isSubmitting?: boolean;
   isAdmin?: boolean;
+  currentUser?: any;
 }
 
 function PhaseMemberMultiSelect({ 
@@ -165,7 +176,7 @@ function PhaseMemberMultiSelect({
   );
 }
 
-export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true }: ProjectFormProps) {
+export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true, currentUser }: ProjectFormProps) {
   const [formData, setFormData] = useState<ProjectFormData>({
     ...defaultFormData,
     ...initialData,
@@ -398,6 +409,20 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
             )}
           </div>
 
+          <div className="space-y-2 p-3 bg-brand-teal/5 border border-brand-teal/20 rounded-xl">
+            <Label className="text-xs font-extrabold text-brand-teal flex items-center gap-1.5 uppercase">
+              👥 Assigned Project Team Members (Select Multiple Employees)
+            </Label>
+            <PhaseMemberMultiSelect 
+              employees={formData.department ? allEmployees.filter(e => e.department?.toLowerCase() === formData.department?.toLowerCase()) : allEmployees}
+              selectedIds={formData.assignedTeamIds || []}
+              onChange={(val) => handleChange("assignedTeamIds", val)}
+            />
+            <p className="text-[11px] text-slate-500 font-medium">
+              Assign multiple employees to this project. They will be included in team task distributions and access controls.
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <textarea
@@ -467,9 +492,15 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="planning">Planning</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
               <SelectItem value="in-progress">In Progress</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="on-hold">On Hold</SelectItem>
+              {(isAdmin || currentUser?.role?.toLowerCase() === "cto" || formData.teamLeaderId === currentUser?.id || formData.status === "testing" || formData.status === "completed") && (
+                <>
+                  <SelectItem value="testing" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto" && formData.teamLeaderId !== currentUser?.id}>🧪 Testing Phase</SelectItem>
+                  <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>✅ Completed</SelectItem>
+                </>
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -691,6 +722,104 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
         </div>
       )}
 
+      {formData.department === "Development" && (
+        <div className="space-y-4 pt-4 border-t border-slate-200 mt-4">
+          <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <Link2 className="w-4 h-4 text-brand-teal" /> Development Links & Third-Party Integrations
+          </h3>
+          
+          <div className="space-y-2">
+            <Label htmlFor="frontendLink">Frontend Link</Label>
+            <Input 
+              id="frontendLink"
+              placeholder="e.g. https://staging.myapp.vercel.app or GitHub repo"
+              value={formData.frontendLink || ""}
+              onChange={(e) => handleChange("frontendLink", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <div className="flex items-center justify-between">
+              <Label className="font-semibold text-slate-700">Third-Party Integrations & Credentials</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const current = formData.thirdPartyIntegrations || [];
+                  handleChange("thirdPartyIntegrations", [...current, { name: "", credentials: "", notes: "" }]);
+                }}
+                className="h-7 text-xs border-brand-teal text-brand-teal hover:bg-brand-teal/5"
+              >
+                + Add Integration
+              </Button>
+            </div>
+            {(!formData.thirdPartyIntegrations || formData.thirdPartyIntegrations.length === 0) ? (
+              <p className="text-xs text-slate-400 italic">No third-party integrations added yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {formData.thirdPartyIntegrations.map((intg: any, index: number) => (
+                  <div key={index} className="p-3 bg-white border border-slate-200 rounded-lg space-y-2 relative shadow-2xs">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        const updated = (formData.thirdPartyIntegrations || []).filter((_, i) => i !== index);
+                        handleChange("thirdPartyIntegrations", updated);
+                      }}
+                      className="h-6 w-6 absolute top-2 right-2 text-red-500 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-8">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-slate-500">Service / Tool Name</Label>
+                        <Input
+                          placeholder="e.g. Stripe API, Firebase, Twilio"
+                          value={intg.name || ""}
+                          onChange={(e) => {
+                            const updated = [...(formData.thirdPartyIntegrations || [])];
+                            updated[index] = { ...updated[index], name: e.target.value };
+                            handleChange("thirdPartyIntegrations", updated);
+                          }}
+                          className="h-8 text-xs font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-slate-500">Credentials / API Keys</Label>
+                        <Input
+                          placeholder="e.g. sk_live_xxx / client_id"
+                          value={intg.credentials || ""}
+                          onChange={(e) => {
+                            const updated = [...(formData.thirdPartyIntegrations || [])];
+                            updated[index] = { ...updated[index], credentials: e.target.value };
+                            handleChange("thirdPartyIntegrations", updated);
+                          }}
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-slate-500">Notes / Scope (Optional)</Label>
+                      <Input
+                        placeholder="e.g. Used for payment gateway on checkout page"
+                        value={intg.notes || ""}
+                        onChange={(e) => {
+                          const updated = [...(formData.thirdPartyIntegrations || [])];
+                          updated[index] = { ...updated[index], notes: e.target.value };
+                          handleChange("thirdPartyIntegrations", updated);
+                        }}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
         </div>
       </ScrollArea>

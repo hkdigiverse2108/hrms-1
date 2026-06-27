@@ -46,11 +46,11 @@ export default function TasksPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
 
-  const canViewTasks = isUserAdmin || checkPermission('tasks', 'canView');
-  const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id);
+  const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id) || user?.role?.toLowerCase() === "team leader" || user?.designation?.toLowerCase() === "team leader";
+  const canViewTasks = isUserAdmin || checkPermission('tasks', 'canView') || isTeamLeader;
   const canAddTask = isUserAdmin || checkPermission('tasks', 'canAdd') || isTeamLeader;
   const canEditTask = isUserAdmin || checkPermission('tasks', 'canEdit') || isTeamLeader;
-  const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete');
+  const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete') || isTeamLeader;
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,6 +70,7 @@ export default function TasksPage() {
   const [quickAddTitle, setQuickAddTitle] = useState("");
   const [quickAddProjectId, setQuickAddProjectId] = useState<string>("");
   const [quickAddPhase, setQuickAddPhase] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"board" | "table" | null>(null);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -198,9 +199,30 @@ export default function TasksPage() {
     }
   };
 
-  const handleSubmit = async (formData: WMTaskFormData) => {
+  const handleSubmit = async (formData: WMTaskFormData | any) => {
     setIsSubmitting(true);
     try {
+      if (formData.isBatchDistribution && Array.isArray(formData.distributedTasks)) {
+        const batch = formData.distributedTasks;
+        await Promise.all(batch.map((t: any) => 
+          fetch(`${API_URL}/wm-tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...t,
+              performedBy: user?.id,
+              userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+            })
+          })
+        ));
+        toast.success(`${batch.length} tasks assigned and distributed across team successfully!`);
+        setModalOpen(false);
+        fetchData();
+        setEditingTask(null);
+        setIsSubmitting(false);
+        return;
+      }
+
       const url = editingTask 
         ? `${API_URL}/wm-tasks/${editingTask.id}` 
         : `${API_URL}/wm-tasks`;
@@ -336,14 +358,16 @@ export default function TasksPage() {
 
   const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)))
     .filter((d: any) => !["sales", "admin", "hr"].includes(d.toLowerCase()));
-  const showTableView = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
+  const isCreativeDefault = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
+  const showTableView = viewMode !== null ? viewMode === "table" : isCreativeDefault;
 
   const filteredTasks = tasks.filter(t => {
     const assignee = employees.find(e => e.id === t.assignedToId);
-    const taskDept = assignee?.department;
+    const taskDept = assignee?.department || t.department;
+    const isProjectTL = projects.some(p => p.id === t.projectId && p.teamLeaderId === user?.id);
 
     // Strict Department Isolation for non-Admins
-    if (!isAdmin) {
+    if (!isAdmin && !isProjectTL) {
       if (taskDept && user?.department && taskDept.toLowerCase() !== user.department.toLowerCase()) {
         return false;
       }
@@ -352,11 +376,10 @@ export default function TasksPage() {
     let isVisible = false;
     if (isAdmin) {
       isVisible = true;
-    } else if (user?.role === "Team Leader") {
-      const project = projects.find(p => p.id === t.projectId);
-      isVisible = project?.teamLeaderId === user?.id || t.assignedToId === user?.id || !t.assignedToId;
+    } else if (isTeamLeader) {
+      isVisible = true;
     } else {
-      isVisible = t.assignedToId === user?.id || !t.assignedToId;
+      isVisible = t.assignedToId === user?.id || t.performedBy === user?.id;
     }
 
     if (!isVisible) return false;
@@ -479,23 +502,38 @@ export default function TasksPage() {
         </div>
         
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">
-            <Button 
-              variant={!showAllTasks ? "secondary" : "ghost"} 
-              size="sm" 
-              className={`h-7 text-[11px] font-bold px-3 ${!showAllTasks ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
+            <button 
+              type="button"
+              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${!showAllTasks ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
               onClick={() => setShowAllTasks(false)}
             >
               Today
-            </Button>
-            <Button 
-              variant={showAllTasks ? "secondary" : "ghost"} 
-              size="sm" 
-              className={`h-7 text-[11px] font-bold px-3 ${showAllTasks ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+            </button>
+            <button 
+              type="button"
+              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${showAllTasks ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
               onClick={() => setShowAllTasks(true)}
             >
               All Tasks
-            </Button>
+            </button>
+          </div>
+
+          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
+            <button 
+              type="button"
+              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${!showTableView ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
+              onClick={() => setViewMode("board")}
+            >
+              📊 Board
+            </button>
+            <button 
+              type="button"
+              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${showTableView ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
+              onClick={() => setViewMode("table")}
+            >
+              📋 Table
+            </button>
           </div>
 
           {!showAllTasks && (
@@ -526,6 +564,7 @@ export default function TasksPage() {
                     <th className="px-4 py-3 min-w-[150px]">Project</th>
                     <th className="px-4 py-3 min-w-[120px]">Phase</th>
                     <th className="px-4 py-3 min-w-[120px]">Assignee</th>
+                    <th className="px-4 py-3 min-w-[80px]">Hours</th>
                     <th className="px-4 py-3 min-w-[120px]">Department</th>
                     <th className="px-4 py-3 min-w-[120px]">Stage</th>
                     <th className="px-4 py-3 min-w-[125px]">Created Date</th>
@@ -559,7 +598,7 @@ export default function TasksPage() {
                         <React.Fragment key={task.id}>
                           {showHeader && (
                             <tr className="bg-brand-teal/5">
-                              <td colSpan={23} className="px-4 py-2 font-bold text-brand-teal border-y border-brand-teal/10">
+                              <td colSpan={24} className="px-4 py-2 font-bold text-brand-teal border-y border-brand-teal/10">
                                 {groupKey}
                               </td>
                             </tr>
@@ -576,6 +615,7 @@ export default function TasksPage() {
                         { key: 'projectId', labelKey: 'projectName', type: 'select', options: projects.filter(p => p.department?.toLowerCase() === 'development').map(p => ({ value: p.id, label: p.title })), minWidth: '150px' },
                         { key: 'phase', type: 'text', minWidth: '120px' },
                         { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.filter(e => e.department?.toLowerCase() === 'development').map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
+                        { key: 'estimatedHours', type: 'number', minWidth: '80px' },
                         { key: 'department', type: 'select', options: ['Development'].map(d => ({ value: d, label: d })), minWidth: '120px' },
                         { key: 'status', type: 'select', options: STAGES.map(s => ({ value: s.id, label: s.label })), minWidth: '120px' },
                         { key: 'createdDate', type: 'readonly', minWidth: '125px' },
@@ -767,6 +807,20 @@ export default function TasksPage() {
                                       )}
                                     </div>
                                   )}
+                                  
+                                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+                                    <div className="flex items-center gap-1.5 text-slate-600 font-semibold truncate">
+                                      <div className="w-4 h-4 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[9px] font-black shrink-0">
+                                        {(task.assignedToName || "U")[0].toUpperCase()}
+                                      </div>
+                                      <span className="truncate text-[12px]">{task.assignedToName || "Unassigned"}</span>
+                                    </div>
+                                    {task.estimatedHours > 0 && (
+                                      <span className="shrink-0 text-[10px] font-black text-brand-teal bg-brand-teal/10 px-2 py-0.5 rounded-md border border-brand-teal/20 flex items-center gap-1">
+                                        ⏱️ {task.estimatedHours} hrs
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>

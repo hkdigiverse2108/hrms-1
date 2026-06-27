@@ -3063,6 +3063,73 @@ async def delete_project(db, project_id: str):
         await log_activity(db, "Deleted", "Admin", "N/A", f"Project '{project.get('title')}' was deleted.", projectId=project_id)
     return True
 
+async def update_module_notebook(db, project_id: str, payload: schemas.ModuleNotebookUpdate):
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return None
+    modules = project.get("modules") or []
+    updated = False
+    for m in modules:
+        m_phase = m.get("phaseName") or ""
+        p_phase = payload.phaseName or ""
+        if m.get("name") == payload.moduleName and m_phase == p_phase:
+            m["researchWork"] = payload.researchWork
+            updated = True
+            break
+            
+    if updated:
+        await db.projects.update_one(
+            {"_id": ObjectId(project_id)},
+            {"$set": {"modules": modules}}
+        )
+        await log_activity(db, "Module Research Updated", payload.performedBy or "Unknown", payload.userName or "User", f"Updated research work for module '{payload.moduleName}'", projectId=project_id)
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+        except Exception:
+            pass
+            
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc) if doc else None
+
+async def add_module_comment(db, project_id: str, payload: schemas.ModuleCommentCreate):
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return None
+    modules = project.get("modules") or []
+    updated = False
+    new_comment = {
+        "id": str(int(time.time() * 1000)),
+        "userId": payload.userId,
+        "userName": payload.userName,
+        "userRole": payload.userRole,
+        "content": payload.content,
+        "createdAt": get_now().strftime("%d %b %Y, %I:%M %p")
+    }
+    for m in modules:
+        m_phase = m.get("phaseName") or ""
+        p_phase = payload.phaseName or ""
+        if m.get("name") == payload.moduleName and m_phase == p_phase:
+            if "comments" not in m or not isinstance(m["comments"], list):
+                m["comments"] = []
+            m["comments"].append(new_comment)
+            updated = True
+            break
+            
+    if updated:
+        await db.projects.update_one(
+            {"_id": ObjectId(project_id)},
+            {"$set": {"modules": modules}}
+        )
+        await log_activity(db, "Module Comment Added", payload.userId, payload.userName, f"Added comment on module '{payload.moduleName}'", projectId=project_id)
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+        except Exception:
+            pass
+            
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc) if doc else None
+
+
 # General Task CRUD
 async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
@@ -3192,7 +3259,13 @@ async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = N
         if user:
             dept = user.get("department")
             
-            if role.lower() == "team leader":
+            user_role = str(user.get("role", "")).lower().strip()
+            user_desig = str(user.get("designation", "")).lower().strip()
+            is_tl = (role and role.lower() == "team leader") or (user_role == "team leader") or (user_desig == "team leader")
+            
+            tl_proj = await db.projects.find_one({"teamLeaderId": userId})
+            
+            if is_tl or tl_proj:
                 # TL sees tasks assigned to them, tasks in their dept, unassigned tasks in their dept, or tasks they created
                 dept_employees = await db.employees.find({"department": dept}).to_list(length=1000)
                 dept_emp_ids = [str(e["_id"]) for e in dept_employees]
@@ -3203,10 +3276,9 @@ async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = N
                     {"performedBy": userId}
                 ]
             else:
-                # Employee sees their own tasks, unassigned tasks in their dept, or tasks they created
+                # Employee sees their own tasks or tasks they created
                 query["$or"] = [
                     {"assignedToId": userId},
-                    {"department": dept, "assignedToId": ""},
                     {"performedBy": userId}
                 ]
                 
@@ -3278,6 +3350,40 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
         
         log_details, diffs = format_field_changes(old_task, update_data, f"Task '{old_task.get('title')}'")
         await log_task_activity(db, task_id, "Updated", performedBy, userName, log_details, diffs=diffs)
+
+        try:
+            new_assignee_id = update_data.get("assignedToId")
+            old_assignee_id = old_task.get("assignedToId") if old_task else None
+            if new_assignee_id and new_assignee_id != old_assignee_id and new_assignee_id != performedBy:
+                await create_notification(db, schemas.NotificationCreate(
+                    employee_id=new_assignee_id,
+                    title="Task Re-assigned",
+                    message=f"You have been assigned task '{update_data.get('title') or (old_task.get('title') if old_task else '')}' in project '{update_data.get('projectName') or (old_task.get('projectName') if old_task else 'General')}'.",
+                    type="task",
+                    reference_id=task_id
+                ))
+        except Exception as e_notif:
+            print(f"Error notifying assignee on task update: {e_notif}")
+
+        try:
+            new_status = str(update_data.get("status") or "").strip().lower()
+            old_status = str(old_task.get("status") or "").strip().lower() if old_task else ""
+            if new_status in ["review", "ready for review"] and new_status != old_status:
+                creator_id = old_task.get("createdBy") or old_task.get("reviewByTL") if old_task else None
+                if not creator_id and old_task and old_task.get("projectId") and len(str(old_task.get("projectId"))) == 24:
+                    project = await db.projects.find_one({"_id": ObjectId(old_task["projectId"])})
+                    if project:
+                        creator_id = project.get("teamLeaderId")
+                if creator_id and creator_id != performedBy and creator_id != (old_task.get("assignedToId") if old_task else None):
+                    await create_notification(db, schemas.NotificationCreate(
+                        employee_id=creator_id,
+                        title="Task Ready for Review",
+                        message=f"{(old_task.get('assignedToName') if old_task else 'An employee')} has submitted task '{(old_task.get('title') if old_task else '')}' for your review.",
+                        type="task",
+                        reference_id=task_id
+                    ))
+        except Exception as e_notif:
+            print(f"Error notifying reviewer on task stage update: {e_notif}")
     
     doc = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
     return fix_id(doc)
