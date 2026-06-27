@@ -32,6 +32,7 @@ import {
   Upload,
   FileSpreadsheet,
   FileX,
+  Settings,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -373,6 +374,64 @@ export default function MarketingReportsPage() {
   const [newCampaignMetric, setNewCampaignMetric] = useState<{
     [key: string]: string;
   }>({});
+
+  const [paymentProject, setPaymentProject] = useState<any>(null);
+  const [paymentSettingsOpen, setPaymentSettingsOpen] = useState(false);
+  const [paymentStartDate, setPaymentStartDate] = useState<string>("");
+  const [paymentDurationMonths, setPaymentDurationMonths] = useState<string>("");
+  const [isPaymentReceived, setIsPaymentReceived] = useState<boolean>(false);
+  
+  const [systemSettings, setSystemSettings] = useState<any>(null);
+
+  const handleSavePaymentSettings = async () => {
+    if (!paymentProject) return;
+    try {
+      const startDate = paymentStartDate ? new Date(paymentStartDate) : null;
+      let endDateStr = null;
+      
+      if (startDate && paymentDurationMonths) {
+        const months = parseInt(paymentDurationMonths, 10);
+        if (!isNaN(months) && months > 0) {
+           const endDate = new Date(startDate);
+           endDate.setMonth(endDate.getMonth() + months);
+           
+           // Calculate on-hold days using existing function
+           const days = calculateProjectDays(paymentProject);
+           if (days.onHold > 0) {
+             endDate.setDate(endDate.getDate() + days.onHold);
+           }
+           
+           endDateStr = endDate.toISOString().split('T')[0];
+        }
+      }
+      
+      const payload: any = {
+        paymentStartDate: paymentStartDate || null,
+        paymentDurationMonths: paymentDurationMonths ? parseInt(paymentDurationMonths, 10) : null,
+        paymentEndDate: endDateStr,
+        isPaymentReceived: isPaymentReceived,
+        performedBy: user?.id,
+        userName: user?.name
+      };
+      
+      const res = await fetch(`${API_URL}/projects/${paymentProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.ok) {
+        toast.success("Payment settings saved successfully");
+        fetchProjects();
+        setPaymentSettingsOpen(false);
+      } else {
+        toast.error("Failed to save payment settings");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("An error occurred while saving payment settings");
+    }
+  };
 
   const handleAddCampaign = async (clientId: string) => {
     const name = newCampaignName[clientId];
@@ -756,7 +815,11 @@ export default function MarketingReportsPage() {
   const fetchClients = async () => {
     try {
       const userParams = user ? `?userId=${user.id}&role=${user.role}` : "";
-      const res = await fetch(`${API_URL}/clients${userParams}`);
+      const [res, sysSetRes] = await Promise.all([
+        fetch(`${API_URL}/clients${userParams}`),
+        fetch(`${API_URL}/system-settings`)
+      ]);
+      
       if (res.ok) {
         const data = await res.json();
         setClients(
@@ -768,6 +831,10 @@ export default function MarketingReportsPage() {
             }
           ),
         );
+      }
+      
+      if (sysSetRes && sysSetRes.ok) {
+        setSystemSettings(await sysSetRes.json());
       }
     } catch (err) {
       console.error("Error fetching clients:", err);
@@ -2216,12 +2283,48 @@ export default function MarketingReportsPage() {
                                 {clientProjects.map((p: any) => {
                                   const days = calculateProjectDays(p);
                                   return (
-                                    <div key={p.id} className="text-[10px] text-slate-500 truncate max-w-[160px]" title={`${p.title} (${days.active}d active)`}>
-                                      <span className="font-medium">{p.title}</span>: 
-                                      <span className="text-emerald-600 font-medium ml-1">{days.active}d active</span>
-                                      {days.onHold > 0 || p.status === 'on-hold' ? (
-                                        <span className="text-amber-600 font-medium ml-1">({days.onHold}d hold)</span>
-                                      ) : null}
+                                    <div key={p.id} className="text-[10px] text-slate-500 flex items-start group py-0.5 w-full">
+                                      <div className="flex-1 overflow-hidden" title={`${p.title} (${days.active}d active)`}>
+                                        <div className="flex items-center justify-between w-full pr-1">
+                                          <div className="truncate">
+                                            <span className="font-medium text-[11px]">{p.title}</span>: 
+                                            <span className="text-emerald-600 font-medium ml-1">{days.active}d active</span>
+                                            {days.onHold > 0 || p.status === 'on-hold' ? (
+                                              <span className="text-amber-600 font-medium ml-1">({days.onHold}d hold)</span>
+                                            ) : null}
+                                          </div>
+                                          {canEditMarketing && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPaymentProject(p);
+                                                setPaymentStartDate(p.paymentStartDate ? p.paymentStartDate.split('T')[0] : "");
+                                                setPaymentDurationMonths(p.paymentDurationMonths ? String(p.paymentDurationMonths) : "");
+                                                setIsPaymentReceived(p.isPaymentReceived || false);
+                                                setPaymentSettingsOpen(true);
+                                              }}
+                                              className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all shrink-0"
+                                              title="Payment Settings"
+                                            >
+                                              <Settings className="w-[18px] h-[18px]" />
+                                            </button>
+                                          )}
+                                        </div>
+                                        {p.paymentEndDate && (() => {
+                                          const paymentDate = new Date(p.paymentEndDate);
+                                          const thresholdDays = systemSettings?.paymentDueDays || 0;
+                                          paymentDate.setDate(paymentDate.getDate() - thresholdDays);
+                                          const isPaymentDue = paymentDate <= new Date() && !p.isPaymentReceived;
+
+                                          return (
+                                            <div className={`font-medium ${isPaymentDue ? 'text-rose-600 font-bold bg-rose-50 px-1 py-0.5 rounded inline-flex items-center gap-1 border border-rose-100' : 'text-brand-teal'}`} title="Auto-calculated Payment End Date">
+                                              Payment End: {format(new Date(p.paymentEndDate), 'dd MMM yyyy')}
+                                              {isPaymentDue && <span className="text-[9px] uppercase tracking-wider">(Due)</span>}
+                                              {p.isPaymentReceived && <span className="text-[9px] uppercase tracking-wider text-emerald-600 ml-1">(Done)</span>}
+                                            </div>
+                                          );
+                                        })()}
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -4069,6 +4172,81 @@ export default function MarketingReportsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={paymentSettingsOpen} onOpenChange={setPaymentSettingsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Payment Settings - {paymentProject?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Start Date</Label>
+              <Input
+                type="date"
+                value={paymentStartDate}
+                onChange={(e) => setPaymentStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Duration (Months)</Label>
+              <Input
+                type="number"
+                min="1"
+                placeholder="e.g. 6"
+                value={paymentDurationMonths}
+                onChange={(e) => setPaymentDurationMonths(e.target.value)}
+              />
+            </div>
+            {(() => {
+              if (!paymentProject || !paymentStartDate || !paymentDurationMonths) return null;
+              const months = parseInt(paymentDurationMonths, 10);
+              if (isNaN(months) || months <= 0) return null;
+              
+              const endDate = new Date(paymentStartDate);
+              endDate.setMonth(endDate.getMonth() + months);
+              
+              const days = calculateProjectDays(paymentProject);
+              let holdText = "";
+              if (days.onHold > 0) {
+                endDate.setDate(endDate.getDate() + days.onHold);
+                holdText = ` (+ ${days.onHold} days on hold)`;
+              }
+              
+              return (
+                <div className="space-y-2">
+                  <Label>Calculated End Date</Label>
+                  <Input
+                    type="text"
+                    readOnly
+                    className="bg-slate-50 cursor-not-allowed"
+                    value={`${format(endDate, 'dd MMM yyyy')}${holdText}`}
+                  />
+                </div>
+              );
+            })()}
+            <div className="flex items-center space-x-2 mt-4 pt-4 border-t border-slate-100">
+              <input
+                type="checkbox"
+                id="isPaymentReceived"
+                checked={isPaymentReceived}
+                onChange={(e) => setIsPaymentReceived(e.target.checked)}
+                className="w-4 h-4 text-brand-teal border-gray-300 rounded focus:ring-brand-teal cursor-pointer"
+              />
+              <Label htmlFor="isPaymentReceived" className="cursor-pointer font-medium text-slate-700">
+                Payment Received / Done
+              </Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentSettingsOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSavePaymentSettings} className="bg-brand-teal text-white hover:bg-brand-teal/90">
+              Save Settings
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

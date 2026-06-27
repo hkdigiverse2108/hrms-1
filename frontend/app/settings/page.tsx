@@ -181,7 +181,8 @@ export default function SettingsPage() {
           defaultScriptDateOffset: settings?.defaultScriptDateOffset !== undefined ? settings.defaultScriptDateOffset : null,
           defaultShootDateOffset: settings?.defaultShootDateOffset !== undefined ? settings.defaultShootDateOffset : null,
           defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
-          defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null
+          defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
+          paymentDueDays: settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0
         })
       });
       if (res.ok) {
@@ -784,6 +785,22 @@ export default function SettingsPage() {
                       onChange={(e) => setSettings({...settings, noTaxInvoicePrefix: e.target.value.toUpperCase()})}
                       disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. NINV"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Digital Marketing Payment Due Threshold (Days)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">Show "Payment Due" this many days before the actual payment date in the Digital Marketing module.</p>
+                    <input 
+                      type="number" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0}
+                      onChange={(e) => setSettings({...settings, paymentDueDays: parseInt(e.target.value) || 0})}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. 5"
+                      min="0"
                     />
                   </div>
                 </div>

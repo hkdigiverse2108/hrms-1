@@ -3035,6 +3035,17 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
             details.append(f"Assigned Approver updated")
         if "assignedPosterId" in update_data and old_project.get("assignedPosterId") != update_data["assignedPosterId"]:
             details.append(f"Assigned Poster updated")
+            
+        # Payment Settings Logging
+        if "paymentStartDate" in update_data and old_project.get("paymentStartDate") != update_data["paymentStartDate"]:
+            details.append(f"Payment Start Date changed to {update_data['paymentStartDate']}")
+        if "paymentDurationMonths" in update_data and old_project.get("paymentDurationMonths") != update_data["paymentDurationMonths"]:
+            details.append(f"Payment Duration changed to {update_data['paymentDurationMonths']} months")
+        if "paymentEndDate" in update_data and old_project.get("paymentEndDate") != update_data["paymentEndDate"]:
+            details.append(f"Payment End Date changed to {update_data['paymentEndDate']}")
+        if "isPaymentReceived" in update_data and old_project.get("isPaymentReceived") != update_data["isPaymentReceived"]:
+            status = "Received" if update_data["isPaymentReceived"] else "Pending"
+            details.append(f"Payment status changed to {status}")
         
         log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
         await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)
