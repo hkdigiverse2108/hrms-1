@@ -5858,13 +5858,14 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
                     merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
                     
-                    expected_rec_sec = int(doc.get('recovery_minutes', 0)) * 60
-                    if expected_rec_sec <= 0 and duration_seconds > 0:
-                        expected_rec_sec = duration_seconds
-                    
-                    actual_inc = new_accumulated - old_accumulated
-                    if actual_inc < expected_rec_sec:
-                        new_accumulated += (expected_rec_sec - actual_inc)
+                    if recovery_type != "break":
+                        expected_rec_sec = int(doc.get('recovery_minutes', 0)) * 60
+                        if expected_rec_sec <= 0 and duration_seconds > 0:
+                            expected_rec_sec = duration_seconds
+                        
+                        actual_inc = new_accumulated - old_accumulated
+                        if actual_inc < expected_rec_sec:
+                            new_accumulated += (expected_rec_sec - actual_inc)
                     
                     # Recalculate workHours string
                     hours, remainder = divmod(int(new_accumulated), 3600)
