@@ -118,14 +118,49 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
 
   const fetchSettings = async () => {
     try {
+      let globalSettings = {
+        scriptDateOffset: undefined,
+        shootDateOffset: undefined,
+        editingStartOffset: undefined,
+        approvalOffset: undefined
+      };
+
+      const sysRes = await fetch(`${API_URL}/system-settings`);
+      if (sysRes.ok) {
+        const sysData = await sysRes.json();
+        if (sysData) {
+          globalSettings = {
+            scriptDateOffset: sysData.defaultScriptDateOffset,
+            shootDateOffset: sysData.defaultShootDateOffset,
+            editingStartOffset: sysData.defaultEditingStartOffset,
+            approvalOffset: sysData.defaultApprovalOffset
+          };
+        }
+      }
+
       const res = await fetch(`${API_URL}/content-calendar-settings?clientId=${clientId}&monthYear=${monthYear}`);
+      let customSettings = {};
       if (res.ok) {
         const data = await res.json();
         if (data && Object.keys(data).length > 0) {
-          setSettings((prev: any) => ({ ...prev, ...data }));
-          setSettingsForm((prev: any) => ({ ...prev, ...data }));
+          // Temporarily ignore cached backend defaults (14, 12, 6, 5) if they match exactly
+          if (data.scriptDateOffset == 14 && data.shootDateOffset == 12 && data.editingStartOffset == 6 && data.approvalOffset == 5) {
+             delete data.scriptDateOffset;
+             delete data.shootDateOffset;
+             delete data.editingStartOffset;
+             delete data.approvalOffset;
+          }
+          customSettings = data;
         }
       }
+
+      const finalSettings = {
+        ...globalSettings,
+        ...customSettings
+      };
+
+      setSettings(finalSettings);
+      setSettingsForm(finalSettings);
     } catch (err) {
       console.error("Failed to fetch settings", err);
     }
@@ -883,19 +918,19 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right col-span-2">Script Date Offset</Label>
-              <Input type="number" className="col-span-2" value={settingsForm.scriptDateOffset || 0} onChange={e => setSettingsForm({...settingsForm, scriptDateOffset: e.target.value})} />
+              <Input type="number" className="col-span-2" value={settingsForm.scriptDateOffset ?? ""} onChange={e => setSettingsForm({...settingsForm, scriptDateOffset: e.target.value ? Number(e.target.value) : undefined})} />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right col-span-2">Shoot Date Offset</Label>
-              <Input type="number" className="col-span-2" value={settingsForm.shootDateOffset || 0} onChange={e => setSettingsForm({...settingsForm, shootDateOffset: e.target.value})} />
+              <Input type="number" className="col-span-2" value={settingsForm.shootDateOffset ?? ""} onChange={e => setSettingsForm({...settingsForm, shootDateOffset: e.target.value ? Number(e.target.value) : undefined})} />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right col-span-2">Editing Start Offset</Label>
-              <Input type="number" className="col-span-2" value={settingsForm.editingStartOffset || 0} onChange={e => setSettingsForm({...settingsForm, editingStartOffset: e.target.value})} />
+              <Input type="number" className="col-span-2" value={settingsForm.editingStartOffset ?? ""} onChange={e => setSettingsForm({...settingsForm, editingStartOffset: e.target.value ? Number(e.target.value) : undefined})} />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right col-span-2">Approval Offset</Label>
-              <Input type="number" className="col-span-2" value={settingsForm.approvalOffset || 0} onChange={e => setSettingsForm({...settingsForm, approvalOffset: e.target.value})} />
+              <Input type="number" className="col-span-2" value={settingsForm.approvalOffset ?? ""} onChange={e => setSettingsForm({...settingsForm, approvalOffset: e.target.value ? Number(e.target.value) : undefined})} />
             </div>
           </div>
           <DialogFooter>

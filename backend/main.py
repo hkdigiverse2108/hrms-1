@@ -2723,14 +2723,10 @@ async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depend
     settings = await crud.get_content_calendar_settings(db, clientId, monthYear)
     if settings:
         return settings
-    # Return defaults if not found
+    # Return empty if not found
     return {
         "clientId": clientId,
-        "monthYear": monthYear,
-        "scriptDateOffset": 14,
-        "shootDateOffset": 12,
-        "editingStartOffset": 6,
-        "approvalOffset": 5
+        "monthYear": monthYear
     }
 
 @app.get("/content-calendar-settings/all", response_model=List[schemas.ContentCalendarSettingsBase])
@@ -2936,14 +2932,10 @@ async def get_content_calendar_settings(clientId: str, monthYear: str, db=Depend
     settings = await crud.get_content_calendar_settings(db, clientId, monthYear)
     if settings:
         return settings
-    # Return defaults if not found
+    # Return empty if not found
     return {
         "clientId": clientId,
-        "monthYear": monthYear,
-        "scriptDateOffset": 14,
-        "shootDateOffset": 12,
-        "editingStartOffset": 6,
-        "approvalOffset": 5
+        "monthYear": monthYear
     }
 
 @app.get("/content-calendar-settings/all", response_model=List[schemas.ContentCalendarSettingsBase])
