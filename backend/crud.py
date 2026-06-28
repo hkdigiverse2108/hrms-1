@@ -13,10 +13,6 @@ from websocket import manager as ws_manager
 import time
 import urllib.request
 import threading
-import re
-
-ADMIN_ROLES_REGEX = re.compile(r"^(admin|super\s*admin|superadmin|administrator|founder)$", re.IGNORECASE)
-NON_ADMIN_FILTER = {"role": {"$not": ADMIN_ROLES_REGEX}}
 
 IST = pytz.timezone('Asia/Kolkata')
 _real_time_anchor = None
@@ -289,12 +285,6 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
             name = f"{first} {middle} {last}"
         update_data["name"] = name
 
-    # Check if resulting employee is admin
-    resulting_role = update_data.get("role", existing.get("role", ""))
-    if resulting_role and bool(ADMIN_ROLES_REGEX.match(resulting_role.strip())):
-        update_data["department"] = ""
-        update_data["designation"] = ""
-
     await db.employees.update_one(
         {"_id": ObjectId(employee_id)},
         {"$set": update_data}
@@ -346,7 +336,7 @@ async def get_dashboard_stats(db):
             "lateToday": 0
         }
         
-    total_employees = await db.employees.count_documents({"status": "active", **NON_ADMIN_FILTER})
+    total_employees = await db.employees.count_documents({"status": "active"})
     
     today = get_now()
     today_str = today.strftime("%Y-%m-%d")
@@ -389,7 +379,7 @@ async def get_analytics_overview(db, months: int = 6):
     
     # Department Distribution
     dept_pipeline = [
-        {"$match": {"status": "active", **NON_ADMIN_FILTER}},
+        {"$match": {"status": "active"}},
         {"$group": {"_id": "$department", "employees": {"$sum": 1}}}
     ]
     dept_data = await db.employees.aggregate(dept_pipeline).to_list(length=100)
@@ -462,14 +452,12 @@ async def get_analytics_overview(db, months: int = 6):
         
         # Hiring Trend
         hires = await db.employees.count_documents({
-            "joinDate": {"$gte": start_dt, "$lt": end_dt},
-            **NON_ADMIN_FILTER
+            "joinDate": {"$gte": start_dt, "$lt": end_dt}
         })
         # Simplified exits (employees who are inactive and updated in that month)
         exits = await db.employees.count_documents({
             "status": "inactive",
-            "updated_at": {"$gte": start_dt, "$lt": end_dt},
-            **NON_ADMIN_FILTER
+            "updated_at": {"$gte": start_dt, "$lt": end_dt}
         })
         hiring_trend.append({
             "month": month_name,
@@ -478,7 +466,7 @@ async def get_analytics_overview(db, months: int = 6):
         })
 
     # Summary Stats
-    total_employees = await db.employees.count_documents({"status": "active", **NON_ADMIN_FILTER})
+    total_employees = await db.employees.count_documents({"status": "active"})
     total_attendance = sum([t["present"] + t["absent"] for t in attendance_trend])
     avg_attendance = (sum([t["present"] for t in attendance_trend]) / total_attendance * 100) if total_attendance > 0 else 0
     
@@ -767,8 +755,7 @@ async def run_payroll_processing(db, month: str, year: int):
     for emp in employees:
         emp_id = emp["id"]
         # Skip inactive and admin employees to avoid generating unnecessary payroll records
-        admin_role_set = {"admin", "super admin", "superadmin", "administrator", "founder"}
-        if emp.get("status", "").lower() == "inactive" or emp.get("role", "").lower().strip() in admin_role_set:
+        if emp.get("status", "").lower() == "inactive" or emp.get("role", "").lower() == "admin":
             await db.payroll.delete_many({"employeeId": emp_id, "month": month, "year": year})
             continue
         # Get salary structure
@@ -1198,11 +1185,24 @@ async def run_payroll_processing(db, month: str, year: int):
         doc = await db.payroll.find_one({"employeeId": emp_id, "month": month, "year": year})
         payroll_results.append(fix_id(doc))
         
+    try:
+        for p_doc in payroll_results:
+            target_emp_id = p_doc.get("employeeId")
+            if target_emp_id:
+                await create_notification(db, schemas.NotificationCreate(
+                    employee_id=target_emp_id,
+                    title="Payslip Released",
+                    message=f"Your payroll for {month} {year} has been processed. You can view your payslip in the Payroll section.",
+                    type="payroll",
+                    reference_id=p_doc.get("id")
+                ))
+    except Exception as e_notif:
+        print(f"Error sending payslip notifications: {e_notif}")
+
     return payroll_results
 
 async def create_employee(db, employee: schemas.EmployeeCreate):
-    admin_roles = {"admin", "super admin", "superadmin", "administrator", "founder"}
-    is_admin = employee.role and employee.role.lower().strip() in admin_roles
+    is_admin = employee.role and employee.role.lower() == "admin"
     
     if not is_admin:
         # Atomic counter to prevent duplicate IDs under concurrent requests
@@ -1223,9 +1223,6 @@ async def create_employee(db, employee: schemas.EmployeeCreate):
     
     employee_dict = employee.dict()
     employee_dict["name"] = name
-    if is_admin:
-        employee_dict["department"] = ""
-        employee_dict["designation"] = ""
     
     if next_id:
         employee_dict["employeeId"] = next_id # Override frontend generation unless it's admin with no ID provided
@@ -1257,7 +1254,7 @@ async def get_departments(db, skip: int = 0, limit: int = 100):
     for row in rows:
         row = fix_id(row)
         # Automatic employee count based on department name
-        row["employeeCount"] = await db.employees.count_documents({"department": row["name"], "status": "active", **NON_ADMIN_FILTER})
+        row["employeeCount"] = await db.employees.count_documents({"department": row["name"]})
         results.append(row)
     return results
 
@@ -2759,16 +2756,8 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
             
         await db.clients.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
         
-        details = []
-        for key, value in update_data.items():
-            old_val = old_client.get(key, "N/A")
-            if old_val != value:
-                # Format key for readability (e.g. companyName -> Company Name)
-                formatted_key = ''.join([' ' + c if c.isupper() else c for c in key]).capitalize().strip()
-                details.append(f"{formatted_key} changed from '{old_val}' to '{value}'")
-        
-        log_details = f"Client '{old_client.get('companyName')}': " + (", ".join(details) if details else "Details updated")
-        await log_activity(db, "Updated", performedBy, userName, log_details, clientId=client_id)
+        log_details, diffs = format_field_changes(old_client, update_data, f"Client '{old_client.get('companyName')}'")
+        await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, clientId=client_id)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "clients"})
@@ -3001,43 +2990,8 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
 
         await db.projects.update_one({"_id": ObjectId(project_id)}, update_query)
         
-        details = []
-        if "status" in update_data and old_project.get("status") != update_data["status"]:
-            details.append(f"Status changed to {update_data['status']}")
-        if "teamLeaderName" in update_data and old_project.get("teamLeaderName") != update_data["teamLeaderName"]:
-            details.append(f"Team Leader changed to {update_data['teamLeaderName']}")
-        
-        # Creative Field Logging
-        creative_fields_map = {
-            "services": "Services",
-            "post": "Post Count",
-            "reel": "Reel Count",
-            "festivalPost": "Festival Post requirement",
-            "graphicsRequired": "Graphics requirement",
-            "postRequired": "Post requirement",
-            "reelRequired": "Reel requirement"
-        }
-        
-        for field, label in creative_fields_map.items():
-            if field in update_data and old_project.get(field) != update_data[field]:
-                details.append(f"{label} changed to '{update_data[field]}'")
-                
-        # Assignment Logging
-        if "assignedScriptwriterId" in update_data and old_project.get("assignedScriptwriterId") != update_data["assignedScriptwriterId"]:
-            details.append(f"Assigned Scriptwriter updated")
-        if "assignedReelEditorId" in update_data and old_project.get("assignedReelEditorId") != update_data["assignedReelEditorId"]:
-            details.append(f"Assigned Reel Editor updated")
-        if "assignedPostDesignerId" in update_data and old_project.get("assignedPostDesignerId") != update_data["assignedPostDesignerId"]:
-            details.append(f"Assigned Post Designer updated")
-        if "assignedShooterId" in update_data and old_project.get("assignedShooterId") != update_data["assignedShooterId"]:
-            details.append(f"Assigned Shooter updated")
-        if "assignedApproverId" in update_data and old_project.get("assignedApproverId") != update_data["assignedApproverId"]:
-            details.append(f"Assigned Approver updated")
-        if "assignedPosterId" in update_data and old_project.get("assignedPosterId") != update_data["assignedPosterId"]:
-            details.append(f"Assigned Poster updated")
-        
-        log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
-        await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)
+        log_details, diffs = format_field_changes(old_project, update_data, f"Project '{old_project.get('title')}'")
+        await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, projectId=project_id)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
@@ -3059,6 +3013,73 @@ async def delete_project(db, project_id: str):
     if project:
         await log_activity(db, "Deleted", "Admin", "N/A", f"Project '{project.get('title')}' was deleted.", projectId=project_id)
     return True
+
+async def update_module_notebook(db, project_id: str, payload: schemas.ModuleNotebookUpdate):
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return None
+    modules = project.get("modules") or []
+    updated = False
+    for m in modules:
+        m_phase = m.get("phaseName") or ""
+        p_phase = payload.phaseName or ""
+        if m.get("name") == payload.moduleName and m_phase == p_phase:
+            m["researchWork"] = payload.researchWork
+            updated = True
+            break
+            
+    if updated:
+        await db.projects.update_one(
+            {"_id": ObjectId(project_id)},
+            {"$set": {"modules": modules}}
+        )
+        await log_activity(db, "Module Research Updated", payload.performedBy or "Unknown", payload.userName or "User", f"Updated research work for module '{payload.moduleName}'", projectId=project_id)
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+        except Exception:
+            pass
+            
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc) if doc else None
+
+async def add_module_comment(db, project_id: str, payload: schemas.ModuleCommentCreate):
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return None
+    modules = project.get("modules") or []
+    updated = False
+    new_comment = {
+        "id": str(int(time.time() * 1000)),
+        "userId": payload.userId,
+        "userName": payload.userName,
+        "userRole": payload.userRole,
+        "content": payload.content,
+        "createdAt": get_now().strftime("%d %b %Y, %I:%M %p")
+    }
+    for m in modules:
+        m_phase = m.get("phaseName") or ""
+        p_phase = payload.phaseName or ""
+        if m.get("name") == payload.moduleName and m_phase == p_phase:
+            if "comments" not in m or not isinstance(m["comments"], list):
+                m["comments"] = []
+            m["comments"].append(new_comment)
+            updated = True
+            break
+            
+    if updated:
+        await db.projects.update_one(
+            {"_id": ObjectId(project_id)},
+            {"$set": {"modules": modules}}
+        )
+        await log_activity(db, "Module Comment Added", payload.userId, payload.userName, f"Added comment on module '{payload.moduleName}'", projectId=project_id)
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+        except Exception:
+            pass
+            
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc) if doc else None
+
 
 # General Task CRUD
 async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
@@ -3182,22 +3203,35 @@ async def delete_task(db, task_id: str):
     return True
 
 # Work Management Task CRUD
-async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
+async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 1000):
     query = {}
     if userId and not await user_has_full_entity_access(db, userId, role, "wm-tasks"):
         user = await get_employee(db, userId)
         if user:
             dept = user.get("department")
             
-            if role.lower() == "team leader":
-                # TL sees tasks assigned to them OR tasks assigned to employees in their dept
+            user_role = str(user.get("role", "")).lower().strip()
+            user_desig = str(user.get("designation", "")).lower().strip()
+            is_tl = (role and role.lower() == "team leader") or (user_role == "team leader") or (user_desig == "team leader")
+            
+            tl_proj = await db.projects.find_one({"teamLeaderId": userId})
+            
+            if is_tl or tl_proj:
+                # TL sees tasks assigned to them, tasks in their dept, unassigned tasks in their dept, or tasks they created
                 dept_employees = await db.employees.find({"department": dept}).to_list(length=1000)
                 dept_emp_ids = [str(e["_id"]) for e in dept_employees]
                 
-                query["assignedToId"] = {"$in": dept_emp_ids}
+                query["$or"] = [
+                    {"assignedToId": {"$in": dept_emp_ids}},
+                    {"department": dept},
+                    {"performedBy": userId}
+                ]
             else:
-                # Employee sees only their own tasks
-                query["assignedToId"] = userId
+                # Employee sees their own tasks or tasks they created
+                query["$or"] = [
+                    {"assignedToId": userId},
+                    {"performedBy": userId}
+                ]
                 
     cursor = db.wm_tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
@@ -3205,8 +3239,8 @@ async def get_wm_tasks(db, userId: str = None, role: str = None, skip: int = 0, 
 
 async def create_wm_task(db, task: schemas.WMTaskCreate):
     task_dict = task.dict()
-    performedBy = task_dict.pop("performedBy", "Unknown")
-    userName = task_dict.pop("userName", "Unknown User")
+    performedBy = task_dict.get("performedBy", "Unknown")
+    userName = task_dict.get("userName", "Unknown User")
     
     if not task_dict.get("createdBy"):
         task_dict["createdBy"] = performedBy
@@ -3238,6 +3272,19 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
     except Exception:
         pass
         
+    try:
+        assignee_id = task_dict.get("assignedToId")
+        if assignee_id and assignee_id != performedBy and assignee_id != "System":
+            await create_notification(db, schemas.NotificationCreate(
+                employee_id=assignee_id,
+                title="New Task Assigned",
+                message=f"You have been assigned task '{task_dict.get('title')}' in project '{task_dict.get('projectName', 'General')}'.",
+                type="task",
+                reference_id=taskId
+            ))
+    except Exception as e_notif:
+        print(f"Error notifying assignee on task create: {e_notif}")
+
     doc = await db.wm_tasks.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
@@ -3265,30 +3312,42 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                 
         await db.wm_tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
         
-        # Log the update
-        details = []
-        if "status" in update_data and old_task.get("status") != update_data["status"]:
-            details.append(f"Stage changed from '{old_task.get('status')}' to '{update_data['status']}'")
-        
-        if "title" in update_data and old_task.get("title") != update_data["title"]:
-            details.append(f"Title changed from '{old_task.get('title')}' to '{update_data['title']}'")
-            
-        if "assignedToName" in update_data and old_task.get("assignedToName") != update_data["assignedToName"]:
-            details.append(f"Assignee changed to '{update_data['assignedToName']}'")
-        elif "assignedToId" in update_data and old_task.get("assignedToId") != update_data["assignedToId"]:
-            details.append(f"Assignee ID updated")
+        log_details, diffs = format_field_changes(old_task, update_data, f"Task '{old_task.get('title')}'")
+        await log_task_activity(db, task_id, "Updated", performedBy, userName, log_details, diffs=diffs)
 
-        if "projectName" in update_data and old_task.get("projectName") != update_data["projectName"]:
-            details.append(f"Project changed to '{update_data['projectName']}'")
-            
-        if "priority" in update_data and old_task.get("priority") != update_data["priority"]:
-            details.append(f"Priority changed from '{old_task.get('priority')}' to '{update_data['priority']}'")
-            
-        if "dueDate" in update_data and old_task.get("dueDate") != update_data["dueDate"]:
-            details.append(f"Due date changed from '{old_task.get('dueDate')}' to '{update_data['dueDate']}'")
-            
-        log_details = f"Task '{old_task.get('title')}': " + (", ".join(details) if details else "No visible changes")
-        await log_task_activity(db, task_id, "Updated", performedBy, userName, log_details)
+        try:
+            new_assignee_id = update_data.get("assignedToId")
+            old_assignee_id = old_task.get("assignedToId") if old_task else None
+            if new_assignee_id and new_assignee_id != old_assignee_id and new_assignee_id != performedBy:
+                await create_notification(db, schemas.NotificationCreate(
+                    employee_id=new_assignee_id,
+                    title="Task Re-assigned",
+                    message=f"You have been assigned task '{update_data.get('title') or (old_task.get('title') if old_task else '')}' in project '{update_data.get('projectName') or (old_task.get('projectName') if old_task else 'General')}'.",
+                    type="task",
+                    reference_id=task_id
+                ))
+        except Exception as e_notif:
+            print(f"Error notifying assignee on task update: {e_notif}")
+
+        try:
+            new_status = str(update_data.get("status") or "").strip().lower()
+            old_status = str(old_task.get("status") or "").strip().lower() if old_task else ""
+            if new_status in ["review", "ready for review"] and new_status != old_status:
+                creator_id = old_task.get("createdBy") or old_task.get("reviewByTL") if old_task else None
+                if not creator_id and old_task and old_task.get("projectId") and len(str(old_task.get("projectId"))) == 24:
+                    project = await db.projects.find_one({"_id": ObjectId(old_task["projectId"])})
+                    if project:
+                        creator_id = project.get("teamLeaderId")
+                if creator_id and creator_id != performedBy and creator_id != (old_task.get("assignedToId") if old_task else None):
+                    await create_notification(db, schemas.NotificationCreate(
+                        employee_id=creator_id,
+                        title="Task Ready for Review",
+                        message=f"{(old_task.get('assignedToName') if old_task else 'An employee')} has submitted task '{(old_task.get('title') if old_task else '')}' for your review.",
+                        type="task",
+                        reference_id=task_id
+                    ))
+        except Exception as e_notif:
+            print(f"Error notifying reviewer on task stage update: {e_notif}")
     
     doc = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
     return fix_id(doc)
@@ -3303,8 +3362,143 @@ async def delete_wm_task(db, task_id: str):
         
     return result.deleted_count > 0
 
+# Universal Field Diffing Helper
+def format_field_changes(old_doc: dict, update_data: dict, entity_prefix: str = "") -> tuple:
+    ignore_keys = {
+        "performedBy", "userName", "updated_at", "updatedAt", "_id", "id", 
+        "statusHistory", "createdDate", "createdAt", "createdBy", "timestamp",
+        "clientName", "teamLeaderName", "assignedToName", "projectName", "employeeName"
+    }
+    
+    field_labels = {
+        "title": "Title",
+        "description": "Description",
+        "status": "Status/Stage",
+        "priority": "Priority",
+        "startDate": "Start Date",
+        "endDate": "End Date",
+        "dueDate": "Due Date",
+        "teamDeadline": "Team Deadline",
+        "clientDeadline": "Client Deadline",
+        "moduleName": "Phase Name",
+        "moduleDeadline": "Phase Deadline",
+        "remarks": "Remarks",
+        "assignedToId": "Assignee",
+        "teamLeaderId": "Team Leader",
+        "clientId": "Client",
+        "companyName": "Company Name",
+        "firstName": "First Name",
+        "lastName": "Last Name",
+        "email": "Email",
+        "phone": "Phone",
+        "department": "Department",
+        "designation": "Designation",
+        "services": "Services Description",
+        "post": "Post Count",
+        "reel": "Reel Count",
+        "festivalPost": "Festival Post Requirement",
+        "graphicsRequired": "Graphics Requirement",
+        "postRequired": "Post Requirement",
+        "reelRequired": "Reel Requirement",
+        "isPhaseWise": "Phase Wise Project",
+        "phases": "Project Phases",
+        "modules": "Project Modules",
+        "postingDate": "Posting Date",
+        "postingDay": "Posting Day",
+        "reelPost": "Deliverable Type",
+        "concept": "Concept Notes",
+        "reference": "Reference Link",
+        "scriptLink": "Script Link",
+        "shootingLink": "Shooting Link",
+        "editingLink": "Editing Link",
+        "finalLink": "Final Deliverable Link",
+        "reviewByTL": "TL Review Remarks",
+        "postingStatus": "Posting Status",
+        "note": "Note",
+        "meetingDate": "Meeting Date",
+        "amount": "Amount",
+        "paymentStatus": "Payment Status",
+        "conclusion": "Conclusion",
+        "campaigns": "Campaigns",
+        "adSpend": "Ad Spend",
+        "leads": "Leads Count",
+        "reach": "Reach",
+        "impressions": "Impressions",
+        "clicks": "Clicks",
+        "conversions": "Conversions",
+        "salary": "Salary",
+    }
+    
+    details = []
+    diffs = []
+    for k, new_val in update_data.items():
+        if k in ignore_keys:
+            continue
+            
+        old_val = old_doc.get(k) if old_doc else None
+        
+        if k == "assignedToId":
+            new_disp = update_data.get("assignedToName", old_doc.get("assignedToName", str(new_val)) if old_doc else str(new_val))
+            old_disp = old_doc.get("assignedToName", str(old_val)) if old_doc else str(old_val)
+            if old_disp != new_disp:
+                details.append(f"Assignee changed from '{old_disp}' to '{new_disp}'")
+                diffs.append({"field": "Assignee", "old": old_disp, "new": new_disp})
+            continue
+        if k == "teamLeaderId":
+            new_disp = update_data.get("teamLeaderName", old_doc.get("teamLeaderName", str(new_val)) if old_doc else str(new_val))
+            old_disp = old_doc.get("teamLeaderName", str(old_val)) if old_doc else str(old_val)
+            if old_disp != new_disp:
+                details.append(f"Team Leader changed from '{old_disp}' to '{new_disp}'")
+                diffs.append({"field": "Team Leader", "old": old_disp, "new": new_disp})
+            continue
+        if k == "clientId":
+            new_disp = update_data.get("clientName", old_doc.get("clientName", str(new_val)) if old_doc else str(new_val))
+            old_disp = old_doc.get("clientName", str(old_val)) if old_doc else str(old_val)
+            if old_disp != new_disp:
+                details.append(f"Client changed from '{old_disp}' to '{new_disp}'")
+                diffs.append({"field": "Client", "old": old_disp, "new": new_disp})
+            continue
+            
+        if old_val is None: old_val = ""
+        if new_val is None: new_val = ""
+        
+        if isinstance(new_val, (list, dict)) or isinstance(old_val, (list, dict)):
+            if old_val != new_val:
+                label = field_labels.get(k, k[0].upper() + k[1:] if k else "Field")
+                details.append(f"Updated {label}")
+                diffs.append({"field": label, "old": str(old_val), "new": str(new_val)})
+            continue
+            
+        # We do NOT use .strip() so exact space changes are detected!
+        old_str = str(old_val)
+        new_str = str(new_val)
+        
+        if old_str.endswith(".0"): old_str = old_str[:-2]
+        if new_str.endswith(".0"): new_str = new_str[:-2]
+        
+        if old_str != new_str:
+            label = field_labels.get(k, ''.join([' ' + c if c.isupper() else c for c in k]).capitalize().strip() if k else "Field")
+            
+            diffs.append({"field": label, "old": old_str, "new": new_str})
+            
+            disp_old = (old_str[:40] + '...') if len(old_str) > 40 else old_str
+            disp_new = (new_str[:40] + '...') if len(new_str) > 40 else new_str
+            
+            if not old_str:
+                details.append(f"Set {label} to '{disp_new}'")
+            elif not new_str:
+                details.append(f"Removed {label} (was '{disp_old}')")
+            else:
+                details.append(f"{label} changed from '{disp_old}' to '{disp_new}'")
+                
+    prefix_str = f"{entity_prefix}: " if entity_prefix else ""
+    if not details:
+        return f"{prefix_str}Saved without changes", diffs
+        
+    return prefix_str + ", ".join(details), diffs
+
 # Activity Log CRUD
-async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None):
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, diffs: list = None, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None):
     log_entry = {
         "action": action,
         "performedBy": performedBy,
@@ -3312,6 +3506,7 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
         "details": details,
         "timestamp": get_now().strftime("%Y-%m-%d %H:%M:%S")
     }
+    if diffs: log_entry["diffs"] = diffs
     if taskId: log_entry["taskId"] = taskId
     if projectId: log_entry["projectId"] = projectId
     if clientId: log_entry["clientId"] = clientId
@@ -3381,8 +3576,8 @@ async def delete_task_log(db, log_id: str):
     return result.deleted_count > 0
 
 # Update existing log_task_activity calls to use the new log_activity
-async def log_task_activity(db, taskId: str, action: str, performedBy: str, userName: str, details: str):
-    await log_activity(db, action, performedBy, userName, details, taskId=taskId)
+async def log_task_activity(db, taskId: str, action: str, performedBy: str, userName: str, details: str, diffs: list = None):
+    await log_activity(db, action, performedBy, userName, details, diffs=diffs, taskId=taskId)
 
 
 # Sales Lead CRUD
@@ -3412,6 +3607,31 @@ async def create_lead(db, lead: schemas.LeadCreate):
     # Log the creation
     await log_activity(db, "Lead Created", performedBy, userName, f"Lead for '{lead_dict['company']}' was created.", leadId=lead_id)
     
+    try:
+        assigned_to = lead_dict.get("assignedTo", [])
+        if not isinstance(assigned_to, list):
+            assigned_to = [assigned_to] if assigned_to else []
+        for emp_name in assigned_to:
+            if not emp_name: continue
+            if isinstance(emp_name, dict):
+                emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+            if not emp_name: continue
+            import re
+            emp_name_escaped = re.escape(str(emp_name).strip())
+            emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
+            if emp:
+                emp_id_str = str(emp["_id"]) if "_id" in emp else emp.get("id")
+                if emp_id_str and emp_id_str != performedBy:
+                    await create_notification(db, schemas.NotificationCreate(
+                        employee_id=emp_id_str,
+                        title="New Lead Assigned",
+                        message=f"You have been assigned sales lead '{lead_dict.get('company') or lead_dict.get('contact', 'Unknown')}'.",
+                        type="lead",
+                        reference_id=lead_id
+                    ))
+    except Exception as e_notif:
+        print(f"Error notifying lead assignee on create: {e_notif}")
+
     doc = await db.leads.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
@@ -3539,6 +3759,32 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
                         await run_payroll_processing(db, month_name, ld.year)
                 except Exception as e:
                     print(f"Error auto-processing payroll on lead won for {emp_name}: {e}")
+                    
+        if "assignedTo" in update_data:
+            try:
+                assigned_to = update_data.get("assignedTo", [])
+                if not isinstance(assigned_to, list):
+                    assigned_to = [assigned_to] if assigned_to else []
+                for emp_name in assigned_to:
+                    if not emp_name: continue
+                    if isinstance(emp_name, dict):
+                        emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+                    if not emp_name: continue
+                    import re
+                    emp_name_escaped = re.escape(str(emp_name).strip())
+                    emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
+                    if emp:
+                        emp_id_str = str(emp["_id"]) if "_id" in emp else emp.get("id")
+                        if emp_id_str and emp_id_str != performedBy:
+                            await create_notification(db, schemas.NotificationCreate(
+                                employee_id=emp_id_str,
+                                title="Lead Re-assigned",
+                                message=f"You have been assigned sales lead '{update_data.get('company') or (old_lead.get('company') if old_lead else '') or 'Unknown'}'.",
+                                type="lead",
+                                reference_id=lead_id
+                            ))
+            except Exception as e_notif:
+                print(f"Error notifying lead assignee on update: {e_notif}")
         
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
@@ -3778,16 +4024,10 @@ async def update_marketing_daily_report(db, report_id: str, report: schemas.Mark
     await db.marketing_daily_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
     
     # Log details
-    changes = []
-    for field, val in update_data.items():
-        if old_report and old_report.get(field) != val:
-            changes.append(f"{field} changed to {val}")
-    
-    if changes:
-        log_details = f"Daily Report updated: " + ", ".join(changes)
-        client_id = old_report.get("clientId")
-        project_id = old_report.get("projectId")
-        await log_activity(db, "Updated", performedBy, userName, log_details, dailyReportId=report_id, clientId=client_id, projectId=project_id)
+    log_details, diffs = format_field_changes(old_report, update_data, "Daily Report")
+    client_id = old_report.get("clientId") if old_report else None
+    project_id = old_report.get("projectId") if old_report else None
+    await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, dailyReportId=report_id, clientId=client_id, projectId=project_id)
         
     doc = await db.marketing_daily_reports.find_one({"_id": ObjectId(report_id)})
     if doc:
@@ -4056,14 +4296,8 @@ async def update_marketing_monthly_report(db, report_id: str, report: schemas.Ma
     await db.marketing_monthly_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
     
     # Log details
-    changes = []
-    for field, val in update_data.items():
-        if old_report and old_report.get(field) != val:
-            changes.append(f"{field} changed to {val}")
-            
-    if changes:
-        log_details = f"Monthly Report updated: " + ", ".join(changes)
-        await log_activity(db, "Updated", performedBy, userName, log_details, monthlyReportId=report_id)
+    log_details, diffs = format_field_changes(old_report, update_data, "Monthly Report")
+    await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, monthlyReportId=report_id)
         
     doc = await db.marketing_monthly_reports.find_one({"_id": ObjectId(report_id)})
     if doc:
@@ -5606,12 +5840,7 @@ def recalculate_attendance_seconds(punches: list, breaks: list) -> tuple:
         
         # If the last punch has no punchOut, it's active.
         if not last.get("punchOut"):
-            if p_copy.get("punchOut") and parse_time(p_copy["punchIn"]) >= parse_time(last["punchIn"]):
-                last["punchOut"] = p_copy["punchOut"]
-                if p_copy.get("type"):
-                    last["type"] = p_copy["type"]
-            else:
-                merged_punches.append(p_copy)
+            merged_punches.append(p_copy)
             continue
             
         last_out_sec = parse_time(last["punchOut"])
@@ -5736,79 +5965,76 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     breaks = attn.get('breaks') or []
                     breaks = [dict(b) for b in breaks]
                     
-                    old_accumulated = attn.get('accumulatedWorkSeconds', 0.0)
-                    
                     fmt_start = start_time if len(start_time.split(':')) == 3 else f"{start_time}:00"
                     fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
 
-                    # The recover time logic is to add time to the production hour
-                    def parse_t(t_str):
-                        if not t_str: return 0
-                        pts = t_str.split(':')
-                        try:
-                            return int(pts[0])*3600 + int(pts[1])*60 + (int(pts[2]) if len(pts)>2 else 0)
-                        except: return 0
-                    
-                    def format_t(sec):
-                        sec = sec % 86400
-                        return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
+                    if recovery_type in ['meeting', 'work']:
+                        # Fix: Trim or remove breaks that overlap with this recovery
+                        def parse_t(t_str):
+                            if not t_str: return 0
+                            pts = t_str.split(':')
+                            try:
+                                return int(pts[0])*3600 + int(pts[1])*60 + (int(pts[2]) if len(pts)>2 else 0)
+                            except: return 0
                         
-                    rec_in = parse_t(fmt_start)
-                    rec_out = parse_t(fmt_end)
-                    if rec_out < rec_in:
-                        rec_out += 86400
-                        
-                    new_breaks = []
-                    for b in breaks:
-                        b_start = b.get("startTime")
-                        b_end = b.get("endTime")
-                        if not b_start or not b_end:
-                            new_breaks.append(b)
-                            continue
+                        def format_t(sec):
+                            sec = sec % 86400
+                            return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
                             
-                        b_in = parse_t(b_start)
-                        b_out = parse_t(b_end)
-                        if b_out < b_in:
-                            b_out += 86400
+                        rec_in = parse_t(fmt_start)
+                        rec_out = parse_t(fmt_end)
+                        if rec_out < rec_in:
+                            rec_out += 86400
                             
-                        overlap_start = max(rec_in, b_in)
-                        overlap_end = min(rec_out, b_out)
-                        
-                        if overlap_start < overlap_end:
-                            # There is overlap
-                            if rec_in <= b_in and rec_out >= b_out:
-                                continue # fully engulfed, remove break
-                            elif b_in < rec_in and b_out > rec_out:
-                                # Split into two
-                                new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
-                                new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
-                            elif b_in >= rec_in and b_out > rec_out:
-                                # Trim start
-                                new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
-                            elif b_in < rec_in and b_out <= rec_out:
-                                # Trim end
-                                new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
-                        else:
-                            new_breaks.append(b)
+                        new_breaks = []
+                        for b in breaks:
+                            b_start = b.get("startTime")
+                            b_end = b.get("endTime")
+                            if not b_start or not b_end:
+                                new_breaks.append(b)
+                                continue
+                                
+                            b_in = parse_t(b_start)
+                            b_out = parse_t(b_end)
+                            if b_out < b_in:
+                                b_out += 86400
+                                
+                            overlap_start = max(rec_in, b_in)
+                            overlap_end = min(rec_out, b_out)
                             
-                    breaks = new_breaks
+                            if overlap_start < overlap_end:
+                                # There is overlap
+                                if rec_in <= b_in and rec_out >= b_out:
+                                    continue # fully engulfed, remove break
+                                elif b_in < rec_in and b_out > rec_out:
+                                    # Split into two
+                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                                elif b_in >= rec_in and b_out > rec_out:
+                                    # Trim start
+                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                                elif b_in < rec_in and b_out <= rec_out:
+                                    # Trim end
+                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                            else:
+                                new_breaks.append(b)
+                                
+                        breaks = new_breaks
 
-                    punches.append({
-                        "punchIn": fmt_start,
-                        "punchOut": fmt_end,
-                        "type": recovery_type or "work"
-                    })
+                        punches.append({
+                            "punchIn": fmt_start,
+                            "punchOut": fmt_end,
+                            "type": recovery_type
+                        })
+                    elif recovery_type == 'break':
+                        breaks.append({
+                            "startTime": fmt_start,
+                            "endTime": fmt_end,
+                            "duration": str(int(duration_seconds // 60))
+                        })
                     
                     # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
                     merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
-                    
-                    expected_rec_sec = int(doc.get('recovery_minutes', 0)) * 60
-                    if expected_rec_sec <= 0 and duration_seconds > 0:
-                        expected_rec_sec = duration_seconds
-                    
-                    actual_inc = new_accumulated - old_accumulated
-                    if actual_inc < expected_rec_sec:
-                        new_accumulated += (expected_rec_sec - actual_inc)
                     
                     # Recalculate workHours string
                     hours, remainder = divmod(int(new_accumulated), 3600)
@@ -5891,31 +6117,28 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                             has_active_break = True
                             break
 
-                    old_acc = attn_record.get('accumulatedWorkSeconds', 0.0)
-                    added_sec = int(doc.get('recovery_minutes', 0)) * 60
-                    new_acc = old_acc + added_sec
-                    if new_acc > 0:
-                        h, r = divmod(int(new_acc), 3600)
-                        m, _ = divmod(r, 60)
-                        attn_record['workHours'] = f"{int(h)}h {int(m)}m"
-                        attn_record['accumulatedWorkSeconds'] = new_acc
-
+                    if not has_active and attn_record.get('checkIn') and attn_record.get('checkOut'):
+                        try:
+                            ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
+                            co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
+                            diff = co - ci
+                            h, r = divmod(diff.total_seconds(), 3600)
+                            m, _ = divmod(r, 60)
+                            attn_record['workHours'] = f"{int(h)}h {int(m)}m"
+                        except Exception: pass
+                    
                     new_status = 'On Break' if (has_active and has_active_break) else ('Active' if has_active else 'Logged')
                     new_checkout = None if has_active else attn_record.get('checkOut')
                     
-                    set_data = {
-                        'breaks': updated_breaks,
-                        'checkIn': attn_record.get('checkIn'),
-                        'checkOut': new_checkout,
-                        'workHours': attn_record.get('workHours'),
-                        'status': new_status
-                    }
-                    if 'accumulatedWorkSeconds' in attn_record:
-                        set_data['accumulatedWorkSeconds'] = attn_record['accumulatedWorkSeconds']
-
                     await db.attendance.update_one(
                         {'_id': attn_record['_id']},
-                        {'$set': set_data}
+                        {'$set': {
+                            'breaks': updated_breaks,
+                            'checkIn': attn_record.get('checkIn'),
+                            'checkOut': new_checkout,
+                            'workHours': attn_record.get('workHours'),
+                            'status': new_status
+                        }}
                     )
     
                 # Case 1: Break Timing Correction

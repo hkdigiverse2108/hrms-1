@@ -1217,7 +1217,7 @@ async def delete_client(client_id: str, db=Depends(get_db)):
     return {"message": "Client deleted successfully"}
 
 # Project Endpoints
-@app.get("/projects", response_model=List[schemas.Project])
+@app.get("/projects")
 async def read_projects(userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 10000, db=Depends(get_db)):
     return await crud.get_projects(db, userId=userId, role=role, skip=skip, limit=limit)
 
@@ -1235,6 +1235,21 @@ async def delete_project(project_id: str, db=Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"message": "Project deleted successfully"}
+
+@app.put("/projects/{project_id}/modules/notebook", response_model=schemas.Project)
+async def update_module_notebook(project_id: str, payload: schemas.ModuleNotebookUpdate, db=Depends(get_db)):
+    updated = await crud.update_module_notebook(db, project_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project or module not found")
+    return updated
+
+@app.post("/projects/{project_id}/modules/comments", response_model=schemas.Project)
+async def add_module_comment(project_id: str, payload: schemas.ModuleCommentCreate, db=Depends(get_db)):
+    updated = await crud.add_module_comment(db, project_id, payload)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project or module not found")
+    return updated
+
 
 # WM Task Endpoints
 # General Task Endpoints
@@ -3102,6 +3117,6 @@ async def delete_other_work(entry_id: str, db=Depends(get_db)):
     return {"message": "Entry deleted successfully"}
 
 if __name__ == "__main__":
-    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8001)))
+    port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)

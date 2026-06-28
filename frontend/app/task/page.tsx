@@ -12,6 +12,7 @@ import {
   Trash2,
   History
 } from "lucide-react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { exportToCSV } from "@/lib/export-utils";
 import { toast } from "sonner";
 import { useAppEvent } from "@/hooks/useAppEvent";
@@ -94,6 +95,7 @@ export default function TaskManagementPage() {
   const canDeletePerm = isAdmin || checkPermission('personal-tasks', 'canDelete');
   const [tasks, setTasks] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [logsModalOpen, setLogsModalOpen] = useState(false);
@@ -130,6 +132,7 @@ export default function TaskManagementPage() {
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   useEffect(() => {
+    setIsMounted(true);
     fetchTasks();
   }, [user]);
 
@@ -414,6 +417,21 @@ export default function TaskManagementPage() {
       setState([...state, val]);
     }
   };
+
+  const onDragEnd = (result: any) => {
+    if (!result.destination) return;
+    const { source, destination, draggableId } = result;
+    if (source.droppableId !== destination.droppableId) {
+      handleUpdateField(draggableId, 'status', destination.droppableId);
+    }
+  };
+
+  const columns = [
+    { id: "todo", title: "To Do", textColor: "text-slate-800" },
+    { id: "in-progress", title: "In Progress", textColor: "text-blue-600" },
+    { id: "on-hold", title: "Review", textColor: "text-amber-600" },
+    { id: "completed", title: "Completed", textColor: "text-emerald-600" }
+  ];
 
   const statsTasks = tasks.filter(task => {
     const priorityMatch = activePriorities.length === 0 || activePriorities.includes(task.priority?.toLowerCase() || "");
@@ -1029,409 +1047,308 @@ export default function TaskManagementPage() {
             </div>
         </div>
         
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto w-full">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-brand-teal" />
               <p className="text-sm text-muted-foreground font-medium">Loading tasks...</p>
             </div>
-          ) : tasks.length > 0 ? (
-            <>
-              <table className="w-full text-sm text-left whitespace-nowrap">
-              <thead className="text-xs text-muted-foreground font-semibold border-b border-border">
-                <tr>
-                  <th className="px-6 py-4 font-medium w-[30%]">Task</th>
-                  <th className="px-6 py-4 font-medium">Assignee</th>
-                  <th className="px-6 py-4 font-medium">Created by</th>
-                  <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium">Priority</th>
-                  <th className="px-6 py-4 font-medium">Due date</th>
-                  <th className="px-6 py-4 font-medium text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {currentTasks.map((task) => (
-                  <tr key={task.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer group">
-                    <td className="px-6 py-4 whitespace-normal min-w-[250px]">
-                      {editingTaskId === task.id ? (
-                        <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
-                          <Input 
-                            autoFocus
-                            value={editTaskTitle}
-                            onChange={(e) => setEditTaskTitle(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleUpdateTitle(task.id);
-                              if (e.key === 'Escape') setEditingTaskId(null);
-                            }}
-                            onBlur={() => handleUpdateTitle(task.id)}
-                            className="h-8 text-sm font-semibold"
-                          />
+          ) : tasks.length > 0 && isMounted ? (
+            <div className="pb-4 min-w-max">
+              <DragDropContext onDragEnd={onDragEnd}>
+                <div className="flex gap-4 p-4 min-h-[600px] items-start">
+                  {columns.map(col => (
+                    <div key={col.id} className="flex-1 w-[300px] min-w-[300px] max-w-[350px] bg-gray-50/50 rounded-xl p-3 border border-border flex flex-col gap-3">
+                      {/* Column Header */}
+                      <div className="flex items-center justify-between mb-2 px-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold text-sm ${col.textColor}`}>{col.title}</span>
+                          <span className="text-[11px] font-bold text-slate-500 bg-slate-200/60 px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                            {sortedTasks.filter(t => (t.status === col.id) || (col.id === 'on-hold' && t.status === 'pending')).length}
+                          </span>
                         </div>
-                      ) : (
-                        <div 
-                          className={`font-semibold text-foreground mb-1 inline-block ${canEdit ? 'hover:text-brand-teal hover:underline cursor-pointer' : ''}`}
-                          title={canEdit ? "Click to edit task name" : ""}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!canEdit) return;
-                            setEditingTaskId(task.id);
-                            setEditTaskTitle(task.title);
+                        <button 
+                          onClick={() => {
+                            setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: col.id === 'on-hold' ? 'on-hold' : col.id, priority: "medium" });
+                            setCreateModalOpen(true);
                           }}
+                          className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-md transition-colors"
                         >
-                          {task.title}
-                        </div>
-                      )}
-                      
-                      {editingDescId === task.id ? (
-                        <div className="flex items-center gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
-                          <Input 
-                            autoFocus
-                            value={editTaskDesc}
-                            onChange={(e) => setEditTaskDesc(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleUpdateDesc(task.id);
-                              if (e.key === 'Escape') setEditingDescId(null);
-                            }}
-                            onBlur={() => handleUpdateDesc(task.id)}
-                            className="h-7 text-xs"
-                          />
-                        </div>
-                      ) : (
-                        <div 
-                          className={`text-xs text-muted-foreground line-clamp-1 ${canEdit ? 'hover:text-brand-teal hover:underline cursor-pointer' : ''}`}
-                          title={canEdit ? "Click to edit description" : ""}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!canEdit) return;
-                            setEditingDescId(task.id);
-                            setEditTaskDesc(task.description || task.desc || "");
-                          }}
-                        >
-                          {task.description || task.desc || <span className="italic text-gray-400">Add a description...</span>}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      {canEdit ? (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded-md border border-transparent hover:border-border transition-colors w-max">
-                              {task.assignedToIds && task.assignedToIds.length > 1 ? (
-                                <div className="flex items-center gap-2">
-                                  <div className="flex -space-x-2 overflow-hidden">
-                                    {(task.assignedToNames || []).slice(0, 3).map((name: string, i: number) => (
-                                      <Avatar key={i} className="w-6 h-6 border-2 border-white">
-                                        <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                                          {name.split(' ').map((n:any) => n[0]).join('')}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                    ))}
-                                    {(task.assignedToNames?.length || 0) > 3 && (
-                                      <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 z-10">
-                                        +{(task.assignedToNames?.length || 0) - 3}
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Droppable Area */}
+                      <Droppable droppableId={col.id}>
+                        {(provided, snapshot) => (
+                          <div 
+                            ref={provided.innerRef} 
+                            {...provided.droppableProps}
+                            className={`flex-1 min-h-[150px] rounded-lg transition-colors flex flex-col gap-3 ${snapshot.isDraggingOver ? 'bg-brand-light/10 border-brand-teal/30 border border-dashed' : ''}`}
+                          >
+                            {sortedTasks.filter(t => (t.status === col.id) || (col.id === 'on-hold' && t.status === 'pending')).map((task, index) => (
+                              <Draggable key={task.id} draggableId={task.id} index={index}>
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    className={`bg-white border border-border rounded-xl p-3.5 shadow-sm hover:shadow-md transition-all group relative flex flex-col gap-3 ${snapshot.isDragging ? 'shadow-lg border-brand-teal/50 rotate-1' : ''}`}
+                                    style={provided.draggableProps.style}
+                                  >
+                                    {/* Header: Title and Actions */}
+                                    <div className="flex justify-between items-start gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        {editingTaskId === task.id ? (
+                                          <div className="flex items-center gap-2 mb-1" onPointerDown={(e) => e.stopPropagation()}>
+                                            <Input 
+                                              autoFocus
+                                              value={editTaskTitle}
+                                              onChange={(e) => setEditTaskTitle(e.target.value)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleUpdateTitle(task.id);
+                                                if (e.key === 'Escape') setEditingTaskId(null);
+                                              }}
+                                              onBlur={() => handleUpdateTitle(task.id)}
+                                              className="h-7 text-sm font-semibold px-2 py-1"
+                                            />
+                                          </div>
+                                        ) : (
+                                          <div 
+                                            className={`font-semibold text-sm text-foreground mb-1 block truncate ${canEdit ? 'hover:text-brand-teal hover:underline cursor-pointer' : ''}`}
+                                            title={canEdit ? "Click to edit task name" : task.title}
+                                            onPointerDown={(e) => {
+                                              if (!canEdit) return;
+                                              e.stopPropagation();
+                                              setEditingTaskId(task.id);
+                                              setEditTaskTitle(task.title);
+                                            }}
+                                          >
+                                            {task.title}
+                                          </div>
+                                        )}
+                                        
+                                        {editingDescId === task.id ? (
+                                          <div className="flex items-center gap-2 mt-1" onPointerDown={(e) => e.stopPropagation()}>
+                                            <Input 
+                                              autoFocus
+                                              value={editTaskDesc}
+                                              onChange={(e) => setEditTaskDesc(e.target.value)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleUpdateDesc(task.id);
+                                                if (e.key === 'Escape') setEditingDescId(null);
+                                              }}
+                                              onBlur={() => handleUpdateDesc(task.id)}
+                                              className="h-6 text-xs px-2 py-1"
+                                            />
+                                          </div>
+                                        ) : (
+                                          <div 
+                                            className={`text-xs text-muted-foreground line-clamp-2 leading-relaxed ${canEdit ? 'hover:text-brand-teal cursor-pointer' : ''}`}
+                                            title={canEdit ? "Click to edit description" : ""}
+                                            onPointerDown={(e) => {
+                                              if (!canEdit) return;
+                                              e.stopPropagation();
+                                              setEditingDescId(task.id);
+                                              setEditTaskDesc(task.description || task.desc || "");
+                                            }}
+                                          >
+                                            {task.description || task.desc || <span className="italic text-gray-400">Add a description...</span>}
+                                          </div>
+                                        )}
                                       </div>
-                                    )}
-                                  </div>
-                                  <span className="text-xs font-medium text-foreground">
-                                    {task.assignedToNames?.length || 0} Assignees
-                                  </span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-3">
-                                  <Avatar className="w-6 h-6">
-                                    <AvatarImage src={task.avatar} />
-                                    <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                                      {((task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'U').split(' ').map((n:any) => n[0]).join('')}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="font-medium text-foreground text-sm line-clamp-1">
-                                    {(task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'Unassigned'}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[280px] p-3" align="start">
-                            <div className="space-y-3">
-                              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Update Assignees</h4>
-                              <Input
-                                placeholder="Search employees..."
-                                value={assigneeSearch}
-                                onChange={(e) => setAssigneeSearch(e.target.value)}
-                                className="h-8 text-xs"
-                              />
-                              <div className="border border-border rounded-md max-h-[160px] overflow-y-auto bg-white p-1 space-y-0.5">
-                                {employees.filter(emp => `${emp.firstName} ${emp.lastName}`.toLowerCase().includes(assigneeSearch.toLowerCase())).map(emp => {
-                                  const currentIds = task.assignedToIds || (task.assignedToId ? [task.assignedToId] : []);
-                                  const isSelected = currentIds.includes(emp.id);
-                                  return (
-                                    <div 
-                                      key={emp.id} 
-                                      className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-md cursor-pointer transition-colors"
-                                      onClick={() => {
-                                        const updatedIds = isSelected 
-                                          ? currentIds.filter((id: string) => id !== emp.id)
-                                          : [...currentIds, emp.id];
-                                        handleUpdateAssignees(task.id, updatedIds);
-                                        // optimistic update
-                                        setTasks(prev => prev.map(t => t.id === task.id ? { 
-                                          ...t, 
-                                          assignedToIds: updatedIds, 
-                                          assignedToNames: updatedIds.map((id:string) => employees.find((e:any) => e.id === id)).filter(Boolean).map((e:any) => `${e.firstName} ${e.lastName}`) 
-                                        } : t));
-                                      }}
-                                    >
-                                      <input 
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        readOnly
-                                        className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal w-4 h-4 cursor-pointer"
-                                      />
-                                      <div className="flex items-center gap-2">
-                                        <Avatar className="w-6 h-6">
-                                          <AvatarFallback className="text-[10px] bg-brand-light text-brand-teal font-medium">
-                                            {emp.firstName[0]}{emp.lastName[0]}
+                                      
+                                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                        <button 
+                                          onPointerDown={(e) => { e.stopPropagation(); fetchTaskLogs(task.id); }}
+                                          className="p-1 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/20 rounded-md transition-colors"
+                                          title="View Logs"
+                                        >
+                                          <History className="w-3.5 h-3.5" />
+                                        </button>
+                                        {canDeleteTask(task) && (
+                                          <button 
+                                            onPointerDown={(e) => { e.stopPropagation(); setTaskToDelete(task.id); }}
+                                            className="p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                                            title="Delete Task"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Meta tags: Priority & Due Date */}
+                                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                                      {/* Priority Dropdown */}
+                                      <div onPointerDown={(e) => e.stopPropagation()}>
+                                        <Select disabled={!canEdit} defaultValue={task.priority} onValueChange={(val) => handleUpdateField(task.id, 'priority', val)}>
+                                          <SelectTrigger className={`h-6 text-[10px] px-2 py-0.5 rounded border focus:ring-0 w-fit ${getPriorityColor(task.priority)} bg-white shadow-none`}>
+                                            <div className="flex items-center gap-1 font-medium capitalize">
+                                              <Flag className="w-2.5 h-2.5" />
+                                              {task.priority || "Medium"}
+                                            </div>
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="urgent"><div className="flex items-center gap-2 text-red-600"><Flag className="w-3 h-3" />Urgent</div></SelectItem>
+                                            <SelectItem value="high"><div className="flex items-center gap-2 text-red-500"><Flag className="w-3 h-3" />High</div></SelectItem>
+                                            <SelectItem value="medium"><div className="flex items-center gap-2 text-amber-500"><Flag className="w-3 h-3" />Medium</div></SelectItem>
+                                            <SelectItem value="low"><div className="flex items-center gap-2 text-slate-500"><Flag className="w-3 h-3" />Low</div></SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+
+                                      {/* Due Date Dropdown */}
+                                      <div onPointerDown={(e) => e.stopPropagation()}>
+                                        {canEdit ? (
+                                          <Popover>
+                                            <PopoverTrigger asChild>
+                                              <div className={`flex items-center gap-1 cursor-pointer px-2 py-0.5 rounded border border-border hover:bg-gray-50 transition-colors h-6 text-[10px] font-medium w-fit ${task.dueDate && task.dueDate <= todayStr && task.status !== 'completed' ? 'text-red-600 border-red-200 bg-red-50' : 'text-muted-foreground'}`}>
+                                                <CalendarIcon className="h-2.5 w-2.5" />
+                                                {task.dueDate ? format(new Date(task.dueDate), "MMM d") : <span>Set date</span>}
+                                              </div>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                              <Calendar
+                                                mode="single"
+                                                selected={task.dueDate ? new Date(task.dueDate) : undefined}
+                                                onSelect={(date) => {
+                                                  if (date) handleUpdateField(task.id, 'dueDate', format(date, "yyyy-MM-dd"));
+                                                }}
+                                                initialFocus
+                                              />
+                                              {task.dueDate && (
+                                                <div className="p-2 border-t border-border">
+                                                  <Button variant="ghost" className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8" onClick={() => handleUpdateField(task.id, 'dueDate', "")}>Clear date</Button>
+                                                </div>
+                                              )}
+                                            </PopoverContent>
+                                          </Popover>
+                                        ) : (
+                                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded border border-border h-6 text-[10px] font-medium w-fit ${task.dueDate && task.dueDate <= todayStr && task.status !== 'completed' ? 'text-red-600 border-red-200 bg-red-50' : 'text-muted-foreground'}`}>
+                                            <CalendarIcon className="h-2.5 w-2.5" />
+                                            {task.dueDate ? format(new Date(task.dueDate), "MMM d") : <span>No date</span>}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Footer: Assignees & Created By */}
+                                    <div className="flex items-center justify-between border-t border-border pt-3 mt-1">
+                                      {/* Assignees */}
+                                      <div className="flex items-center" onPointerDown={(e) => e.stopPropagation()}>
+                                        {canEdit ? (
+                                          <Popover>
+                                            <PopoverTrigger asChild>
+                                              <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+                                                {task.assignedToIds && task.assignedToIds.length > 0 ? (
+                                                  <div className="flex -space-x-1.5 overflow-hidden">
+                                                    {(task.assignedToNames || [task.assignedToName || task.assignee]).filter(Boolean).slice(0, 3).map((name: string, i: number) => (
+                                                      <Avatar key={i} className="w-6 h-6 border-2 border-white">
+                                                        <AvatarFallback className="bg-brand-light text-brand-teal text-[9px] font-bold">
+                                                          {name.split(' ').map((n:any) => n[0]).join('').substring(0, 2)}
+                                                        </AvatarFallback>
+                                                      </Avatar>
+                                                    ))}
+                                                    {((task.assignedToNames?.length || (task.assignedToName ? 1 : 0)) > 3) && (
+                                                      <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 z-10">
+                                                        +{(task.assignedToNames?.length || 1) - 3}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                ) : (
+                                                  <Avatar className="w-6 h-6 border border-dashed border-gray-300">
+                                                    <AvatarFallback className="bg-gray-50 text-gray-400 text-[10px]">
+                                                      <Plus className="w-3 h-3" />
+                                                    </AvatarFallback>
+                                                  </Avatar>
+                                                )}
+                                              </div>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[280px] p-3" align="start">
+                                              <div className="space-y-3">
+                                                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Update Assignees</h4>
+                                                <Input placeholder="Search employees..." value={assigneeSearch} onChange={(e) => setAssigneeSearch(e.target.value)} className="h-8 text-xs" />
+                                                <div className="border border-border rounded-md max-h-[160px] overflow-y-auto bg-white p-1 space-y-0.5">
+                                                  {employees.filter(emp => `${emp.firstName} ${emp.lastName}`.toLowerCase().includes(assigneeSearch.toLowerCase())).map(emp => {
+                                                    const currentIds = task.assignedToIds || (task.assignedToId ? [task.assignedToId] : []);
+                                                    const isSelected = currentIds.includes(emp.id);
+                                                    return (
+                                                      <div 
+                                                        key={emp.id} 
+                                                        className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-md cursor-pointer transition-colors"
+                                                        onClick={() => {
+                                                          const updatedIds = isSelected ? currentIds.filter((id: string) => id !== emp.id) : [...currentIds, emp.id];
+                                                          handleUpdateAssignees(task.id, updatedIds);
+                                                          setTasks(prev => prev.map(t => t.id === task.id ? { 
+                                                            ...t, 
+                                                            assignedToIds: updatedIds, 
+                                                            assignedToNames: updatedIds.map((id:string) => employees.find((e:any) => e.id === id)).filter(Boolean).map((e:any) => `${e.firstName} ${e.lastName}`) 
+                                                          } : t));
+                                                        }}
+                                                      >
+                                                        <input type="checkbox" checked={isSelected} readOnly className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal w-4 h-4 cursor-pointer" />
+                                                        <div className="flex items-center gap-2">
+                                                          <Avatar className="w-6 h-6"><AvatarFallback className="text-[10px] bg-brand-light text-brand-teal font-medium">{emp.firstName[0]}{emp.lastName[0]}</AvatarFallback></Avatar>
+                                                          <span className="text-xs font-medium text-foreground">{emp.firstName} {emp.lastName}</span>
+                                                        </div>
+                                                      </div>
+                                                    )
+                                                  })}
+                                                </div>
+                                              </div>
+                                            </PopoverContent>
+                                          </Popover>
+                                        ) : (
+                                          <div className="flex -space-x-1.5 overflow-hidden">
+                                            {(task.assignedToNames || [task.assignedToName || task.assignee]).filter(Boolean).slice(0, 3).map((name: string, i: number) => (
+                                              <Avatar key={i} className="w-6 h-6 border-2 border-white">
+                                                <AvatarFallback className="bg-brand-light text-brand-teal text-[9px] font-bold">
+                                                  {name.split(' ').map((n:any) => n[0]).join('').substring(0, 2)}
+                                                </AvatarFallback>
+                                              </Avatar>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Created By */}
+                                      <div className="flex items-center gap-1.5" title={`Created by ${task.assignedByName || 'System'}`}>
+                                        <span className="text-[10px] text-muted-foreground">By</span>
+                                        <Avatar className="w-5 h-5">
+                                          <AvatarFallback className="bg-blue-50 text-blue-600 border border-blue-200 text-[8px] font-bold">
+                                            {(task.assignedByName || 'System').split(' ').map((n:any) => n[0]).join('').substring(0, 2)}
                                           </AvatarFallback>
                                         </Avatar>
-                                        <span className="text-xs font-medium text-foreground">{emp.firstName} {emp.lastName}</span>
                                       </div>
                                     </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      ) : (
-                        task.assignedToIds && task.assignedToIds.length > 1 ? (
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex -space-x-2 overflow-hidden">
-                                  {(task.assignedToNames || []).slice(0, 3).map((name: string, i: number) => (
-                                    <Avatar key={i} className="w-6 h-6 border-2 border-white">
-                                      <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                                        {name.split(' ').map((n:any) => n[0]).join('')}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                  ))}
-                                  {(task.assignedToNames?.length || 0) > 3 && (
-                                    <div className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 z-10">
-                                      +{(task.assignedToNames?.length || 0) - 3}
-                                    </div>
-                                  )}
-                                </div>
-                                <span className="text-xs font-medium text-foreground hover:underline">
-                                  {task.assignedToNames?.length || 0} Assignees
-                                </span>
-                              </div>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[200px] p-3" align="start">
-                              <div className="space-y-2">
-                                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Assignees</h4>
-                                <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-1">
-                                  {(task.assignedToNames || []).map((name: string, i: number) => (
-                                    <div key={i} className="flex items-center gap-2">
-                                      <Avatar className="w-6 h-6">
-                                        <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                                          {name.split(' ').map((n:any) => n[0]).join('')}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <span className="text-sm font-medium text-foreground">{name}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        ) : (
-                          <div className="flex items-center gap-3">
-                            <Avatar className="w-6 h-6">
-                              <AvatarImage src={task.avatar} />
-                              <AvatarFallback className="bg-brand-light text-brand-teal text-[10px] font-bold">
-                                {((task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'U').split(' ').map((n:any) => n[0]).join('')}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="font-medium text-foreground text-sm line-clamp-1">
-                              {(task.assignedToNames && task.assignedToNames[0]) || task.assignedToName || task.assignee || 'Unassigned'}
-                            </span>
+
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
                           </div>
-                        )
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-6 h-6">
-                          <AvatarFallback className="bg-blue-50 text-blue-600 border border-blue-200 text-[10px] font-bold">
-                            {(task.assignedByName || 'System').split(' ').map((n:any) => n[0]).join('').substring(0, 2)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="font-medium text-foreground text-sm">{task.assignedByName || 'System'}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      <Select disabled={!canEdit} defaultValue={task.status} onValueChange={(val) => handleUpdateField(task.id, 'status', val)}>
-                        <SelectTrigger className={`h-8 w-[120px] px-2.5 py-1 rounded-md text-xs font-semibold capitalize border focus:ring-0 focus:ring-offset-0 ${getStatusBadge(task.status)}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="todo">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-                              To do
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="on-hold">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                              On Hold
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="in-progress">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-brand-teal"></span>
-                              In progress
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="completed">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                              Completed
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      <Select disabled={!canEdit} defaultValue={task.priority} onValueChange={(val) => handleUpdateField(task.id, 'priority', val)}>
-                        <SelectTrigger className={`h-8 w-[110px] px-2.5 py-1 rounded-md text-xs font-semibold capitalize border focus:ring-0 focus:ring-offset-0 ${getPriorityColor(task.priority)}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="urgent">
-                            <div className="flex items-center gap-2 text-red-600">
-                              <Flag className="w-3 h-3" />
-                              Urgent
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="high">
-                            <div className="flex items-center gap-2 text-red-500">
-                              <Flag className="w-3 h-3" />
-                              High
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="medium">
-                            <div className="flex items-center gap-2 text-amber-500">
-                              <Flag className="w-3 h-3" />
-                              Medium
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="low">
-                            <div className="flex items-center gap-2 text-slate-500">
-                              <Flag className="w-3 h-3" />
-                              Low
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      {canEdit ? (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent hover:border-border transition-colors">
-                              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                              {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
-                            </div>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={task.dueDate ? new Date(task.dueDate) : undefined}
-                              onSelect={(date) => {
-                                if (date) handleUpdateField(task.id, 'dueDate', format(date, "yyyy-MM-dd"));
-                              }}
-                              initialFocus
-                              disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                            />
-                            {task.dueDate && (
-                              <div className="p-2 border-t border-border">
-                                <Button 
-                                  variant="ghost" 
-                                  className="w-full text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
-                                  onClick={() => handleUpdateField(task.id, 'dueDate', "")}
-                                >
-                                  Clear date
-                                </Button>
-                              </div>
-                            )}
-                          </PopoverContent>
-                        </Popover>
-                      ) : (
-                        <div className="flex items-center gap-2 px-2 py-1 rounded-md text-sm font-medium w-[130px] border border-transparent">
-                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                          {task.dueDate ? format(new Date(task.dueDate), "MMM d, yyyy") : <span className="text-muted-foreground font-normal">Set date</span>}
-                        </div>
-                      )}
-                    </td>
-                      <td className="px-6 py-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <button 
-                          onClick={() => fetchTaskLogs(task.id)}
-                          className="p-1.5 text-muted-foreground hover:text-brand-teal hover:bg-brand-light/20 rounded-md transition-colors inline-flex items-center justify-center mr-1"
-                          title="View Logs"
-                        >
-                          <History className="w-4 h-4" />
-                        </button>
-                        {canDeleteTask(task) && (
-                          <button 
-                            onClick={() => setTaskToDelete(task.id)}
-                            className="p-1.5 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded-md transition-colors inline-flex items-center justify-center"
-                            title="Delete Task"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
                         )}
-                      </td>
-                    </tr>
-                ))}
-              </tbody>
-            </table>
-            
-            {totalPages > 1 && (
-              <div className="py-4 border-t border-border mt-auto bg-white/50">
-                <Pagination>
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious 
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} 
-                        className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                      />
-                    </PaginationItem>
-                    
-                    {Array.from({ length: totalPages }).map((_, idx) => (
-                      <PaginationItem key={idx}>
-                        <PaginationLink 
-                          isActive={currentPage === idx + 1}
-                          onClick={() => setCurrentPage(idx + 1)}
-                          className="cursor-pointer"
-                        >
-                          {idx + 1}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                    
-                    <PaginationItem>
-                      <PaginationNext 
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} 
-                        className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
-            )}
-            </>
-        ) : (
+                      </Droppable>
+                      
+                      {/* Add a card button (Trello style) */}
+                      <button 
+                        onClick={() => {
+                          setNewTask({ title: "", description: "", assignedToIds: [], dueDate: "", status: col.id === 'on-hold' ? 'on-hold' : col.id, priority: "medium" });
+                          setCreateModalOpen(true);
+                        }}
+                        className="flex items-center gap-2 mt-1 px-2.5 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-200/60 rounded-md transition-colors w-full text-left"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add a card
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </DragDropContext>
+            </div>
+          ) : (
             <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
               <p className="text-lg font-bold text-slate-800">No Tasks Found</p>
               <p className="text-sm text-muted-foreground max-w-[250px]">

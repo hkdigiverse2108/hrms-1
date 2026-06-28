@@ -86,8 +86,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('projects', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"));
     }
-    if (isAdmin || checkPermission('tasks', 'canView')) {
-      workManagementChildren.push(getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"));
+    const isTL = Boolean(user && (user.role?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'team leader'));
+    if (isAdmin || isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/tasks">Development</Link>, "/work-management/tasks"));
     }
     const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
     if (isAdmin || isHRUser || checkPermission('daily-progress', 'canView')) {

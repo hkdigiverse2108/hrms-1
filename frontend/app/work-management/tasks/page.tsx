@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, History, AlertTriangle, MoreHorizontal } from "lucide-react";
+import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { WMTaskForm, WMTaskFormData } from "@/components/hrms/WMTaskForm";
@@ -30,7 +30,9 @@ import { useConfirm } from "@/context/ConfirmContext";
 const STAGES = [
   { id: "todo", label: "To Do", color: "text-slate-700 bg-transparent", lineColor: "bg-slate-400" },
   { id: "in-progress", label: "In Progress", color: "text-blue-700 bg-transparent", lineColor: "bg-blue-500" },
-  { id: "review", label: "Review", color: "text-amber-700 bg-transparent", lineColor: "bg-amber-500" },
+  { id: "bugs", label: "Bugs", color: "text-red-700 bg-transparent", lineColor: "bg-red-500" },
+  { id: "onhold", label: "On Hold", color: "text-amber-700 bg-transparent", lineColor: "bg-amber-500" },
+  { id: "fix-bugs", label: "Fix Bugs", color: "text-orange-700 bg-transparent", lineColor: "bg-orange-500" },
   { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
 
@@ -40,14 +42,15 @@ export default function TasksPage() {
   const router = useRouter();
   const { checkPermission, isAdmin: isUserAdmin, loading: permissionsLoading } = usePermissions();
 
-  const canViewTasks = isUserAdmin || checkPermission('tasks', 'canView');
-  const canAddTask = isUserAdmin || checkPermission('tasks', 'canAdd');
-  const canEditTask = isUserAdmin || checkPermission('tasks', 'canEdit');
-  const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete');
-
   const [tasks, setTasks] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+
+  const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id) || user?.role?.toLowerCase() === "team leader" || user?.designation?.toLowerCase() === "team leader";
+  const canViewTasks = isUserAdmin || checkPermission('tasks', 'canView') || isTeamLeader;
+  const canAddTask = isUserAdmin || checkPermission('tasks', 'canAdd') || isTeamLeader;
+  const canEditTask = isUserAdmin || checkPermission('tasks', 'canEdit') || isTeamLeader;
+  const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete') || isTeamLeader;
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,6 +66,11 @@ export default function TasksPage() {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [quickAddStage, setQuickAddStage] = useState<string | null>(null);
+  const [quickAddTitle, setQuickAddTitle] = useState("");
+  const [quickAddProjectId, setQuickAddProjectId] = useState<string>("");
+  const [quickAddPhase, setQuickAddPhase] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"board" | "table" | null>(null);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -104,9 +112,9 @@ export default function TasksPage() {
     setIsLoading(true);
     try {
       const [tRes, pRes, eRes] = await Promise.all([
-        fetch(`${API_URL}/wm-tasks`),
-        fetch(`${API_URL}/projects`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/wm-tasks`, { cache: 'no-store' }),
+        fetch(`${API_URL}/projects`, { cache: 'no-store' }),
+        fetch(`${API_URL}/employees`, { cache: 'no-store' })
       ]);
       
       if (tRes.ok) setTasks(await tRes.json());
@@ -150,9 +158,71 @@ export default function TasksPage() {
     }
   };
 
-  const handleSubmit = async (formData: WMTaskFormData) => {
+  const handleQuickAdd = async (stageId: string) => {
+    if (!quickAddTitle.trim()) return;
     setIsSubmitting(true);
     try {
+      const payload = {
+        title: quickAddTitle.trim(),
+        status: stageId,
+        projectId: quickAddProjectId,
+        phase: quickAddPhase,
+        dueDate: dateFilter,
+        postingDate: dateFilter,
+        performedBy: user?.id,
+        userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        department: selectedDepartment === 'all' && user?.department ? user.department : (selectedDepartment !== 'all' ? selectedDepartment : 'Development'),
+        assignedToId: "",
+      };
+
+      const res = await fetch(`${API_URL}/wm-tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const newTask = await res.json();
+        setTasks(prev => [...prev, newTask]);
+        setQuickAddTitle("");
+        setQuickAddPhase("");
+        setQuickAddProjectId("");
+      } else {
+        const error = await res.json();
+        toast.error(`Error: ${error.detail || "Failed to add task"}`);
+      }
+    } catch (err) {
+      console.error("Error quick adding task:", err);
+      toast.error("Failed to connect to the server");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async (formData: WMTaskFormData | any) => {
+    setIsSubmitting(true);
+    try {
+      if (formData.isBatchDistribution && Array.isArray(formData.distributedTasks)) {
+        const batch = formData.distributedTasks;
+        await Promise.all(batch.map((t: any) => 
+          fetch(`${API_URL}/wm-tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...t,
+              performedBy: user?.id,
+              userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+            })
+          })
+        ));
+        toast.success(`${batch.length} tasks assigned and distributed across team successfully!`);
+        setModalOpen(false);
+        fetchData();
+        setEditingTask(null);
+        setIsSubmitting(false);
+        return;
+      }
+
       const url = editingTask 
         ? `${API_URL}/wm-tasks/${editingTask.id}` 
         : `${API_URL}/wm-tasks`;
@@ -288,14 +358,16 @@ export default function TasksPage() {
 
   const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)))
     .filter((d: any) => !["sales", "admin", "hr"].includes(d.toLowerCase()));
-  const showTableView = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
+  const isCreativeDefault = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
+  const showTableView = viewMode !== null ? viewMode === "table" : isCreativeDefault;
 
   const filteredTasks = tasks.filter(t => {
     const assignee = employees.find(e => e.id === t.assignedToId);
-    const taskDept = assignee?.department;
+    const taskDept = assignee?.department || t.department;
+    const isProjectTL = projects.some(p => p.id === t.projectId && p.teamLeaderId === user?.id);
 
     // Strict Department Isolation for non-Admins
-    if (!isAdmin) {
+    if (!isAdmin && !isProjectTL) {
       if (taskDept && user?.department && taskDept.toLowerCase() !== user.department.toLowerCase()) {
         return false;
       }
@@ -304,11 +376,10 @@ export default function TasksPage() {
     let isVisible = false;
     if (isAdmin) {
       isVisible = true;
-    } else if (user?.role === "Team Leader") {
-      const project = projects.find(p => p.id === t.projectId);
-      isVisible = project?.teamLeaderId === user?.id || t.assignedToId === user?.id;
+    } else if (isTeamLeader) {
+      isVisible = true;
     } else {
-      isVisible = t.assignedToId === user?.id;
+      isVisible = t.assignedToId === user?.id || t.performedBy === user?.id;
     }
 
     if (!isVisible) return false;
@@ -316,7 +387,8 @@ export default function TasksPage() {
     // Department Filter
     if (selectedDepartment !== "all") {
       const assignee = employees.find(e => e.id === t.assignedToId);
-      if (assignee?.department !== selectedDepartment) return false;
+      const dept = assignee?.department || t.department;
+      if (dept !== selectedDepartment) return false;
     }
 
     const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -332,6 +404,14 @@ export default function TasksPage() {
     }
 
     return true;
+  }).sort((a, b) => {
+    const pA = a.projectName || "";
+    const pB = b.projectName || "";
+    if (pA !== pB) return pA.localeCompare(pB);
+    const phA = a.phase || "";
+    const phB = b.phase || "";
+    if (phA !== phB) return phA.localeCompare(phB);
+    return new Date(b.createdDate || 0).getTime() - new Date(a.createdDate || 0).getTime();
   });
 
   const paginatedTasks = filteredTasks.slice(
@@ -363,27 +443,31 @@ export default function TasksPage() {
   return (
     <div className="space-y-4 flex flex-col h-[calc(100vh-140px)]">
       <PageHeader
-        title="Tasks Board"
-        description="Manage your team's workflow. Click any task card to update details."
+        title="Development Board"
+        description="Manage software & web development sprints. Click any card to update details."
       >
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push('/work-management/modules')} className="gap-2 border-brand-teal text-brand-teal hover:bg-brand-teal-light hover:text-white font-bold">
+            <Briefcase className="w-4 h-4" />
+            Project Modules
+          </Button>
+          
+          {canAddTask && (
+            <Button onClick={() => { setEditingTask(null); setModalOpen(true); }} className="bg-brand-teal text-white hover:bg-brand-teal-light font-bold">
+              <Plus className="w-4 h-4 mr-2" />
+              Assign Task
+            </Button>
+          )}
 
           <Dialog open={modalOpen} onOpenChange={(open) => {
             setModalOpen(open);
             if (!open) setEditingTask(null);
           }}>
-            {canAddTask && (
-              <DialogTrigger asChild>
-                <Button size="sm" className="bg-brand-teal hover:bg-brand-teal-light text-white h-9 px-4 text-[12px] rounded-lg">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Task
-                </Button>
-              </DialogTrigger>
-            )}
+
             <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto custom-scrollbar">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">
-                  {editingTask ? "Edit Task Details" : "Create New Task"}
+                  {editingTask ? "Edit Task" : "Assign New Task"}
                 </DialogTitle>
               </DialogHeader>
               <WMTaskForm 
@@ -418,23 +502,38 @@ export default function TasksPage() {
         </div>
         
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">
-            <Button 
-              variant={!showAllTasks ? "secondary" : "ghost"} 
-              size="sm" 
-              className={`h-7 text-[11px] font-bold px-3 ${!showAllTasks ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
+            <button 
+              type="button"
+              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${!showAllTasks ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
               onClick={() => setShowAllTasks(false)}
             >
               Today
-            </Button>
-            <Button 
-              variant={showAllTasks ? "secondary" : "ghost"} 
-              size="sm" 
-              className={`h-7 text-[11px] font-bold px-3 ${showAllTasks ? 'bg-brand-teal text-white' : 'text-slate-500'}`}
+            </button>
+            <button 
+              type="button"
+              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${showAllTasks ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
               onClick={() => setShowAllTasks(true)}
             >
               All Tasks
-            </Button>
+            </button>
+          </div>
+
+          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
+            <button 
+              type="button"
+              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${!showTableView ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
+              onClick={() => setViewMode("board")}
+            >
+              📊 Board
+            </button>
+            <button 
+              type="button"
+              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${showTableView ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
+              onClick={() => setViewMode("table")}
+            >
+              📋 Table
+            </button>
           </div>
 
           {!showAllTasks && (
@@ -449,22 +548,7 @@ export default function TasksPage() {
             </div>
           )}
 
-          {isAdmin && (
-            <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-              <SelectTrigger className="h-9 w-[180px] text-xs font-bold bg-white">
-                <div className="flex items-center gap-2">
-                  <Briefcase className="w-3.5 h-3.5 text-brand-teal" />
-                  <SelectValue placeholder="All Departments" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {departments.map(dept => (
-                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+
         </div>
       </div>
 
@@ -478,7 +562,9 @@ export default function TasksPage() {
                     <th className="px-4 py-3 w-16 text-center">S.No.</th>
                     <th className="px-4 py-3 min-w-[200px]">Task Title</th>
                     <th className="px-4 py-3 min-w-[150px]">Project</th>
+                    <th className="px-4 py-3 min-w-[120px]">Phase</th>
                     <th className="px-4 py-3 min-w-[120px]">Assignee</th>
+                    <th className="px-4 py-3 min-w-[80px]">Hours</th>
                     <th className="px-4 py-3 min-w-[120px]">Department</th>
                     <th className="px-4 py-3 min-w-[120px]">Stage</th>
                     <th className="px-4 py-3 min-w-[125px]">Created Date</th>
@@ -501,8 +587,23 @@ export default function TasksPage() {
                   </tr>
                 </thead>
                 <tbody className="text-[12px] divide-y divide-slate-100">
-                  {paginatedTasks.map((task, index) => (
-                    <tr 
+                  {(() => {
+                    let currentGroup = "";
+                    return paginatedTasks.map((task, index) => {
+                      const groupKey = `${task.projectName || "Unknown Project"} ${task.phase ? `- ${task.phase}` : ''}`;
+                      const showHeader = groupKey !== currentGroup;
+                      if (showHeader) currentGroup = groupKey;
+
+                      return (
+                        <React.Fragment key={task.id}>
+                          {showHeader && (
+                            <tr className="bg-brand-teal/5">
+                              <td colSpan={24} className="px-4 py-2 font-bold text-brand-teal border-y border-brand-teal/10">
+                                {groupKey}
+                              </td>
+                            </tr>
+                          )}
+                          <tr 
                       key={task.id} 
                       className="hover:bg-slate-50/50 transition-colors group"
                     >
@@ -511,9 +612,11 @@ export default function TasksPage() {
                       {/* Inline Editable Fields */}
                       {[
                         { key: 'title', type: 'text', minWidth: '200px' },
-                        { key: 'projectId', labelKey: 'projectName', type: 'select', options: projects.map(p => ({ value: p.id, label: p.title })), minWidth: '150px' },
-                        { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
-                        { key: 'department', type: 'select', options: ['Development', 'Creative', 'Marketing'].map(d => ({ value: d, label: d })), minWidth: '120px' },
+                        { key: 'projectId', labelKey: 'projectName', type: 'select', options: projects.filter(p => p.department?.toLowerCase() === 'development').map(p => ({ value: p.id, label: p.title })), minWidth: '150px' },
+                        { key: 'phase', type: 'text', minWidth: '120px' },
+                        { key: 'assignedToId', labelKey: 'assignedToName', type: 'select', options: employees.filter(e => e.department?.toLowerCase() === 'development').map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), minWidth: '150px' },
+                        { key: 'estimatedHours', type: 'number', minWidth: '80px' },
+                        { key: 'department', type: 'select', options: ['Development'].map(d => ({ value: d, label: d })), minWidth: '120px' },
                         { key: 'status', type: 'select', options: STAGES.map(s => ({ value: s.id, label: s.label })), minWidth: '120px' },
                         { key: 'createdDate', type: 'readonly', minWidth: '125px' },
                         { key: 'postingDate', type: 'date' },
@@ -588,55 +691,35 @@ export default function TasksPage() {
                                     className="text-blue-500 hover:underline font-bold"
                                     onClick={(e) => e.stopPropagation()}
                                   >
-                                    Link
-                                  </a>
-                                </div>
-                              ) : col.key === 'postingStatus' ? (
-                                <Badge className={task[col.key] === "Yes" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}>
-                                  {task[col.key] || "No"}
-                                </Badge>
-                              ) : (
-                                <span>{task[col.key] || "-"}</span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      ))}
-
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-2">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} 
-                            className="p-1.5 hover:bg-brand-teal/10 rounded-md text-brand-teal transition-colors"
-                            title="View History"
-                          >
-                            <History className="w-3.5 h-3.5" />
-                          </button>
-                          {canEditTask && (
-                            <button 
-                              onClick={() => { setEditingTask(task); setModalOpen(true); }} 
-                              className="p-1.5 hover:bg-slate-100 rounded-md text-blue-600 transition-colors"
-                              title="Edit Task"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {canDeleteTask && (
-                            <button 
-                              onClick={() => handleDelete(task.id)} 
-                              className="p-1.5 hover:bg-red-50 rounded-md text-red-500 transition-colors"
-                              title="Delete Task"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                                          Link
+                                        </a>
+                                      </div>
+                                    ) : col.key === 'postingStatus' ? (
+                                      <Badge className={task[col.key] === "Yes" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}>
+                                        {task[col.key] || "No"}
+                                      </Badge>
+                                    ) : (
+                                      <span>{task[col.key] || "-"}</span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                            ))}
+                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-center gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1.5 hover:bg-brand-teal/10 rounded-md text-brand-teal transition-colors" title="View History"><History className="w-3.5 h-3.5" /></button>
+                                {canEditTask && <button onClick={() => { setEditingTask(task); setModalOpen(true); }} className="p-1.5 hover:bg-slate-100 rounded-md text-blue-600 transition-colors" title="Edit Task"><Pencil className="w-3.5 h-3.5" /></button>}
+                                {canDeleteTask && <button onClick={() => handleDelete(task.id)} className="p-1.5 hover:bg-red-50 rounded-md text-red-500 transition-colors" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>}
+                              </div>
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
                   {filteredTasks.length === 0 && (
                     <tr>
-                      <td colSpan={20} className="px-4 py-20 text-center text-slate-400 italic">No creative tasks found.</td>
+                      <td colSpan={24} className="px-4 py-20 text-center text-slate-400 italic">No creative tasks found.</td>
                     </tr>
                   )}
                 </tbody>
@@ -656,142 +739,194 @@ export default function TasksPage() {
             )}
           </div>
         ) : (
-          <DragDropContext onDragEnd={onDragEnd}>
-            <div className="flex gap-6 h-full overflow-x-auto pb-4 items-start">
-              {STAGES.map(stage => (
-                <div key={stage.id} className="flex flex-col w-[300px] shrink-0 h-full bg-slate-50/50 rounded-2xl border border-slate-100/50">
-                  <div className="flex items-center justify-between p-4 pb-2">
-                    <div className="flex items-center gap-2.5">
-                      <h3 className={`font-bold text-[14px] ${stage.color}`}>{stage.label}</h3>
-                      <span className="bg-slate-200/60 text-slate-600 px-2 py-0.5 rounded-full text-[11px] font-bold">
-                        {filteredTasks.filter(t => t.status === stage.id).length}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {canAddTask && (
-                        <button 
-                          onClick={() => {
-                            setEditingTask({ status: stage.id });
-                            setModalOpen(true);
-                          }}
-                          className="p-1 hover:bg-slate-200/80 rounded-md text-slate-500 hover:text-slate-700 transition-colors"
-                          title={`Add task to ${stage.label}`}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <Droppable droppableId={stage.id}>
-                    {(provided, snapshot) => (
-                      <div
-                        {...provided.droppableProps}
-                        ref={provided.innerRef}
-                        className={`flex-1 overflow-y-auto p-3 pt-2 transition-colors custom-scrollbar ${
-                          snapshot.isDraggingOver ? "bg-slate-100/50" : ""
-                        }`}
-                      >
-                        <div className="space-y-3">
-                          {filteredTasks
-                            .filter(t => t.status === stage.id)
-                            .map((task, index) => (
-                              <Draggable key={task.id} draggableId={task.id} index={index}>
-                                {(provided, snapshot) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    className="group"
-                                    onClick={() => {
-                                      if (canEditTask) {
-                                        setEditingTask(task);
-                                        setModalOpen(true);
-                                      }
-                                    }}
-                                  >
-                                    <div className={`p-4 rounded-xl transition-all cursor-pointer border relative overflow-hidden ${
-                                      snapshot.isDragging ? "opacity-90 scale-[1.02] shadow-xl border-brand-teal ring-4 ring-brand-teal/5" : 
-                                      "bg-white hover:border-brand-teal/30 border-slate-200 shadow-sm hover:shadow-md"
-                                    } ${isOverdue(task.dueDate, task.status) ? "border-red-200 bg-red-50/20" : ""}`}>
-                                      
-                                      {/* Selection Indicator */}
-                                      <div className={`absolute top-0 left-0 w-1 h-full transition-all ${stage.lineColor}`} />
-                                      
-                                      <div className="flex items-start justify-between gap-3 mb-3">
-                                        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                                          <div className="flex items-center gap-2">
-                                            <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                              task.priority === 'urgent' ? 'bg-red-500' :
-                                              task.priority === 'high' ? 'bg-orange-500' :
-                                              task.priority === 'medium' ? 'bg-blue-500' :
-                                              'bg-slate-300'
-                                            }`} />
-                                            <h4 className="font-bold text-[13px] text-slate-800 leading-snug line-clamp-2">
-                                              {task.title}
-                                            </h4>
-                                          </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-brand-teal/10 rounded-md text-brand-teal" title="View History"><History className="w-3.5 h-3.5" /></button>
-                                          {canDeleteTask && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0">
-                                          <Briefcase className="w-3 h-3 text-brand-teal shrink-0" />
-                                          <span className="text-[11px] font-bold text-slate-600 truncate max-w-[80px]">
-                                            {task.projectName || "General"}
-                                          </span>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0">
-                                          <User className="w-3 h-3 text-brand-teal shrink-0" />
-                                          <span className="text-[11px] font-bold text-slate-600 truncate max-w-[100px]">
-                                            {task.assignedToName || (employees.find(e => e.id === task.assignedToId) ? `${employees.find(e => e.id === task.assignedToId).firstName} ${employees.find(e => e.id === task.assignedToId).lastName}` : "Unassigned")}
-                                          </span>
-                                        </div>
-
-                                        {task.createdDate && (
-                                          <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 min-w-0">
-                                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
-                                            <span className="text-[11px] font-bold text-slate-600 truncate">
-                                              {task.createdDate}
-                                            </span>
-                                          </div>
-                                        )}
-
-                                        {employees.find(e => e.id === task.assignedToId)?.department && (
-                                          <div className="px-2 py-0.5 bg-brand-teal/5 text-brand-teal border border-brand-teal/10 rounded-md text-[9px] font-extrabold uppercase tracking-tighter">
-                                            {employees.find(e => e.id === task.assignedToId).department}
-                                          </div>
-                                        )}
-                                        
-                                        {isOverdue(task.dueDate, task.status) && (
-                                          <div className="flex items-center gap-1 text-red-600 ml-auto">
-                                            <AlertTriangle className="w-3.5 h-3.5" />
-                                            <span className="text-[10px] font-bold uppercase">Overdue</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
+    <DragDropContext onDragEnd={onDragEnd}>
+      <div className="flex gap-4 h-full overflow-x-auto pb-4 items-start px-2">
+        {STAGES.map(stage => (
+          <div key={stage.id} className="flex flex-col flex-1 min-w-[250px] h-full bg-slate-50/80 rounded-[20px] border border-slate-200 overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between p-4 pb-3">
+              <h3 className={`font-semibold text-[15px] ${stage.color}`}>{stage.label}</h3>
+              <div className="flex items-center gap-3 text-slate-500">
+                <span className="text-[13px] font-bold bg-slate-200/80 px-2 py-0.5 rounded-full text-slate-600">
+                  {filteredTasks.filter(t => t.status === stage.id).length}
+                </span>
+                <MoreHorizontal className="w-5 h-5 cursor-pointer hover:text-slate-700 transition-colors" />
+              </div>
+            </div>
+            
+            <Droppable droppableId={stage.id}>
+              {(provided, snapshot) => (
+                <div
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
+                  className={`flex-1 overflow-y-auto p-3 pt-1 transition-colors custom-scrollbar ${
+                    snapshot.isDraggingOver ? "bg-slate-200/30" : ""
+                  }`}
+                >
+                  <div className="space-y-2.5">
+                    {filteredTasks
+                      .filter(t => t.status === stage.id)
+                      .map((task, index) => (
+                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className="group"
+                              onClick={() => {
+                                if (canEditTask) {
+                                  setEditingTask(task);
+                                  setModalOpen(true);
+                                }
+                              }}
+                            >
+                              <div className={`p-4 rounded-xl transition-all cursor-pointer relative overflow-hidden ${
+                                snapshot.isDragging ? "opacity-90 scale-[1.02] shadow-xl ring-2 ring-brand-teal/20 bg-white" : 
+                                "bg-white hover:bg-slate-50 shadow-sm hover:shadow-md border border-slate-200 hover:border-brand-teal/30"
+                              }`}>
+                                
+                                <div className="min-h-[24px] relative">
+                                  <div className="float-right ml-2 -mt-1 flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-brand-teal" title="View Logs"><History className="w-3.5 h-3.5" /></button>
+                                    {canDeleteTask && (
+                                      <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-400 hover:text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    )}
                                   </div>
-                                )}
-                              </Draggable>
-                            ))}
-                          {provided.placeholder}
-                        </div>
+                                  <h4 className="font-medium text-[14.5px] text-slate-800 leading-snug break-words whitespace-pre-wrap">
+                                    {task.title}
+                                  </h4>
+                                  {task.projectName && (
+                                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                      <span className="text-[10px] font-bold text-brand-teal bg-brand-teal/5 px-1.5 py-0.5 rounded border border-brand-teal/10 truncate max-w-full">
+                                        {task.projectName}
+                                      </span>
+                                      {task.phase && (
+                                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                          {task.phase}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  
+                                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+                                    <div className="flex items-center gap-1.5 text-slate-600 font-semibold truncate">
+                                      <div className="w-4 h-4 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[9px] font-black shrink-0">
+                                        {(task.assignedToName || "U")[0].toUpperCase()}
+                                      </div>
+                                      <span className="truncate text-[12px]">{task.assignedToName || "Unassigned"}</span>
+                                    </div>
+                                    {task.estimatedHours > 0 && (
+                                      <span className="shrink-0 text-[10px] font-black text-brand-teal bg-brand-teal/10 px-2 py-0.5 rounded-md border border-brand-teal/20 flex items-center gap-1">
+                                        ⏱️ {task.estimatedHours} hrs
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                    {provided.placeholder}
+                    {canAddTask && (
+                      <div className="pt-2">
+                        {quickAddStage === stage.id ? (
+                          <div className="bg-white p-3 rounded-xl border border-brand-teal/30 shadow-sm space-y-3">
+                            <textarea
+                              autoFocus
+                              placeholder="Enter task title..."
+                              className="w-full text-[14px] bg-transparent font-medium outline-none resize-none min-h-[50px] text-slate-800 placeholder:text-slate-400"
+                              value={quickAddTitle}
+                              onChange={(e) => setQuickAddTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleQuickAdd(stage.id);
+                                } else if (e.key === 'Escape') {
+                                  setQuickAddStage(null);
+                                  setQuickAddTitle("");
+                                  setQuickAddProjectId("");
+                                  setQuickAddPhase("");
+                                }
+                              }}
+                            />
+                            <div className="flex flex-col gap-2 border-t border-slate-100 pt-2">
+                              <select 
+                                className="w-full text-[12px] bg-slate-50 border border-slate-200 rounded px-2 py-1.5 outline-none font-medium text-slate-600"
+                                value={quickAddProjectId}
+                                onChange={(e) => {
+                                  setQuickAddProjectId(e.target.value);
+                                  setQuickAddPhase("");
+                                }}
+                              >
+                                <option value="">Select Project</option>
+                                {projects.filter(p => p.department?.toLowerCase() === 'development').map(p => (
+                                  <option key={p.id} value={p.id}>{p.title}</option>
+                                ))}
+                              </select>
+                              
+                              {quickAddProjectId && projects.find(p => p.id === quickAddProjectId)?.isPhaseWise && projects.find(p => p.id === quickAddProjectId)?.phases?.length > 0 && (
+                                <select 
+                                  className="w-full text-[12px] bg-slate-50 border border-slate-200 rounded px-2 py-1.5 outline-none font-medium text-slate-600"
+                                  value={quickAddPhase}
+                                  onChange={(e) => setQuickAddPhase(e.target.value)}
+                                >
+                                  <option value="">Select Phase</option>
+                                  {projects.find(p => p.id === quickAddProjectId)?.phases.map((ph: any) => (
+                                    <option key={ph.name} value={ph.name}>{ph.name}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between mt-2">
+                              <Button 
+                                size="sm" 
+                                className="h-8 text-xs bg-brand-teal text-white hover:bg-brand-teal-light px-4 font-semibold rounded-lg"
+                                onClick={() => handleQuickAdd(stage.id)}
+                                disabled={!quickAddTitle.trim() || isSubmitting}
+                              >
+                                {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+                                Add
+                              </Button>
+                              <button 
+                                onClick={() => {
+                                  setQuickAddStage(null);
+                                  setQuickAddTitle("");
+                                  setQuickAddProjectId("");
+                                  setQuickAddPhase("");
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setQuickAddStage(stage.id);
+                              setQuickAddTitle("");
+                              setQuickAddProjectId("");
+                              setQuickAddPhase("");
+                            }}
+                            className="flex items-center justify-between w-full p-2 mt-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 rounded-lg transition-colors group"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <Plus className="w-5 h-5 text-slate-400 group-hover:text-brand-teal transition-colors" />
+                              <span className="text-[14.5px] font-medium">Add a task</span>
+                            </div>
+                          </button>
+                        )}
                       </div>
                     )}
-                  </Droppable>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </DragDropContext>
+              )}
+            </Droppable>
+          </div>
+        ))}
+      </div>
+    </DragDropContext>
         )}
       </div>
     </div>

@@ -1,13 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { API_URL } from "@/lib/config";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Trash2, X, Check, Search, Link2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 
 export interface ProjectFormData {
   title: string;
@@ -18,6 +22,7 @@ export interface ProjectFormData {
   teamLeaderId: string;
   startDate: string;
   endDate: string;
+  teamDeadline?: string;
   status: string;
   priority: string;
   // Creative fields
@@ -30,6 +35,14 @@ export interface ProjectFormData {
   reelRequired?: string;
   assignedEmployeeId?: string;
   assignedEmployeeName?: string;
+  isPhaseWise?: boolean;
+  phases?: Array<{name: string, assignedToId?: string, assignedToIds?: string[], startDate: string, endDate: string}>;
+  // Development fields
+  frontendLink?: string;
+  thirdPartyIntegrations?: Array<{ name: string; credentials: string; notes?: string }>;
+  assignedTeamIds?: string[];
+  testingLinks?: Array<{ title: string; url: string; notes?: string }>;
+  testingBugs?: Array<{ id: string; title: string; description: string; reportedBy: string; reportedByName: string; date: string; status: "open" | "fixed" }>;
 }
 
 const defaultFormData: ProjectFormData = {
@@ -40,6 +53,7 @@ const defaultFormData: ProjectFormData = {
   teamLeaderId: "",
   startDate: new Date().toISOString().split('T')[0],
   endDate: "",
+  teamDeadline: "",
   status: "planning",
   priority: "medium",
   // Creative fields defaults
@@ -50,19 +64,134 @@ const defaultFormData: ProjectFormData = {
   graphicsRequired: "No",
   postRequired: "No",
   reelRequired: "No",
+  isPhaseWise: false,
+  phases: [],
+  frontendLink: "",
+  thirdPartyIntegrations: [],
+  testingLinks: [],
+  testingBugs: [],
 };
 
 interface ProjectFormProps {
   initialData?: Partial<ProjectFormData>;
   onSubmit: (data: ProjectFormData) => void;
   isSubmitting?: boolean;
+  isAdmin?: boolean;
+  currentUser?: any;
 }
 
-export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectFormProps) {
+function PhaseMemberMultiSelect({ 
+  employees, 
+  selectedIds, 
+  onChange,
+}: { 
+  employees: any[]; 
+  selectedIds: string[]; 
+  onChange: (ids: string[]) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = employees.filter(emp => {
+    const fullName = `${emp.firstName || ""} ${emp.lastName || ""}`.toLowerCase();
+    return fullName.includes(search.toLowerCase());
+  });
+
+  const toggleEmployee = (id: string) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter(sid => sid !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  const selectedEmployees = employees.filter(e => selectedIds.includes(e.id));
+
+  return (
+    <div ref={containerRef} className="relative mt-1">
+      {selectedEmployees.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {selectedEmployees.map(emp => (
+            <Badge 
+              key={emp.id} 
+              variant="outline" 
+              className="bg-brand-teal/10 text-brand-teal border-brand-teal/30 text-[10px] py-0 px-1.5 pr-0.5 gap-1 font-medium"
+            >
+              {emp.firstName} {emp.lastName}
+              <button 
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleEmployee(emp.id); }}
+                className="ml-0.5 hover:bg-brand-teal/20 rounded-full p-0.5 transition-colors"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      <div className="relative">
+        <Input
+          placeholder="Select members..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setIsOpen(true); }}
+          onFocus={() => setIsOpen(true)}
+          className="bg-white border-slate-200 focus-visible:ring-brand-teal h-8 text-xs"
+        />
+        
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="p-2 text-xs text-slate-500 text-center">No members found</div>
+            ) : (
+              filtered.map(emp => {
+                const isSelected = selectedIds.includes(emp.id);
+                return (
+                  <div 
+                    key={emp.id}
+                    onClick={() => toggleEmployee(emp.id)}
+                    className="flex items-center justify-between p-2 text-xs hover:bg-slate-50 cursor-pointer"
+                  >
+                    <span>{emp.firstName} {emp.lastName}</span>
+                    {isSelected && <Check className="w-3 h-3 text-brand-teal" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true, currentUser }: ProjectFormProps) {
   const [formData, setFormData] = useState<ProjectFormData>({
     ...defaultFormData,
     ...initialData,
   });
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        ...defaultFormData,
+        ...initialData,
+      });
+    } else {
+      setFormData(defaultFormData);
+    }
+  }, [initialData]);
   const [clients, setClients] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [allEmployees, setAllEmployees] = useState<any[]>([]);
@@ -96,12 +225,72 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
     }
   };
 
-  const handleChange = (field: keyof ProjectFormData, value: string) => {
+  const handleChange = (field: keyof ProjectFormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddPhase = () => {
+    const currentPhases = formData.phases || [];
+    handleChange("phases", [...currentPhases, { name: "", assignedToId: "", assignedToIds: [], startDate: "", endDate: "" }]);
+  };
+
+  const handlePhaseChange = (index: number, field: string, value: any) => {
+    const newPhases = [...(formData.phases || [])];
+    newPhases[index] = { ...newPhases[index], [field]: value };
+    handleChange("phases", newPhases);
+  };
+
+  const handleRemovePhase = (index: number) => {
+    const newPhases = [...(formData.phases || [])];
+    newPhases.splice(index, 1);
+    handleChange("phases", newPhases);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.department === "Development") {
+      if (isAdmin && !formData.endDate) {
+        toast.error("Client Deadline (End Date) is compulsory for Development projects.");
+        return;
+      }
+      if (!formData.teamDeadline) {
+        toast.error("Team Deadline is compulsory for Development projects.");
+        return;
+      }
+
+      if (formData.endDate && formData.teamDeadline) {
+        if (new Date(formData.teamDeadline) > new Date(formData.endDate)) {
+          toast.error("Team Deadline cannot be later than the Client Deadline.");
+          return;
+        }
+      }
+
+      // Validate phase deadlines against team deadline (or client deadline)
+      if (formData.isPhaseWise && formData.phases && formData.phases.length > 0) {
+        const referenceDeadlineStr = formData.teamDeadline || formData.endDate;
+        if (referenceDeadlineStr) {
+          const referenceDeadline = new Date(referenceDeadlineStr);
+          const deadlineLabel = formData.teamDeadline ? 'Team Deadline' : 'Client Deadline';
+          for (let i = 0; i < formData.phases.length; i++) {
+            const phase = formData.phases[i];
+            if (phase.startDate) {
+              const phaseStartDate = new Date(phase.startDate);
+              if (phaseStartDate > referenceDeadline) {
+                toast.error(`Phase ${i + 1} start date cannot be later than the ${deadlineLabel}.`);
+                return;
+              }
+            }
+            if (phase.endDate) {
+              const phaseDeadline = new Date(phase.endDate);
+              if (phaseDeadline > referenceDeadline) {
+                toast.error(`Phase ${i + 1} deadline cannot be later than the ${deadlineLabel}.`);
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
     onSubmit(formData);
   };
 
@@ -220,6 +409,20 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             )}
           </div>
 
+          <div className="space-y-2 p-3 bg-brand-teal/5 border border-brand-teal/20 rounded-xl">
+            <Label className="text-xs font-extrabold text-brand-teal flex items-center gap-1.5 uppercase">
+              👥 Assigned Project Team Members (Select Multiple Employees)
+            </Label>
+            <PhaseMemberMultiSelect 
+              employees={formData.department ? allEmployees.filter(e => e.department?.toLowerCase() === formData.department?.toLowerCase()) : allEmployees}
+              selectedIds={formData.assignedTeamIds || []}
+              onChange={(val) => handleChange("assignedTeamIds", val)}
+            />
+            <p className="text-[11px] text-slate-500 font-medium">
+              Assign multiple employees to this project. They will be included in team task distributions and access controls.
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <textarea
@@ -231,7 +434,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${formData.department === "Development" ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
         <div className="space-y-2">
           <Label htmlFor="startDate">Start Date</Label>
           <Input
@@ -242,15 +445,39 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="endDate">End Date (Optional)</Label>
-          <Input
-            id="endDate"
-            type="date"
-            value={formData.endDate || ""}
-            onChange={(e) => handleChange("endDate", e.target.value)}
-          />
-        </div>
+        {isAdmin && (
+          <div className="space-y-2">
+            <Label htmlFor="endDate">
+              {formData.department === "Development" ? (
+                <>Client Deadline <span className="text-red-500">*</span></>
+              ) : (
+                "End Date (Optional)"
+              )}
+            </Label>
+            <Input
+              id="endDate"
+              type="date"
+              value={formData.endDate || ""}
+              onChange={(e) => handleChange("endDate", e.target.value)}
+              required={formData.department === "Development"}
+            />
+          </div>
+        )}
+        {formData.department === "Development" && (
+          <div className="space-y-2">
+            <Label htmlFor="teamDeadline">
+              Team Deadline <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="teamDeadline"
+              type="date"
+              value={formData.teamDeadline || ""}
+              onChange={(e) => handleChange("teamDeadline", e.target.value)}
+              max={formData.endDate || ""}
+              required
+            />
+          </div>
+        )}
       </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -265,9 +492,15 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="planning">Planning</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
               <SelectItem value="in-progress">In Progress</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="on-hold">On Hold</SelectItem>
+              {(isAdmin || currentUser?.role?.toLowerCase() === "cto" || formData.teamLeaderId === currentUser?.id || formData.status === "testing" || formData.status === "completed") && (
+                <>
+                  <SelectItem value="testing" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto" && formData.teamLeaderId !== currentUser?.id}>🧪 Testing Phase</SelectItem>
+                  <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>✅ Completed</SelectItem>
+                </>
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -289,6 +522,105 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
         </div>
       </div>
       
+      {formData.department === "Development" && (
+        <div className="space-y-4 pt-4 border-t border-slate-200 mt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-base font-semibold text-slate-800">Phase Wise Project</Label>
+              <p className="text-xs text-slate-500">Assign phase deadlines and team members</p>
+            </div>
+            <Switch
+              checked={formData.isPhaseWise || false}
+              onCheckedChange={(checked) => handleChange("isPhaseWise", checked)}
+            />
+          </div>
+          
+          {formData.isPhaseWise && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-slate-700">Project Phases & Deadlines</h4>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleAddPhase}
+                  className="h-8 text-xs bg-brand-teal text-white hover:bg-brand-teal-light hover:text-white border-transparent"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Add Phase
+                </Button>
+              </div>
+              
+              {(formData.phases || []).length === 0 ? (
+                <div className="text-center py-6 text-slate-500 text-sm border rounded-lg bg-slate-50 border-dashed">
+                  No phases added yet. Click "Add Phase" to assign deadlines.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(formData.phases || []).map((phase, index) => (
+                    <div key={index} className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50/60 shadow-sm">
+                      <div className="flex-1 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs font-bold text-slate-600">Phase Name</Label>
+                            <Input 
+                              value={phase.name || ""} 
+                              onChange={(e) => handlePhaseChange(index, "name", e.target.value)} 
+                              placeholder="e.g. Design Phase"
+                              className="h-8 text-xs mt-1 bg-white"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs font-bold text-slate-600">Assign To Members</Label>
+                            <PhaseMemberMultiSelect 
+                              employees={allEmployees.filter(e => formData.department ? e.department?.toLowerCase() === formData.department.toLowerCase() : true)}
+                              selectedIds={phase.assignedToIds || (phase.assignedToId ? [phase.assignedToId] : [])}
+                              onChange={(val) => handlePhaseChange(index, "assignedToIds", val)}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs font-bold text-slate-600">Start Date</Label>
+                            <Input 
+                              type="date" 
+                              value={phase.startDate || ""} 
+                              max={formData.teamDeadline || formData.endDate || undefined}
+                              onChange={(e) => handlePhaseChange(index, "startDate", e.target.value)}
+                              className="h-8 text-xs mt-1 bg-white"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs font-bold text-slate-600">Phase Deadline</Label>
+                            <Input 
+                              type="date" 
+                              value={phase.endDate || ""} 
+                              max={formData.teamDeadline || formData.endDate || undefined}
+                              onChange={(e) => handlePhaseChange(index, "endDate", e.target.value)}
+                              className="h-8 text-xs mt-1 bg-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <Button 
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemovePhase(index)}
+                        className="mt-6 h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                        title="Remove Phase"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {formData.department === "Creative" && (
         <div className="space-y-4 pt-4 border-t border-slate-200 mt-4">
           <h3 className="text-sm font-semibold text-slate-800">Creative Deliverables</h3>
@@ -390,6 +722,104 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting }: ProjectForm
         </div>
       )}
 
+      {formData.department === "Development" && (
+        <div className="space-y-4 pt-4 border-t border-slate-200 mt-4">
+          <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <Link2 className="w-4 h-4 text-brand-teal" /> Development Links & Third-Party Integrations
+          </h3>
+          
+          <div className="space-y-2">
+            <Label htmlFor="frontendLink">Frontend Link</Label>
+            <Input 
+              id="frontendLink"
+              placeholder="e.g. https://staging.myapp.vercel.app or GitHub repo"
+              value={formData.frontendLink || ""}
+              onChange={(e) => handleChange("frontendLink", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <div className="flex items-center justify-between">
+              <Label className="font-semibold text-slate-700">Third-Party Integrations & Credentials</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const current = formData.thirdPartyIntegrations || [];
+                  handleChange("thirdPartyIntegrations", [...current, { name: "", credentials: "", notes: "" }]);
+                }}
+                className="h-7 text-xs border-brand-teal text-brand-teal hover:bg-brand-teal/5"
+              >
+                + Add Integration
+              </Button>
+            </div>
+            {(!formData.thirdPartyIntegrations || formData.thirdPartyIntegrations.length === 0) ? (
+              <p className="text-xs text-slate-400 italic">No third-party integrations added yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {formData.thirdPartyIntegrations.map((intg: any, index: number) => (
+                  <div key={index} className="p-3 bg-white border border-slate-200 rounded-lg space-y-2 relative shadow-2xs">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        const updated = (formData.thirdPartyIntegrations || []).filter((_, i) => i !== index);
+                        handleChange("thirdPartyIntegrations", updated);
+                      }}
+                      className="h-6 w-6 absolute top-2 right-2 text-red-500 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-8">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-slate-500">Service / Tool Name</Label>
+                        <Input
+                          placeholder="e.g. Stripe API, Firebase, Twilio"
+                          value={intg.name || ""}
+                          onChange={(e) => {
+                            const updated = [...(formData.thirdPartyIntegrations || [])];
+                            updated[index] = { ...updated[index], name: e.target.value };
+                            handleChange("thirdPartyIntegrations", updated);
+                          }}
+                          className="h-8 text-xs font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-slate-500">Credentials / API Keys</Label>
+                        <Input
+                          placeholder="e.g. sk_live_xxx / client_id"
+                          value={intg.credentials || ""}
+                          onChange={(e) => {
+                            const updated = [...(formData.thirdPartyIntegrations || [])];
+                            updated[index] = { ...updated[index], credentials: e.target.value };
+                            handleChange("thirdPartyIntegrations", updated);
+                          }}
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-slate-500">Notes / Scope (Optional)</Label>
+                      <Input
+                        placeholder="e.g. Used for payment gateway on checkout page"
+                        value={intg.notes || ""}
+                        onChange={(e) => {
+                          const updated = [...(formData.thirdPartyIntegrations || [])];
+                          updated[index] = { ...updated[index], notes: e.target.value };
+                          handleChange("thirdPartyIntegrations", updated);
+                        }}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
         </div>
       </ScrollArea>
