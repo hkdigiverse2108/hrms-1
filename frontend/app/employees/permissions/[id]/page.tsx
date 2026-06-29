@@ -65,8 +65,8 @@ const PERMISSION_GROUPS = [
     icon: Briefcase,
     modules: [
       { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-      { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/tasks' },
-      { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/task' },
+      { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
+      { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
@@ -87,8 +87,8 @@ const PERMISSION_GROUPS = [
     name: 'More',
     icon: MessagesSquare,
     modules: [
-      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/remarks' },
-      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/review' },
+      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
+      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
       { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
       { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
       { moduleName: 'activity-tracker', displayName: 'Activity Tracker', tabUrl: '/activity-tracker' },

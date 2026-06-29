@@ -23,7 +23,7 @@ const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname === "/") return null; // Always allow landing on the dashboard
   if (pathname.startsWith("/work-management/projects")) return "projects";
-  if (pathname.startsWith("/work-management/tasks")) return "tasks";
+  if (pathname.startsWith("/work-management/development")) return "tasks";
   if (pathname.startsWith("/work-management/daily-progress")) return "daily-progress";
   if (pathname.startsWith("/work-management/sales")) return "sales";
   if (pathname.startsWith("/work-management/clients")) return "clients";
@@ -55,11 +55,11 @@ function getRequiredModuleForPath(pathname: string): string | null {
   if (pathname.startsWith("/workspace/seating")) return "seating-arrangement";
   if (pathname.startsWith("/workspace/resource")) return "resource-management";
   
-  if (pathname.startsWith("/remarks")) return "remarks";
-  if (pathname.startsWith("/review")) return "review";
+  if (pathname.startsWith("/penalty")) return "remarks";
+  if (pathname.startsWith("/remarks")) return "review";
   if (pathname.startsWith("/invoice")) return "invoice";
   if (pathname.startsWith("/chat")) return "chat";
-  if (pathname.startsWith("/task")) return "personal-tasks";
+  if (pathname.startsWith("/tasks")) return "personal-tasks";
   if (pathname.startsWith("/schedule")) return "schedule";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/activity-tracker")) return "activity-tracker";

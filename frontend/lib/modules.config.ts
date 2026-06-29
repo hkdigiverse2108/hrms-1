@@ -89,14 +89,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     name: 'Penalty',
     icon: MessagesSquare,
     modules: [
-      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/remarks' },
+      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
     ]
   },
   {
     name: 'Remarks',
     icon: Star,
     modules: [
-      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/review' },
+      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
     ]
   },
   {
@@ -118,8 +118,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     icon: Briefcase,
     modules: [
       { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-      { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/tasks' },
-      { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/task' },
+      { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
+      { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },  
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
