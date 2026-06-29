@@ -1231,6 +1231,7 @@ class WMTaskBase(BaseModel):
     priority: Optional[str] = "medium" # low, medium, high, urgent
     estimatedHours: Optional[float] = 0
     remarks: Optional[str] = None
+    reasonForPending: Optional[str] = None
     createdBy: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
@@ -1276,6 +1277,7 @@ class WMTaskUpdate(BaseModel):
     priority: Optional[str] = None
     estimatedHours: Optional[float] = None
     remarks: Optional[str] = None
+    reasonForPending: Optional[str] = None
     
     # Phase & Hierarchy Fields
     phase: Optional[str] = None

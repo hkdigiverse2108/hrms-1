@@ -22,6 +22,7 @@ export interface WMTaskFormData {
   priority: string;
   moduleName?: string;
   remarks?: string;
+  reasonForPending?: string;
   createdDate?: string;
   
   // Graphics fields
@@ -56,6 +57,7 @@ const defaultFormData: WMTaskFormData = {
   priority: "medium",
   moduleName: "",
   remarks: "",
+  reasonForPending: "",
   postingDate: "",
   postingDay: "",
   reelPost: "Post",
@@ -252,6 +254,10 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.status === "pending" && !formData.reasonForPending?.trim()) {
+      toast.error("Reason for pending is required when marking a task as Pending");
+      return;
+    }
     if (selectedProject) {
       if (formData.dueDate && selectedProject.endDate && new Date(formData.dueDate) > new Date(selectedProject.endDate)) {
         toast.error("Task deadline cannot exceed Project deadline");
@@ -431,6 +437,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
               <SelectItem value="in-progress">In Progress</SelectItem>
               <SelectItem value="bugs">Bugs</SelectItem>
               <SelectItem value="onhold">On Hold</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="fix-bugs">Fix Bugs</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
@@ -571,6 +578,19 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {formData.status === "pending" && (
+        <div className="space-y-2">
+          <Label htmlFor="reasonForPending" className="after:content-['_*'] after:text-red-500">Reason for Pending</Label>
+          <Input
+            id="reasonForPending"
+            placeholder="Required: Why is this task pending?"
+            value={formData.reasonForPending ?? ""}
+            onChange={(e) => handleChange("reasonForPending", e.target.value)}
+            required
+          />
         </div>
       )}
 

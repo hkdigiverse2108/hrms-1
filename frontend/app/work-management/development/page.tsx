@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { WMTaskForm, WMTaskFormData } from "@/components/hrms/WMTaskForm";
 import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +35,7 @@ const STAGES = [
   { id: "in-progress", label: "In Progress", color: "text-blue-700 bg-transparent", lineColor: "bg-blue-500" },
   { id: "bugs", label: "Bugs", color: "text-red-700 bg-transparent", lineColor: "bg-red-500" },
   { id: "onhold", label: "On Hold", color: "text-amber-700 bg-transparent", lineColor: "bg-amber-500" },
+  { id: "pending", label: "Pending", color: "text-purple-700 bg-transparent", lineColor: "bg-purple-500" },
   { id: "fix-bugs", label: "Fix Bugs", color: "text-orange-700 bg-transparent", lineColor: "bg-orange-500" },
   { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
@@ -72,6 +74,20 @@ export default function TasksPage() {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  const [pendingReasonOpen, setPendingReasonOpen] = useState(false);
+  const [pendingReasonText, setPendingReasonText] = useState("");
+  const [pendingReasonCallback, setPendingReasonCallback] = useState<{
+    resolve: (reason: string | null) => void;
+  } | null>(null);
+
+  const getPendingReason = () => {
+    return new Promise<string | null>((resolve) => {
+      setPendingReasonText("");
+      setPendingReasonCallback({ resolve });
+      setPendingReasonOpen(true);
+    });
+  };
   const [quickAddStage, setQuickAddStage] = useState<string | null>(null);
   const [quickAddTitle, setQuickAddTitle] = useState("");
   const [quickAddProjectId, setQuickAddProjectId] = useState<string>("");
@@ -296,14 +312,32 @@ export default function TasksPage() {
 
     const taskId = draggableId;
     const newStatus = destination.droppableId;
+    
+    await handleStatusChange(taskId, newStatus);
+  };
+
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
     const draggedTask = tasks.find(t => t.id === taskId);
     const assigneeId = draggedTask?.assignedToId;
     
+    let reason = "";
+    if (newStatus === "pending") {
+      const inputReason = await getPendingReason();
+      if (inputReason === null) {
+        return; // User cancelled
+      }
+      if (!inputReason.trim()) {
+        toast.error("A reason is required to mark a task as Pending.");
+        return;
+      }
+      reason = inputReason.trim();
+    }
+
     const prevTasks = [...tasks];
     const hasOtherInProgress = newStatus === "in-progress" && prevTasks.some(t => t.id !== taskId && t.assignedToId === assigneeId && t.status === "in-progress");
     
     const updatedTasks = tasks.map(t => {
-      if (t.id === taskId) return { ...t, status: newStatus };
+      if (t.id === taskId) return { ...t, status: newStatus, reasonForPending: reason || t.reasonForPending };
       if (newStatus === "in-progress" && assigneeId && t.assignedToId === assigneeId && t.status === "in-progress") {
         return { ...t, status: "todo" };
       }
@@ -315,14 +349,18 @@ export default function TasksPage() {
     }
 
     try {
+      const payload: any = { 
+        status: newStatus,
+        performedBy: user?.id,
+        userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+      };
+      if (reason) {
+        payload.reasonForPending = reason;
+      }
       const res = await fetch(`${API_URL}/wm-tasks/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          status: newStatus,
-          performedBy: user?.id,
-          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         setTasks(prevTasks);
@@ -343,6 +381,20 @@ export default function TasksPage() {
         performedBy: user?.id,
         userName: user?.name || `${user?.firstName} ${user?.lastName}`,
       };
+
+      if (field === 'status' && value === 'pending') {
+        const inputReason = await getPendingReason();
+        if (inputReason === null) {
+          setEditingCell(null);
+          return; // User cancelled
+        }
+        if (!inputReason.trim()) {
+          toast.error("A reason is required to mark a task as Pending.");
+          setEditingCell(null);
+          return;
+        }
+        payload.reasonForPending = inputReason.trim();
+      }
 
       // Special handling for derived fields
       if (field === 'projectId') {
@@ -522,6 +574,68 @@ export default function TasksPage() {
                 isSubmitting={isSubmitting} 
                 userDepartment={user?.department}
               />
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={pendingReasonOpen} onOpenChange={(open) => {
+            if (!open) {
+              if (pendingReasonCallback) {
+                pendingReasonCallback.resolve(null);
+                setPendingReasonCallback(null);
+              }
+              setPendingReasonOpen(false);
+            }
+          }}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-bold">Reason for Pending</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="customReasonForPending" className="text-sm font-semibold text-slate-700">
+                    Please provide a reason why this task is pending (Client Side):
+                  </Label>
+                  <textarea
+                    id="customReasonForPending"
+                    className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="e.g. Waiting for client response on design feedback"
+                    value={pendingReasonText}
+                    onChange={(e) => setPendingReasonText(e.target.value)}
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (pendingReasonCallback) {
+                        pendingReasonCallback.resolve(null);
+                        setPendingReasonCallback(null);
+                      }
+                      setPendingReasonOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-brand-teal text-white hover:bg-brand-teal-light"
+                    onClick={() => {
+                      if (!pendingReasonText.trim()) {
+                        toast.error("Reason is required");
+                        return;
+                      }
+                      if (pendingReasonCallback) {
+                        pendingReasonCallback.resolve(pendingReasonText.trim());
+                        setPendingReasonCallback(null);
+                      }
+                      setPendingReasonOpen(false);
+                    }}
+                  >
+                    Submit
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
