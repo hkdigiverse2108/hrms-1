@@ -46,6 +46,12 @@ export default function ProjectsPage() {
   const [selectedCompany, setSelectedCompany] = useState("all");
 
   useEffect(() => {
+    if (!isAdmin && user?.department) {
+      setSelectedDept(user.department.toLowerCase());
+    }
+  }, [isAdmin, user]);
+
+  useEffect(() => {
     if (!permissionsLoading && !canViewProjects) {
       setTimeout(() => {
         router.push("/");
@@ -475,7 +481,13 @@ export default function ProjectsPage() {
     return missing;
   });
 
-  const filteredProjects = projects.filter(p => {
+  const allowedProjects = projects.filter(p => {
+    if (isAdmin) return true;
+    if (!user?.department) return true;
+    return p.department && p.department.toLowerCase() === user.department.toLowerCase();
+  });
+
+  const filteredProjects = allowedProjects.filter(p => {
     const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           p.department?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -1025,17 +1037,19 @@ export default function ProjectsPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          <Select value={selectedDept} onValueChange={setSelectedDept}>
-            <SelectTrigger className="w-[160px] h-10 font-medium">
-              <SelectValue placeholder="Department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              <SelectItem value="Development">Development</SelectItem>
-              <SelectItem value="Creative">Creative</SelectItem>
-              <SelectItem value="Digital Marketing">Digital Marketing</SelectItem>
-            </SelectContent>
-          </Select>
+          {isAdmin && (
+            <Select value={selectedDept} onValueChange={setSelectedDept}>
+              <SelectTrigger className="w-[160px] h-10 font-medium">
+                <SelectValue placeholder="Department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {["Development", "Creative", "Digital Marketing"].map(dept => (
+                  <SelectItem key={dept} value={dept.toLowerCase()}>{dept}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <Select value={selectedStatus} onValueChange={setSelectedStatus}>
             <SelectTrigger className="w-[140px] h-10 font-medium">
