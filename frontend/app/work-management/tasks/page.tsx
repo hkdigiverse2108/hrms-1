@@ -363,10 +363,14 @@ export default function TasksPage() {
 
   const isDueTask = (t: any) => {
     if (!t.assignedToId || t.status === "completed") return false;
-    const taskDate = showTableView ? t.postingDate : t.dueDate;
-    if (!taskDate) return true;
     const todayStr = new Date().toISOString().split('T')[0];
-    return taskDate <= todayStr || taskDate <= dateFilter;
+    const taskDate = showTableView ? t.postingDate : t.dueDate;
+    if (!taskDate || taskDate <= todayStr || taskDate <= dateFilter) return true;
+    const createdStr = t.createdDate ? (typeof t.createdDate === 'string' ? t.createdDate.split('T')[0] : "") : "";
+    const postingStr = t.postingDate || "";
+    if (createdStr && (createdStr <= todayStr || createdStr <= dateFilter)) return true;
+    if (postingStr && (postingStr <= todayStr || postingStr <= dateFilter)) return true;
+    return false;
   };
 
   const filteredTasks = tasks.filter(t => {
