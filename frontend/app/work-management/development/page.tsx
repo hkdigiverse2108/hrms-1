@@ -57,6 +57,8 @@ export default function TasksPage() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
   const [employeeFilterOpen, setEmployeeFilterOpen] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
+  const [projectFilterOpen, setProjectFilterOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -78,7 +80,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedDepartment, selectedEmployeeId, dateFilter, showAllTasks]);
+  }, [searchTerm, selectedDepartment, selectedEmployeeId, selectedProjectId, dateFilter, showAllTasks]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -413,6 +415,11 @@ export default function TasksPage() {
       if (t.assignedToId !== selectedEmployeeId) return false;
     }
 
+    // Project Filter
+    if (selectedProjectId !== "all") {
+      if (t.projectId !== selectedProjectId) return false;
+    }
+
     const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           t.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.assignedToName?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -516,6 +523,81 @@ export default function TasksPage() {
         </div>
         
         <div className="flex items-center gap-2">
+          {(() => {
+            const activeProjects = projects.filter(p => {
+              const isNotCompleted = p.status?.toLowerCase() !== "completed" && p.status?.toLowerCase() !== "cancelled";
+              if (!isNotCompleted) return false;
+              if (selectedDepartment !== "all") {
+                return p.department?.toLowerCase() === selectedDepartment.toLowerCase();
+              }
+              return true;
+            });
+            const selectedProj = projects.find(p => p.id === selectedProjectId);
+            return (
+              <Popover open={projectFilterOpen} onOpenChange={setProjectFilterOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={projectFilterOpen}
+                    className="h-9 text-xs font-bold bg-white border border-slate-200 rounded-lg px-3 outline-none text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition-all justify-between min-w-[150px] max-w-[200px] truncate"
+                  >
+                    <span className="truncate">
+                      {selectedProjectId === "all"
+                        ? "All Active Projects"
+                        : selectedProj
+                        ? selectedProj.title
+                        : "Select Project"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[240px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search active project..." className="h-8 text-xs" />
+                    <CommandList>
+                      <CommandEmpty>No project found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="All Active Projects"
+                          onSelect={() => {
+                            setSelectedProjectId("all");
+                            setProjectFilterOpen(false);
+                          }}
+                          className="text-xs cursor-pointer font-medium"
+                        >
+                          <Check
+                            className={`mr-2 h-3.5 w-3.5 text-brand-teal ${
+                              selectedProjectId === "all" ? "opacity-100" : "opacity-0"
+                            }`}
+                          />
+                          All Active Projects
+                        </CommandItem>
+                        {activeProjects.map((proj) => (
+                          <CommandItem
+                            key={proj.id}
+                            value={proj.title}
+                            onSelect={() => {
+                              setSelectedProjectId(proj.id);
+                              setProjectFilterOpen(false);
+                            }}
+                            className="text-xs cursor-pointer font-medium"
+                          >
+                            <Check
+                              className={`mr-2 h-3.5 w-3.5 text-brand-teal ${
+                                selectedProjectId === proj.id ? "opacity-100" : "opacity-0"
+                              }`}
+                            />
+                            <span className="truncate">{proj.title}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            );
+          })()}
           {isAdmin && (() => {
             const selectedEmp = employees.find(e => e.id === selectedEmployeeId);
             return (
@@ -619,19 +701,6 @@ export default function TasksPage() {
               📋 Table
             </button>
           </div>
-
-          {!showAllTasks && (
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 h-9">
-              <Calendar className="w-3.5 h-3.5 text-brand-teal" />
-              <input 
-                type="date" 
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="text-xs font-bold bg-transparent outline-none border-none p-0"
-              />
-            </div>
-          )}
-
 
         </div>
       </div>
