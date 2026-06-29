@@ -47,7 +47,7 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (!isAdmin && user?.department) {
-      setSelectedDept(user.department.toLowerCase());
+      setSelectedDept(user.department.toLowerCase().trim());
     }
   }, [isAdmin, user]);
 
@@ -484,7 +484,8 @@ export default function ProjectsPage() {
   const allowedProjects = projects.filter(p => {
     if (isAdmin) return true;
     if (!user?.department) return true;
-    return p.department && p.department.toLowerCase() === user.department.toLowerCase();
+    const userDept = user.department.toLowerCase().trim();
+    return p.department && p.department.toLowerCase().includes(userDept);
   });
 
   const filteredProjects = allowedProjects.filter(p => {
@@ -492,7 +493,8 @@ export default function ProjectsPage() {
                           p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           p.department?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesDept = selectedDept === "all" || p.department?.toLowerCase() === selectedDept.toLowerCase();
+    const selectedDeptTrimmed = selectedDept.toLowerCase().trim();
+    const matchesDept = selectedDept === "all" || (p.department && p.department.toLowerCase().includes(selectedDeptTrimmed));
     const matchesStatus = selectedStatus === "all" || p.status?.toLowerCase() === selectedStatus.toLowerCase();
     const matchesPriority = selectedPriority === "all" || p.priority?.toLowerCase() === selectedPriority.toLowerCase();
     const matchesCompany = selectedCompany === "all" || p.clientName === selectedCompany;
