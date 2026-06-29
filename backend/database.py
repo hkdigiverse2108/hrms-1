@@ -49,7 +49,10 @@ ALLOW_INVALID_CERTS = os.getenv("ALLOW_INVALID_CERTS", "true").lower() == "true"
 client = AsyncIOMotorClient(
     MONGO_URL, 
     tls=True,
-    tlsAllowInvalidCertificates=ALLOW_INVALID_CERTS
+    tlsAllowInvalidCertificates=ALLOW_INVALID_CERTS,
+    maxPoolSize=100,
+    minPoolSize=10,
+    maxIdleTimeMS=45000
 )
 
 # --- Automatic Timestamp Handling Wrapper classes ---
