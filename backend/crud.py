@@ -2586,6 +2586,12 @@ async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = N
                 {"_id": {"$in": [ObjectId(cid) for cid in project_client_ids if ObjectId.is_valid(cid)]}}
             ]
             
+            user = await get_employee(db, user_id)
+            if user and user.get("department"):
+                import re
+                dept_regex = re.compile(f".*{re.escape(user.get('department'))}.*", re.IGNORECASE)
+                query["$or"].append({"department": dept_regex})
+            
     cursor = db.clients.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
@@ -2915,6 +2921,11 @@ async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, 
                     or_conditions.append({"_id": {"$in": project_ids_as_obj}})
                 or_conditions.append({"id": {"$in": project_ids}}) # fallback for string IDs
             
+            if dept:
+                import re
+                dept_regex = re.compile(f".*{re.escape(dept)}.*", re.IGNORECASE)
+                or_conditions.append({"department": dept_regex})
+
             query["$or"] = or_conditions
 
     cursor = db.projects.find(query).sort("_id", -1).skip(skip).limit(limit)
