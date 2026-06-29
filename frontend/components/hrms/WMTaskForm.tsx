@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Calendar } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
+import { useUser } from "@/hooks/useUser";
 
 export interface WMTaskFormData {
   title: string;
@@ -80,8 +81,13 @@ interface WMTaskFormProps {
 }
 
 export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment }: WMTaskFormProps) {
+  const { user } = useUser();
+  const isExistingTask = Boolean((initialData as any)?.id || (initialData as any)?._id);
+  const defaultAssignee = !isExistingTask ? (initialData?.assignedToId || user?.id || "") : (initialData?.assignedToId || "");
+
   const [formData, setFormData] = useState<WMTaskFormData>({
     ...defaultFormData,
+    assignedToId: defaultAssignee,
     ...initialData,
   });
   const [projects, setProjects] = useState<any[]>([]);
@@ -94,11 +100,24 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
   }, []);
 
   useEffect(() => {
+    setFormData(prev => {
+      const isExisting = Boolean((initialData as any)?.id || (initialData as any)?._id);
+      if (!isExisting && !prev.assignedToId && user?.id) {
+        return { ...prev, assignedToId: user.id };
+      }
+      return prev;
+    });
+  }, [user]);
+
+  useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
+    const isExisting = Boolean((initialData as any)?.id || (initialData as any)?._id);
+    const assignee = !isExisting ? (initialData?.assignedToId || user?.id || "") : (initialData?.assignedToId || "");
     setFormData({
       ...defaultFormData,
       dueDate: today,
       ...initialData,
+      assignedToId: assignee,
     });
   }, [initialData]);
 
@@ -144,7 +163,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           newData.projectId = "";
         }
         const currentEmployee = employees.find(e => e.id === prev.assignedToId);
-        if (currentEmployee && currentEmployee.department?.toLowerCase() !== value.toLowerCase()) {
+        if (currentEmployee && currentEmployee.department && currentEmployee.department.toLowerCase() !== value.toLowerCase()) {
           newData.assignedToId = "";
         }
       }

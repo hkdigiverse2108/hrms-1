@@ -172,7 +172,8 @@ export default function TasksPage() {
         performedBy: user?.id,
         userName: user?.name || `${user?.firstName} ${user?.lastName}`,
         department: selectedDepartment === 'all' && user?.department ? user.department : (selectedDepartment !== 'all' ? selectedDepartment : 'Development'),
-        assignedToId: "",
+        assignedToId: user?.id || "",
+        assignedToName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || "Unassigned",
       };
 
       const res = await fetch(`${API_URL}/wm-tasks`, {

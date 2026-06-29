@@ -3261,13 +3261,21 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
         if project:
             task_dict["projectName"] = project.get("title")
     
+    if not task_dict.get("assignedToId"):
+        fallback_id = performedBy if performedBy and performedBy != "Unknown" else task_dict.get("createdBy")
+        if fallback_id and fallback_id != "Unknown":
+            task_dict["assignedToId"] = fallback_id
+
     if task_dict.get("assignedToId"):
-        employee = await db.employees.find_one({"_id": ObjectId(task_dict["assignedToId"])})
-        if employee:
-            if not task_dict.get("assignedToName"):
-                task_dict["assignedToName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
-            if not task_dict.get("department"):
-                task_dict["department"] = employee.get("department")
+        try:
+            employee = await db.employees.find_one({"_id": ObjectId(task_dict["assignedToId"])})
+            if employee:
+                if not task_dict.get("assignedToName") or task_dict.get("assignedToName") == "Unassigned":
+                    task_dict["assignedToName"] = f"{employee.get('firstName', '')} {employee.get('lastName', '')}".trim() if hasattr(f"{employee.get('firstName', '')} {employee.get('lastName', '')}", "trim") else f"{employee.get('firstName', '')} {employee.get('lastName', '')}".strip()
+                if not task_dict.get("department"):
+                    task_dict["department"] = employee.get("department")
+        except Exception:
+            pass
 
     if not task_dict.get("createdDate"):
         task_dict["createdDate"] = get_now().strftime("%Y-%m-%d")

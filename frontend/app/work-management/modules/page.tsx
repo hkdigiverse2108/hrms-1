@@ -96,7 +96,7 @@ export default function ModulesPage() {
   const [formData, setFormData] = useState({
     title: "",
     dueDate: "",
-    assignedToId: "",
+    assignedToId: user?.id || "",
     stage: "todo",
     priority: "medium",
     estimatedHours: 0
@@ -204,9 +204,15 @@ export default function ModulesPage() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (user?.id && !formData.assignedToId) {
+      setFormData(prev => ({ ...prev, assignedToId: user.id }));
+    }
+  }, [user]);
+
   const openAddModal = (phase: any = null) => {
     setActivePhase(phase);
-    setFormData({ title: "", dueDate: "", assignedToId: "", stage: "todo", priority: "medium" });
+    setFormData({ title: "", dueDate: "", assignedToId: user?.id || "", stage: "todo", priority: "medium", estimatedHours: 0 });
     setIsModalOpen(true);
   };
 
@@ -246,14 +252,16 @@ export default function ModulesPage() {
 
     setIsSubmitting(true);
     try {
-      const assignee = employees.find(emp => emp.id === formData.assignedToId);
+      const finalAssignedId = formData.assignedToId || user?.id || "";
+      const assignee = employees.find(emp => emp.id === finalAssignedId);
+      const creatorName = user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || null;
       
       const newModule = { 
         name: formData.title.trim(), 
         phaseName: activePhase ? activePhase.name : null,
         dueDate: formData.dueDate,
-        assignedToId: formData.assignedToId,
-        assignedToName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
+        assignedToId: finalAssignedId,
+        assignedToName: assignee ? `${assignee.firstName} ${assignee.lastName}` : (finalAssignedId === user?.id ? creatorName : null),
         stage: formData.stage,
         priority: formData.priority,
         estimatedHours: formData.estimatedHours || 0,
