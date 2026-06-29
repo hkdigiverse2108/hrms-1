@@ -1046,7 +1046,12 @@ export default function ProjectsPage() {
               <SelectItem value="planning">Planning</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="on-hold">On Hold</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
+              {(selectedDept === "all" || selectedDept.toLowerCase() === "development" || selectedDept.toLowerCase().includes("dev")) && (
+                <>
+                  <SelectItem value="testing">Testing</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </>
+              )}
             </SelectContent>
           </Select>
 
@@ -1126,6 +1131,7 @@ export default function ProjectsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => {
             const progress = calculateProgress(project.id);
+            const isDevProject = !project.department || project.department.toLowerCase() === "development" || project.department.toLowerCase().includes("dev");
             const overdue = isOverdue(project.endDate, project.status, progress);
             const isManagementOrTL = isAdmin || user?.role === "HR" || project.teamLeaderId === user?.id;
             
@@ -1138,7 +1144,7 @@ export default function ProjectsPage() {
                     <div className="flex flex-col">
                       <div className="flex gap-2 items-center mb-2">
                         <Badge variant={getStatusColor(project.status, progress)} className="capitalize">
-                          {progress === 100 ? 'Completed' : project.status.replace('-', ' ')}
+                          {isDevProject && progress === 100 ? 'Completed' : project.status.replace('-', ' ')}
                         </Badge>
                         {overdue && (
                           <Badge variant="destructive" className="text-[10px] font-bold h-5 flex items-center gap-1">
@@ -1294,8 +1300,8 @@ export default function ProjectsPage() {
                       </div>
                     )}
 
-                    {/* Testing Phase / Shift to Testing Action */}
-                    {project.status === "testing" ? (
+                    {/* Testing Phase / Shift to Testing Action - Only for Development Projects */}
+                    {isDevProject && (project.status === "testing" ? (
                       <div className="pt-3 border-t border-dashed border-indigo-200">
                         <Button 
                           type="button"
@@ -1329,7 +1335,7 @@ export default function ProjectsPage() {
                           </div>
                         )}
                       </div>
-                    ) : null}
+                    ) : null)}
 
                     <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       {isAdmin ? (

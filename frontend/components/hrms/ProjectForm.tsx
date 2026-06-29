@@ -495,7 +495,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="in-progress">In Progress</SelectItem>
               <SelectItem value="on-hold">On Hold</SelectItem>
-              {(isAdmin || currentUser?.role?.toLowerCase() === "cto" || formData.teamLeaderId === currentUser?.id || formData.status === "testing" || formData.status === "completed") && (
+              {(!formData.department || formData.department.toLowerCase() === "development" || formData.department.toLowerCase().includes("dev")) && (isAdmin || currentUser?.role?.toLowerCase() === "cto" || formData.teamLeaderId === currentUser?.id || formData.status === "testing" || formData.status === "completed") && (
                 <>
                   <SelectItem value="testing" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto" && formData.teamLeaderId !== currentUser?.id}>🧪 Testing Phase</SelectItem>
                   <SelectItem value="completed" disabled={!isAdmin && currentUser?.role?.toLowerCase() !== "cto"}>✅ Completed</SelectItem>
