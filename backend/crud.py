@@ -6057,11 +6057,38 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                             "type": recovery_type
                         })
                     elif recovery_type == 'break':
-                        breaks.append({
-                            "startTime": fmt_start,
-                            "endTime": fmt_end,
-                            "duration": str(int(duration_seconds // 60))
-                        })
+                        # Find matching or overlapping break to correct instead of blindly appending
+                        best_break = None
+                        req_start_mins = (ci_dt.hour * 60) + ci_dt.minute
+                        req_end_mins = (co_dt.hour * 60) + co_dt.minute
+                        
+                        for b in breaks:
+                            try:
+                                b_start_parts = b.get('startTime', '00:00').split(':')
+                                b_start_mins = int(b_start_parts[0]) * 60 + int(b_start_parts[1])
+                                b_end_parts = b.get('endTime', '23:59').split(':')
+                                b_end_mins = int(b_end_parts[0]) * 60 + int(b_end_parts[1])
+                                
+                                overlaps = max(req_start_mins, b_start_mins) < min(req_end_mins, b_end_mins)
+                                close_start = abs(b_start_mins - req_start_mins) <= 30
+                                close_end = abs(b_end_mins - req_end_mins) <= 30
+                                
+                                if overlaps or close_start or close_end:
+                                    best_break = b
+                                    break
+                            except Exception:
+                                continue
+                                
+                        if best_break:
+                            best_break["startTime"] = fmt_start
+                            best_break["endTime"] = fmt_end
+                            best_break["duration"] = str(int(duration_seconds // 60))
+                        else:
+                            breaks.append({
+                                "startTime": fmt_start,
+                                "endTime": fmt_end,
+                                "duration": str(int(duration_seconds // 60))
+                            })
                     
                     # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
                     merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
@@ -6184,23 +6211,45 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                         updated = False
                         breaks = attn.get('breaks', [])
                         
-                        # Find the BEST matching break (closest startTime)
+                        # Find the BEST matching or overlapping break (closest startTime or overlap)
                         best_break = None
-                        min_diff = 16 # Must be within 15 mins
                         
-                        for b in breaks:
+                        # Parse requested times to minutes
+                        def to_mins(t_str):
+                            if not t_str: return None
+                            parts = t_str.split(':')
                             try:
-                                db_h, db_m = map(int, b.get('startTime', '00:00').split(':')[:2])
-                                req_h, req_m = map(int, break_in.split(':')[:2])
-                                diff = abs((db_h * 60 + db_m) - (req_h * 60 + req_m))
-                                if diff < min_diff:
-                                    min_diff = diff
-                                    best_break = b
-                            except Exception: continue
+                                return int(parts[0]) * 60 + int(parts[1])
+                            except Exception:
+                                return None
+                                
+                        req_start = to_mins(break_in)
+                        req_end = to_mins(break_out)
+                        
+                        if req_start is not None and req_end is not None:
+                            for b in breaks:
+                                try:
+                                    b_start = to_mins(b.get('startTime'))
+                                    b_end = to_mins(b.get('endTime'))
+                                    if b_start is None:
+                                        continue
+                                    if b_end is None:
+                                        b_end = 23 * 60 + 59  # default to end of day if active
+                                        
+                                    overlaps = max(req_start, b_start) < min(req_end, b_end)
+                                    close_start = abs(b_start - req_start) <= 30
+                                    close_end = b_end is not None and abs(b_end - req_end) <= 30
+                                    
+                                    if overlaps or close_start or close_end:
+                                        best_break = b
+                                        break
+                                except Exception:
+                                    continue
                         
                         if best_break:
-                            print(f"DEBUG: Best match found in record {attn['_id']} with {min_diff} mins diff")
-                            best_break['endTime'] = break_out
+                            print(f"DEBUG: Best match found in record {attn['_id']}")
+                            best_break['startTime'] = break_in if len(break_in.split(':')) == 3 else f"{break_in}:00"
+                            best_break['endTime'] = break_out if len(break_out.split(':')) == 3 else f"{break_out}:00"
                             fmt = '%H:%M:%S' if len(break_in.split(':')) == 3 else '%H:%M'
                             t1, t2 = datetime.strptime(break_in, fmt), datetime.strptime(break_out, fmt)
                             best_break['duration'] = str(int((t2 - t1).total_seconds() / 60))
