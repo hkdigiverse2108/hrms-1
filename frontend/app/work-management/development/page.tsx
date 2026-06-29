@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus } from "lucide-react";
+import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { WMTaskForm, WMTaskFormData } from "@/components/hrms/WMTaskForm";
@@ -21,6 +21,8 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TablePagination } from "@/components/common/TablePagination";
@@ -53,6 +55,8 @@ export default function TasksPage() {
   const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete') || isTeamLeader;
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
+  const [employeeFilterOpen, setEmployeeFilterOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -74,7 +78,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedDepartment, dateFilter, showAllTasks]);
+  }, [searchTerm, selectedDepartment, selectedEmployeeId, dateFilter, showAllTasks]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -404,6 +408,11 @@ export default function TasksPage() {
       if (dept !== selectedDepartment) return false;
     }
 
+    // Employee Filter (for Admin)
+    if (selectedEmployeeId !== "all") {
+      if (t.assignedToId !== selectedEmployeeId) return false;
+    }
+
     const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           t.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.assignedToName?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -507,6 +516,76 @@ export default function TasksPage() {
         </div>
         
         <div className="flex items-center gap-2">
+          {isAdmin && (() => {
+            const selectedEmp = employees.find(e => e.id === selectedEmployeeId);
+            return (
+              <Popover open={employeeFilterOpen} onOpenChange={setEmployeeFilterOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={employeeFilterOpen}
+                    className="h-9 text-xs font-bold bg-white border border-slate-200 rounded-lg px-3 outline-none text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition-all justify-between min-w-[160px] max-w-[220px] truncate"
+                  >
+                    <span className="truncate">
+                      {selectedEmployeeId === "all"
+                        ? "All Employees"
+                        : selectedEmp
+                        ? `${selectedEmp.firstName} ${selectedEmp.lastName}`
+                        : "Select Employee"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[220px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search employee..." className="h-8 text-xs" />
+                    <CommandList>
+                      <CommandEmpty>No employee found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="All Employees"
+                          onSelect={() => {
+                            setSelectedEmployeeId("all");
+                            setEmployeeFilterOpen(false);
+                          }}
+                          className="text-xs cursor-pointer font-medium"
+                        >
+                          <Check
+                            className={`mr-2 h-3.5 w-3.5 text-brand-teal ${
+                              selectedEmployeeId === "all" ? "opacity-100" : "opacity-0"
+                            }`}
+                          />
+                          All Employees
+                        </CommandItem>
+                        {employees.map((emp) => {
+                          const fullName = `${emp.firstName} ${emp.lastName}`;
+                          return (
+                            <CommandItem
+                              key={emp.id}
+                              value={fullName}
+                              onSelect={() => {
+                                setSelectedEmployeeId(emp.id);
+                                setEmployeeFilterOpen(false);
+                              }}
+                              className="text-xs cursor-pointer font-medium"
+                            >
+                              <Check
+                                className={`mr-2 h-3.5 w-3.5 text-brand-teal ${
+                                  selectedEmployeeId === emp.id ? "opacity-100" : "opacity-0"
+                                }`}
+                              />
+                              {fullName}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            );
+          })()}
           <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
             <button 
               type="button"
