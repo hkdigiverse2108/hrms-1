@@ -412,18 +412,41 @@ async def lifespan(app):
     except Exception as e:
         print(f"[PC Registration] Failed to register PC: {e}")
 
-    # Ensure database indexes for chat messages are created to speed up loading
+    # Ensure database indexes are created to speed up loading across high-traffic collections
     try:
         from database import db
-        print("[Chat Indexing] Ensuring database indexes for chat messages...", flush=True)
-        # Index for group/general chats
+        print("[Database Indexing] Ensuring indexes for high-traffic collections...", flush=True)
+        # Chat Messages
         await db.messages.create_index([("groupId", 1), ("timestamp", 1)])
-        # Indexes for personal chats
         await db.messages.create_index([("senderId", 1), ("receiverId", 1), ("timestamp", 1)])
         await db.messages.create_index([("receiverId", 1), ("senderId", 1), ("timestamp", 1)])
-        print("[Chat Indexing] Chat message indexes verified/created successfully.", flush=True)
+        
+        # Work Management Tasks
+        await db.wm_tasks.create_index([("department", 1), ("status", 1)])
+        await db.wm_tasks.create_index([("assignedToId", 1), ("status", 1)])
+        await db.wm_tasks.create_index([("projectId", 1)])
+        await db.wm_tasks.create_index([("dueDate", 1)])
+        await db.wm_tasks.create_index([("postingDate", 1)])
+        
+        # Projects
+        await db.projects.create_index([("department", 1), ("status", 1)])
+        await db.projects.create_index([("clientId", 1)])
+        await db.projects.create_index([("teamLeaderId", 1)])
+        
+        # Employees & Attendance
+        await db.employees.create_index([("email", 1)])
+        await db.employees.create_index([("department", 1)])
+        await db.attendance.create_index([("employeeId", 1), ("date", -1)])
+        await db.attendance.create_index([("date", -1)])
+        
+        # Logs & Clients
+        await db.task_logs.create_index([("taskId", 1), ("timestamp", -1)])
+        await db.task_logs.create_index([("projectId", 1), ("timestamp", -1)])
+        await db.clients.create_index([("department", 1)])
+        
+        print("[Database Indexing] All database indexes verified/created successfully.", flush=True)
     except Exception as e:
-        print(f"[Chat Indexing] Failed to create chat indexes: {e}", flush=True)
+        print(f"[Database Indexing] Failed to create indexes: {e}", flush=True)
 
     reminder_task = asyncio.create_task(content_calendar_reminder_task())
     feedback_task = asyncio.create_task(feedback_reminder_task())
