@@ -438,7 +438,6 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
               <SelectItem value="bugs">Bugs</SelectItem>
               <SelectItem value="onhold">On Hold</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="fix-bugs">Fix Bugs</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>

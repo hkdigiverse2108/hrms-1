@@ -855,7 +855,6 @@ export default function ModulesPage() {
                     <SelectItem value="in-progress">In Progress</SelectItem>
                     <SelectItem value="bugs">Bugs</SelectItem>
                     <SelectItem value="onhold">On Hold</SelectItem>
-                    <SelectItem value="fix-bugs">Fix Bugs</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1184,7 +1183,6 @@ export default function ModulesPage() {
                             <SelectItem value="in-progress" className="text-xs">In Progress</SelectItem>
                             <SelectItem value="bugs" className="text-xs">Bugs</SelectItem>
                             <SelectItem value="onhold" className="text-xs">On Hold</SelectItem>
-                            <SelectItem value="fix-bugs" className="text-xs">Fix Bugs</SelectItem>
                             <SelectItem value="completed" className="text-xs">Completed</SelectItem>
                           </SelectContent>
                         </Select>
