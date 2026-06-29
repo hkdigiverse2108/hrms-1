@@ -3280,6 +3280,12 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
     if not task_dict.get("createdDate"):
         task_dict["createdDate"] = get_now().strftime("%Y-%m-%d")
         
+    if task_dict.get("status") == "in-progress" and task_dict.get("assignedToId"):
+        await db.wm_tasks.update_many(
+            {"assignedToId": task_dict["assignedToId"], "status": "in-progress"},
+            {"$set": {"status": "todo"}}
+        )
+
     result = await db.wm_tasks.insert_one(task_dict)
     taskId = str(result.inserted_id)
     
@@ -3329,6 +3335,13 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                 if not update_data.get("department"):
                     update_data["department"] = employee.get("department")
                 
+        target_assignee = update_data.get("assignedToId") or (old_task.get("assignedToId") if old_task else None)
+        if update_data.get("status") == "in-progress" and target_assignee:
+            await db.wm_tasks.update_many(
+                {"assignedToId": target_assignee, "status": "in-progress", "_id": {"$ne": ObjectId(task_id)}},
+                {"$set": {"status": "todo"}}
+            )
+
         await db.wm_tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
         
         log_details, diffs = format_field_changes(old_task, update_data, f"Task '{old_task.get('title')}'")

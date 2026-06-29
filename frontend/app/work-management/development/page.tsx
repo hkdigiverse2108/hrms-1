@@ -296,10 +296,23 @@ export default function TasksPage() {
 
     const taskId = draggableId;
     const newStatus = destination.droppableId;
+    const draggedTask = tasks.find(t => t.id === taskId);
+    const assigneeId = draggedTask?.assignedToId;
     
     const prevTasks = [...tasks];
-    const updatedTasks = tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
+    const hasOtherInProgress = newStatus === "in-progress" && prevTasks.some(t => t.id !== taskId && t.assignedToId === assigneeId && t.status === "in-progress");
+    
+    const updatedTasks = tasks.map(t => {
+      if (t.id === taskId) return { ...t, status: newStatus };
+      if (newStatus === "in-progress" && assigneeId && t.assignedToId === assigneeId && t.status === "in-progress") {
+        return { ...t, status: "todo" };
+      }
+      return t;
+    });
     setTasks(updatedTasks);
+    if (hasOtherInProgress) {
+      toast.info("Previous in-progress task moved to To Do (only 1 task allowed in progress)");
+    }
 
     try {
       const res = await fetch(`${API_URL}/wm-tasks/${taskId}`, {
@@ -314,6 +327,8 @@ export default function TasksPage() {
       if (!res.ok) {
         setTasks(prevTasks);
         toast.error("Failed to update task stage");
+      } else if (hasOtherInProgress) {
+        fetchData();
       }
     } catch (err) {
       console.error("Error updating task status:", err);
@@ -349,13 +364,23 @@ export default function TasksPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
+        const targetTask = tasks.find(t => t.id === taskId);
+        const targetAssignee = payload.assignedToId || targetTask?.assignedToId;
+        const hasOtherInProgress = field === 'status' && value === 'in-progress' && tasks.some(t => t.id !== taskId && t.assignedToId === targetAssignee && t.status === 'in-progress');
+
         setTasks(prev => prev.map(t => {
           if (t.id === taskId) {
-            const updated = { ...t, ...payload };
-            return updated;
+            return { ...t, ...payload };
+          }
+          if (field === 'status' && value === 'in-progress' && targetAssignee && t.assignedToId === targetAssignee && t.status === 'in-progress') {
+            return { ...t, status: 'todo' };
           }
           return t;
         }));
+        if (hasOtherInProgress) {
+          toast.info("Previous in-progress task moved to To Do (only 1 task allowed in progress)");
+          fetchData();
+        }
       }
     } catch (err) {
       console.error("Error updating field:", err);
