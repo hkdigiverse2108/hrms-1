@@ -65,13 +65,13 @@ const PERMISSION_GROUPS = [
     icon: Briefcase,
     modules: [
       { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-      { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
-      { moduleName: 'personal-tasks', displayName: 'Personal Tasks', tabUrl: '/task' },
+      { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/tasks' },
+      { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/task' },
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
       { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
-      { moduleName: 'creative', displayName: 'SMM', tabUrl: '/work-management/smm' },
+      { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
     ]
   },
   {
@@ -87,8 +87,8 @@ const PERMISSION_GROUPS = [
     name: 'More',
     icon: MessagesSquare,
     modules: [
-      { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
-      { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
+      { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/remarks' },
+      { moduleName: 'review', displayName: 'Remarks', tabUrl: '/review' },
       { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
       { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
       { moduleName: 'activity-tracker', displayName: 'Activity Tracker', tabUrl: '/activity-tracker' },
@@ -161,7 +161,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
         if (data && data.permissions) {
           const merged = DEFAULT_MODULES.map(def => {
             const existing = data.permissions.find((p: any) => p.moduleName === def.moduleName)
-            return existing || { ...def, canAdd: false, canEdit: false, canDelete: false, canView: false }
+            return existing ? { ...existing, displayName: def.displayName, tabUrl: def.tabUrl } : { ...def, canAdd: false, canEdit: false, canDelete: false, canView: false }
           })
           setPermissions(merged)
           setActivePresetId(data.presetId || null)
@@ -470,10 +470,10 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
                           return (
                             <tr key={m.moduleName} className="hover:bg-slate-50/30 transition-colors group">
                               <td className="px-6 py-4">
-                                <div className="font-bold text-slate-900 group-hover:text-brand-teal transition-colors">{p.displayName}</div>
+                                <div className="font-bold text-slate-900 group-hover:text-brand-teal transition-colors">{m.displayName}</div>
                               </td>
                               <td className="px-6 py-4">
-                                <div className="text-[10px] text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded inline-block">{p.tabUrl}</div>
+                                <div className="text-[10px] text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded inline-block">{m.tabUrl}</div>
                               </td>
                               <td className="px-6 py-4 text-center">
                                 <Checkbox 
