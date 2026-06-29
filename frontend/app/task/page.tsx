@@ -461,10 +461,17 @@ export default function TaskManagementPage() {
     
     let ownershipMatch = true;
     
+    // Non-admin users: always show only tasks assigned to them or created by them
+    if (!isAdmin) {
+      ownershipMatch = isAssignedToMe || isCreatedByMe;
+    }
+
+    // Admin users: respect the "My Tasks" / "All Users" toggle
     if (isAdmin && !adminViewAllUsers) {
       ownershipMatch = isAssignedToMe || isCreatedByMe;
     }
 
+    // Additional quick filters (Assigned to me / Created by me toggles)
     if (assignedToMe && createdByMe) {
       ownershipMatch = ownershipMatch && (isAssignedToMe || isCreatedByMe);
     } else if (assignedToMe) {
