@@ -96,6 +96,11 @@ export interface Payroll {
   monthlyLeaveDays: number
   lopDays: number
   deductionRemarks?: string
+  incentiveDetails?: string
+  incentiveAmount?: number
+  incentiveBreakdown?: any[]
+  paymentMode?: string
+  chequeNumber?: string
 }
 
 export interface JobOpening {
@@ -208,6 +213,17 @@ export interface Client {
   department?: string
   status: 'active' | 'inactive'
   createdDate?: string
+  greetingsMsgSent?: boolean
+  greetingsLogs?: { timestamp: string; sentBy: string; status: boolean }[]
+  workReviews?: {
+    id: string;
+    date: string;
+    addedBy: string;
+    content: string;
+    type: string;
+    status: 'Pending' | 'Approved' | 'Needs Revision';
+    adminComment?: string;
+  }[]
 }
 export interface WMTask {
   id: string

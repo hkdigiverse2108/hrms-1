@@ -20,34 +20,58 @@ def get_password_hash(password):
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    # Set expiration to 100 years so tokens do not expire on time
+    expire = datetime.utcnow() + timedelta(days=36500)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 async def get_current_user_token(authorization: Optional[str] = Header(None)):
-    """Verify JWT token and return payload. Raises 401 if missing/invalid."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    """Verify JWT token (ignoring time expiration) and verify user is active."""
     if not authorization or not authorization.startswith("Bearer "):
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please log in to continue.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     token = authorization.split(" ")[1]
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # options={"verify_exp": False} removes token time expiration completely
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"verify_exp": False})
         user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid session token. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Check if user is turned inactive in database
+        from database import db
+        from bson import ObjectId
+        user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User account no longer exists.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if str(user.get("status", "")).lower() == "inactive":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Your account has been turned inactive. Access revoked.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         return payload
     except JWTError:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # Alias: require any authenticated user
 require_auth = get_current_user_token
@@ -59,15 +83,16 @@ async def require_admin(token_payload: dict = Depends(get_current_user_token)):
     This prevents employees from calling sensitive endpoints even if they
     somehow know the API URL.
     """
-    role = str(token_payload.get("role", "")).lower()
-    if role != "admin":
+    admin_roles = {"admin", "super admin", "superadmin", "administrator", "founder"}
+    role = str(token_payload.get("role", "")).lower().strip()
+    if role not in admin_roles:
         # Fallback: query database in case token doesn't contain role
         from database import db
         user_id = token_payload.get("sub")
         if user_id:
             from bson import ObjectId
             user = await db.employees.find_one({"_id": ObjectId(user_id) if len(user_id) == 24 else user_id})
-            if user and str(user.get("role", "")).lower() == "admin":
+            if user and str(user.get("role", "")).lower().strip() in admin_roles:
                 return token_payload
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

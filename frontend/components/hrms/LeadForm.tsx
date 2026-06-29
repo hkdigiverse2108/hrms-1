@@ -18,7 +18,10 @@ export interface LeadFormData {
   priority: string;
   source: string;
   remarks: string;
-  assignedTo: string;
+  assignedTo: string[];
+  isHot: boolean;
+  holdResumeDate?: string;
+  date?: string;
 }
 
 import { API_URL } from "@/lib/config";
@@ -30,10 +33,21 @@ interface LeadFormProps {
 }
 
 export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps) {
+  const parsedInitialData = initialData ? {
+    ...initialData,
+    assignedTo: Array.isArray(initialData.assignedTo) 
+      ? initialData.assignedTo 
+      : (initialData.assignedTo ? [initialData.assignedTo] : [])
+  } : null;
+
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<LeadFormData>({
-    defaultValues: initialData || {
+    defaultValues: parsedInitialData || {
       status: "Lead",
       priority: "Medium",
+      isHot: false,
+      assignedTo: [],
+      holdResumeDate: "",
+      date: new Date().toISOString().split('T')[0],
     }
   });
 
@@ -55,20 +69,17 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
   const currentPriority = watch("priority");
   const currentAssignedTo = watch("assignedTo");
 
+  useEffect(() => {
+    if (currentStatus === "On Hold" || currentStatus === "Client Won" || currentStatus === "Client Lost") {
+      setValue("isHot", false);
+    }
+  }, [currentStatus, setValue]);
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="company">Company Name</Label>
-          <Input 
-            id="company" 
-            placeholder="Enter company name" 
-            {...register("company", { required: "Company name is required" })} 
-          />
-          {errors.company && <p className="text-xs text-red-500">{errors.company.message}</p>}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="contact">Contact Person</Label>
+          <Label htmlFor="contact">Contact Person <span className="text-red-500">*</span></Label>
           <Input 
             id="contact" 
             placeholder="Enter contact name" 
@@ -76,9 +87,26 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
           />
           {errors.contact && <p className="text-xs text-red-500">{errors.contact.message}</p>}
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="phone">Phone Number <span className="text-red-500">*</span></Label>
+          <Input 
+            id="phone" 
+            placeholder="+1 (555) 000-0000" 
+            {...register("phone", { required: "Phone number is required" })} 
+          />
+          {errors.phone && <p className="text-xs text-red-500">{errors.phone.message}</p>}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="company">Company Name</Label>
+          <Input 
+            id="company" 
+            placeholder="Enter company name" 
+            {...register("company")} 
+          />
+        </div>
         <div className="space-y-2">
           <Label htmlFor="email">Email Address</Label>
           <Input 
@@ -88,17 +116,9 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
             {...register("email")} 
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="phone">Phone Number</Label>
-          <Input 
-            id="phone" 
-            placeholder="+1 (555) 000-0000" 
-            {...register("phone")} 
-          />
-        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="expectedIncome">Expected Income</Label>
           <Input 
@@ -115,6 +135,14 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
             {...register("source")} 
           />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="date">Created Date</Label>
+          <Input 
+            id="date" 
+            type="date"
+            {...register("date")} 
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -128,8 +156,9 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
               <SelectItem value="Lead">Lead</SelectItem>
               <SelectItem value="Contacted">Contacted</SelectItem>
               <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
+              <SelectItem value="On Hold">On Hold</SelectItem>
               <SelectItem value="Client Won">Client Won</SelectItem>
-              <SelectItem value="Client Loss">Client Loss</SelectItem>
+              <SelectItem value="Client Lost">Client Lost</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -148,19 +177,64 @@ export function LeadForm({ initialData, onSubmit, isSubmitting }: LeadFormProps)
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      {currentStatus === "On Hold" && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="holdResumeDate">Resume Date</Label>
+            <Input 
+              id="holdResumeDate"
+              type="date"
+              {...register("holdResumeDate", { required: "Resume date is required when status is On Hold" })}
+            />
+            {errors.holdResumeDate && <p className="text-xs text-red-500">{errors.holdResumeDate.message}</p>}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 items-end">
         <div className="space-y-2">
           <Label>Assigned To</Label>
-          <Select value={currentAssignedTo} onValueChange={(val) => setValue("assignedTo", val)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select employee" />
-            </SelectTrigger>
-            <SelectContent>
-              {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
-                <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || `${emp.firstName} ${emp.lastName}`}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="border border-slate-200 rounded-lg p-2 max-h-36 overflow-y-auto space-y-1.5 bg-slate-50/50">
+            {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+              const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
+              const assignedList = Array.isArray(currentAssignedTo) ? currentAssignedTo : (currentAssignedTo ? [currentAssignedTo] : []);
+              return (
+                <label key={emp.id} className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={assignedList.includes(empName)}
+                    onChange={(e) => {
+                      const updated = e.target.checked 
+                        ? [...assignedList, empName] 
+                        : assignedList.filter((n: string) => n !== empName);
+                      setValue("assignedTo", updated);
+                    }}
+                    className="rounded border-slate-300 text-brand-teal focus:ring-brand-teal w-3.5 h-3.5"
+                  />
+                  {empName}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 h-10">
+          <input 
+            type="checkbox"
+            id="isHot"
+            disabled={currentStatus === "On Hold" || currentStatus === "Client Won" || currentStatus === "Client Lost"}
+            {...register("isHot")}
+            className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal w-4 h-4 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <Label 
+            htmlFor="isHot" 
+            className={`font-bold text-slate-700 ${
+              (currentStatus === "On Hold" || currentStatus === "Client Won" || currentStatus === "Client Lost")
+                ? "opacity-50 cursor-not-allowed"
+                : "cursor-pointer"
+            }`}
+          >
+            Mark as Hot Lead
+          </Label>
         </div>
       </div>
 

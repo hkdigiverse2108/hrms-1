@@ -26,6 +26,7 @@ import Image from 'next/image'
 import { Checkbox } from '@/components/ui/checkbox'
 import { API_URL, getAvatarUrl } from '@/lib/config'
 import { toast } from "sonner";
+import { TIME_OPTIONS } from '@/lib/constants'
 
 export interface EmployeeFormData {
   employeeId: string
@@ -106,7 +107,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   const designations = data?.designations || []
   const roles = data?.roles || []
   const relations = data?.relations || []
-  const documentTypes = data?.documentTypes || []
+  const documentTypes = (data as any)?.documentTypes || []
   
   const [formData, setFormData] = useState<EmployeeFormData>(defaultFormData)
   const [showPassword, setShowPassword] = useState(false)
@@ -177,9 +178,15 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
   }, [initialData])
 
 
+  const isRoleAdmin = (r?: string) => {
+    if (!r) return false;
+    const clean = r.toLowerCase().trim();
+    return clean === 'admin' || clean === 'super admin' || clean === 'superadmin' || clean === 'administrator' || clean === 'founder' || clean === 'super_admin';
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (formData.role !== 'Admin' && (!formData.startTime || !formData.endTime)) {
+    if (!isRoleAdmin(formData.role) && (!formData.startTime || !formData.endTime)) {
       toast.error('Please enter both Start Time and End Time.')
       return
     }
@@ -239,20 +246,20 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
       {/* Main Information Grid (3 Columns) */}
       <div className="grid gap-x-12 gap-y-6 md:grid-cols-3">
         {/* Row 1 */}
-        <FormField label="First Name" id="firstName" required value={formData.firstName} onChange={v => handleChange('firstName', v)} />
-        <FormField label="Middle Name" id="middleName" required value={formData.middleName} onChange={v => handleChange('middleName', v)} />
-        <FormField label="Last Name" id="lastName" required value={formData.lastName} onChange={v => handleChange('lastName', v)} />
+        <FormField label="First Name" id="firstName" required value={formData.firstName} onChange={(v: string) => handleChange('firstName', v)} />
+        <FormField label="Middle Name" id="middleName" required value={formData.middleName} onChange={(v: string) => handleChange('middleName', v)} />
+        <FormField label="Last Name" id="lastName" required value={formData.lastName} onChange={(v: string) => handleChange('lastName', v)} />
 
         {/* Row 2 */}
-        <FormField label="Email" id="email" type="email" required value={formData.email} onChange={v => handleChange('email', v)} placeholder="example@email.com" />
-        <FormField label="Phone Number" id="phone" required value={formData.phone} onChange={v => handleChange('phone', v)} placeholder="Enter phone number" />
+        <FormField label="Email" id="email" type="email" required value={formData.email} onChange={(v: string) => handleChange('email', v)} placeholder="example@email.com" />
+        <FormField label="Phone Number" id="phone" required value={formData.phone} onChange={(v: string) => handleChange('phone', v)} placeholder="Enter phone number" />
         <FormField 
           label="Password" 
           id="password" 
           type={showPassword ? "text" : "password"} 
           required={mode === 'add'} 
           value={formData.password} 
-          onChange={v => handleChange('password', v)} 
+          onChange={(v: string) => handleChange('password', v)} 
           placeholder={mode === 'edit' ? "Enter new password (leave blank to keep current)" : "............"} 
           rightElement={
             <button
@@ -266,11 +273,11 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
         />
 
         {/* Row 3 */}
-        <FormField label="DOB" id="dob" type="date" required value={formData.dob} onChange={v => handleChange('dob', v)} />
-        {formData.role !== 'Admin' && (
+        <FormField label="DOB" id="dob" type="date" required value={formData.dob} onChange={(v: string) => handleChange('dob', v)} />
+        {!isRoleAdmin(formData.role) && (
           <>
-            <FormField label="Joining Date" id="joinDate" type="date" required value={formData.joinDate} onChange={v => handleChange('joinDate', v)} />
-            <FormField label="Salary" id="salary" type="number" required value={formData.salary} onChange={v => handleChange('salary', v)} placeholder="Enter salary" />
+            <FormField label="Joining Date" id="joinDate" type="date" required value={formData.joinDate} onChange={(v: string) => handleChange('joinDate', v)} />
+            <FormField label="Salary" id="salary" type="number" required value={formData.salary} onChange={(v: string) => handleChange('salary', v)} placeholder="Enter salary" />
           </>
         )}
 
@@ -279,7 +286,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           id="gender"
           required
           value={formData.gender}
-          onValueChange={(v) => {
+          onValueChange={(v: string) => {
             console.log("Gender changed to:", v);
             handleChange('gender', v);
           }}
@@ -297,7 +304,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           id="role"
           required
           value={formData.role}
-          onValueChange={(v) => handleChange('role', v)}
+          onValueChange={(v: string) => handleChange('role', v)}
           options={[
             ...roles.map((r: any) => ({ label: r.name, value: r.name })),
             ...(roles.some((r: any) => r.name?.toLowerCase() === 'intern') ? [] : [{ label: 'Intern', value: 'Intern' }])
@@ -307,7 +314,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
       </div>
  
       {/* Dynamic Conditional Sections */}
-      {formData.role !== 'Admin' && (
+      {!isRoleAdmin(formData.role) && (
         <>
           {/* Bank Details Card */}
           <Card className="relative pt-6 border border-gray-200 shadow-sm rounded-xl overflow-visible mt-12">
@@ -316,11 +323,11 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             </div>
             <CardContent className="pt-8 px-8 pb-10">
               <div className="grid gap-x-16 gap-y-6 md:grid-cols-2">
-                <FormField label="UPI ID" id="upiId" required={formData.role !== 'Admin'} value={formData.upiId} onChange={v => handleChange('upiId', v)} />
-                <FormField label="Account Number" id="accountNumber" required={formData.role !== 'Admin'} value={formData.accountNumber} onChange={v => handleChange('accountNumber', v)} />
-                <FormField label="IFSC Code" id="ifscCode" required={formData.role !== 'Admin'} value={formData.ifscCode} onChange={v => handleChange('ifscCode', v)} />
-                <FormField label="Bank Name" id="bankName" required={formData.role !== 'Admin'} value={formData.bankName} onChange={v => handleChange('bankName', v)} />
-                <FormField label="Account Holder Name" id="accountHolderName" required={formData.role !== 'Admin'} value={formData.accountHolderName} onChange={v => handleChange('accountHolderName', v)} />
+                <FormField label="UPI ID" id="upiId" required={!isRoleAdmin(formData.role)} value={formData.upiId} onChange={(v: string) => handleChange('upiId', v)} />
+                <FormField label="Account Number" id="accountNumber" required={!isRoleAdmin(formData.role)} value={formData.accountNumber} onChange={(v: string) => handleChange('accountNumber', v)} />
+                <FormField label="IFSC Code" id="ifscCode" required={!isRoleAdmin(formData.role)} value={formData.ifscCode} onChange={(v: string) => handleChange('ifscCode', v)} />
+                <FormField label="Bank Name" id="bankName" required={!isRoleAdmin(formData.role)} value={formData.bankName} onChange={(v: string) => handleChange('bankName', v)} />
+                <FormField label="Account Holder Name" id="accountHolderName" required={!isRoleAdmin(formData.role)} value={formData.accountHolderName} onChange={(v: string) => handleChange('accountHolderName', v)} />
               </div>
             </CardContent>
           </Card>
@@ -332,14 +339,14 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
             </div>
             <CardContent className="pt-8 px-8 pb-10">
               <div className="grid gap-x-16 gap-y-6 md:grid-cols-2">
-                <FormField label="Parent Name" id="parentName" required={formData.role !== 'Admin'} value={formData.parentName} onChange={v => handleChange('parentName', v)} />
-                <FormField label="Parent Number" id="parentNumber" required={formData.role !== 'Admin'} value={formData.parentNumber} onChange={v => handleChange('parentNumber', v)} />
+                <FormField label="Parent Name" id="parentName" required={!isRoleAdmin(formData.role)} value={formData.parentName} onChange={(v: string) => handleChange('parentName', v)} />
+                <FormField label="Parent Number" id="parentNumber" required={!isRoleAdmin(formData.role)} value={formData.parentNumber} onChange={(v: string) => handleChange('parentNumber', v)} />
                 <FormSelect
                   key={`rel-${relations.length}`}
                   label="Relationship"
                   id="relation"
                   value={formData.relation}
-                  onValueChange={(v) => handleChange('relation', v)}
+                  onValueChange={(v: string) => handleChange('relation', v)}
                   options={relations.map((r: any) => ({ label: r.name, value: r.name }))}
                   placeholder="Select relationship"
                 />
@@ -353,7 +360,7 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
       <div className="space-y-6 pt-6 max-w-4xl">
         <div className="flex items-center gap-4">
           <Label className="w-44 text-left font-medium text-gray-700">Employee ID:</Label>
-          {formData.role === 'Admin' ? (
+          {isRoleAdmin(formData.role) ? (
             <Input
               value={formData.employeeId}
               onChange={(e) => handleChange('employeeId', e.target.value)}
@@ -368,14 +375,14 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
           )}
         </div>
         
-        {formData.role !== 'Admin' && (
+        {!isRoleAdmin(formData.role) && (
           <>
-            <FormField label="Aadhar Card" id="aadharCard" value={formData.aadharCard} onChange={v => handleChange('aadharCard', v)} />
-            <FormField label="PAN Card" id="panCard" value={formData.panCard} onChange={v => handleChange('panCard', v)} />
+            <FormField label="Aadhar Card" id="aadharCard" value={formData.aadharCard} onChange={(v: string) => handleChange('aadharCard', v)} />
+            <FormField label="PAN Card" id="panCard" value={formData.panCard} onChange={(v: string) => handleChange('panCard', v)} />
           </>
         )}
         
-        {formData.role !== 'Admin' && (
+        {!isRoleAdmin(formData.role) && (
           <>
             <FormSelect 
               key={`dept-${departments.length}`} 
@@ -383,18 +390,18 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
               id="department" 
               required 
               value={formData.department} 
-              onValueChange={v => handleChange('department', v)} 
+              onValueChange={(v: string) => handleChange('department', v)} 
               options={departments.map((d: any) => ({ label: d.name, value: d.name }))} 
               placeholder="Select department" 
             />
-            <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={v => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
+            <FormSelect key={`des-${designations.length}-${formData.department}`} label="Designation" id="designation" required value={formData.designation} onValueChange={(v: string) => handleChange('designation', v)} options={designations.filter((d: any) => d.department === formData.department).map((d: any) => ({ label: d.title, value: d.title }))} placeholder="Select designation" />
             
             <FormSelect 
               label="Status" 
               id="status" 
               required 
               value={formData.status} 
-              onValueChange={v => handleChange('status', v)} 
+              onValueChange={(v: string) => handleChange('status', v)} 
               options={[
                 { label: 'Active', value: 'active' },
                 { label: 'Inactive', value: 'inactive' }
@@ -408,9 +415,23 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
                 Working Hours{<span className="text-red-500 ml-1 text-lg font-bold">*</span>}:
               </Label>
               <div className="flex items-center gap-4 flex-1 max-w-[400px]">
-                <Input type="time" required value={formData.startTime} onChange={(e) => handleChange('startTime', e.target.value)} />
+                <Select value={formData.startTime} onValueChange={(v) => handleChange('startTime', v)} required>
+                  <SelectTrigger className="flex-1 bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm">
+                    <SelectValue placeholder="Start Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 <span className="text-gray-400 font-medium whitespace-nowrap">to</span>
-                <Input type="time" required value={formData.endTime} onChange={(e) => handleChange('endTime', e.target.value)} />
+                <Select value={formData.endTime} onValueChange={(v) => handleChange('endTime', v)} required>
+                  <SelectTrigger className="flex-1 bg-white border-gray-200 focus:ring-brand-teal h-10 shadow-sm">
+                    <SelectValue placeholder="End Time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[250px]">
+                    {TIME_OPTIONS.map(opt => <SelectItem key={`end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </>

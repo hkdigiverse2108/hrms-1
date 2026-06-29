@@ -11,6 +11,15 @@ import {
   RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import { useConfirm } from "@/context/ConfirmContext";
@@ -82,6 +91,8 @@ export default function ViewInvoicePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [showIncentiveModal, setShowIncentiveModal] = useState(false);
+  const [incentiveAmountBase, setIncentiveAmountBase] = useState("");
   const [settings, setSettings] = useState<any>(null);
   const { confirm } = useConfirm();
 
@@ -218,14 +229,32 @@ export default function ViewInvoicePage() {
     }
   };
 
-  const handleMarkAsPaid = async () => {
+  const handleMarkAsPaidClick = () => {
     if (!invoice) return;
+    setIncentiveAmountBase(invoice.incentiveAmountBase !== undefined && invoice.incentiveAmountBase !== null ? invoice.incentiveAmountBase.toString() : "");
+    setShowIncentiveModal(true);
+  };
+
+  const executeMarkAsPaid = async () => {
+    if (!invoice) return;
+    const baseAmt = parseFloat(incentiveAmountBase);
+    if (isNaN(baseAmt) || baseAmt < 0) {
+      toast.error("Please enter a valid incentive amount");
+      return;
+    }
+
+    if (baseAmt > (invoice.total || 0)) {
+      toast.error("Incentive base amount cannot exceed the invoice amount");
+      return;
+    }
+
     setIsUpdatingStatus(true);
+    setShowIncentiveModal(false);
     try {
       const res = await fetch(`${API_URL}/invoices/${invoiceId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Paid" })
+        body: JSON.stringify({ status: "Paid", incentiveAmountBase: baseAmt })
       });
       if (res.ok) {
         const updated = await res.json();
@@ -417,7 +446,7 @@ export default function ViewInvoicePage() {
           {invoice.status !== "Paid" && (
             <Button 
               className="bg-[#15803D] hover:bg-[#15803D]/90 text-white font-medium h-10 px-4"
-              onClick={handleMarkAsPaid}
+              onClick={handleMarkAsPaidClick}
               disabled={isUpdatingStatus}
             >
               {isUpdatingStatus ? (
@@ -428,18 +457,31 @@ export default function ViewInvoicePage() {
             </Button>
           )}
           {invoice.status === "Paid" && (
-            <Button 
-              variant="outline"
-              className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-medium h-10 px-4"
-              onClick={handleMarkAsUnpaid}
-              disabled={isUpdatingStatus}
-            >
-              {isUpdatingStatus ? (
-                <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Processing...</>
-              ) : (
-                <><RotateCcw className="w-3.5 h-3.5 mr-2" />Mark as Unpaid</>
-              )}
-            </Button>
+            <>
+              <Button 
+                variant="outline"
+                className="border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 font-medium h-10 px-4"
+                onClick={() => {
+                  setIncentiveAmountBase(invoice.incentiveAmountBase !== undefined && invoice.incentiveAmountBase !== null ? invoice.incentiveAmountBase.toString() : "");
+                  setShowIncentiveModal(true);
+                }}
+                disabled={isUpdatingStatus}
+              >
+                <DollarSign className="w-3.5 h-3.5 mr-2" />Edit Incentive Base
+              </Button>
+              <Button 
+                variant="outline"
+                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-medium h-10 px-4"
+                onClick={handleMarkAsUnpaid}
+                disabled={isUpdatingStatus}
+              >
+                {isUpdatingStatus ? (
+                  <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Processing...</>
+                ) : (
+                  <><RotateCcw className="w-3.5 h-3.5 mr-2" />Mark as Unpaid</>
+                )}
+              </Button>
+            </>
           )}
           <Button 
             variant="outline" 
@@ -800,17 +842,44 @@ export default function ViewInvoicePage() {
                   />
                 </div>
               )}
-              <div className="w-44 h-[2px] bg-black" />
-              <h4 className="font-bold text-[#111827] text-[11.5px] uppercase tracking-wide leading-none">
-                MANGUKIYA HET RAJESHBHAI
-              </h4>
-              <p className="text-[9.5px] font-medium text-slate-500 tracking-wide">
-                For Harikrushn DigiVerse LLP
-              </p>
+              <div className="w-40 border-t border-slate-300 mb-1"></div>
+              <span className="text-[11px] font-bold text-[#111827]">Authorized Signatory</span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Incentive Dialog */}
+      <Dialog open={showIncentiveModal} onOpenChange={setShowIncentiveModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Enter Incentive Base Amount</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="incentiveAmountBase">Amount on which incentive is given</Label>
+              <Input
+                id="incentiveAmountBase"
+                type="number"
+                value={incentiveAmountBase}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (invoice && val && parseFloat(val) > (invoice.total || 0)) {
+                    toast.error("Incentive base amount cannot exceed the invoice amount");
+                    return;
+                  }
+                  setIncentiveAmountBase(val);
+                }}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowIncentiveModal(false)}>Cancel</Button>
+            <Button onClick={executeMarkAsPaid} className="bg-[#15803D] hover:bg-[#15803D]/90 text-white font-medium">Confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

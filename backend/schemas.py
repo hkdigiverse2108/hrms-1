@@ -136,6 +136,20 @@ RobustDateDMY = Annotated[Optional[date], BeforeValidator(parse_robust_date), Pl
 RobustDatetime = Annotated[Optional[datetime], BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_standard, when_used='always')]
 RobustDatetimeDMY = Annotated[Optional[datetime], BeforeValidator(parse_robust_datetime), PlainSerializer(serialize_robust_datetime_dmy, when_used='always')]
 
+def parse_robust_assigned_to(v: Any) -> List[str]:
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(item) for item in v if item]
+    if isinstance(v, str):
+        v_clean = v.strip()
+        if not v_clean:
+            return []
+        return [v_clean]
+    return []
+
+RobustAssignedTo = Annotated[List[str], BeforeValidator(parse_robust_assigned_to)]
+
 class BaseModel(PydanticBaseModel):
     created_at: Optional[RobustDatetime] = None
     updated_at: Optional[RobustDatetime] = None
@@ -190,6 +204,7 @@ class EmployeeBase(BaseModel):
     requiredDocuments: Optional[List[str]] = []
     securityDepositExempt: Optional[bool] = False
     securityDepositDirectPayments: Optional[List[Dict[str, Any]]] = []
+    googleCalendarTokens: Optional[Dict[str, Any]] = None
 
 class EmployeeCreate(EmployeeBase):
     pass
@@ -266,6 +281,7 @@ class AttendanceBase(BaseModel):
     checkOut: Optional[str] = None
     status: str
     workHours: Optional[str] = None
+    accumulatedWorkSeconds: Optional[float] = None
     breaks: List[Break] = []
     punches: List[PunchLog] = []
     remarks: Optional[str] = None
@@ -285,6 +301,7 @@ class AttendanceUpdate(BaseModel):
     checkOut: Optional[str] = None
     status: Optional[str] = None
     workHours: Optional[str] = None
+    accumulatedWorkSeconds: Optional[float] = None
     punches: Optional[List[PunchLog]] = None
     remarks: Optional[str] = None
     isLate: Optional[bool] = None
@@ -395,6 +412,9 @@ class PayrollBase(BaseModel):
     deductionRemarks: str = ""
     paymentMode: Optional[str] = "Cash"
     chequeNumber: Optional[str] = "-"
+    incentiveDetails: Optional[str] = ""
+    incentiveAmount: Optional[float] = 0.0
+    incentiveBreakdown: Optional[List[dict]] = []
 
 class Payroll(PayrollBase):
     id: str
@@ -745,6 +765,50 @@ class PenaltyTypeUpdate(BaseModel):
 class PenaltyType(PenaltyTypeBase):
     id: str
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    timestamp: str
+
+class ChatContext(BaseModel):
+    taskId: Optional[str] = None
+    projectId: Optional[str] = None
+    taskTitle: Optional[str] = None
+
+class ChatRequest(BaseModel):
+    message: str
+    context: Optional[ChatContext] = None
+    history: List[ChatMessage] = []
+
+# Dynamic Feedback Forms
+class FeedbackFormField(BaseModel):
+    id: str
+    type: str # text, textarea, rating, radio, checkbox
+    label: str
+    required: bool = False
+    options: Optional[List[str]] = None
+
+class FeedbackFormCreate(BaseModel):
+    clientId: str
+    title: str
+    description: Optional[str] = None
+    fields: List[FeedbackFormField] = []
+
+class FeedbackForm(FeedbackFormCreate):
+    id: str
+    createdAt: str
+    createdBy: Optional[str] = None
+
+class FeedbackResponseCreate(BaseModel):
+    formId: str
+    clientId: str
+    projectId: Optional[str] = None
+    answers: Dict[str, Any]
+
+class FeedbackResponse(FeedbackResponseCreate):
+    id: str
+    submittedAt: str
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -795,16 +859,30 @@ class Notification(NotificationBase):
         from_attributes = True
 
 # Client Schemas
+def parse_campaigns(v: Any) -> List[Dict[str, Any]]:
+    if not v:
+        return []
+    res = []
+    for item in v:
+        if isinstance(item, str):
+            res.append({"name": item, "isActive": True})
+        elif isinstance(item, dict):
+            res.append(item)
+    return res
+
+RobustCampaigns = Annotated[List[Dict[str, Any]], BeforeValidator(parse_campaigns)]
+
 class ClientBase(BaseModel):
     name: str
     companyName: str
-    email: str
+    email: Optional[str] = None
     phone: str
     address: Optional[str] = None
     state: Optional[str] = ""
     gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = "active"
+    whatsappGroup: Optional[str] = None
     services: Optional[str] = None
     festivalPost: Optional[str] = None
     post: Optional[int] = 0
@@ -817,13 +895,46 @@ class ClientBase(BaseModel):
     salesFocused: Optional[str] = "No"
     dailyBudget: Optional[float] = 0
     remarks: Optional[str] = None
-    responsibility: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     dailyFollowup: Optional[str] = "No"
+    followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = [] # 0=Monday, 6=Sunday
+    followupDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastFollowupDate: Optional[RobustDate] = None
+    nextFollowupDate: Optional[RobustDate] = None
     interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
     interviewNotes: Optional[str] = None
     createdDate: Optional[RobustDate] = None
+    meetings: Optional[List[dict]] = []
+    greetingsMsgSent: Optional[bool] = False
+    greetingsLogs: Optional[List[dict]] = []
+    paymentFrequency: Optional[str] = "One-Time" # 'One-Time', 'Half-Monthly', 'Monthly', 'Quarterly', 'Yearly', 'Custom'
+    paymentCustomDays: Optional[int] = None
+    paymentAmount: Optional[float] = 0.0
+    paymentDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastPaymentDate: Optional[RobustDate] = None
+    nextPaymentDueDate: Optional[RobustDate] = None
+    paymentRemarks: Optional[str] = None
+    workReviews: Optional[List[dict]] = []
+    
+    # Creative Team Assignments
+    assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
+    assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
+    campaigns: Optional[RobustCampaigns] = []
 
 class ClientCreate(ClientBase):
     performedBy: Optional[str] = None
@@ -831,6 +942,8 @@ class ClientCreate(ClientBase):
 
 class ClientUpdate(BaseModel):
     name: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
     companyName: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -839,6 +952,7 @@ class ClientUpdate(BaseModel):
     gstin: Optional[str] = None
     department: Optional[str] = None
     status: Optional[str] = None
+    whatsappGroup: Optional[str] = None
     services: Optional[str] = None
     festivalPost: Optional[str] = None
     post: Optional[int] = None
@@ -851,15 +965,47 @@ class ClientUpdate(BaseModel):
     salesFocused: Optional[str] = None
     dailyBudget: Optional[float] = None
     remarks: Optional[str] = None
-    responsibility: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
+    meetings: Optional[List[dict]] = []
     dailyFollowup: Optional[str] = None
     interviewDate: Optional[RobustDate] = None
     interviewTime: Optional[str] = None
     interviewerName: Optional[str] = None
     interviewLink: Optional[str] = None
     interviewNotes: Optional[str] = None
+    followupType: Optional[str] = None
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = None
+    followupDatesOfMonth: Optional[List[int]] = None
+    lastFollowupDate: Optional[str] = None
+    nextFollowupDate: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    greetingsMsgSent: Optional[bool] = None
+    greetingsLogs: Optional[List[dict]] = None
+    paymentFrequency: Optional[str] = None
+    paymentCustomDays: Optional[int] = None
+    paymentAmount: Optional[float] = None
+    paymentDatesOfMonth: Optional[List[int]] = None
+    lastPaymentDate: Optional[RobustDate] = None
+    nextPaymentDueDate: Optional[RobustDate] = None
+    paymentRemarks: Optional[str] = None
+    workReviews: Optional[List[dict]] = None
+    campaigns: Optional[RobustCampaigns] = None
+    
+    assignedScriptwriterId: Optional[str] = None
+    assignedScriptwriterName: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedReelEditorName: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedPostDesignerName: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedShooterName: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedApproverName: Optional[str] = None
+    assignedPosterId: Optional[str] = None
+    assignedPosterName: Optional[str] = None
 
 class Client(ClientBase):
     id: str
@@ -873,14 +1019,68 @@ class ProjectBase(BaseModel):
     description: Optional[str] = None
     clientId: str
     clientName: Optional[str] = None
+    leadId: Optional[str] = None
+    meetings: Optional[List[dict]] = []
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
+    assignedTeamIds: Optional[List[str]] = []
     startDate: RobustDate
     endDate: Optional[RobustDate] = None
+    teamDeadline: Optional[RobustDate] = None
     status: Optional[str] = "planning"
+    statusHistory: Optional[List[dict]] = []
     priority: Optional[str] = "medium"
     budget: Optional[float] = 0
+    followupType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = [] # 0=Monday, 6=Sunday
+    followupDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastFollowupDate: Optional[RobustDate] = None
+    nextFollowupDate: Optional[RobustDate] = None
+    
+    # Payment Settings
+    paymentStartDate: Optional[RobustDate] = None
+    paymentDurationMonths: Optional[int] = None
+    paymentEndDate: Optional[RobustDate] = None
+    paymentReminderDays: Optional[int] = None
+    isPaymentReceived: Optional[bool] = False
+    
+    # Feedback Collection Fields
+    feedbackType: Optional[str] = "Interval" # 'Interval', 'Weekly', 'Monthly'
+    feedbackIntervalDays: Optional[int] = None
+    feedbackDaysOfWeek: Optional[List[int]] = [] # 0=Monday, 6=Sunday
+    feedbackDatesOfMonth: Optional[List[int]] = [] # 1-31
+    lastFeedbackDate: Optional[RobustDate] = None
+    nextFeedbackDate: Optional[RobustDate] = None
+    
+    # Creative Tracking Fields
+    services: Optional[str] = None
+    post: Optional[int] = 0
+    reel: Optional[int] = 0
+    festivalPost: Optional[str] = "No"
+    graphicsRequired: Optional[str] = "No"
+    postRequired: Optional[str] = "No"
+    reelRequired: Optional[str] = "No"
+    assignedScriptwriterId: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedPosterId: Optional[str] = None
+    
+    # Phase Wise Project Fields
+    isPhaseWise: Optional[bool] = False
+    phases: Optional[List[dict]] = []
+    modules: Optional[List[dict]] = []
+    
+    # Development Project Fields
+    frontendLink: Optional[str] = None
+    thirdPartyIntegrations: Optional[List[dict]] = []
+    testingLinks: Optional[List[dict]] = []
+    testingBugs: Optional[List[dict]] = []
 
 class ProjectCreate(ProjectBase):
     performedBy: Optional[str] = None
@@ -891,22 +1091,89 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    leadId: Optional[str] = None
     department: Optional[str] = None
     teamLeaderId: Optional[str] = None
     teamLeaderName: Optional[str] = None
+    assignedEmployeeId: Optional[str] = None
+    assignedEmployeeName: Optional[str] = None
+    assignedTeamIds: Optional[List[str]] = None
     startDate: Optional[RobustDate] = None
     endDate: Optional[RobustDate] = None
+    teamDeadline: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None
     budget: Optional[float] = None
+    followupType: Optional[str] = None
+    followupIntervalDays: Optional[int] = None
+    followupDaysOfWeek: Optional[List[int]] = None
+    followupDatesOfMonth: Optional[List[int]] = None
+    lastFollowupDate: Optional[RobustDate] = None
+    nextFollowupDate: Optional[RobustDate] = None
+    
+    # Payment Settings
+    paymentStartDate: Optional[RobustDate] = None
+    paymentDurationMonths: Optional[int] = None
+    paymentEndDate: Optional[RobustDate] = None
+    paymentReminderDays: Optional[int] = None
+    isPaymentReceived: Optional[bool] = None
+    
+    feedbackType: Optional[str] = None
+    feedbackIntervalDays: Optional[int] = None
+    feedbackDaysOfWeek: Optional[List[int]] = None
+    feedbackDatesOfMonth: Optional[List[int]] = None
+    lastFeedbackDate: Optional[RobustDate] = None
+    nextFeedbackDate: Optional[RobustDate] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    
+    # Creative Tracking Fields
+    services: Optional[str] = None
+    post: Optional[int] = None
+    reel: Optional[int] = None
+    festivalPost: Optional[str] = None
+    graphicsRequired: Optional[str] = None
+    postRequired: Optional[str] = None
+    reelRequired: Optional[str] = None
+    assignedScriptwriterId: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedPosterId: Optional[str] = None
+    
+    # Phase Wise Project Fields
+    isPhaseWise: Optional[bool] = None
+    phases: Optional[List[dict]] = None
+    modules: Optional[List[dict]] = None
+    
+    # Development Project Fields
+    frontendLink: Optional[str] = None
+    thirdPartyIntegrations: Optional[List[dict]] = None
+    testingLinks: Optional[List[dict]] = None
+    testingBugs: Optional[List[dict]] = None
 
 class Project(ProjectBase):
     id: str
 
     class Config:
         from_attributes = True
+
+class ModuleNotebookUpdate(BaseModel):
+    moduleName: str
+    phaseName: Optional[str] = None
+    researchWork: str
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+
+class ModuleCommentCreate(BaseModel):
+    moduleName: str
+    phaseName: Optional[str] = None
+    content: str
+    userId: str
+    userName: str
+    userRole: Optional[str] = None
+
 
 # General Task Schemas
 class TaskBase(BaseModel):
@@ -958,9 +1225,19 @@ class WMTaskBase(BaseModel):
     assignedToName: Optional[str] = None
     department: Optional[str] = None
     dueDate: Optional[RobustDate] = None
+    moduleName: Optional[str] = None
+    moduleDeadline: Optional[RobustDate] = None
     status: Optional[str] = "todo" # todo, in-progress, review, completed
     priority: Optional[str] = "medium" # low, medium, high, urgent
+    estimatedHours: Optional[float] = 0
     remarks: Optional[str] = None
+    createdBy: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
+    
+    # Phase & Hierarchy Fields
+    phase: Optional[str] = None
+    subtasks: Optional[List[dict]] = []
     
     # Graphics specific fields
     postingDate: Optional[RobustDate] = None
@@ -993,9 +1270,16 @@ class WMTaskUpdate(BaseModel):
     assignedToName: Optional[str] = None
     department: Optional[str] = None
     dueDate: Optional[RobustDate] = None
+    moduleName: Optional[str] = None
+    moduleDeadline: Optional[RobustDate] = None
     status: Optional[str] = None
     priority: Optional[str] = None
+    estimatedHours: Optional[float] = None
     remarks: Optional[str] = None
+    
+    # Phase & Hierarchy Fields
+    phase: Optional[str] = None
+    subtasks: Optional[List[dict]] = None
     
     # Graphics specific fields
     postingDate: Optional[RobustDate] = None
@@ -1034,6 +1318,7 @@ class TaskLogBase(BaseModel):
     performedBy: str
     userName: str
     details: str
+    diffs: Optional[List[dict]] = []
     timestamp: Optional[RobustDatetime] = None
 
 class TaskLog(TaskLogBase):
@@ -1046,21 +1331,40 @@ class FollowUp(BaseModel):
     date: RobustDate
     note: str
     performedBy: Optional[str] = None
+    nextFollowUpDate: Optional[RobustDate] = None
+
+class Meeting(BaseModel):
+    date: str
+    note: str
+    performedBy: Optional[str] = None
+    type: Optional[str] = None # "Monthly Review", "Strategy Pitch", "Onboarding", "Check-in", "Ad-hoc"
+    location: Optional[str] = None # "Google Meet", "Zoom", "Phone Call", "In-Person"
+    attendees: Optional[str] = None
+    attendeeIds: Optional[List[str]] = []
+    status: Optional[str] = None # "Scheduled", "Completed", "Cancelled"
+    nextSteps: Optional[str] = None
+    duration: Optional[str] = None
+    link: Optional[str] = None
 
 class LeadBase(BaseModel):
-    company: str
+    company: Optional[str] = ""
     contact: str
     email: Optional[str] = None
     phone: Optional[str] = None
     expectedIncome: Optional[str] = None
-    status: Optional[str] = "Lead" # Lead, Contacted, Proposal Sent, Client Won, Client Loss
+    status: Optional[str] = "Lead" # Lead, Contacted, Proposal Sent, Client Won, Client Loss, On Hold
     priority: Optional[str] = "Medium" # Low, Medium, High
     source: Optional[str] = None
     date: Optional[RobustDate] = None
     remarks: Optional[str] = None
     closedDate: Optional[RobustDate] = None
-    assignedTo: Optional[Union[str, List[str]]] = None
+    assignedTo: Optional[Union[str, List[RobustAssignedTo]]] = []
     followUps: Optional[List[FollowUp]] = []
+    isHot: Optional[bool] = False
+    holdResumeDate: Optional[RobustDate] = None
+    createdBy: Optional[str] = None
+    createdByUserName: Optional[str] = None
+    nextFollowUpDate: Optional[RobustDate] = None
 
 class LeadCreate(LeadBase):
     performedBy: Optional[str] = None
@@ -1078,9 +1382,13 @@ class LeadUpdate(BaseModel):
     date: Optional[RobustDate] = None
     remarks: Optional[str] = None
     closedDate: Optional[RobustDate] = None
-    assignedTo: Optional[str] = None
+    assignedTo: Optional[RobustAssignedTo] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    isHot: Optional[bool] = None
+    holdResumeDate: Optional[RobustDate] = None
+    nextFollowUpDate: Optional[RobustDate] = None
+    reason: Optional[str] = None
 
 class Lead(LeadBase):
     id: str
@@ -1091,9 +1399,12 @@ class Lead(LeadBase):
 class SystemSettingsBase(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = True
     latePunchDeductionEnabled: Optional[bool] = True
+    dailyProgressRejectDeductionEnabled: Optional[bool] = False
     officeStartTime: Optional[str] = "09:30"
     officeEndTime: Optional[str] = "18:30"
     lateBufferMins: Optional[int] = 10
+    inactivityTimeoutEnabled: Optional[bool] = False
+    inactivityTimeoutMins: Optional[int] = 5
     allowedMonthlyPaidLeaves: Optional[int] = 1
     companyGstin: Optional[str] = "24AAXFN3372M1ZK"
     companyAddress: Optional[str] = "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA."
@@ -1113,13 +1424,21 @@ class SystemSettingsBase(BaseModel):
     companyLetterheadUrl: Optional[str] = None
     companySignatureUrl: Optional[str] = None
     defaultSac: Optional[str] = ""
+    defaultScriptDateOffset: Optional[int] = None
+    defaultShootDateOffset: Optional[int] = None
+    defaultEditingStartOffset: Optional[int] = None
+    defaultApprovalOffset: Optional[int] = None
+    paymentDueDays: Optional[int] = 0
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
     latePunchDeductionEnabled: Optional[bool] = None
+    dailyProgressRejectDeductionEnabled: Optional[bool] = None
     officeStartTime: Optional[str] = None
     officeEndTime: Optional[str] = None
     lateBufferMins: Optional[int] = None
+    inactivityTimeoutEnabled: Optional[bool] = None
+    inactivityTimeoutMins: Optional[int] = None
     allowedMonthlyPaidLeaves: Optional[int] = None
     companyGstin: Optional[str] = None
     companyAddress: Optional[str] = None
@@ -1139,6 +1458,11 @@ class SystemSettingsUpdate(BaseModel):
     companyLetterheadUrl: Optional[str] = None
     companySignatureUrl: Optional[str] = None
     defaultSac: Optional[str] = None
+    defaultScriptDateOffset: Optional[int] = None
+    defaultShootDateOffset: Optional[int] = None
+    defaultEditingStartOffset: Optional[int] = None
+    defaultApprovalOffset: Optional[int] = None
+    paymentDueDays: Optional[int] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1146,6 +1470,23 @@ class SystemSettings(SystemSettingsBase):
         from_attributes = True
 
 # Marketing Report Schemas
+class ProjectDailyRemarkBase(BaseModel):
+    projectId: str
+    clientId: Optional[str] = None
+    date: RobustDate
+    remark: Optional[str] = None
+
+class ProjectDailyRemarkCreate(ProjectDailyRemarkBase):
+    pass
+
+class ProjectDailyRemarkUpdate(BaseModel):
+    remark: Optional[str] = None
+
+class ProjectDailyRemark(ProjectDailyRemarkBase):
+    id: str
+    class Config:
+        from_attributes = True
+
 class MarketingDailyReportBase(BaseModel):
     date: RobustDate
     campaignName: str
@@ -1155,15 +1496,26 @@ class MarketingDailyReportBase(BaseModel):
     followers: int = 0
     spend: float = 0
     cpl: float = 0
+    revenue: float = 0
     remarks: Optional[str] = None
+    reason: Optional[str] = None
+    campaignOptimization: bool = False
+    leadsFileUrl: Optional[str] = None
+    isDeleted: Optional[bool] = False
 
 class MarketingDailyReportCreate(MarketingDailyReportBase):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
 
 class MarketingDailyReportUpdate(BaseModel):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     date: Optional[RobustDate] = None
     campaignName: Optional[str] = None
     reach: Optional[int] = None
@@ -1172,7 +1524,11 @@ class MarketingDailyReportUpdate(BaseModel):
     followers: Optional[int] = None
     spend: Optional[float] = None
     cpl: Optional[float] = None
+    revenue: Optional[float] = None
     remarks: Optional[str] = None
+    reason: Optional[str] = None
+    campaignOptimization: Optional[bool] = None
+    leadsFileUrl: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
@@ -1180,8 +1536,15 @@ class MarketingDailyReport(MarketingDailyReportBase):
     id: str
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
+    performedBy: Optional[str] = None
+    userName: Optional[str] = None
     class Config:
         from_attributes = True
+
+class BulkDeleteLeadsRequest(BaseModel):
+    ids: List[str]
 
 class MarketingMonthlyReportBase(BaseModel):
     clientName: str
@@ -1194,13 +1557,20 @@ class MarketingMonthlyReportBase(BaseModel):
     totalRevenue: float = 0
     overallROAS: float = 0
     conclusion: Optional[str] = None
+    employeeConclusion: Optional[str] = None
+    adminConclusion: Optional[str] = None
+    clientConclusion: Optional[str] = None
 
 class MarketingMonthlyReportCreate(MarketingMonthlyReportBase):
     clientId: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
 
 class MarketingMonthlyReportUpdate(BaseModel):
     clientId: Optional[str] = None
     clientName: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     month: Optional[str] = None
     totalSpend: Optional[float] = None
     totalLeads: Optional[int] = None
@@ -1209,13 +1579,17 @@ class MarketingMonthlyReportUpdate(BaseModel):
     avgCPP: Optional[float] = None
     totalRevenue: Optional[float] = None
     overallROAS: Optional[float] = None
-    conclusion: Optional[str] = None
+    employeeConclusion: Optional[str] = None
+    adminConclusion: Optional[str] = None
+    clientConclusion: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
 
 class MarketingMonthlyReport(MarketingMonthlyReportBase):
     id: str
     clientId: Optional[str] = None
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -1253,6 +1627,7 @@ class ChatMessageBase(BaseModel):
     seenBy: List[str] = []
     archivedBy: List[str] = []
     completedBy: List[str] = []
+    forwardedFrom: Optional[str] = None
     reactions: Optional[dict] = {} # { emoji: [userId1, userId2] }
     poll: Optional[Poll] = None
     isVoice: bool = False
@@ -1404,6 +1779,9 @@ class IncentiveSlabBase(BaseModel):
     minAmount: float
     maxAmount: float
     percentage: float
+    employees: Optional[List[str]] = []
+    clientCategories: Optional[List[str]] = []
+    isRecurring: Optional[bool] = False
 
 class IncentiveSlabCreate(IncentiveSlabBase):
     pass
@@ -1412,6 +1790,9 @@ class IncentiveSlabUpdate(BaseModel):
     minAmount: Optional[float] = None
     maxAmount: Optional[float] = None
     percentage: Optional[float] = None
+    employees: Optional[List[str]] = None
+    clientCategories: Optional[List[str]] = None
+    isRecurring: Optional[bool] = None
 
 class IncentiveSlab(IncentiveSlabBase):
     id: str
@@ -1420,13 +1801,19 @@ class IncentiveSlab(IncentiveSlabBase):
 class SalesTargetBase(BaseModel):
     employeeId: str
     employeeName: Optional[str] = "Unknown"
-    type: str = "Monthly" # Monthly, Weekly
-    month: str
-    year: int
+    type: str = "Monthly" # Monthly, Weekly, Custom
+    month: Optional[str] = None
+    year: Optional[int] = None
     week: Optional[int] = None # 1, 2, 3, 4, 5
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
     targetAmount: float = 0
     currentAchievement: float = 0
+    incentiveBase: Optional[float] = 0
     incentiveAmount: float = 0
+    breakdown: Optional[List[dict]] = []
+    status: Optional[str] = "Active"
+    createdAt: Optional[str] = None
 
 class SalesTargetCreate(SalesTargetBase):
     pass
@@ -1437,6 +1824,9 @@ class SalesTargetUpdate(BaseModel):
     incentiveAmount: Optional[float] = None
     type: Optional[str] = None
     week: Optional[int] = None
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
+    status: Optional[str] = None
 
 class SalesTarget(SalesTargetBase):
     id: str
@@ -1542,6 +1932,9 @@ class InvoiceBase(BaseModel):
     otherQrUrl: Optional[str] = None
     status: str = "Pending"  # Pending, Paid, Overdue
     invoiceType: str = "Tax Invoice"  # Tax Invoice, Proforma Invoice
+    incentiveAmountBase: Optional[float] = None
+    createdBy: Optional[str] = None
+    createdById: Optional[str] = None
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1570,10 +1963,14 @@ class InvoiceUpdate(BaseModel):
     otherQrUrl: Optional[str] = None
     status: Optional[str] = None
     invoiceType: Optional[str] = None
+    incentiveAmountBase: Optional[float] = None
+    createdBy: Optional[str] = None
+    createdById: Optional[str] = None
 
 class Invoice(InvoiceBase):
     id: str
     timestamp: str
+    paymentDate: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -1680,13 +2077,14 @@ class ScheduleBase(BaseModel):
     title: str
     description: Optional[str] = None
     employeeId: str
-    employeeName: str
+    employeeName: Optional[str] = "Unknown"
     date: RobustDate
     startTime: str
     endTime: str
     type: str  # e.g., 'meeting', 'busy', 'out_of_office', 'work'
     attendees: Optional[List[str]] = []
     createdBy: Optional[str] = None
+    googleEventId: Optional[str] = None
 
 class ScheduleCreate(ScheduleBase):
     pass
@@ -1753,5 +2151,119 @@ class RegisteredPC(RegisteredPCBase):
     id: str
 
 
+# Content Calendar Schemas
+class ContentCalendarEntryBase(BaseModel):
+    clientId: str
+    monthYear: str  # Format: "YYYY-MM"
+    postingDate: Optional[str] = None
+    postingDay: Optional[str] = None
+    postReel: Optional[str] = None
+    concept: Optional[str] = None
+    topic: Optional[str] = None
+    reference: Optional[str] = None
+    scriptDate: Optional[str] = None
+    scriptLink: Optional[str] = None
+    shootDate: Optional[str] = None
+    shootLink: Optional[str] = None
+    editingStart: Optional[str] = None
+    finalReelLink: Optional[str] = None
+    finalPostLink: Optional[str] = None
+    approval: Optional[str] = None
+    isApproved: Optional[str] = None
+    thumbnailLink: Optional[str] = None
+    postingLinkOfIg: Optional[str] = None
+    actualPostingDate: Optional[str] = None
+    updatedBy: Optional[str] = None
+    logs: Optional[List[dict]] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
 
+class ContentCalendarEntryCreate(ContentCalendarEntryBase):
+    pass
 
+class ContentCalendarEntryUpdate(BaseModel):
+    monthYear: Optional[str] = None
+    postingDate: Optional[str] = None
+    postingDay: Optional[str] = None
+    postReel: Optional[str] = None
+    concept: Optional[str] = None
+    topic: Optional[str] = None
+    reference: Optional[str] = None
+    scriptDate: Optional[str] = None
+    scriptLink: Optional[str] = None
+    shootDate: Optional[str] = None
+    shootLink: Optional[str] = None
+    editingStart: Optional[str] = None
+    finalReelLink: Optional[str] = None
+    finalPostLink: Optional[str] = None
+    approval: Optional[str] = None
+    isApproved: Optional[str] = None
+    thumbnailLink: Optional[str] = None
+    postingLinkOfIg: Optional[str] = None
+    actualPostingDate: Optional[str] = None
+    updatedBy: Optional[str] = None
+    remark: Optional[str] = None
+    remarkStage: Optional[str] = None
+
+class ContentCalendarEntry(ContentCalendarEntryBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+class ContentCalendarSettingsBase(BaseModel):
+    clientId: str
+    monthYear: str
+    scriptDateOffset: Optional[int] = None
+    shootDateOffset: Optional[int] = None
+    editingStartOffset: Optional[int] = None
+    approvalOffset: Optional[int] = None
+    isApproved: bool = False
+    approvalStatus: str = "Pending"
+    statusLogs: Optional[List[dict]] = []
+
+class ContentCalendarSettingsCreate(ContentCalendarSettingsBase):
+    pass
+
+class ContentCalendarSettingsUpdate(BaseModel):
+    scriptDateOffset: Optional[int] = None
+    shootDateOffset: Optional[int] = None
+    editingStartOffset: Optional[int] = None
+    approvalOffset: Optional[int] = None
+    isApproved: Optional[bool] = None
+    approvalStatus: Optional[str] = None
+    statusLogs: Optional[List[dict]] = None
+
+class ContentCalendarSettings(ContentCalendarSettingsBase):
+    id: str
+    class Config:
+        from_attributes = True
+
+# --- Other Work ---
+class OtherWorkBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assigneeId: str
+    assigneeName: str
+    assignerId: str
+    assignerName: str
+    deadline: str
+    status: str = "Pending"
+    taskType: Optional[str] = "other-work"
+    logs: Optional[List[dict]] = None
+
+class OtherWorkCreate(OtherWorkBase):
+    pass
+
+class OtherWorkUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
+    deadline: Optional[str] = None
+    status: Optional[str] = None
+    logs: Optional[List[dict]] = None
+
+class OtherWork(OtherWorkBase):
+    id: str
+    class Config:
+        from_attributes = True

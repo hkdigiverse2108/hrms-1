@@ -94,6 +94,7 @@ export default function TaskManagementPage() {
   const canDeletePerm = isAdmin || checkPermission('personal-tasks', 'canDelete');
   const [tasks, setTasks] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [logsModalOpen, setLogsModalOpen] = useState(false);
@@ -106,6 +107,7 @@ export default function TaskManagementPage() {
   const [editingDescId, setEditingDescId] = useState<string | null>(null);
   const [editTaskDesc, setEditTaskDesc] = useState("");
   const [assigneeSearch, setAssigneeSearch] = useState("");
+  const [adminViewAllUsers, setAdminViewAllUsers] = useState(false);
 
   // Form State
   const [newTask, setNewTask] = useState<{
@@ -129,6 +131,7 @@ export default function TaskManagementPage() {
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   useEffect(() => {
+    setIsMounted(true);
     fetchTasks();
   }, [user]);
 
@@ -146,7 +149,21 @@ export default function TaskManagementPage() {
       ]);
       
       if (tRes.ok) setTasks(await tRes.json());
-      if (eRes.ok) setEmployees(await eRes.json());
+      if (eRes.ok) {
+        let emps = await eRes.json();
+        if (user && !emps.some((e: any) => e.id === user.id)) {
+          emps.unshift({
+            id: user.id,
+            firstName: user.firstName || user.name?.split(' ')[0] || 'Me',
+            lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+            name: user.name,
+            email: user.email,
+            designation: user.designation,
+            department: user.department
+          });
+        }
+        setEmployees(emps);
+      }
     } catch (err) {
       console.error("Error fetching tasks:", err);
     } finally {
@@ -400,8 +417,22 @@ export default function TaskManagementPage() {
     }
   };
 
-  const filteredTasks = tasks.filter(task => {
-    const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status) || (activeStatuses.includes('on-hold') && task.status === 'pending') || (activeStatuses.includes('pending') && task.status === 'on-hold');
+  const onDragEnd = (result: any) => {
+    if (!result.destination) return;
+    const { source, destination, draggableId } = result;
+    if (source.droppableId !== destination.droppableId) {
+      handleUpdateField(draggableId, 'status', destination.droppableId);
+    }
+  };
+
+  const columns = [
+    { id: "todo", title: "To Do", textColor: "text-slate-800" },
+    { id: "in-progress", title: "In Progress", textColor: "text-blue-600" },
+    { id: "on-hold", title: "Review", textColor: "text-amber-600" },
+    { id: "completed", title: "Completed", textColor: "text-emerald-600" }
+  ];
+
+  const statsTasks = tasks.filter(task => {
     const priorityMatch = activePriorities.length === 0 || activePriorities.includes(task.priority?.toLowerCase() || "");
     const assigneeMatch = activeAssignees.length === 0 || 
       (task.assignedToIds && activeAssignees.some(id => task.assignedToIds.includes(id))) || 
@@ -409,12 +440,13 @@ export default function TaskManagementPage() {
     
     let dateMatch = true;
     if (activeDateRange?.from && task.dueDate) {
-      const taskDate = new Date(task.dueDate);
+      const [y, m, d] = task.dueDate.split('-');
+      const taskDate = new Date(Number(y), Number(m) - 1, Number(d));
       taskDate.setHours(0,0,0,0);
-      const from = activeDateRange.from;
+      const from = new Date(activeDateRange.from);
       from.setHours(0,0,0,0);
       if (activeDateRange.to) {
-        const to = activeDateRange.to;
+        const to = new Date(activeDateRange.to);
         to.setHours(0,0,0,0);
         dateMatch = taskDate >= from && taskDate <= to;
       } else {
@@ -425,18 +457,35 @@ export default function TaskManagementPage() {
     }
     
     const isAssignedToMe = task.assignedToId === user?.id || (task.assignedToIds && task.assignedToIds.includes(user?.id));
-    const isCreatedByMe = task.assignedById === user?.id;
+    const isCreatedByMe = task.assignedById === user?.id || task.createdBy === user?.id;
     
     let ownershipMatch = true;
-    if (assignedToMe && createdByMe) {
+    
+    // Non-admin users: always show only tasks assigned to them or created by them
+    if (!isAdmin) {
       ownershipMatch = isAssignedToMe || isCreatedByMe;
-    } else if (assignedToMe) {
-      ownershipMatch = isAssignedToMe;
-    } else if (createdByMe) {
-      ownershipMatch = isCreatedByMe;
     }
 
-    return statusMatch && priorityMatch && assigneeMatch && dateMatch && ownershipMatch;
+    // Admin users: respect the "My Tasks" / "All Users" toggle
+    if (isAdmin && !adminViewAllUsers) {
+      ownershipMatch = isAssignedToMe || isCreatedByMe;
+    }
+
+    // Additional quick filters (Assigned to me / Created by me toggles)
+    if (assignedToMe && createdByMe) {
+      ownershipMatch = ownershipMatch && (isAssignedToMe || isCreatedByMe);
+    } else if (assignedToMe) {
+      ownershipMatch = ownershipMatch && isAssignedToMe;
+    } else if (createdByMe) {
+      ownershipMatch = ownershipMatch && isCreatedByMe;
+    }
+
+    return priorityMatch && assigneeMatch && dateMatch && ownershipMatch;
+  });
+
+  const filteredTasks = statsTasks.filter(task => {
+    const statusMatch = activeStatuses.length === 0 || activeStatuses.includes(task.status) || (activeStatuses.includes('on-hold') && task.status === 'pending') || (activeStatuses.includes('pending') && task.status === 'on-hold');
+    return statusMatch;
   });
 
   const sortedTasks = [...filteredTasks].sort((a, b) => {
@@ -458,6 +507,27 @@ export default function TaskManagementPage() {
       >
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
           
+          {isAdmin && (
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className={`h-8 text-[12px] font-bold px-4 ${!adminViewAllUsers ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setAdminViewAllUsers(false)}
+              >
+                My Tasks
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className={`h-8 text-[12px] font-bold px-4 ${adminViewAllUsers ? 'bg-brand-teal text-white hover:bg-brand-teal/90 hover:text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setAdminViewAllUsers(true)}
+              >
+                All Users
+              </Button>
+            </div>
+          )}
+
           {/* Create Task Modal */}
           {canAdd && (
           <Dialog open={createModalOpen} onOpenChange={(val) => {
@@ -762,11 +832,11 @@ export default function TaskManagementPage() {
       {/* Summary Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { title: "To do", count: tasks.filter(t => t.status === 'todo').length.toString().padStart(2, '0'), desc: "New tasks waiting to be picked up.", dot: "bg-slate-400" },
-          { title: "On Hold", count: tasks.filter(t => t.status === 'on-hold' || t.status === 'pending').length.toString().padStart(2, '0'), desc: "Tasks paused for approval or feedback.", dot: "bg-amber-400" },
-          { title: "In progress", count: tasks.filter(t => t.status === 'in-progress').length.toString().padStart(2, '0'), desc: "Active work items currently being handled.", dot: "bg-brand-teal" },
-          { title: "Due Tasks", count: tasks.filter(t => t.dueDate && t.status !== 'completed' && t.dueDate <= todayStr).length.toString().padStart(2, '0'), desc: "Tasks that are due today or overdue.", dot: "bg-red-500", highlight: true },
-          { title: "Completed", count: tasks.filter(t => t.status === 'completed').length.toString().padStart(2, '0'), desc: "Completed tasks reviewed and closed.", dot: "bg-emerald-600" },
+          { title: "To do", count: statsTasks.filter(t => t.status === 'todo').length.toString().padStart(2, '0'), desc: "New tasks waiting to be picked up.", dot: "bg-slate-400" },
+          { title: "On Hold", count: statsTasks.filter(t => t.status === 'on-hold' || t.status === 'pending').length.toString().padStart(2, '0'), desc: "Tasks paused for approval or feedback.", dot: "bg-amber-400" },
+          { title: "In progress", count: statsTasks.filter(t => t.status === 'in-progress').length.toString().padStart(2, '0'), desc: "Active work items currently being handled.", dot: "bg-brand-teal" },
+          { title: "Due Tasks", count: statsTasks.filter(t => t.dueDate && t.status !== 'completed' && t.dueDate <= todayStr).length.toString().padStart(2, '0'), desc: "Tasks that are due today or overdue.", dot: "bg-red-500", highlight: true },
+          { title: "Completed", count: statsTasks.filter(t => t.status === 'completed').length.toString().padStart(2, '0'), desc: "Completed tasks reviewed and closed.", dot: "bg-emerald-600" },
         ].map((stat, i) => (
           <div key={i} className={`bg-white border ${stat.highlight ? 'border-red-200 bg-red-50/30' : 'border-border'} rounded-xl p-4 shadow-sm flex flex-col h-full`}>
             <div className="flex items-center justify-between mb-2">
@@ -1127,7 +1197,6 @@ export default function TaskManagementPage() {
                                           ? currentIds.filter((id: string) => id !== emp.id)
                                           : [...currentIds, emp.id];
                                         handleUpdateAssignees(task.id, updatedIds);
-                                        // optimistic update
                                         setTasks(prev => prev.map(t => t.id === task.id ? { 
                                           ...t, 
                                           assignedToIds: updatedIds, 
@@ -1398,3 +1467,4 @@ export default function TaskManagementPage() {
     </div>
   );
 }
+

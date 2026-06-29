@@ -1,9 +1,12 @@
 from bson import ObjectId
 from datetime import datetime, timedelta, timezone, date
 from typing import List, Optional, Dict
+import asyncio
 import schemas
 import auth
 import calendar
+import google_auth
+import google_calendar
 import pytz
 from websocket import manager as ws_manager
 
@@ -63,21 +66,57 @@ def get_now():
         elapsed = time.monotonic() - _mono_anchor
         return _real_time_anchor + timedelta(seconds=elapsed)
 
+_PLACEHOLDER_TIMES = {"", "--", "--:--", "-"}
+
+def _is_placeholder_time(time_str) -> bool:
+    if time_str is None:
+        return True
+    return str(time_str).strip() in _PLACEHOLDER_TIMES
+
+def _record_to_date(date_val) -> date:
+    if isinstance(date_val, datetime):
+        if date_val.tzinfo is not None:
+            return date_val.astimezone(IST).date()
+        return date_val.date()
+    if isinstance(date_val, date):
+        return date_val
+    date_str = str(date_val).split('T')[0].split(' ')[0]
+    return datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+
+def _resolve_punch_start_time(record: dict) -> Optional[str]:
+    candidates = [
+        record.get("lastPunchIn"),
+        record.get("checkIn"),
+    ]
+    punches = record.get("punches") or []
+    for punch in reversed(punches):
+        candidates.append(punch.get("punchIn"))
+    for candidate in candidates:
+        if candidate and not _is_placeholder_time(candidate):
+            return str(candidate).strip()
+    return None
+
 def parse_datetime(date_val, time_str):
-    if not time_str:
+    if _is_placeholder_time(time_str):
         return get_now()
+    time_str = str(time_str).strip()
     if isinstance(date_val, (date, datetime)):
         date_str = date_val.strftime("%Y-%m-%d")
     else:
-        # Extract only the date part in case date_val is an ISO timestamp string or full datetime string
         date_str = str(date_val).split('T')[0].split(' ')[0]
-    try:
-        # Standard format
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        # Fallback for formats without seconds
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-    return IST.localize(dt)
+    combined_formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %I:%M:%S %p",
+        "%Y-%m-%d %I:%M %p",
+    ]
+    for fmt in combined_formats:
+        try:
+            dt = datetime.strptime(f"{date_str} {time_str}", fmt)
+            return IST.localize(dt)
+        except ValueError:
+            continue
+    return get_now()
 
 def fix_id(doc):
     from datetime import datetime, date
@@ -97,11 +136,23 @@ def fix_id(doc):
                     new_doc[k] = v.isoformat()
                 else:
                     new_doc[k] = v.strftime("%Y-%m-%d")
+            elif isinstance(v, float):
+                import math
+                if math.isnan(v) or math.isinf(v):
+                    new_doc[k] = 0.0
+                else:
+                    new_doc[k] = v
             elif isinstance(v, (dict, list)):
                 new_doc[k] = fix_id(v)
             else:
                 new_doc[k] = v
         return new_doc
+    elif isinstance(doc, ObjectId):
+        return str(doc)
+    elif isinstance(doc, float):
+        import math
+        if math.isnan(doc) or math.isinf(doc):
+            return 0.0
     return doc
 
 async def archive_and_delete_many(db, collection_name: str, query: dict):
@@ -251,22 +302,22 @@ async def update_employee(db, employee_id: str, employee_update: schemas.Employe
     return fix_id(updated_doc)
 
 async def get_employees(db, skip: int = 0, limit: int = 100):
-    cursor = db.employees.find().skip(skip).limit(limit)
+    cursor = db.employees.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def get_attendance(db, skip: int = 0, limit: int = 100):
-    cursor = db.attendance.find().skip(skip).limit(limit)
+    cursor = db.attendance.find().sort([("date", -1), ("_id", -1)]).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def get_leave_requests(db, skip: int = 0, limit: int = 100):
-    cursor = db.leave_requests.find().skip(skip).limit(limit)
+    cursor = db.leave_requests.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def get_announcements(db, skip: int = 0, limit: int = 100):
-    cursor = db.announcements.find().skip(skip).limit(limit)
+    cursor = db.announcements.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -442,12 +493,12 @@ async def get_analytics_overview(db, months: int = 6):
     }
 
 async def get_payroll(db, skip: int = 0, limit: int = 100):
-    cursor = db.payroll.find().skip(skip).limit(limit)
+    cursor = db.payroll.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def get_salary_structures(db, skip: int = 0, limit: int = 100):
-    cursor = db.salary_structures.find().skip(skip).limit(limit)
+    cursor = db.salary_structures.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -502,7 +553,7 @@ async def get_bonus_deductions(db, month: str = None, year: int = None):
     query = {}
     if month: query["month"] = month
     if year: query["year"] = year
-    cursor = db.bonus_deductions.find(query)
+    cursor = db.bonus_deductions.find(query).sort("_id", -1)
     rows = await cursor.to_list(length=1000)
     return [fix_id(row) for row in rows]
 
@@ -533,7 +584,7 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
             {"date": {"$gte": start_dt_aware, "$lte": end_dt_aware}}
         ]
     
-    cursor = db.remarks.find(remark_query)
+    cursor = db.remarks.find(remark_query).sort("_id", -1)
     remarks = await cursor.to_list(length=1000)
     
     # 4. Merge remarks that are deductions
@@ -672,8 +723,9 @@ async def get_bonus_deductions_with_remarks(db, month: str = None, year: int = N
             "date": r_date_str
         })
         
+    # Sort by date descending so newest are on top
+    adjustments.sort(key=lambda x: str(x.get("date", "")), reverse=True)
     return adjustments
-
 async def create_bonus_deduction(db, item: schemas.BonusDeductionCreate):
     item_dict = item.dict()
     result = await db.bonus_deductions.insert_one(item_dict)
@@ -697,6 +749,7 @@ async def run_payroll_processing(db, month: str, year: int):
     penalty_types = await get_penalty_types(db)
     system_settings = await get_system_settings(db)
     late_punch_deduction_enabled = system_settings.get("latePunchDeductionEnabled", True)
+    daily_progress_reject_deduction_enabled = system_settings.get("dailyProgressRejectDeductionEnabled", False)
     payroll_results = []
     
     for emp in employees:
@@ -838,11 +891,17 @@ async def run_payroll_processing(db, month: str, year: int):
         att_start_dt_aware = att_start_dt_naive.replace(tzinfo=IST)
         att_end_dt_aware = (att_end_dt_naive - timedelta(seconds=1)).replace(tzinfo=IST)
         
+        emp_id_query = [{"employeeId": emp_id}]
+        if ObjectId.is_valid(emp_id):
+            emp_id_query.append({"employeeId": ObjectId(emp_id)})
+
         attendance_cursor = db.attendance.find({
-            "employeeId": emp_id,
-            "$or": [
-                {"date": {"$gte": att_start_dt_naive, "$lt": att_end_dt_naive}},
-                {"date": {"$gte": att_start_dt_aware, "$lte": att_end_dt_aware}}
+            "$and": [
+                {"$or": emp_id_query},
+                {"$or": [
+                    {"date": {"$gte": att_start_dt_naive, "$lt": att_end_dt_naive}},
+                    {"date": {"$gte": att_start_dt_aware, "$lte": att_end_dt_aware}}
+                ]}
             ]
         })
         attendance_records = await attendance_cursor.to_list(length=100)
@@ -922,23 +981,99 @@ async def run_payroll_processing(db, month: str, year: int):
         emp_adjustments = [a for a in adjustments if a["employeeId"] == emp_id and a["status"] == "active"]
         
         # Recalculate Sales Targets to ensure fresh data for payroll
-        targets_cursor = db.sales_targets.find({
-            "employeeId": emp_id,
-            "month": month,
-            "year": year
-        })
-        targets = await targets_cursor.to_list(length=10)
-        for t in targets:
-            await recalculate_sales_target(db, emp_id, month, year, t.get("type", "Monthly"), t.get("week"))
+        try:
+            tgt_month_num = list(calendar.month_name).index(month)
+        except ValueError:
+            tgt_month_map = {m: i for i, m in enumerate(calendar.month_name)}
+            tgt_month_num = tgt_month_map.get(month.capitalize(), 1)
+        _, tgt_num_days = calendar.monthrange(year, tgt_month_num)
+        
+        month_start_str = f"{year}-{tgt_month_num:02d}-01"
+        month_end_str = f"{year}-{tgt_month_num:02d}-{tgt_num_days:02d}"
 
-        # Fetch Sales Incentive
-        sales_target = await db.sales_targets.find_one({
-            "employeeId": emp_id,
-            "month": month,
-            "year": year,
-            "type": "Monthly" # Usually payroll uses monthly incentive
+        emp_obj_id = ObjectId(emp_id) if len(emp_id) == 24 else None
+        emp_query = [emp_id]
+        if emp_obj_id:
+            emp_query.append(emp_obj_id)
+            
+        targets_cursor = db.sales_targets.find({
+            "employeeId": {"$in": emp_query},
+            "$or": [
+                {
+                    "month": month,
+                    "year": year
+                },
+                {
+                    "type": "Custom",
+                    "startDate": {"$lte": month_end_str},
+                    "endDate": {"$gte": month_start_str}
+                }
+            ]
         })
-        incentive_amount = sales_target.get("incentiveAmount", 0) if sales_target else 0
+        targets = await targets_cursor.to_list(length=100)
+        for t in targets:
+            await recalculate_sales_target(
+                db, 
+                emp_id, 
+                month, 
+                year, 
+                t.get("type", "Monthly"), 
+                t.get("week"),
+                startDate=t.get("startDate"),
+                endDate=t.get("endDate")
+            )
+
+        # Fetch Sales Incentives (all targets relevant to this month)
+        updated_targets_cursor = db.sales_targets.find({
+            "employeeId": {"$in": emp_query},
+            "$or": [
+                {
+                    "month": month,
+                    "year": year
+                },
+                {
+                    "type": "Custom",
+                    "startDate": {"$lte": month_end_str},
+                    "endDate": {"$gte": month_start_str}
+                }
+            ]
+        })
+        updated_targets = await updated_targets_cursor.to_list(length=100)
+        
+        incentive_amount = 0.0
+        incentive_details_list = []
+        combined_breakdown = []
+        for t in updated_targets:
+            t_inc = t.get("incentiveAmount", 0.0)
+            incentive_amount += t_inc
+            
+            t_type = t.get("type", "Monthly")
+            t_target = t.get("targetAmount", 0.0)
+            t_achieved = t.get("currentAchievement", 0.0)
+            
+            if t_type == "Custom":
+                sd_raw = t.get("startDate", "")
+                ed_raw = t.get("endDate", "")
+                try:
+                    sd_dt = datetime.strptime(sd_raw, "%Y-%m-%d")
+                    ed_dt = datetime.strptime(ed_raw, "%Y-%m-%d")
+                    date_desc = f"{sd_dt.strftime('%d')} to {ed_dt.strftime('%d %b')}"
+                except:
+                    date_desc = f"{sd_raw} to {ed_raw}"
+            elif t_type == "Weekly":
+                date_desc = f"Week {t.get('week')} ({month})"
+            else:
+                date_desc = f"Monthly ({month})"
+                
+            incentive_details_list.append(
+                f"• {date_desc}: Target ₹{int(t_target)}, Achieved ₹{int(t_achieved)} (Incentive: ₹{int(t_inc)})"
+            )
+            
+            t_breakdown = t.get("breakdown", [])
+            if t_breakdown:
+                combined_breakdown.extend(t_breakdown)
+        
+        incentive_details_str = "; ".join(incentive_details_list)
 
         total_bonus = 0
         total_adhoc_deduction = 0
@@ -947,7 +1082,7 @@ async def run_payroll_processing(db, month: str, year: int):
             if a["type"] == "bonus":
                 total_bonus += a["amount"]
             elif a["type"] == "deduction":
-                if "rejected by Team Leader" in a["reason"] or "Work rejected by TL" in a["reason"]:
+                if "was rejected. Automatic full-day salary deduction applied" in a["reason"] or "Work rejected by TL" in a["reason"]:
                     penalty_total += per_day_gross
                     deduction_details.append(f"{a['reason']}: ₹{round(per_day_gross, 2)}")
                 else:
@@ -990,8 +1125,15 @@ async def run_payroll_processing(db, month: str, year: int):
             
             if remark_type == "Late Punch-in":
                 if late_punch_deduction_enabled:
-                    penalty_total += per_day_gross
-                    deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{round(per_day_gross, 2)}")
+                    if per_day_gross > 0:
+                        penalty_total += per_day_gross
+                        deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{round(per_day_gross, 2)}")
+                    else:
+                        # Salary is 0, so deduct the penalty given in penalty_types for Late Punch-in
+                        p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
+                        if p_amount > 0:
+                            penalty_total += p_amount
+                            deduction_details.append(f"Late Punch-in ({r_date_str}): ₹{p_amount}")
                 continue
 
             p_amount = next((p["amount"] for p in penalty_types if p["name"] == remark_type), 0)
@@ -1022,13 +1164,16 @@ async def run_payroll_processing(db, month: str, year: int):
             "basicSalary": salary["basic"],
             "allowances": salary["hra"] + salary["conveyance"] + salary["medical"] + salary["specialAllowance"] + incentive_amount,
             "bonus": total_bonus,
+            "incentiveAmount": round(incentive_amount, 2),
             "deductions": salary["pf"] + salary["esi"] + salary["professionalTax"] + salary["tds"] + lop_amount + total_adhoc_deduction + penalty_total + deposit_deduction,
             "penalty": penalty_total,
             "securityDeposit": deposit_deduction,
             "returnedDeposit": returned_deposit,
             "netSalary": round(net_salary, 2),
             "status": existing_payroll.get("status", "processed") if existing_payroll else "processed",
-            "deductionRemarks": "; ".join(deduction_details)
+            "deductionRemarks": "; ".join(deduction_details),
+            "incentiveDetails": incentive_details_str,
+            "incentiveBreakdown": combined_breakdown
         }
         
         await db.payroll.update_one(
@@ -1040,6 +1185,20 @@ async def run_payroll_processing(db, month: str, year: int):
         doc = await db.payroll.find_one({"employeeId": emp_id, "month": month, "year": year})
         payroll_results.append(fix_id(doc))
         
+    try:
+        for p_doc in payroll_results:
+            target_emp_id = p_doc.get("employeeId")
+            if target_emp_id:
+                await create_notification(db, schemas.NotificationCreate(
+                    employee_id=target_emp_id,
+                    title="Payslip Released",
+                    message=f"Your payroll for {month} {year} has been processed. You can view your payslip in the Payroll section.",
+                    type="payroll",
+                    reference_id=p_doc.get("id")
+                ))
+    except Exception as e_notif:
+        print(f"Error sending payslip notifications: {e_notif}")
+
     return payroll_results
 
 async def create_employee(db, employee: schemas.EmployeeCreate):
@@ -1089,7 +1248,7 @@ async def create_employee(db, employee: schemas.EmployeeCreate):
 
 # Department CRUD
 async def get_departments(db, skip: int = 0, limit: int = 100):
-    cursor = db.departments.find().skip(skip).limit(limit)
+    cursor = db.departments.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     results = []
     for row in rows:
@@ -1109,10 +1268,24 @@ async def create_department(db, department: schemas.DepartmentCreate):
 
 async def update_department(db, department_id: str, department_update: schemas.DepartmentUpdate):
     update_data = department_update.dict(exclude_unset=True)
+    
+    # We need the old department name to cascade changes
+    old_doc = await db.departments.find_one({"_id": ObjectId(department_id)})
+    
     await db.departments.update_one(
         {"_id": ObjectId(department_id)},
         {"$set": update_data}
     )
+    
+    if old_doc and "name" in update_data and old_doc.get("name") != update_data["name"]:
+        old_name = old_doc.get("name")
+        new_name = update_data["name"]
+        # cascade update to employees, clients, tasks, projects
+        await db.employees.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.clients.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.tasks.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        await db.projects.update_many({"department": old_name}, {"$set": {"department": new_name}})
+        
     updated_doc = await db.departments.find_one({"_id": ObjectId(department_id)})
     return fix_id(updated_doc)
 
@@ -1122,7 +1295,7 @@ async def delete_department(db, department_id: str):
 
 # Designation CRUD
 async def get_designations(db, skip: int = 0, limit: int = 100):
-    cursor = db.designations.find().skip(skip).limit(limit)
+    cursor = db.designations.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -1149,7 +1322,7 @@ async def delete_designation(db, designation_id: str):
 
 # Generic CRUD Helpers
 async def get_items(db, collection_name: str, skip: int = 0, limit: int = 100):
-    cursor = db[collection_name].find().skip(skip).limit(limit)
+    cursor = db[collection_name].find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -1316,7 +1489,7 @@ async def update_intern(db, intern_id: str, update: schemas.InternUpdate): retur
 async def delete_intern(db, intern_id: str): return await delete_item(db, "interns", intern_id)
 
 async def get_assets(db, skip: int = 0, limit: int = 100):
-    cursor = db.assets.find().skip(skip).limit(limit)
+    cursor = db.assets.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     results = []
     for row in rows:
@@ -1454,7 +1627,7 @@ async def get_reviews(db, employee_id: str = None, skip: int = 0, limit: int = 1
     query = {}
     if employee_id:
         query["employeeId"] = employee_id
-    cursor = db.reviews.find(query).skip(skip).limit(limit)
+    cursor = db.reviews.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 async def create_review(db, review: schemas.ReviewCreate): 
@@ -1581,10 +1754,104 @@ async def authenticate_user(db, login_data: schemas.LoginRequest):
     return None
 
 
+async def _apply_punch_out_to_record(db, record: dict, close_dt: datetime, auto_remark: Optional[str] = None):
+    """Close an open attendance record at close_dt. Works with raw MongoDB docs."""
+    start_time_str = _resolve_punch_start_time(record)
+    if not start_time_str:
+        now_time_str = close_dt.strftime("%H:%M:%S")
+        await db.attendance.update_one(
+            {"_id": record["_id"]},
+            {"$set": {
+                "checkOut": now_time_str,
+                "status": "Logged",
+                "workHours": "0h 0m",
+                "accumulatedWorkSeconds": 0,
+                "remarks": auto_remark or record.get("remarks") or "-",
+            }}
+        )
+        return await db.attendance.find_one({"_id": record["_id"]})
+
+    check_in_time = parse_datetime(record['date'], start_time_str)
+    if close_dt < check_in_time:
+        close_dt = check_in_time + timedelta(minutes=1)
+
+    breaks = record.get("breaks", [])
+    total_break_seconds = 0
+    updated_breaks = []
+
+    for b in breaks:
+        b_copy = dict(b)
+        b_start_str = b_copy.get("startTime")
+        if b_start_str and not _is_placeholder_time(b_start_str):
+            b_start = parse_datetime(record['date'], b_start_str)
+            if b_start >= check_in_time:
+                b_end_str = b_copy.get("endTime")
+                if b_end_str and not _is_placeholder_time(b_end_str):
+                    b_end = parse_datetime(record['date'], b_end_str)
+                    if b_end < b_start:
+                        b_end += timedelta(days=1)
+                    break_dur = (b_end - b_start).total_seconds()
+                else:
+                    b_end = close_dt
+                    break_dur = (b_end - b_start).total_seconds()
+                    b_copy["endTime"] = close_dt.strftime("%H:%M:%S")
+                    b_copy["duration"] = f"{int(break_dur // 60)}m"
+                total_break_seconds += break_dur
+        updated_breaks.append(b_copy)
+
+    raw_session_seconds = (close_dt - check_in_time).total_seconds()
+    session_work_seconds = max(0.0, raw_session_seconds - total_break_seconds)
+
+    accumulated_seconds = record.get("accumulatedWorkSeconds") or 0
+    total_seconds = accumulated_seconds + session_work_seconds
+
+    hours, remainder = divmod(int(total_seconds), 3600)
+    minutes, _ = divmod(remainder, 60)
+    work_hours = f"{hours}h {minutes}m"
+    now_time_str = close_dt.strftime("%H:%M:%S")
+
+    punches = record.get("punches", [])
+    update_data = {
+        "checkOut": now_time_str,
+        "workHours": work_hours,
+        "status": "Logged",
+        "accumulatedWorkSeconds": total_seconds,
+        "breaks": updated_breaks,
+    }
+
+    if punches:
+        punches_copy = [dict(p) for p in punches]
+        if punches_copy[-1].get("punchOut") in [None, ""]:
+            punches_copy[-1]["punchOut"] = now_time_str
+        update_data["punches"] = punches_copy
+    else:
+        update_data["punches"] = [{"punchIn": start_time_str, "punchOut": now_time_str}]
+
+    if auto_remark:
+        existing_remarks = record.get("remarks") or ""
+        if not existing_remarks or existing_remarks == "-":
+            update_data["remarks"] = auto_remark
+        elif auto_remark not in existing_remarks:
+            update_data["remarks"] = f"{existing_remarks}; {auto_remark}"
+
+    await db.attendance.update_one({"_id": record["_id"]}, {"$set": update_data})
+    return await db.attendance.find_one({"_id": record["_id"]})
+
+
+async def auto_close_stale_open_sessions(db, employee_id: str) -> int:
+    """Auto-close open attendance sessions from previous days (forgotten punch-out)."""
+    # Disabled automatic punch-out as requested by the user
+    return 0
+
+
 async def get_attendance_status(db, employee_id: str):
-    # Find most recent active punch (checkOut missing)
+    await auto_close_stale_open_sessions(db, employee_id)
+    query_or = [{"employeeId": employee_id}]
+    if ObjectId.is_valid(employee_id):
+        query_or.append({"employeeId": ObjectId(employee_id)})
+        
     cursor = db.attendance.find({
-        "employeeId": employee_id,
+        "$or": query_or,
         "checkOut": None
     }).sort("date", -1).limit(1)
     records = await cursor.to_list(length=1)
@@ -1595,6 +1862,8 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
     employee = await get_employee(db, employee_id)
     if not employee:
         return None
+
+    await auto_close_stale_open_sessions(db, employee_id)
     
     today = get_now()
     today_str = today.strftime("%Y-%m-%d")
@@ -1675,8 +1944,12 @@ async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
         print(f"Error checking leave for punch-in: {e_leave}")
 
     # Check for existing record for today to consolidate - supports naive and aware dates
+    query_or = [{"employeeId": employee_id}]
+    if ObjectId.is_valid(employee_id):
+        query_or.append({"employeeId": ObjectId(employee_id)})
+        
     existing_record = await db.attendance.find_one({
-        "employeeId": employee_id,
+        "$or": query_or,
         "date": {"$in": [today_dt_naive, today_dt_aware]}
     })
 
@@ -1794,79 +2067,20 @@ async def punch_out(db, employee_id: str, punch_out_time: Optional[str] = None):
     status = await get_attendance_status(db, employee_id)
     if not status:
         return None
-    
+
+    record = await db.attendance.find_one({"_id": ObjectId(status["id"])})
+    if not record:
+        return None
+
     if punch_out_time:
         if len(punch_out_time.split(':')) == 2:
             punch_out_time = f"{punch_out_time}:00"
-        now = parse_datetime(status['date'], punch_out_time)
+        close_dt = parse_datetime(record['date'], punch_out_time)
     else:
-        now = get_now()
-    # Use lastPunchIn if available to calculate session duration, otherwise fallback to checkIn
-    start_time_str = status.get("lastPunchIn") or status["checkIn"]
-    check_in_time = parse_datetime(status['date'], start_time_str)
-    
-    # Calculate break seconds that occurred during this session (since check_in_time)
-    breaks = status.get("breaks", [])
-    total_break_seconds = 0
-    updated_breaks = []
-    
-    for b in breaks:
-        b_copy = dict(b)
-        b_start_str = b_copy.get("startTime")
-        if b_start_str:
-            b_start = parse_datetime(status['date'], b_start_str)
-            if b_start >= check_in_time:
-                b_end_str = b_copy.get("endTime")
-                if b_end_str:
-                    b_end = parse_datetime(status['date'], b_end_str)
-                    if b_end < b_start:
-                        b_end += timedelta(days=1)
-                    break_dur = (b_end - b_start).total_seconds()
-                else:
-                    # User punched out while on active break: close the break at now
-                    b_end = now
-                    break_dur = (b_end - b_start).total_seconds()
-                    b_copy["endTime"] = now.strftime("%H:%M:%S")
-                    b_copy["duration"] = f"{int(break_dur // 60)}m"
-                total_break_seconds += break_dur
-        updated_breaks.append(b_copy)
-        
-    raw_session_seconds = (now - check_in_time).total_seconds()
-    session_work_seconds = max(0.0, raw_session_seconds - total_break_seconds)
-    
-    accumulated_seconds = status.get("accumulatedWorkSeconds") or 0
-    total_seconds = accumulated_seconds + session_work_seconds
-    
-    hours, remainder = divmod(int(total_seconds), 3600)
-    minutes, _ = divmod(remainder, 60)
-    work_hours = f"{hours}h {minutes}m"
-    
-    # Update the last punch log entry
-    punches = status.get("punches", [])
-    now_time_str = now.strftime("%H:%M:%S")
-    
-    update_data = {
-        "checkOut": now_time_str,
-        "workHours": work_hours,
-        "status": "Logged",
-        "accumulatedWorkSeconds": total_seconds,
-        "breaks": updated_breaks
-    }
+        close_dt = get_now()
 
-    if punches:
-        punches_copy = [dict(p) for p in punches]
-        punches_copy[-1]["punchOut"] = now_time_str
-        update_data["punches"] = punches_copy
-    else:
-        update_data["punches"] = [{"punchIn": start_time_str, "punchOut": now_time_str}]
-    
-    await db.attendance.update_one(
-        {"_id": ObjectId(status["id"])},
-        {"$set": update_data}
-    )
-    
-    updated_doc = await db.attendance.find_one({"_id": ObjectId(status["id"])})
-    return fix_id(updated_doc)
+    updated = await _apply_punch_out_to_record(db, record, close_dt)
+    return fix_id(updated)
 
 async def create_manual_attendance(db, attendance: schemas.AttendanceCreate):
     attendance_dict = attendance.dict()
@@ -1989,10 +2203,13 @@ async def break_in(db, employee_id: str):
     return fix_id(result)
 
 async def break_out(db, employee_id: str):
-    # Find record where status is 'On Break'
-    # Find most recent record where status is 'On Break'
+    await auto_close_stale_open_sessions(db, employee_id)
+    query_or = [{"employeeId": employee_id}]
+    if ObjectId.is_valid(employee_id):
+        query_or.append({"employeeId": ObjectId(employee_id)})
+        
     cursor = db.attendance.find({
-        "employeeId": employee_id,
+        "$or": query_or,
         "status": "On Break",
         "checkOut": None
     }).sort("date", -1).limit(1)
@@ -2323,11 +2540,155 @@ async def delete_leave_request(db, leave_id: str):
     result = await db.leave_requests.delete_one({"_id": ObjectId(leave_id)})
     return result.deleted_count > 0
 
+# Helper for checking full entity access permission
+async def user_has_full_entity_access(db, user_id: str, role: str, target_module: str = None) -> bool:
+    if not role and not user_id:
+        return False
+    role_lower = str(role or "").lower().strip()
+    full_roles = {"admin", "manager", "social media manager", "smm", "director", "head", "super admin", "digital marketer", "digital marketing"}
+    if role_lower in full_roles or "social media" in role_lower or "digital marketing" in role_lower:
+        return True
+        
+    if user_id:
+        user = await get_employee(db, user_id)
+        if user:
+            ur = str(user.get("role", "")).lower().strip()
+            udes = str(user.get("designation", "")).lower().strip()
+            udept = str(user.get("department", "")).lower().strip()
+            if ur in full_roles or udes in full_roles or "social media" in ur or "social media" in udes or "digital marketing" in ur or "digital marketing" in udes:
+                return True
+                
+        # Check permissions table
+        perm_doc = await db.user_permissions.find_one({"employeeId": user_id})
+        if perm_doc:
+            modules_to_check = {"projects", "smm", "clients", "digital-marketing", "work-management"}
+            if target_module:
+                modules_to_check.add(target_module)
+            for p in perm_doc.get("permissions", []):
+                if p.get("moduleName") in modules_to_check and (p.get("canView") or p.get("canEdit") or p.get("canAdd")):
+                    return True
+    return False
+
 # Client CRUD
-async def get_clients(db, skip: int = 0, limit: int = 100):
-    cursor = db.clients.find().skip(skip).limit(limit)
+async def get_clients(db, skip: int = 0, limit: int = 10000, user_info: dict = None):
+    query = {}
+    if user_info:
+        role = str(user_info.get("role", "")).lower()
+        user_id = user_info.get("sub")
+        if not await user_has_full_entity_access(db, user_id, role, "clients"):
+            user_id = user_info.get("sub")
+            # Fetch user's projects to get associated clients
+            user_projects = await get_projects(db, userId=user_id, role=role, skip=0, limit=10000)
+            project_client_ids = [str(p.get("clientId")) for p in user_projects if p.get("clientId")]
+            
+            query["$or"] = [
+                {"assignedEmployeeId": user_id},
+                {"_id": {"$in": [ObjectId(cid) for cid in project_client_ids if ObjectId.is_valid(cid)]}}
+            ]
+            
+            user = await get_employee(db, user_id)
+            if user and user.get("department"):
+                import re
+                dept_regex = re.compile(f".*{re.escape(user.get('department'))}.*", re.IGNORECASE)
+                query["$or"].append({"department": dept_regex})
+            
+    cursor = db.clients.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
+
+async def get_client(db, client_id: str):
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    if doc:
+        return fix_id(doc)
+    return None
+
+async def calculate_next_followup_date(db, start_date_str: str, config: dict) -> str:
+    if not start_date_str or not config:
+        return None
+        
+    try:
+        current_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+    except ValueError:
+        return None
+        
+    followup_type = config.get("followupType", "Interval")
+    
+    holiday_query = {
+        "$or": [
+            {"company": {"$in": [None, "", "null"]}}
+        ]
+    }
+    
+    all_holidays = await db.holidays.find(holiday_query).to_list(length=1000)
+    
+    holiday_dates = set()
+    for h in all_holidays:
+        h_date = h.get("date")
+        if h_date:
+            try:
+                h_date_str = h_date.strftime("%Y-%m-%d") if isinstance(h_date, (date, datetime)) else str(h_date)[:10]
+                holiday_dates.add(h_date_str)
+            except:
+                pass
+                
+    def is_valid_day(d: datetime) -> bool:
+        if d.weekday() == 6: # Sunday
+            return False
+        if d.strftime("%Y-%m-%d") in holiday_dates:
+            return False
+        return True
+
+    current_date += timedelta(days=1)
+    
+    if followup_type == "Interval":
+        interval_days = config.get("followupIntervalDays") or 0
+        if interval_days <= 0: return None
+        
+        current_date -= timedelta(days=1)
+        days_added = 0
+        while days_added < interval_days:
+            current_date += timedelta(days=1)
+            if not is_valid_day(current_date): continue
+            days_added += 1
+        return current_date.strftime("%Y-%m-%d")
+        
+    elif followup_type == "Weekly":
+        days_of_week = config.get("followupDaysOfWeek") or []
+        if not days_of_week: return None
+        
+        for _ in range(30):
+            if current_date.weekday() in days_of_week:
+                target_date = current_date
+                while not is_valid_day(target_date):
+                    target_date += timedelta(days=1)
+                return target_date.strftime("%Y-%m-%d")
+            current_date += timedelta(days=1)
+            
+    elif followup_type == "Monthly":
+        import calendar
+        dates_of_month = config.get("followupDatesOfMonth") or []
+        if not dates_of_month: return None
+        
+        for _ in range(60):
+            last_day_of_month = calendar.monthrange(current_date.year, current_date.month)[1]
+            
+            is_match = False
+            for target_dom in dates_of_month:
+                if current_date.day == target_dom:
+                    is_match = True
+                    break
+                elif target_dom > last_day_of_month and current_date.day == last_day_of_month:
+                    is_match = True
+                    break
+                    
+            if is_match:
+                target_date = current_date
+                while not is_valid_day(target_date):
+                    target_date += timedelta(days=1)
+                return target_date.strftime("%Y-%m-%d")
+            current_date += timedelta(days=1)
+            
+    return None
 
 async def create_client(db, client: schemas.ClientCreate):
     client_dict = client.dict()
@@ -2336,6 +2697,10 @@ async def create_client(db, client: schemas.ClientCreate):
     
     if not client_dict.get("createdDate"):
         client_dict["createdDate"] = get_now().strftime("%Y-%m-%d")
+        
+    if client_dict.get("followupType") and client_dict.get("lastFollowupDate"):
+        client_dict["nextFollowupDate"] = await calculate_next_followup_date(db, client_dict["lastFollowupDate"], client_dict)
+        
     result = await db.clients.insert_one(client_dict)
     clientId = str(result.inserted_id)
     
@@ -2356,24 +2721,138 @@ async def update_client(db, client_id: str, client_update: schemas.ClientUpdate)
     
     if update_data:
         old_client = await db.clients.find_one({"_id": ObjectId(client_id)})
+        
+        # Handle followup calculation
+        followup_fields = ["followupType", "followupIntervalDays", "followupDaysOfWeek", "followupDatesOfMonth", "lastFollowupDate"]
+        if any(f in update_data for f in followup_fields):
+            new_config = {
+                "followupType": update_data.get("followupType", old_client.get("followupType")),
+                "followupIntervalDays": update_data.get("followupIntervalDays", old_client.get("followupIntervalDays")),
+                "followupDaysOfWeek": update_data.get("followupDaysOfWeek", old_client.get("followupDaysOfWeek")),
+                "followupDatesOfMonth": update_data.get("followupDatesOfMonth", old_client.get("followupDatesOfMonth"))
+            }
+            new_last_date = update_data.get("lastFollowupDate", old_client.get("lastFollowupDate"))
+            if new_last_date:
+                update_data["nextFollowupDate"] = await calculate_next_followup_date(db, new_last_date, new_config)
+            else:
+                update_data["nextFollowupDate"] = None
+                
+        try:
+            client_id_obj = ObjectId(client_id)
+            query_client_id = {"$in": [client_id, client_id_obj]}
+        except Exception:
+            query_client_id = client_id
+
+        if update_data.get("status") == "on-hold":
+            await db.projects.update_many(
+                {"clientId": query_client_id},
+                {
+                    "$set": {"status": "on-hold"},
+                    "$push": {"statusHistory": {"status": "on-hold", "timestamp": get_now().isoformat()}}
+                }
+            )
+        elif update_data.get("status") == "active":
+            await db.projects.update_many(
+                {"clientId": query_client_id},
+                {
+                    "$set": {"status": "in-progress"},
+                    "$push": {"statusHistory": {"status": "in-progress", "timestamp": get_now().isoformat()}}
+                }
+            )
+            
         await db.clients.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
         
-        details = []
-        for key, value in update_data.items():
-            old_val = old_client.get(key, "N/A")
-            if old_val != value:
-                # Format key for readability (e.g. companyName -> Company Name)
-                formatted_key = ''.join([' ' + c if c.isupper() else c for c in key]).capitalize().strip()
-                details.append(f"{formatted_key} changed from '{old_val}' to '{value}'")
-        
-        log_details = f"Client '{old_client.get('companyName')}': " + (", ".join(details) if details else "Details updated")
-        await log_activity(db, "Updated", performedBy, userName, log_details, clientId=client_id)
+        log_details, diffs = format_field_changes(old_client, update_data, f"Client '{old_client.get('companyName')}'")
+        await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, clientId=client_id)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "clients"})
+            if update_data.get("status") in ["on-hold", "active"]:
+                await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
         except Exception:
             pass
             
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
+async def add_client_meeting(db, client_id: str, meeting: schemas.Meeting, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    meeting_dict = meeting.dict()
+    if not meeting_dict.get("date"):
+        meeting_dict["date"] = get_now().strftime("%Y-%m-%d %H:%M")
+        
+    await db.clients.update_one(
+        {"_id": ObjectId(client_id)},
+        {"$push": {"meetings": meeting_dict}}
+    )
+    
+    # Log activity
+    await log_activity(db, "Client Meeting Added", performedBy, userName, f"Added meeting: {meeting_dict.get('note', 'No notes provided')}", clientId=client_id)
+    
+    # Auto-create schedules for attendees
+    client = await db.clients.find_one({"_id": ObjectId(client_id)})
+    client_name = client.get("companyName", "Client") if client else "Client"
+    
+    attendee_ids = meeting_dict.get("attendeeIds", [])
+    if attendee_ids:
+        # Try to parse start and end times
+        start_time, end_time = "09:30", "10:00"
+        if " - " in meeting_dict.get("duration", ""):
+            parts = meeting_dict["duration"].split(" - ")
+            start_time, end_time = parts[0].strip(), parts[1].strip()
+        
+        date_str = meeting_dict["date"].split(" ")[0] if " " in meeting_dict.get("date", "") else meeting_dict.get("date", "").split("T")[0]
+        
+        for emp_id in attendee_ids:
+            if not emp_id: continue
+            q = {"_id": ObjectId(emp_id)} if ObjectId.is_valid(emp_id) else {"id": emp_id}
+            emp = await db.employees.find_one(q)
+            emp_name = emp.get("name", "Unknown") if emp else "Unknown"
+            
+            schedule_data = {
+                "title": f"Meeting: {client_name}",
+                "description": meeting_dict.get("note", ""),
+                "employeeId": str(emp.get("_id", emp_id)) if emp else emp_id,
+                "employeeName": emp_name,
+                "date": date_str,
+                "startTime": start_time,
+                "endTime": end_time,
+                "type": "meeting",
+                "attendees": [a.strip() for a in meeting_dict.get("attendees", "").split(",")] if meeting_dict.get("attendees") else [],
+                "createdBy": userName
+            }
+            # create_schedule will handle Google Calendar syncing if enabled
+            try:
+                await create_schedule(db, schedule_data)
+            except Exception as e:
+                print(f"Error auto-creating schedule for meeting: {e}")
+
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
+async def update_client_meeting(db, client_id: str, meeting_idx: int, meeting: schemas.Meeting, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    meeting_dict = meeting.dict()
+    
+    await db.clients.update_one(
+        {"_id": ObjectId(client_id)},
+        {"$set": {f"meetings.{meeting_idx}": meeting_dict}}
+    )
+    
+    # Log activity
+    await log_activity(db, "Client Meeting Updated", performedBy, userName, f"Updated meeting at index {meeting_idx}: {meeting_dict.get('note', 'No notes provided')}", clientId=client_id)
+    
+    doc = await db.clients.find_one({"_id": ObjectId(client_id)})
+    return fix_id(doc)
+
+async def delete_client_meeting(db, client_id: str, meeting_idx: int, performedBy: str = "Unknown", userName: str = "Unknown User"):
+    client = await db.clients.find_one({"_id": ObjectId(client_id)})
+    if client and "meetings" in client and len(client["meetings"]) > meeting_idx:
+        meetings = client["meetings"]
+        deleted_meeting = meetings.pop(meeting_idx)
+        await db.clients.update_one(
+            {"_id": ObjectId(client_id)},
+            {"$set": {"meetings": meetings}}
+        )
+        await log_activity(db, "Client Meeting Deleted", performedBy, userName, f"Deleted meeting: {deleted_meeting.get('note', 'No notes provided')}", clientId=client_id)
     doc = await db.clients.find_one({"_id": ObjectId(client_id)})
     return fix_id(doc)
 
@@ -2408,40 +2887,48 @@ async def delete_client(db, client_id: str):
 # Project CRUD
 async def get_projects(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "projects"):
         # Fetch user to get department
         user = await get_employee(db, userId)
         if user:
             dept = user.get("department")
             
-            if role.lower() == "team leader":
-                # TL sees projects where they are TL OR projects in their department
-                query["$or"] = [
-                    {"teamLeaderId": userId},
-                    {"department": dept}
-                ]
-            else:
-                # Employee sees projects where they have tasks
-                task_cursor = db.wm_tasks.find({"assignedToId": userId})
-                task_list = await task_cursor.to_list(length=1000)
-                project_ids = list(set([t.get("projectId") for t in task_list if t.get("projectId")]))
-                
-                or_conditions = [{"teamLeaderId": userId}]
-                if project_ids:
-                    project_ids_as_obj = []
-                    for pid in project_ids:
-                        try:
-                            project_ids_as_obj.append(ObjectId(pid))
-                        except Exception:
-                            pass
-                    
-                    if project_ids_as_obj:
-                        or_conditions.append({"_id": {"$in": project_ids_as_obj}})
-                    or_conditions.append({"id": {"$in": project_ids}}) # fallback for string IDs
-                
-                query["$or"] = or_conditions
+            # Everyone else (Team Leader, Employee, etc) sees projects where they have tasks or are assigned
 
-    cursor = db.projects.find(query).skip(skip).limit(limit)
+            task_cursor = db.wm_tasks.find({"assignedToId": userId})
+            task_list = await task_cursor.to_list(length=1000)
+            project_ids = list(set([t.get("projectId") for t in task_list if t.get("projectId")]))
+            
+            or_conditions = [
+                {"teamLeaderId": userId},
+                {"assignedEmployeeId": userId},
+                {"assignedScriptwriterId": userId},
+                {"assignedReelEditorId": userId},
+                {"assignedPostDesignerId": userId},
+                {"assignedShooterId": userId},
+                {"assignedApproverId": userId},
+                {"assignedPosterId": userId}
+            ]
+            if project_ids:
+                project_ids_as_obj = []
+                for pid in project_ids:
+                    try:
+                        project_ids_as_obj.append(ObjectId(pid))
+                    except Exception:
+                        pass
+                
+                if project_ids_as_obj:
+                    or_conditions.append({"_id": {"$in": project_ids_as_obj}})
+                or_conditions.append({"id": {"$in": project_ids}}) # fallback for string IDs
+            
+            if dept:
+                import re
+                dept_regex = re.compile(f".*{re.escape(dept)}.*", re.IGNORECASE)
+                or_conditions.append({"department": dept_regex})
+
+            query["$or"] = or_conditions
+
+    cursor = db.projects.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -2459,6 +2946,9 @@ async def create_project(db, project: schemas.ProjectCreate):
         employee = await db.employees.find_one({"_id": ObjectId(project_dict["teamLeaderId"])})
         if employee:
             project_dict["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
+            
+    if "statusHistory" not in project_dict or not project_dict["statusHistory"]:
+        project_dict["statusHistory"] = [{"status": project_dict.get("status", "planning"), "timestamp": get_now().isoformat()}]
             
     result = await db.projects.insert_one(project_dict)
     projectId = str(result.inserted_id)
@@ -2491,16 +2981,28 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
             if employee:
                 update_data["teamLeaderName"] = f"{employee.get('firstName')} {employee.get('lastName')}"
                 
-        await db.projects.update_one({"_id": ObjectId(project_id)}, {"$set": update_data})
-        
-        details = []
+        # Calculate nextFollowupDate
+        followup_keys = ["followupType", "followupIntervalDays", "followupDaysOfWeek", "followupDatesOfMonth", "lastFollowupDate"]
+        if any(k in update_data for k in followup_keys):
+            merged_config = {**old_project, **update_data}
+            
+            # RobustDate parsing might make lastFollowupDate a date object
+            base_date_obj = merged_config.get("lastFollowupDate")
+            base_date = base_date_obj.strftime("%Y-%m-%d") if isinstance(base_date_obj, (date, datetime)) else base_date_obj
+            if not base_date:
+                base_date = get_now().strftime("%Y-%m-%d")
+                
+            next_date = await calculate_next_followup_date(db, base_date, merged_config)
+            update_data["nextFollowupDate"] = next_date
+
+        update_query = {"$set": update_data}
         if "status" in update_data and old_project.get("status") != update_data["status"]:
-            details.append(f"Status changed to {update_data['status']}")
-        if "teamLeaderName" in update_data and old_project.get("teamLeaderName") != update_data["teamLeaderName"]:
-            details.append(f"Team Leader changed to {update_data['teamLeaderName']}")
+            update_query["$push"] = {"statusHistory": {"status": update_data["status"], "timestamp": get_now().isoformat()}}
+
+        await db.projects.update_one({"_id": ObjectId(project_id)}, update_query)
         
-        log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
-        await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)
+        log_details, diffs = format_field_changes(old_project, update_data, f"Project '{old_project.get('title')}'")
+        await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, projectId=project_id)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
@@ -2523,10 +3025,77 @@ async def delete_project(db, project_id: str):
         await log_activity(db, "Deleted", "Admin", "N/A", f"Project '{project.get('title')}' was deleted.", projectId=project_id)
     return True
 
+async def update_module_notebook(db, project_id: str, payload: schemas.ModuleNotebookUpdate):
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return None
+    modules = project.get("modules") or []
+    updated = False
+    for m in modules:
+        m_phase = m.get("phaseName") or ""
+        p_phase = payload.phaseName or ""
+        if m.get("name") == payload.moduleName and m_phase == p_phase:
+            m["researchWork"] = payload.researchWork
+            updated = True
+            break
+            
+    if updated:
+        await db.projects.update_one(
+            {"_id": ObjectId(project_id)},
+            {"$set": {"modules": modules}}
+        )
+        await log_activity(db, "Module Research Updated", payload.performedBy or "Unknown", payload.userName or "User", f"Updated research work for module '{payload.moduleName}'", projectId=project_id)
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+        except Exception:
+            pass
+            
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc) if doc else None
+
+async def add_module_comment(db, project_id: str, payload: schemas.ModuleCommentCreate):
+    project = await db.projects.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return None
+    modules = project.get("modules") or []
+    updated = False
+    new_comment = {
+        "id": str(int(time.time() * 1000)),
+        "userId": payload.userId,
+        "userName": payload.userName,
+        "userRole": payload.userRole,
+        "content": payload.content,
+        "createdAt": get_now().strftime("%d %b %Y, %I:%M %p")
+    }
+    for m in modules:
+        m_phase = m.get("phaseName") or ""
+        p_phase = payload.phaseName or ""
+        if m.get("name") == payload.moduleName and m_phase == p_phase:
+            if "comments" not in m or not isinstance(m["comments"], list):
+                m["comments"] = []
+            m["comments"].append(new_comment)
+            updated = True
+            break
+            
+    if updated:
+        await db.projects.update_one(
+            {"_id": ObjectId(project_id)},
+            {"$set": {"modules": modules}}
+        )
+        await log_activity(db, "Module Comment Added", payload.userId, payload.userName, f"Added comment on module '{payload.moduleName}'", projectId=project_id)
+        try:
+            await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
+        except Exception:
+            pass
+            
+    doc = await db.projects.find_one({"_id": ObjectId(project_id)})
+    return fix_id(doc) if doc else None
+
+
 # General Task CRUD
 async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, limit: int = 100):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "tasks"):
         # User sees tasks assigned to them, or tasks they assigned
         query["$or"] = [
             {"assignedToId": userId},
@@ -2534,7 +3103,7 @@ async def get_tasks(db, userId: str = None, role: str = None, skip: int = 0, lim
             {"assignedById": userId}
         ]
                 
-    cursor = db.tasks.find(query).skip(skip).limit(limit)
+    cursor = db.tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -2645,30 +3214,47 @@ async def delete_task(db, task_id: str):
     return True
 
 # Work Management Task CRUD
+async def get_wm_tasks(db, userId: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 1000):
     query = {}
-    if role and role.lower() not in ["admin", "hr"] and userId:
+    if userId and not await user_has_full_entity_access(db, userId, role, "wm-tasks"):
         user = await get_employee(db, userId)
         if user:
             dept = user.get("department")
             
-            if role.lower() == "team leader":
-                # TL sees tasks assigned to them OR tasks assigned to employees in their dept
+            user_role = str(user.get("role", "")).lower().strip()
+            user_desig = str(user.get("designation", "")).lower().strip()
+            is_tl = (role and role.lower() == "team leader") or (user_role == "team leader") or (user_desig == "team leader")
+            
+            tl_proj = await db.projects.find_one({"teamLeaderId": userId})
+            
+            if is_tl or tl_proj:
+                # TL sees tasks assigned to them, tasks in their dept, unassigned tasks in their dept, or tasks they created
                 dept_employees = await db.employees.find({"department": dept}).to_list(length=1000)
                 dept_emp_ids = [str(e["_id"]) for e in dept_employees]
                 
-                query["assignedToId"] = {"$in": dept_emp_ids}
+                query["$or"] = [
+                    {"assignedToId": {"$in": dept_emp_ids}},
+                    {"department": dept},
+                    {"performedBy": userId}
+                ]
             else:
-                # Employee sees only their own tasks
-                query["assignedToId"] = userId
+                # Employee sees their own tasks or tasks they created
+                query["$or"] = [
+                    {"assignedToId": userId},
+                    {"performedBy": userId}
+                ]
                 
-    cursor = db.wm_tasks.find(query).skip(skip).limit(limit)
+    cursor = db.wm_tasks.find(query).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
 async def create_wm_task(db, task: schemas.WMTaskCreate):
     task_dict = task.dict()
-    performedBy = task_dict.pop("performedBy", "Unknown")
-    userName = task_dict.pop("userName", "Unknown User")
+    performedBy = task_dict.get("performedBy", "Unknown")
+    userName = task_dict.get("userName", "Unknown User")
+    
+    if not task_dict.get("createdBy"):
+        task_dict["createdBy"] = performedBy
     
     if not task_dict.get("projectName") and task_dict.get("projectId"):
         project = await db.projects.find_one({"_id": ObjectId(task_dict["projectId"])})
@@ -2697,6 +3283,19 @@ async def create_wm_task(db, task: schemas.WMTaskCreate):
     except Exception:
         pass
         
+    try:
+        assignee_id = task_dict.get("assignedToId")
+        if assignee_id and assignee_id != performedBy and assignee_id != "System":
+            await create_notification(db, schemas.NotificationCreate(
+                employee_id=assignee_id,
+                title="New Task Assigned",
+                message=f"You have been assigned task '{task_dict.get('title')}' in project '{task_dict.get('projectName', 'General')}'.",
+                type="task",
+                reference_id=taskId
+            ))
+    except Exception as e_notif:
+        print(f"Error notifying assignee on task create: {e_notif}")
+
     doc = await db.wm_tasks.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
@@ -2724,30 +3323,42 @@ async def update_wm_task(db, task_id: str, task_update: schemas.WMTaskUpdate):
                 
         await db.wm_tasks.update_one({"_id": ObjectId(task_id)}, {"$set": update_data})
         
-        # Log the update
-        details = []
-        if "status" in update_data and old_task.get("status") != update_data["status"]:
-            details.append(f"Stage changed from '{old_task.get('status')}' to '{update_data['status']}'")
-        
-        if "title" in update_data and old_task.get("title") != update_data["title"]:
-            details.append(f"Title changed from '{old_task.get('title')}' to '{update_data['title']}'")
-            
-        if "assignedToName" in update_data and old_task.get("assignedToName") != update_data["assignedToName"]:
-            details.append(f"Assignee changed to '{update_data['assignedToName']}'")
-        elif "assignedToId" in update_data and old_task.get("assignedToId") != update_data["assignedToId"]:
-            details.append(f"Assignee ID updated")
+        log_details, diffs = format_field_changes(old_task, update_data, f"Task '{old_task.get('title')}'")
+        await log_task_activity(db, task_id, "Updated", performedBy, userName, log_details, diffs=diffs)
 
-        if "projectName" in update_data and old_task.get("projectName") != update_data["projectName"]:
-            details.append(f"Project changed to '{update_data['projectName']}'")
-            
-        if "priority" in update_data and old_task.get("priority") != update_data["priority"]:
-            details.append(f"Priority changed from '{old_task.get('priority')}' to '{update_data['priority']}'")
-            
-        if "dueDate" in update_data and old_task.get("dueDate") != update_data["dueDate"]:
-            details.append(f"Due date changed from '{old_task.get('dueDate')}' to '{update_data['dueDate']}'")
-            
-        log_details = f"Task '{old_task.get('title')}': " + (", ".join(details) if details else "No visible changes")
-        await log_task_activity(db, task_id, "Updated", performedBy, userName, log_details)
+        try:
+            new_assignee_id = update_data.get("assignedToId")
+            old_assignee_id = old_task.get("assignedToId") if old_task else None
+            if new_assignee_id and new_assignee_id != old_assignee_id and new_assignee_id != performedBy:
+                await create_notification(db, schemas.NotificationCreate(
+                    employee_id=new_assignee_id,
+                    title="Task Re-assigned",
+                    message=f"You have been assigned task '{update_data.get('title') or (old_task.get('title') if old_task else '')}' in project '{update_data.get('projectName') or (old_task.get('projectName') if old_task else 'General')}'.",
+                    type="task",
+                    reference_id=task_id
+                ))
+        except Exception as e_notif:
+            print(f"Error notifying assignee on task update: {e_notif}")
+
+        try:
+            new_status = str(update_data.get("status") or "").strip().lower()
+            old_status = str(old_task.get("status") or "").strip().lower() if old_task else ""
+            if new_status in ["review", "ready for review"] and new_status != old_status:
+                creator_id = old_task.get("createdBy") or old_task.get("reviewByTL") if old_task else None
+                if not creator_id and old_task and old_task.get("projectId") and len(str(old_task.get("projectId"))) == 24:
+                    project = await db.projects.find_one({"_id": ObjectId(old_task["projectId"])})
+                    if project:
+                        creator_id = project.get("teamLeaderId")
+                if creator_id and creator_id != performedBy and creator_id != (old_task.get("assignedToId") if old_task else None):
+                    await create_notification(db, schemas.NotificationCreate(
+                        employee_id=creator_id,
+                        title="Task Ready for Review",
+                        message=f"{(old_task.get('assignedToName') if old_task else 'An employee')} has submitted task '{(old_task.get('title') if old_task else '')}' for your review.",
+                        type="task",
+                        reference_id=task_id
+                    ))
+        except Exception as e_notif:
+            print(f"Error notifying reviewer on task stage update: {e_notif}")
     
     doc = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
     return fix_id(doc)
@@ -2762,8 +3373,143 @@ async def delete_wm_task(db, task_id: str):
         
     return result.deleted_count > 0
 
+# Universal Field Diffing Helper
+def format_field_changes(old_doc: dict, update_data: dict, entity_prefix: str = "") -> tuple:
+    ignore_keys = {
+        "performedBy", "userName", "updated_at", "updatedAt", "_id", "id", 
+        "statusHistory", "createdDate", "createdAt", "createdBy", "timestamp",
+        "clientName", "teamLeaderName", "assignedToName", "projectName", "employeeName"
+    }
+    
+    field_labels = {
+        "title": "Title",
+        "description": "Description",
+        "status": "Status/Stage",
+        "priority": "Priority",
+        "startDate": "Start Date",
+        "endDate": "End Date",
+        "dueDate": "Due Date",
+        "teamDeadline": "Team Deadline",
+        "clientDeadline": "Client Deadline",
+        "moduleName": "Phase Name",
+        "moduleDeadline": "Phase Deadline",
+        "remarks": "Remarks",
+        "assignedToId": "Assignee",
+        "teamLeaderId": "Team Leader",
+        "clientId": "Client",
+        "companyName": "Company Name",
+        "firstName": "First Name",
+        "lastName": "Last Name",
+        "email": "Email",
+        "phone": "Phone",
+        "department": "Department",
+        "designation": "Designation",
+        "services": "Services Description",
+        "post": "Post Count",
+        "reel": "Reel Count",
+        "festivalPost": "Festival Post Requirement",
+        "graphicsRequired": "Graphics Requirement",
+        "postRequired": "Post Requirement",
+        "reelRequired": "Reel Requirement",
+        "isPhaseWise": "Phase Wise Project",
+        "phases": "Project Phases",
+        "modules": "Project Modules",
+        "postingDate": "Posting Date",
+        "postingDay": "Posting Day",
+        "reelPost": "Deliverable Type",
+        "concept": "Concept Notes",
+        "reference": "Reference Link",
+        "scriptLink": "Script Link",
+        "shootingLink": "Shooting Link",
+        "editingLink": "Editing Link",
+        "finalLink": "Final Deliverable Link",
+        "reviewByTL": "TL Review Remarks",
+        "postingStatus": "Posting Status",
+        "note": "Note",
+        "meetingDate": "Meeting Date",
+        "amount": "Amount",
+        "paymentStatus": "Payment Status",
+        "conclusion": "Conclusion",
+        "campaigns": "Campaigns",
+        "adSpend": "Ad Spend",
+        "leads": "Leads Count",
+        "reach": "Reach",
+        "impressions": "Impressions",
+        "clicks": "Clicks",
+        "conversions": "Conversions",
+        "salary": "Salary",
+    }
+    
+    details = []
+    diffs = []
+    for k, new_val in update_data.items():
+        if k in ignore_keys:
+            continue
+            
+        old_val = old_doc.get(k) if old_doc else None
+        
+        if k == "assignedToId":
+            new_disp = update_data.get("assignedToName", old_doc.get("assignedToName", str(new_val)) if old_doc else str(new_val))
+            old_disp = old_doc.get("assignedToName", str(old_val)) if old_doc else str(old_val)
+            if old_disp != new_disp:
+                details.append(f"Assignee changed from '{old_disp}' to '{new_disp}'")
+                diffs.append({"field": "Assignee", "old": old_disp, "new": new_disp})
+            continue
+        if k == "teamLeaderId":
+            new_disp = update_data.get("teamLeaderName", old_doc.get("teamLeaderName", str(new_val)) if old_doc else str(new_val))
+            old_disp = old_doc.get("teamLeaderName", str(old_val)) if old_doc else str(old_val)
+            if old_disp != new_disp:
+                details.append(f"Team Leader changed from '{old_disp}' to '{new_disp}'")
+                diffs.append({"field": "Team Leader", "old": old_disp, "new": new_disp})
+            continue
+        if k == "clientId":
+            new_disp = update_data.get("clientName", old_doc.get("clientName", str(new_val)) if old_doc else str(new_val))
+            old_disp = old_doc.get("clientName", str(old_val)) if old_doc else str(old_val)
+            if old_disp != new_disp:
+                details.append(f"Client changed from '{old_disp}' to '{new_disp}'")
+                diffs.append({"field": "Client", "old": old_disp, "new": new_disp})
+            continue
+            
+        if old_val is None: old_val = ""
+        if new_val is None: new_val = ""
+        
+        if isinstance(new_val, (list, dict)) or isinstance(old_val, (list, dict)):
+            if old_val != new_val:
+                label = field_labels.get(k, k[0].upper() + k[1:] if k else "Field")
+                details.append(f"Updated {label}")
+                diffs.append({"field": label, "old": str(old_val), "new": str(new_val)})
+            continue
+            
+        # We do NOT use .strip() so exact space changes are detected!
+        old_str = str(old_val)
+        new_str = str(new_val)
+        
+        if old_str.endswith(".0"): old_str = old_str[:-2]
+        if new_str.endswith(".0"): new_str = new_str[:-2]
+        
+        if old_str != new_str:
+            label = field_labels.get(k, ''.join([' ' + c if c.isupper() else c for c in k]).capitalize().strip() if k else "Field")
+            
+            diffs.append({"field": label, "old": old_str, "new": new_str})
+            
+            disp_old = (old_str[:40] + '...') if len(old_str) > 40 else old_str
+            disp_new = (new_str[:40] + '...') if len(new_str) > 40 else new_str
+            
+            if not old_str:
+                details.append(f"Set {label} to '{disp_new}'")
+            elif not new_str:
+                details.append(f"Removed {label} (was '{disp_old}')")
+            else:
+                details.append(f"{label} changed from '{disp_old}' to '{disp_new}'")
+                
+    prefix_str = f"{entity_prefix}: " if entity_prefix else ""
+    if not details:
+        return f"{prefix_str}Saved without changes", diffs
+        
+    return prefix_str + ", ".join(details), diffs
+
 # Activity Log CRUD
-async def log_activity(db, action: str, performedBy: str, userName: str, details: str, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None):
+async def log_activity(db, action: str, performedBy: str, userName: str, details: str, diffs: list = None, taskId: str = None, projectId: str = None, clientId: str = None, leadId: str = None, dailyReportId: str = None, monthlyReportId: str = None, applicationId: str = None, assetId: str = None, categoryId: str = None):
     log_entry = {
         "action": action,
         "performedBy": performedBy,
@@ -2771,6 +3517,7 @@ async def log_activity(db, action: str, performedBy: str, userName: str, details
         "details": details,
         "timestamp": get_now().strftime("%Y-%m-%d %H:%M:%S")
     }
+    if diffs: log_entry["diffs"] = diffs
     if taskId: log_entry["taskId"] = taskId
     if projectId: log_entry["projectId"] = projectId
     if clientId: log_entry["clientId"] = clientId
@@ -2830,14 +3577,23 @@ async def get_task_logs(db, taskId: str = None, projectId: str = None, clientId:
     rows = await cursor.to_list(length=100)
     return [fix_id(row) for row in rows]
 
+async def update_task_log(db, log_id: str, new_details: str):
+    await db.task_logs.update_one({"_id": ObjectId(log_id)}, {"$set": {"details": new_details}})
+    doc = await db.task_logs.find_one({"_id": ObjectId(log_id)})
+    return fix_id(doc) if doc else None
+
+async def delete_task_log(db, log_id: str):
+    result = await db.task_logs.delete_one({"_id": ObjectId(log_id)})
+    return result.deleted_count > 0
+
 # Update existing log_task_activity calls to use the new log_activity
-async def log_task_activity(db, taskId: str, action: str, performedBy: str, userName: str, details: str):
-    await log_activity(db, action, performedBy, userName, details, taskId=taskId)
+async def log_task_activity(db, taskId: str, action: str, performedBy: str, userName: str, details: str, diffs: list = None):
+    await log_activity(db, action, performedBy, userName, details, diffs=diffs, taskId=taskId)
 
 
 # Sales Lead CRUD
 async def get_leads(db, skip: int = 0, limit: int = 100):
-    cursor = db.leads.find().skip(skip).limit(limit)
+    cursor = db.leads.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -2849,12 +3605,44 @@ async def create_lead(db, lead: schemas.LeadCreate):
     if not lead_dict.get("date"):
         lead_dict["date"] = get_now().strftime("%Y-%m-%d")
         
+    if lead_dict.get("status") in ["On Hold", "Client Won", "Client Loss"]:
+        lead_dict["isHot"] = False
+        
+    # Store creator information
+    lead_dict["createdBy"] = performedBy
+    lead_dict["createdByUserName"] = userName
+        
     result = await db.leads.insert_one(lead_dict)
     lead_id = str(result.inserted_id)
     
     # Log the creation
     await log_activity(db, "Lead Created", performedBy, userName, f"Lead for '{lead_dict['company']}' was created.", leadId=lead_id)
     
+    try:
+        assigned_to = lead_dict.get("assignedTo", [])
+        if not isinstance(assigned_to, list):
+            assigned_to = [assigned_to] if assigned_to else []
+        for emp_name in assigned_to:
+            if not emp_name: continue
+            if isinstance(emp_name, dict):
+                emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+            if not emp_name: continue
+            import re
+            emp_name_escaped = re.escape(str(emp_name).strip())
+            emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
+            if emp:
+                emp_id_str = str(emp["_id"]) if "_id" in emp else emp.get("id")
+                if emp_id_str and emp_id_str != performedBy:
+                    await create_notification(db, schemas.NotificationCreate(
+                        employee_id=emp_id_str,
+                        title="New Lead Assigned",
+                        message=f"You have been assigned sales lead '{lead_dict.get('company') or lead_dict.get('contact', 'Unknown')}'.",
+                        type="lead",
+                        reference_id=lead_id
+                    ))
+    except Exception as e_notif:
+        print(f"Error notifying lead assignee on create: {e_notif}")
+
     doc = await db.leads.find_one({"_id": result.inserted_id})
     return fix_id(doc)
 
@@ -2867,6 +3655,7 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
     update_data = lead_update.dict(exclude_unset=True)
     performedBy = update_data.pop("performedBy", "Unknown")
     userName = update_data.pop("userName", "Unknown User")
+    reason = update_data.pop("reason", None)
     
     if update_data:
         # If status changed to 'Client Won', set closedDate if not provided
@@ -2874,57 +3663,139 @@ async def update_lead(db, lead_id: str, lead_update: schemas.LeadUpdate):
         if not old_lead:
             return None
             
-        if update_data.get("status") == "Client Won" and not update_data.get("closedDate"):
-            update_data["closedDate"] = get_now().strftime("%Y-%m-%d")
+        if update_data.get("status") == "Client Won" and old_lead.get("status") != "Client Won":
+            if not update_data.get("closedDate"):
+                update_data["closedDate"] = get_now().strftime("%Y-%m-%d")
+            
+        if update_data.get("status") in ["On Hold", "Client Won", "Client Loss"]:
+            update_data["isHot"] = False
+            
+        if update_data.get("status") == "On Hold" and "holdResumeDate" not in update_data:
+            update_data["holdResumeDate"] = None
             
         await db.leads.update_one({"_id": oid}, {"$set": update_data})
         
         # Log the update with detailed changes
         changes = []
-        ALLOWED_LOG_FIELDS = ["company", "contact", "email", "phone", "expectedIncome", "status", "priority", "source", "date", "remarks", "assignedTo"]
+        ALLOWED_LOG_FIELDS = ["company", "contact", "email", "phone", "expectedIncome", "status", "priority", "source", "date", "remarks", "assignedTo", "holdResumeDate", "isHot", "nextFollowUpDate"]
         for key, new_val in update_data.items():
             if key not in ALLOWED_LOG_FIELDS:
                 continue
             old_val = old_lead.get(key)
             if old_val != new_val:
-                display_key = key.replace("_", " ").title()
+                if key == "holdResumeDate":
+                    display_key = "Resume Date"
+                elif key == "nextFollowUpDate":
+                    display_key = "Next Follow-up Date"
+                elif key == "isHot":
+                    display_key = "Hot Status"
+                else:
+                    display_key = key.replace("_", " ").title()
+                    
                 if key == "expectedIncome":
                     changes.append(f"{display_key} changed from ₹{old_val or 0} to ₹{new_val}")
+                elif key == "isHot":
+                    old_str = "Yes" if old_val else "No"
+                    new_str = "Yes" if new_val else "No"
+                    changes.append(f"{display_key} changed from '{old_str}' to '{new_str}'")
                 else:
-                    changes.append(f"{display_key} changed from '{old_val or 'None'}' to '{new_val}'")
+                    changes.append(f"{display_key} changed from '{old_val or 'None'}' to '{new_val or 'None'}'")
                     
         if changes:
             details = "; ".join(changes)
+            if reason:
+                details += f" (Reason: {reason})"
             await log_activity(db, "Lead Updated", performedBy, userName, details, leadId=lead_id)
         
         # Trigger recalculation if status is Client Won or assignedTo changed
         if update_data.get("status") == "Client Won" or "assignedTo" in update_data:
             updated_lead = await db.leads.find_one({"_id": oid})
-            emp_name = updated_lead.get("assignedTo")
-            if emp_name:
-                emp = await db.employees.find_one({"name": emp_name})
-                if emp:
-                    ld_str = updated_lead.get("closedDate") or updated_lead.get("date")
-                    try:
-
-                        ld = None
-                        for fmt in ("%b %d, %Y", "%Y-%m-%d", "%d/%m/%Y"):
-                            try: 
-                                if isinstance(ld_str, datetime):
-                                    ld = ld_str
-                                else:
-                                    ld = datetime.strptime(str(ld_str), fmt)
+            assigned_to = updated_lead.get("assignedTo", [])
+            # assignedTo is a list of names
+            if not isinstance(assigned_to, list):
+                assigned_to = [assigned_to] if assigned_to else []
+            
+            for emp_name in assigned_to:
+                if not emp_name:
+                    continue
+                if isinstance(emp_name, dict):
+                    emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+                if not emp_name:
+                    continue
+                import re
+                emp_name_escaped = re.escape(str(emp_name).strip())
+                emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
+                if not emp:
+                    continue
+                ld_str = updated_lead.get("closedDate") or updated_lead.get("date")
+                try:
+                    ld = None
+                    if isinstance(ld_str, datetime):
+                        ld = ld_str.replace(tzinfo=None)  # strip timezone for safe comparison
+                    elif ld_str:
+                        for fmt in ("%b %d, %Y", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                            try:
+                                ld = datetime.strptime(str(ld_str).strip(), fmt)
                                 break
                             except Exception: continue
-                        
-                        if ld:
-                            month_name = ld.strftime("%B")
-                            week_num = (ld.day - 1) // 7 + 1
-                            # Recalculate Monthly
-                            await recalculate_sales_target(db, str(emp["_id"]), month_name, ld.year, "Monthly")
-                            # Recalculate Weekly
-                            await recalculate_sales_target(db, str(emp["_id"]), month_name, ld.year, "Weekly", week_num)
-                    except Exception: pass
+                    
+                    if ld:
+                        month_name = ld.strftime("%B")
+                        week_num = (ld.day - 1) // 7 + 1
+                        emp_id_str = str(emp["_id"])
+                        # Recalculate Monthly
+                        await recalculate_sales_target(db, emp_id_str, month_name, ld.year, "Monthly")
+                        # Recalculate Weekly
+                        await recalculate_sales_target(db, emp_id_str, month_name, ld.year, "Weekly", week_num)
+                        emp_obj_id = ObjectId(emp_id_str) if len(emp_id_str) == 24 else None
+                        emp_query = [emp_id_str]
+                        if emp_obj_id:
+                            emp_query.append(emp_obj_id)
+                            
+                        custom_targets_cursor = db.sales_targets.find({
+                            "employeeId": {"$in": emp_query},
+                            "type": "Custom"
+                        })
+                        async for t in custom_targets_cursor:
+                            await recalculate_sales_target(
+                                db,
+                                emp_id_str,
+                                t.get("month"),
+                                t.get("year"),
+                                "Custom",
+                                startDate=t.get("startDate"),
+                                endDate=t.get("endDate")
+                            )
+                        # Auto-reprocess payroll to update the incentives and totals
+                        await run_payroll_processing(db, month_name, ld.year)
+                except Exception as e:
+                    print(f"Error auto-processing payroll on lead won for {emp_name}: {e}")
+                    
+        if "assignedTo" in update_data:
+            try:
+                assigned_to = update_data.get("assignedTo", [])
+                if not isinstance(assigned_to, list):
+                    assigned_to = [assigned_to] if assigned_to else []
+                for emp_name in assigned_to:
+                    if not emp_name: continue
+                    if isinstance(emp_name, dict):
+                        emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+                    if not emp_name: continue
+                    import re
+                    emp_name_escaped = re.escape(str(emp_name).strip())
+                    emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
+                    if emp:
+                        emp_id_str = str(emp["_id"]) if "_id" in emp else emp.get("id")
+                        if emp_id_str and emp_id_str != performedBy:
+                            await create_notification(db, schemas.NotificationCreate(
+                                employee_id=emp_id_str,
+                                title="Lead Re-assigned",
+                                message=f"You have been assigned sales lead '{update_data.get('company') or (old_lead.get('company') if old_lead else '') or 'Unknown'}'.",
+                                type="lead",
+                                reference_id=lead_id
+                            ))
+            except Exception as e_notif:
+                print(f"Error notifying lead assignee on update: {e_notif}")
         
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
@@ -2938,16 +3809,27 @@ async def delete_lead(db, lead_id: str):
 
 async def add_lead_follow_up(db, lead_id: str, follow_up: schemas.FollowUp, performedBy: str = "Unknown", userName: str = "Unknown User"):
     follow_up_dict = follow_up.dict()
+    next_follow_up_date = follow_up_dict.get("nextFollowUpDate", None)
     if not follow_up_dict.get("date"):
         follow_up_dict["date"] = get_now().strftime("%Y-%m-%d %H:%M")
         
     await db.leads.update_one(
         {"_id": ObjectId(lead_id)},
-        {"$push": {"followUps": follow_up_dict}}
+        {
+            "$push": {"followUps": follow_up_dict},
+            "$set": {"nextFollowUpDate": next_follow_up_date}
+        }
     )
     
     # Log activity
-    await log_activity(db, "Follow-up Added", performedBy, userName, f"Added follow-up: {follow_up_dict.get('note', 'No notes provided')}", leadId=lead_id)
+    log_detail = f"Added follow-up: {follow_up_dict.get('note', 'No notes provided')}"
+    if next_follow_up_date:
+        try:
+            date_str = next_follow_up_date.strftime("%Y-%m-%d")
+        except AttributeError:
+            date_str = str(next_follow_up_date)
+        log_detail += f" (Next follow-up date: {date_str})"
+    await log_activity(db, "Follow-up Added", performedBy, userName, log_detail, leadId=lead_id)
     
     doc = await db.leads.find_one({"_id": ObjectId(lead_id)})
     return fix_id(doc)
@@ -2979,6 +3861,8 @@ async def get_system_settings(db):
             "officeStartTime": "09:30",
             "officeEndTime": "18:30",
             "lateBufferMins": 10,
+            "inactivityTimeoutEnabled": False,
+            "inactivityTimeoutMins": 5,
             "allowedMonthlyPaidLeaves": 1,
             "companyGstin": "24AAXFN3372M1ZK",
             "companyAddress": "FLAT-204, 2nd FLOOR, RS NO-67/1, WING-A, HARIKRUSHANA COMPLEX, OPP. BHAGAT NAGAR, VED, GURUKULROAD, KATARGAM, SURAT- 395004, GUJARAT, INDIA.",
@@ -3008,13 +3892,40 @@ async def update_system_settings(db, settings_update: schemas.SystemSettingsUpda
 # Marketing Reports CRUD
 async def create_marketing_daily_report(db, report: schemas.MarketingDailyReportCreate):
     report_dict = report.dict()
+    if "date" in report_dict and hasattr(report_dict["date"], "strftime"):
+        report_dict["date"] = report_dict["date"].strftime("%Y-%m-%d")
     result = await db.marketing_daily_reports.insert_one(report_dict)
     report_dict["id"] = str(result.inserted_id)
     return report_dict
 
-async def get_marketing_daily_reports(db, client_id: str = None, date: str = None):
+async def get_marketing_daily_reports(db, client_id: str = None, date: str = None, start_date: str = None, end_date: str = None, user_info: dict = None):
     query = {}
-    if client_id:
+    if user_info:
+        role = str(user_info.get("role", "")).lower()
+        user_id = user_info.get("sub")
+        if user_id and not await user_has_full_entity_access(db, user_id, role, "digital-marketing"):
+            user_id = user_info.get("sub")
+            # Get allowed clients
+            allowed_clients = await db.clients.find({"assignedEmployeeId": user_id}).to_list(length=None)
+            allowed_client_ids = [str(c["_id"]) for c in allowed_clients]
+            
+            # Get allowed projects using existing get_projects logic
+            allowed_projects = await get_projects(db, userId=user_id, role=role, limit=10000)
+            allowed_project_ids = [str(p.get("id", p.get("_id"))) for p in allowed_projects]
+            project_client_ids = [str(p.get("clientId")) for p in allowed_projects if p.get("clientId")]
+            all_allowed_clients = list(set(allowed_client_ids + project_client_ids))
+            
+            query["$or"] = [
+                {"projectId": {"$in": allowed_project_ids}},
+                {"clientId": {"$in": all_allowed_clients}}
+            ]
+            
+            if client_id:
+                if client_id not in all_allowed_clients:
+                    return []
+                query["clientId"] = client_id
+                query.pop("$or", None)
+    if client_id and "clientId" not in query:
         query["clientId"] = client_id
     if date:
         try:
@@ -3023,6 +3934,22 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
             query["date"] = {"$in": [date, parsed_date, dt_val]}
         except Exception:
             query["date"] = date
+    elif start_date and end_date:
+        query["$and"] = query.get("$and", []) + [
+            {"$or": [
+                {"date": {"$gte": start_date, "$lte": end_date}},
+                {
+                    "reach": {"$in": [0, "0", None]},
+                    "impression": {"$in": [0, "0", None]},
+                    "leads": {"$in": [0, "0", None]},
+                    "spend": {"$in": [0, "0", None]},
+                    "cpl": {"$in": [0, "0", None]},
+                    "revenue": {"$in": [0, "0", None]},
+                    "followers": {"$in": [0, "0", None]},
+                    "remarks": {"$in": ["", None, " "]}
+                }
+            ]}
+        ]
     cursor = db.marketing_daily_reports.find(query).sort("date", -1)
     reports = []
     async for doc in cursor:
@@ -3030,11 +3957,93 @@ async def get_marketing_daily_reports(db, client_id: str = None, date: str = Non
         reports.append(doc)
     return reports
 
+async def generate_missing_daily_reports_for_yesterday(db):
+    from datetime import datetime, timedelta
+    
+    # Check the last 3 days to cover weekends and holidays
+    dates_to_check = [
+        (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
+        (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d"),
+        (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d"),
+    ]
+    
+    cursor = db.clients.find({"status": {"$in": ["active", "Active"]}})
+    clients = await cursor.to_list(length=1000)
+    
+    generated_count = 0
+    
+    for client in clients:
+        campaigns = client.get("campaigns", [])
+        if not campaigns:
+            continue
+            
+        for camp in campaigns:
+            if isinstance(camp, str):
+                camp_name = camp
+                is_active = True
+                metric = "CPL"
+            elif isinstance(camp, dict):
+                camp_name = camp.get("name")
+                is_active = camp.get("isActive", True)
+                metric = camp.get("metric", "CPL")
+            else:
+                continue
+                
+            if not is_active or not camp_name:
+                continue
+                
+            client_id_str = str(client.get("_id"))
+            
+            for check_date in dates_to_check:
+                query = {
+                    "clientId": client_id_str,
+                    "campaignName": camp_name,
+                    "date": check_date
+                }
+                
+                existing = await db.marketing_daily_reports.find_one(query)
+                if not existing:
+                    # Find a Digital Marketing project for this client
+                    project = await db.projects.find_one({
+                        "clientId": client_id_str,
+                        "department": "Digital Marketing"
+                    })
+                    
+                    if project and project.get("status") in ["on-hold", "On Hold", "on_hold"]:
+                        continue
+                        
+                    project_id = str(project.get("_id")) if project else None
+                    project_title = project.get("title") if project else None
+
+                    new_report = {
+                        "clientId": client_id_str,
+                        "clientName": client.get("companyName", ""),
+                        "projectId": project_id,
+                        "projectName": project_title,
+                        "date": check_date,
+                        "campaignName": camp_name,
+                        "reach": 0,
+                        "impression": 0,
+                        "leads": 0,
+                        "followers": 0,
+                        "spend": 0,
+                        "cpl": 0,
+                        "revenue": 0,
+                        "remarks": ""
+                    }
+                    await db.marketing_daily_reports.insert_one(new_report)
+                    generated_count += 1
+                
+    return {"generatedCount": generated_count, "datesChecked": dates_to_check}
+
 async def update_marketing_daily_report(db, report_id: str, report: schemas.MarketingDailyReportUpdate):
     update_data = report.dict(exclude_unset=True)
     performedBy = update_data.pop("performedBy", "Unknown")
     userName = update_data.pop("userName", "Unknown User")
     
+    if "date" in update_data and hasattr(update_data["date"], "strftime"):
+        update_data["date"] = update_data["date"].strftime("%Y-%m-%d")
+        
     if not update_data:
         return None
         
@@ -3042,14 +4051,10 @@ async def update_marketing_daily_report(db, report_id: str, report: schemas.Mark
     await db.marketing_daily_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
     
     # Log details
-    changes = []
-    for field, val in update_data.items():
-        if old_report and old_report.get(field) != val:
-            changes.append(f"{field} changed to {val}")
-    
-    if changes:
-        log_details = f"Daily Report updated: " + ", ".join(changes)
-        await log_activity(db, "Updated", performedBy, userName, log_details, dailyReportId=report_id)
+    log_details, diffs = format_field_changes(old_report, update_data, "Daily Report")
+    client_id = old_report.get("clientId") if old_report else None
+    project_id = old_report.get("projectId") if old_report else None
+    await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, dailyReportId=report_id, clientId=client_id, projectId=project_id)
         
     doc = await db.marketing_daily_reports.find_one({"_id": ObjectId(report_id)})
     if doc:
@@ -3058,8 +4063,32 @@ async def update_marketing_daily_report(db, report_id: str, report: schemas.Mark
     return None
 
 async def delete_marketing_daily_report(db, report_id: str):
-    result = await db.marketing_daily_reports.delete_one({"_id": ObjectId(report_id)})
-    return result.deleted_count > 0
+    result = await db.marketing_daily_reports.update_one(
+        {"_id": ObjectId(report_id)},
+        {"$set": {"isDeleted": True}}
+    )
+    return result.modified_count > 0 or result.matched_count > 0
+
+async def bulk_clear_leads_files(db, ids: list, collection_name: str):
+    object_ids = [ObjectId(id) for id in ids if ObjectId.is_valid(id)]
+    if not object_ids:
+        return []
+    
+    collection = db[collection_name]
+    
+    # 1. Fetch documents to return their leadsFileUrl
+    cursor = collection.find({"_id": {"$in": object_ids}, "leadsFileUrl": {"$ne": None}})
+    docs = await cursor.to_list(length=None)
+    
+    urls_to_delete = [doc.get("leadsFileUrl") for doc in docs if doc.get("leadsFileUrl")]
+    
+    # 2. Update documents to clear leadsFileUrl
+    await collection.update_many(
+        {"_id": {"$in": object_ids}},
+        {"$set": {"leadsFileUrl": ""}}
+    )
+    
+    return urls_to_delete
 
 async def create_marketing_monthly_report(db, report: schemas.MarketingMonthlyReportCreate):
     report_dict = report.dict()
@@ -3067,19 +4096,178 @@ async def create_marketing_monthly_report(db, report: schemas.MarketingMonthlyRe
     report_dict["id"] = str(result.inserted_id)
     return report_dict
 
-async def get_marketing_monthly_reports(db, client_id: str = None, month: str = None):
-    query = {}
-    if client_id:
-        query["clientId"] = client_id
+async def get_marketing_monthly_reports(db, client_id: str = None, month: list = None, user_info: dict = None):
+    match_query = {}
+    allowed_project_ids = []
+    all_allowed_clients = []
+    is_restricted = False
+    
+    if user_info:
+        role = str(user_info.get("role", "")).lower()
+        user_id = user_info.get("sub")
+        if user_id and not await user_has_full_entity_access(db, user_id, role, "digital-marketing"):
+            is_restricted = True
+            user_id = user_info.get("sub")
+            # Get allowed clients
+            allowed_clients = await db.clients.find({"assignedEmployeeId": user_id}).to_list(length=None)
+            allowed_client_ids = [str(c["_id"]) for c in allowed_clients]
+            
+            # Get allowed projects
+            allowed_projects = await get_projects(db, userId=user_id, role=role, limit=10000)
+            allowed_project_ids = [str(p.get("id", p.get("_id"))) for p in allowed_projects]
+            project_client_ids = [str(p.get("clientId")) for p in allowed_projects if p.get("clientId")]
+            all_allowed_clients = list(set(allowed_client_ids + project_client_ids))
+            
+            match_query["$or"] = [
+                {"projectId": {"$in": allowed_project_ids}},
+                {"clientId": {"$in": all_allowed_clients}}
+            ]
+            
+            if client_id:
+                if client_id not in all_allowed_clients:
+                    return []
+                match_query["clientId"] = client_id
+                match_query.pop("$or", None)
+    
+    if client_id and "clientId" not in match_query:
+        match_query["clientId"] = client_id
+    
+    MONTH_MAP = {
+        "January": "01", "February": "02", "March": "03", "April": "04",
+        "May": "05", "June": "06", "July": "07", "August": "08",
+        "September": "09", "October": "10", "November": "11", "December": "12"
+    }
+    
     if month:
-        query["month"] = month
+        # Handle case where month is a string or a list of strings
+        months_list = [month] if isinstance(month, str) else month
+        months_list = [m for m in months_list if m != "all"]
         
-    cursor = db.marketing_monthly_reports.find(query)
-    reports = []
-    async for doc in cursor:
-        doc["id"] = str(doc["_id"])
-        reports.append(doc)
-    return reports
+        if months_list:
+            all_date_ors = []
+            for m in months_list:
+                month_num = MONTH_MAP.get(m)
+                if month_num:
+                    year = datetime.now().year
+                    # Create start and end datetime for the month
+                    start_dt = datetime(year, int(month_num), 1)
+                    if int(month_num) == 12:
+                        end_dt = datetime(year + 1, 1, 1)
+                    else:
+                        end_dt = datetime(year, int(month_num) + 1, 1)
+                    
+                    regex_pattern = f"^{year}-{month_num}-"
+                    all_date_ors.extend([
+                        {"date": {"$regex": regex_pattern}},
+                        {"date": {"$gte": start_dt, "$lt": end_dt}},
+                        {"month": m}
+                    ])
+                else:
+                    # Fallback if month is something else
+                    all_date_ors.append({"month": m})
+            
+            if "$or" in match_query:
+                match_query["$and"] = [{"$or": match_query.pop("$or")}, {"$or": all_date_ors}]
+            else:
+                match_query["$or"] = all_date_ors
+            
+    pipeline = [
+        {"$match": match_query},
+        {"$group": {
+            "_id": "$clientId",
+            "clientName": {"$first": "$clientName"},
+            "totalSpend": {"$sum": "$spend"},
+            "totalLeads": {"$sum": "$leads"},
+            "totalRevenue": {"$sum": "$revenue"}
+        }}
+    ]
+    
+    aggregated = await db.marketing_daily_reports.aggregate(pipeline).to_list(length=1000)
+    
+    display_month = "All"
+    if isinstance(month, str):
+        display_month = month if month != "all" else "All"
+    elif isinstance(month, list) and month:
+        filtered_months = [m for m in month if m != "all"]
+        if filtered_months:
+            display_month = ", ".join(filtered_months)
+
+    # Fetch manual conclusions from existing marketing_monthly_reports collection
+    monthly_query = {}
+    if is_restricted:
+        monthly_query["$or"] = [
+            {"projectId": {"$in": allowed_project_ids}},
+            {"clientId": {"$in": all_allowed_clients}}
+        ]
+        
+    if client_id:
+        monthly_query["clientId"] = client_id
+        monthly_query.pop("$or", None)
+        
+    if month and month != "all":
+        # Handle if month is a list from FastAPI
+        if isinstance(month, list):
+            valid_months = [m for m in month if m != "all"]
+            if valid_months:
+                monthly_query["month"] = {"$in": valid_months}
+        else:
+            monthly_query["month"] = month
+        
+    manual_reports_cursor = db.marketing_monthly_reports.find(monthly_query)
+    manual_reports = {doc.get("clientId"): doc async for doc in manual_reports_cursor}
+    
+    results = []
+    for agg in aggregated:
+        cid = agg["_id"]
+        manual = manual_reports.get(cid, {})
+        
+        spend = float(agg.get("totalSpend") or 0)
+        leads = int(agg.get("totalLeads") or 0)
+        revenue = float(agg.get("totalRevenue") or 0)
+        
+        cpr = spend / leads if leads > 0 else 0
+        roas = revenue / spend if spend > 0 else 0
+        
+        report = {
+            "id": str(manual.get("_id")) if manual.get("_id") else f"agg-{cid}-{display_month}",
+            "clientId": cid,
+            "clientName": agg.get("clientName") or manual.get("clientName", "Unknown"),
+            "month": display_month,
+            "totalSpend": spend,
+            "totalLeads": leads,
+            "totalSales": 0,
+            "totalRevenue": revenue,
+            "avgCPR": cpr,
+            "avgCPP": 0,
+            "overallROAS": roas,
+            "conclusion": manual.get("conclusion") or "",
+            "employeeConclusion": manual.get("employeeConclusion") or "",
+            "adminConclusion": manual.get("adminConclusion") or "",
+            "clientConclusion": manual.get("clientConclusion") or ""
+        }
+        results.append(report)
+        
+    # Add any manual reports that didn't have daily reports for this month
+    agg_client_ids = {agg["_id"] for agg in aggregated}
+    for cid, manual in manual_reports.items():
+        if cid not in agg_client_ids:
+            doc = manual.copy()
+            doc["id"] = str(doc.pop("_id"))
+            # Ensure fields exist so UI doesn't break
+            doc["totalSpend"] = float(doc.get("totalSpend") or 0)
+            doc["totalLeads"] = int(doc.get("totalLeads") or 0)
+            doc["totalSales"] = int(doc.get("totalSales") or 0)
+            doc["totalRevenue"] = float(doc.get("totalRevenue") or 0)
+            doc["avgCPR"] = float(doc.get("avgCPR") or 0)
+            doc["avgCPP"] = float(doc.get("avgCPP") or 0)
+            doc["overallROAS"] = float(doc.get("overallROAS") or 0)
+            doc["conclusion"] = doc.get("conclusion") or ""
+            doc["employeeConclusion"] = doc.get("employeeConclusion") or ""
+            doc["adminConclusion"] = doc.get("adminConclusion") or ""
+            doc["clientConclusion"] = doc.get("clientConclusion") or ""
+            results.append(doc)
+            
+    return results
 
 async def update_marketing_monthly_report(db, report_id: str, report: schemas.MarketingMonthlyReportUpdate):
     update_data = report.dict(exclude_unset=True)
@@ -3089,18 +4277,57 @@ async def update_marketing_monthly_report(db, report_id: str, report: schemas.Ma
     if not update_data:
         return None
         
+    if report_id.startswith("agg-"):
+        # This is an aggregated report that doesn't have a manual DB entry yet.
+        # We need to upsert it based on clientId and month.
+        parts = report_id.split("-", 2)
+        if len(parts) >= 3:
+            client_id = parts[1]
+            month = parts[2]
+            
+            # Make sure we have the required fields to create the doc if it doesn't exist
+            if "clientId" not in update_data:
+                update_data["clientId"] = client_id
+            if "month" not in update_data:
+                update_data["month"] = month
+                
+            # If clientName is missing, try to fetch it
+            if "clientName" not in update_data:
+                client = await db.clients.find_one({"_id": ObjectId(client_id)}) if ObjectId.is_valid(client_id) else None
+                update_data["clientName"] = client.get("companyName", "Unknown") if client else "Unknown"
+
+            # Fill missing defaults so Pydantic doesn't throw 500
+            for k in ["totalSpend", "avgCPR", "avgCPP", "totalRevenue", "overallROAS"]:
+                if k not in update_data: update_data[k] = 0.0
+            for k in ["totalLeads", "totalSales"]:
+                if k not in update_data: update_data[k] = 0
+            
+            result = await db.marketing_monthly_reports.update_one(
+                {"clientId": client_id, "month": month},
+                {"$set": update_data},
+                upsert=True
+            )
+            
+            doc = await db.marketing_monthly_reports.find_one({"clientId": client_id, "month": month})
+            if doc:
+                doc["id"] = str(doc.pop("_id"))
+                
+                # Log details
+                log_details = f"Monthly Report created/updated with conclusion"
+                await log_activity(db, "Updated", performedBy, userName, log_details, monthlyReportId=doc["id"])
+                
+                return doc
+        return None
+
+    if not ObjectId.is_valid(report_id):
+        return None
+        
     old_report = await db.marketing_monthly_reports.find_one({"_id": ObjectId(report_id)})
     await db.marketing_monthly_reports.update_one({"_id": ObjectId(report_id)}, {"$set": update_data})
     
     # Log details
-    changes = []
-    for field, val in update_data.items():
-        if old_report and old_report.get(field) != val:
-            changes.append(f"{field} changed to {val}")
-            
-    if changes:
-        log_details = f"Monthly Report updated: " + ", ".join(changes)
-        await log_activity(db, "Updated", performedBy, userName, log_details, monthlyReportId=report_id)
+    log_details, diffs = format_field_changes(old_report, update_data, "Monthly Report")
+    await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, monthlyReportId=report_id)
         
     doc = await db.marketing_monthly_reports.find_one({"_id": ObjectId(report_id)})
     if doc:
@@ -3109,12 +4336,102 @@ async def update_marketing_monthly_report(db, report_id: str, report: schemas.Ma
     return None
 
 async def delete_marketing_monthly_report(db, report_id: str):
-    result = await db.marketing_monthly_reports.delete_one({"_id": ObjectId(report_id)})
-    return result.deleted_count > 0
+    res = await db.marketing_monthly_reports.delete_one({"_id": ObjectId(report_id)})
+    if res.deleted_count > 0:
+        await log_activity(db, "Deleted", "Admin", "N/A", f"Marketing Monthly Report was deleted.", monthlyReportId=report_id)
+    return res.deleted_count > 0
+
+async def sync_monthly_marketing_reports(db, date_str: str = None):
+    try:
+        if not date_str:
+            now = get_now()
+            date_str = now.strftime("%Y-%m-%d")
+        else:
+            now = datetime.strptime(date_str, "%Y-%m-%d")
+
+        year_month = now.strftime("%Y-%m") # e.g. "2026-06"
+        month_name = now.strftime("%B")    # e.g. "June"
+        
+        cursor = db.marketing_daily_reports.find({"date": {"$regex": f"^{year_month}"}})
+        daily_reports = await cursor.to_list(length=10000)
+        
+        client_aggregates = {}
+        for r in daily_reports:
+            c_id = str(r.get("clientId"))
+            if not c_id or c_id == "None": continue
+            if c_id not in client_aggregates:
+                client_aggregates[c_id] = {
+                    "clientName": r.get("clientName", "Unknown"),
+                    "totalSpend": 0.0,
+                    "totalLeads": 0,
+                    "totalRevenue": 0.0
+                }
+            
+            try:
+                client_aggregates[c_id]["totalSpend"] += float(r.get("spend") or 0)
+                client_aggregates[c_id]["totalLeads"] += int(r.get("leads") or 0)
+                client_aggregates[c_id]["totalRevenue"] += float(r.get("revenue") or 0)
+            except Exception:
+                pass
+                
+        for c_id, agg in client_aggregates.items():
+            total_spend = agg["totalSpend"]
+            total_leads = agg["totalLeads"]
+            total_revenue = agg["totalRevenue"]
+            
+            avg_cpr = round(total_spend / total_leads, 2) if total_leads > 0 else 0.0
+            overall_roas = round(total_revenue / total_spend, 2) if total_spend > 0 else 0.0
+            
+            existing = await db.marketing_monthly_reports.find_one({
+                "clientId": c_id,
+                "month": month_name
+            })
+            
+            if existing:
+                total_sales = existing.get("totalSales", 0)
+                avg_cpp = round(total_spend / total_sales, 2) if total_sales > 0 else 0.0
+                
+                update_data = {
+                    "totalSpend": round(total_spend, 2),
+                    "totalLeads": total_leads,
+                    "totalRevenue": round(total_revenue, 2),
+                    "avgCPR": avg_cpr,
+                    "avgCPP": avg_cpp,
+                    "overallROAS": overall_roas
+                }
+                await db.marketing_monthly_reports.update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": update_data}
+                )
+            else:
+                # Check if the client is on-hold before adding a new row
+                client = await db.clients.find_one({"_id": ObjectId(c_id)})
+                if client and client.get("status") == "on-hold":
+                    continue
+                
+                new_report = {
+                    "clientId": c_id,
+                    "clientName": agg["clientName"],
+                    "month": month_name,
+                    "totalSpend": round(total_spend, 2),
+                    "totalLeads": total_leads,
+                    "totalSales": 0,
+                    "avgCPR": avg_cpr,
+                    "avgCPP": 0.0,
+                    "totalRevenue": round(total_revenue, 2),
+                    "overallROAS": overall_roas,
+                    "employeeConclusion": "",
+                    "adminConclusion": "",
+                    "clientConclusion": ""
+                }
+                await db.marketing_monthly_reports.insert_one(new_report)
+                
+    except Exception as e:
+        print(f"Error syncing monthly marketing reports: {e}", flush=True)
 
 # Penalty Type CRUD
 async def get_penalty_types(db, skip: int = 0, limit: int = 100):
-    cursor = db.penalty_types.find().skip(skip).limit(limit)
+    cursor = db.penalty_types.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -3180,7 +4497,10 @@ async def get_chat_groups(db, user_id: str):
         fixed = fix_id(row)
         last_msg = await db.messages.find_one({"groupId": fixed["id"]}, sort=[("timestamp", -1)])
         if last_msg:
-            fixed["lastMessage"] = last_msg.get("text", "")
+            text = last_msg.get("text", "")
+            if not text and (last_msg.get("attachmentUrl") or last_msg.get("attachmentName")):
+                text = "Sent a file"
+            fixed["lastMessage"] = text
             try:
                 from datetime import datetime
                 t_str = last_msg["timestamp"].replace("Z", "+00:00")
@@ -3310,6 +4630,8 @@ async def get_chat_summaries(db, user_id: str):
                 ]
             },
             "lastMessage": {"$first": "$text"},
+            "attachmentUrl": {"$first": "$attachmentUrl"},
+            "attachmentName": {"$first": "$attachmentName"},
             "timestamp": {"$first": "$timestamp"},
             "isSeen": {"$first": "$isSeen"},
             "senderId": {"$first": "$senderId"}
@@ -3361,7 +4683,10 @@ async def get_chat_channels(db):
         fixed = fix_id(row)
         last_msg = await db.messages.find_one({"groupId": fixed["id"]}, sort=[("timestamp", -1)])
         if last_msg:
-            fixed["lastMessage"] = last_msg.get("text", "")
+            text = last_msg.get("text", "")
+            if not text and (last_msg.get("attachmentUrl") or last_msg.get("attachmentName")):
+                text = "Sent a file"
+            fixed["lastMessage"] = text
             try:
                 from datetime import datetime
                 t_str = last_msg["timestamp"].replace("Z", "+00:00")
@@ -3722,7 +5047,7 @@ async def delete_document_request(db, req_id: str):
     return result.deleted_count > 0
 
 # Employee Daily Report CRUD
-async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
+async def apply_work_rejection_penalty(db, employee_id: str, report_date):
     employee = await get_employee(db, employee_id)
     if not employee:
         return
@@ -3732,7 +5057,14 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
         return
     
     try:
-        dt = datetime.strptime(report_date, "%Y-%m-%d")
+        if isinstance(report_date, str):
+            dt = datetime.strptime(report_date.split("T")[0].split(" ")[0], "%Y-%m-%d")
+        else:
+            # It's already a date or datetime object
+            dt = report_date
+            
+        report_date_str = dt.strftime("%Y-%m-%d")
+            
         month_name = calendar.month_name[dt.month]
         month_num = dt.month
         year = dt.year
@@ -3775,7 +5107,7 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
                 
         total_working_days = max(1, num_days - len(sunday_dates) - unique_holidays)
         per_day_salary = salary_struct["monthlyGross"] / total_working_days
-        reason = f"Daily work report for {report_date} was rejected by Team Leader. Automatic full-day salary deduction applied."
+        reason = f"Daily work report for {report_date_str} was rejected. Automatic full-day salary deduction applied."
         
         # Check if already deducted for this specific date
         existing = await db.bonus_deductions.find_one({
@@ -3793,7 +5125,7 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
                 amount=round(per_day_salary, 2),
                 reason=reason,
                 status="active",
-                date=report_date
+                date=report_date_str
             )
             await create_bonus_deduction(db, deduction)
             
@@ -3804,7 +5136,7 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
                 "role": employee.get("designation", "Staff"),
                 "avatar": employee.get("profilePhoto", ""),
                 "type": "Performance",
-                "details": f"Daily work report for {report_date} was rejected by Team Leader. Automatic full-day salary deduction applied.",
+                "details": f"Daily work report for {report_date_str} was rejected. Automatic full-day salary deduction applied.",
                 "addedBy": "System",
                 "date": datetime.combine(dt.date(), datetime.min.time()).replace(tzinfo=IST)
             }
@@ -3812,6 +5144,32 @@ async def apply_work_rejection_penalty(db, employee_id: str, report_date: str):
             
     except Exception as e:
         print(f"Error applying work rejection penalty: {e}")
+
+async def remove_work_rejection_penalty(db, employee_id: str, report_date):
+    try:
+        if isinstance(report_date, str):
+            dt = datetime.strptime(report_date.split("T")[0].split(" ")[0], "%Y-%m-%d")
+        else:
+            dt = report_date
+            
+        report_date_str = dt.strftime("%Y-%m-%d")
+        reason = f"Daily work report for {report_date_str} was rejected. Automatic full-day salary deduction applied."
+        
+        # Remove deduction
+        await db.bonus_deductions.delete_many({
+            "employeeId": employee_id,
+            "type": "deduction",
+            "reason": reason
+        })
+        
+        # Remove remark
+        await db.remarks.delete_many({
+            "employeeId": employee_id,
+            "type": "Performance",
+            "details": reason
+        })
+    except Exception as e:
+        print(f"Error removing work rejection penalty: {e}")
 
 async def create_employee_daily_report(db, report: schemas.EmployeeDailyReportCreate):
     report_dict = report.dict()
@@ -3872,19 +5230,104 @@ async def get_sales_targets(db, month: Optional[str] = None, year: Optional[int]
 
 async def create_or_update_sales_target(db, target: schemas.SalesTargetCreate):
     target_dict = target.dict()
-    # Unique identifier: employeeId + month + year + type + (week if weekly)
+    # Ensure employeeId is an ObjectId if valid
+    emp_id = target_dict["employeeId"]
+    if isinstance(emp_id, str) and len(emp_id) == 24:
+        target_dict["employeeId"] = ObjectId(emp_id)
+
+    # Unique identifier: employeeId + type + details
     query = {
         "employeeId": target_dict["employeeId"],
-        "month": target_dict["month"],
-        "year": target_dict["year"],
         "type": target_dict.get("type", "Monthly")
     }
     if target_dict.get("type") == "Weekly":
+        query["month"] = target_dict["month"]
+        query["year"] = target_dict["year"]
         query["week"] = target_dict.get("week")
+    elif target_dict.get("type") == "Monthly":
+        query["month"] = target_dict["month"]
+        query["year"] = target_dict["year"]
+    elif target_dict.get("type") == "Custom":
+        query["startDate"] = target_dict.get("startDate")
+        query["endDate"] = target_dict.get("endDate")
         
+    # Check for date overlaps
+    def get_date_range(td):
+        from datetime import datetime
+        import calendar
+        ttype = td.get("type", "Monthly")
+        if ttype == "Custom":
+            sd_str = td.get("startDate")
+            ed_str = td.get("endDate")
+            if not sd_str or not ed_str: return None, None
+            try:
+                sd = datetime.strptime(sd_str, "%Y-%m-%d")
+                ed = datetime.strptime(ed_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                return sd, ed
+            except: return None, None
+        
+        m_str = td.get("month")
+        y = td.get("year")
+        if not m_str or not y: return None, None
+        
+        try:
+            m_num = list(calendar.month_name).index(m_str)
+        except: return None, None
+            
+        if ttype == "Monthly":
+            _, last = calendar.monthrange(y, m_num)
+            sd = datetime(y, m_num, 1)
+            ed = datetime(y, m_num, last, 23, 59, 59)
+            return sd, ed
+            
+        if ttype == "Weekly":
+            w = td.get("week", 1)
+            _, last = calendar.monthrange(y, m_num)
+            s_day = (w - 1) * 7 + 1
+            e_day = min(w * 7, last)
+            if s_day > last: return None, None
+            sd = datetime(y, m_num, s_day)
+            ed = datetime(y, m_num, e_day, 23, 59, 59)
+            return sd, ed
+            
+        return None, None
+        
+    new_sd, new_ed = get_date_range(target_dict)
+    if new_sd and new_ed:
+        existing = await db.sales_targets.find({"employeeId": target_dict["employeeId"]}).to_list(length=100)
+        for ext in existing:
+            # Skip if it is the exact same target type/period we are upserting
+            ext_q = {"type": ext.get("type")}
+            if ext.get("type") == "Weekly":
+                ext_q["month"] = ext.get("month")
+                ext_q["year"] = ext.get("year")
+                ext_q["week"] = ext.get("week")
+            elif ext.get("type") == "Monthly":
+                ext_q["month"] = ext.get("month")
+                ext_q["year"] = ext.get("year")
+            elif ext.get("type") == "Custom":
+                ext_q["startDate"] = ext.get("startDate")
+                ext_q["endDate"] = ext.get("endDate")
+                
+            is_same = True
+            for k, v in query.items():
+                if k != "employeeId" and ext_q.get(k) != v:
+                    is_same = False
+                    break
+            if is_same: continue
+            
+            ext_sd, ext_ed = get_date_range(ext)
+            if ext_sd and ext_ed:
+                if new_sd <= ext_ed and new_ed >= ext_sd:
+                    raise ValueError(f"Target overlaps with existing {ext.get('type')} target")
+                    
+    target_dict.pop("createdAt", None)
     await db.sales_targets.update_one(
         query,
-        {"$set": target_dict},
+        {
+            "$set": target_dict,
+            "$setOnInsert": {"createdAt": get_now().isoformat()}
+        },
         upsert=True
     )
     
@@ -3892,10 +5335,12 @@ async def create_or_update_sales_target(db, target: schemas.SalesTargetCreate):
     await recalculate_sales_target(
         db, 
         target_dict["employeeId"], 
-        target_dict["month"], 
-        target_dict["year"], 
+        target_dict.get("month"), 
+        target_dict.get("year"), 
         target_dict.get("type", "Monthly"), 
-        target_dict.get("week")
+        target_dict.get("week"),
+        startDate=target_dict.get("startDate"),
+        endDate=target_dict.get("endDate")
     )
     
     doc = await db.sales_targets.find_one(query)
@@ -3911,7 +5356,21 @@ async def update_sales_target(db, target_id: str, target_update: schemas.SalesTa
     return fix_id(result)
 
 async def delete_sales_target(db, target_id: str):
-    await db.sales_targets.delete_one({"_id": ObjectId(target_id)})
+    target = await db.sales_targets.find_one({"_id": ObjectId(target_id)})
+    if target:
+        query = {
+            "type": target.get("type"),
+            "targetAmount": target.get("targetAmount")
+        }
+        if "month" in target: query["month"] = target["month"]
+        if "year" in target: query["year"] = target["year"]
+        if "week" in target: query["week"] = target["week"]
+        if "startDate" in target: query["startDate"] = target["startDate"]
+        if "endDate" in target: query["endDate"] = target["endDate"]
+        
+        await db.sales_targets.delete_many(query)
+    else:
+        await db.sales_targets.delete_one({"_id": ObjectId(target_id)})
     return True
 
 # Incentive Slab CRUD
@@ -3935,102 +5394,255 @@ async def update_incentive_slab(db, slab_id: str, slab_update: schemas.Incentive
     )
     return fix_id(result)
 
-async def calculate_sales_incentive(db, revenue: float):
-    # Fetch slabs sorted by minAmount
-    cursor = db.incentive_slabs.find().sort("minAmount", 1)
+async def calculate_sales_incentive(db, total_amount: float, invoice_amount: float, employee_id: str, employee_name: str, category: str = None, is_recurring: bool = False):
+    if total_amount <= 0 or invoice_amount <= 0:
+        return 0.0, 0.0
+        
+    # Fetch slabs assigned to this specific employee (match by name)
+    cursor = db.incentive_slabs.find({
+        "employees": {"$in": [employee_id, employee_name]}
+    }).sort("minAmount", 1)
     slabs = await cursor.to_list(length=100)
     
-    # Find the applicable slab (highest percentage where revenue hits the bracket)
-    # Most business logic uses "flat" rate for the bracket reached
-    applicable_slab = None
+    # If no custom slabs exist for this employee, fetch global default slabs
+    if not slabs:
+        cursor = db.incentive_slabs.find({
+            "$or": [
+                {"employees": {"$exists": False}},
+                {"employees": {"$size": 0}},
+                {"employees": None}
+            ]
+        }).sort("minAmount", 1)
+        slabs = await cursor.to_list(length=100)
+    
+    if not slabs:
+        return 0.0, 0.0
+
+    valid_slabs = []
     for slab in slabs:
-        if revenue >= slab["minAmount"] and revenue <= slab["maxAmount"]:
-            applicable_slab = slab
+        slab_recurring = slab.get("isRecurring", False)
+        if slab_recurring != is_recurring:
+            continue
+            
+        slab_cats = slab.get("clientCategories", [])
+        if slab_cats and category:
+            if category not in slab_cats:
+                continue
+                
+        valid_slabs.append(slab)
+        
+    if not valid_slabs:
+        valid_slabs = slabs
+        
+    tier_slab = None
+    for slab in valid_slabs:
+        if total_amount >= slab["minAmount"] and total_amount <= slab["maxAmount"]:
+            tier_slab = slab
             break
             
-    if applicable_slab:
-        return round((revenue * applicable_slab["percentage"]) / 100, 2)
-    return 0.0
-
-async def recalculate_sales_target(db, employee_id: str, month: str, year: int, target_type: str = "Monthly", week: Optional[int] = None):
-    try:
-        # 1. Calculate Achievement from Leads
-        query = {
-            "assignedTo": None, # Will be filled below
-            "status": "Client Won"
-        }
+    # If total_amount exceeds all slab maxAmounts, use the highest slab
+    if not tier_slab and total_amount > valid_slabs[-1]["minAmount"]:
+        tier_slab = valid_slabs[-1]
         
-        # Get employee name for query
+    if tier_slab:
+        earned = round((invoice_amount * tier_slab["percentage"]) / 100, 2)
+        return earned, tier_slab["percentage"]
+        
+    return 0.0, 0.0
+
+async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = None, year: Optional[int] = None, target_type: str = "Monthly", week: Optional[int] = None, startDate: Optional[str] = None, endDate: Optional[str] = None):
+    try:
+        # 1. Calculate Achievement from First Paid Invoices
         emp = await get_employee(db, employee_id)
         if not emp: return
         emp_name = emp["name"]
-        query["assignedTo"] = emp_name
+        emp_name_norm = " ".join(emp_name.split()).lower()
 
-        cursor = db.leads.find(query)
-        all_won_leads = await cursor.to_list(length=1000)
+        cursor = db.invoices.find({"status": "Paid"}).sort("timestamp", 1)
+        all_paid_invoices = await cursor.to_list(length=10000)
         
-        total_achievement = 0.0
-        for lead in all_won_leads:
-            try:
-                # Parse date and check if it matches period
-                lead_date_str = lead.get("closedDate") or lead.get("date")
-                if not lead_date_str: continue
-
-                # Expected format: "May 08, 2026" or "2026-05-08"
-                ld = None
-                if isinstance(lead_date_str, datetime):
-                    ld = lead_date_str
-                else:
-                    for fmt in ("%b %d, %Y", "%Y-%m-%d", "%d/%m/%Y"):
-                        try:
-                            ld = datetime.strptime(str(lead_date_str), fmt)
-                            break
-                        except Exception: continue
-                
-                if not ld: continue
-                
-                # Check month/year
-                month_name = ld.strftime("%B")
-                if month_name != month or ld.year != year:
-                    continue
-                
-                # Weekly check
-                if target_type == "Weekly" and week:
-                    lead_week = (ld.day - 1) // 7 + 1
-                    if lead_week != week:
+        processed_clients = set()
+        first_paid_invoices = []
+        recurring_paid_invoices = []
+        
+        for inv in all_paid_invoices:
+            c_name = inv.get("clientName", "").strip().lower()
+            if not c_name: continue
+            
+            if c_name not in processed_clients:
+                processed_clients.add(c_name)
+                first_paid_invoices.append(inv)
+            else:
+                recurring_paid_invoices.append(inv)
+        
+        async def process_invoices_for_emp(invoices_list):
+            achievement = 0.0
+            incentive_achievement = 0.0
+            matched_invoices = []
+            for inv in invoices_list:
+                try:
+                    c_name_orig = str(inv.get("clientName", "")).strip()
+                    if not c_name_orig:
                         continue
+                        
+                    import re
+                    c_name_escaped = re.escape(c_name_orig)
+                    regex_pattern = f"^\\s*{c_name_escaped}\\s*$"
+                    
+                    leads_cursor = db.leads.find({
+                        "status": "Client Won",
+                        "$or": [
+                            {"company": {"$regex": regex_pattern, "$options": "i"}},
+                            {"contact": {"$regex": regex_pattern, "$options": "i"}}
+                        ]
+                    })
+                    matching_leads = await leads_cursor.to_list(length=100)
+                    
+                    if not matching_leads:
+                        continue
+                        
+                    assigned_lead = None
+                    for lead in matching_leads:
+                        raw_assigned = lead.get("assignedTo", [])
+                        # safely extract names regardless of nesting or dicts
+                        def extract_names(item):
+                            if isinstance(item, list):
+                                res = []
+                                for x in item: res.extend(extract_names(x))
+                                return res
+                            elif isinstance(item, dict):
+                                return [item.get("value", "") or item.get("label", "")]
+                            else:
+                                return [str(item)]
+                                
+                        assigned_names = extract_names(raw_assigned)
+                        
+                        for name in assigned_names:
+                            if name and " ".join(name.split()).lower() == emp_name_norm:
+                                assigned_lead = lead
+                                break
+                        if assigned_lead:
+                            break
+                            
+                    if not assigned_lead:
+                        continue
+
+                    inv_date_str = inv.get("paymentDate") or inv.get("issueDate") or inv.get("timestamp")
+                    if not inv_date_str: continue
+
+                    ld = None
+                    if isinstance(inv_date_str, datetime):
+                        ld = inv_date_str.replace(tzinfo=None)
+                    elif isinstance(inv_date_str, date) and not isinstance(inv_date_str, datetime):
+                        ld = datetime(inv_date_str.year, inv_date_str.month, inv_date_str.day)
+                    else:
+                        try:
+                            ld = datetime.fromisoformat(str(inv_date_str).strip()).replace(tzinfo=None)
+                        except Exception:
+                            for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%b %d, %Y", "%d/%m/%Y", "%d-%m-%Y"):
+                                try:
+                                    ld = datetime.strptime(str(inv_date_str).strip(), fmt)
+                                    break
+                                except Exception: continue
+                    
+                    if not ld: continue
+                    
+                    if target_type == "Custom":
+                        if not startDate or not endDate:
+                            continue
+                        sd = datetime.strptime(startDate, "%Y-%m-%d").replace(hour=0, minute=0, second=0, microsecond=0)
+                        ed = datetime.strptime(endDate, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999)
+                        if not (sd <= ld <= ed):
+                            continue
+                    else:
+                        month_name_ld = ld.strftime("%B")
+                        if month_name_ld != month or ld.year != year:
+                            continue
+                        
+                        if target_type == "Weekly" and week:
+                            lead_week = (ld.day - 1) // 7 + 1
+                            if lead_week != week:
+                                continue
+                    
+                    actual_base = float(inv.get("subtotal", 0))
+                    raw_inc_base = inv.get("incentiveAmountBase")
+                    if raw_inc_base == "":
+                        inc_base = actual_base
+                    else:
+                        inc_base = float(raw_inc_base if raw_inc_base is not None else actual_base)
+                    
+                    achievement += actual_base
+                    incentive_achievement += inc_base
+                    
+                    category = assigned_lead.get("category", "Other") if assigned_lead else "Other"
+                    is_recurring = inv in recurring_paid_invoices
+                    
+                    matched_invoices.append({
+                        "invoiceId": str(inv.get("_id", "")),
+                        "invoiceNumber": inv.get("invoiceNumber", ""),
+                        "clientName": c_name_orig,
+                        "subtotal": actual_base,
+                        "incentiveBase": inc_base,
+                        "category": category,
+                        "isRecurring": is_recurring,
+                        "slabPercentage": 0.0,
+                        "earnedIncentive": 0.0
+                    })
+                except Exception as e:
+                    print(f"Error processing invoice in recalculate_sales_target: {e}")
+                    continue
+            
+            # Second pass: calculate incentives now that we have total incentive_achievement
+            final_matched_invoices = []
+            for item in matched_invoices:
+                earned, slab_pct = await calculate_sales_incentive(
+                    db,
+                    total_amount=item["incentiveBase"],
+                    invoice_amount=item["incentiveBase"],
+                    employee_id=employee_id,
+                    employee_name=emp_name,
+                    category=item["category"],
+                    is_recurring=item["isRecurring"]
+                )
+                item["slabPercentage"] = slab_pct
+                item["earnedIncentive"] = earned
+                final_matched_invoices.append(item)
                 
-                # Extract income amount
-                income_str = str(lead.get("expectedIncome", "0")).replace("₹", "").replace(",", "").strip()
-                if not income_str: income_str = "0"
-                total_achievement += float(income_str)
-            except Exception as e:
-                print(f"Error processing lead in recalculate_sales_target: {e}")
-                continue
+            return achievement, incentive_achievement, final_matched_invoices
                 
-        # 2. Calculate Incentive
-        incentive = await calculate_sales_incentive(db, total_achievement)
+        # 2. Calculate Achievements & Incentive
+        total_achievement, total_incentive_base, matched_all = await process_invoices_for_emp(all_paid_invoices)
+        
+        incentive = sum([mi.get("earnedIncentive", 0.0) for mi in matched_all])
+        
+        breakdown = matched_all
         
         # 3. Update Target record
+        emp_obj_id = ObjectId(employee_id) if isinstance(employee_id, str) and len(employee_id) == 24 else employee_id
+        
         target_query = {
-            "employeeId": employee_id,
-            "month": month,
-            "year": year,
+            "employeeId": {"$in": [employee_id, emp_obj_id]},
             "type": target_type
         }
         if target_type == "Weekly":
+            target_query["month"] = month
+            target_query["year"] = year
             target_query["week"] = week
+        elif target_type == "Monthly":
+            target_query["month"] = month
+            target_query["year"] = year
+        elif target_type == "Custom":
+            target_query["startDate"] = startDate
+            target_query["endDate"] = endDate
             
         await db.sales_targets.update_one(
             target_query,
             {"$set": {
                 "currentAchievement": total_achievement,
-                "incentiveAmount": incentive
-            }, "$setOnInsert": {
-                "employeeName": emp.get("name", "Unknown") if emp else "Unknown",
-                "targetAmount": 0
-            }},
-            upsert=True
+                "incentiveBase": total_incentive_base,
+                "incentiveAmount": incentive,
+                "breakdown": breakdown
+            }}
         )
     except Exception as e:
         print(f"Global error in recalculate_sales_target: {e}")
@@ -4050,7 +5662,11 @@ async def update_employee_daily_report(db, report_id: str, report_update: schema
     
     # Apply penalty if status changed to Rejected
     if update_data.get("status") == "Rejected" and existing and existing.get("status") != "Rejected":
-        await apply_work_rejection_penalty(db, existing["employeeId"], existing["date"])
+        system_settings = await get_system_settings(db)
+        if system_settings.get("dailyProgressRejectDeductionEnabled", False):
+            await apply_work_rejection_penalty(db, existing["employeeId"], existing["date"])
+    elif update_data.get("status") != "Rejected" and existing and existing.get("status") == "Rejected":
+        await remove_work_rejection_penalty(db, existing["employeeId"], existing["date"])
         
     # Log activity
     if existing:
@@ -4100,7 +5716,7 @@ async def save_user_permissions(db, employee_id: str, permissions_data: schemas.
 
 # Permission Presets CRUD
 async def get_permission_presets(db, skip: int = 0, limit: int = 100):
-    cursor = db.permission_presets.find().skip(skip).limit(limit)
+    cursor = db.permission_presets.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -4163,10 +5779,12 @@ async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
                     continue
                 
                 # Create the notification document
+                rec_date = doc.get('date', '')
+                date_str = str(rec_date).split(' ')[0] if rec_date else ''
                 notification = {
                     "employee_id": staff_id,
                     "title": "New Time Recovery Request",
-                    "message": f"{doc.get('employee_name', 'An employee')} has submitted a time recovery request for {doc.get('date')}.",
+                    "message": f"{doc.get('employee_name', 'An employee')} has submitted a time recovery request for {date_str}.",
                     "type": "attendance",
                     "reference_id": str(doc["_id"]),
                     "is_read": False,
@@ -4189,7 +5807,7 @@ async def create_time_recovery(db, recovery: schemas.TimeRecoveryCreate):
     return fix_id(doc)
 
 async def get_time_recoveries(db, skip: int = 0, limit: int = 100):
-    cursor = db.time_recovery.find().skip(skip).limit(limit)
+    cursor = db.time_recovery.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -4323,18 +5941,40 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
             import re
             from datetime import datetime
             
+            rec_date = doc.get('date')
+            date_vals = [rec_date] if rec_date else []
+            if rec_date:
+                if isinstance(rec_date, str):
+                    date_only_str = rec_date.split(' ')[0]
+                    try:
+                        dt_naive = datetime.strptime(date_only_str, "%Y-%m-%d")
+                        dt_aware = dt_naive.replace(tzinfo=IST)
+                        date_vals.extend([dt_naive, dt_aware])
+                    except Exception as parse_err:
+                        print(f"Error parsing date string {rec_date}: {parse_err}")
+                elif hasattr(rec_date, 'year'):
+                    try:
+                        dt_naive = datetime(rec_date.year, rec_date.month, rec_date.day)
+                        dt_aware = dt_naive.replace(tzinfo=IST)
+                        date_vals.extend([dt_naive, dt_aware])
+                    except Exception as parse_err:
+                        print(f"Error converting date object {rec_date}: {parse_err}")
+
             recovery_type = doc.get('recovery_type')
             start_time = doc.get('start_time')
             end_time = doc.get('end_time')
             
             if recovery_type and start_time and end_time:
                 # Modern type-based approval logic
+                emp_id = doc['employee_id']
+                query_or = [{'employeeId': emp_id}, {'employee_id': emp_id}]
+                if ObjectId.is_valid(emp_id):
+                    query_or.append({'employeeId': ObjectId(emp_id)})
+                    query_or.append({'employee_id': ObjectId(emp_id)})
+                    
                 search_query = {
-                    '$or': [
-                        {'employeeId': doc['employee_id']},
-                        {'employee_id': doc['employee_id']}
-                    ],
-                    'date': doc['date']
+                    '$or': query_or,
+                    'date': {'$in': date_vals} if date_vals else doc.get('date')
                 }
                 print(f"DEBUG: Searching attendance records for recovery: {doc['date']}")
                 cursor = db.attendance.find(search_query)
@@ -4359,6 +5999,58 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     fmt_end = end_time if len(end_time.split(':')) == 3 else f"{end_time}:00"
 
                     if recovery_type in ['meeting', 'work']:
+                        # Fix: Trim or remove breaks that overlap with this recovery
+                        def parse_t(t_str):
+                            if not t_str: return 0
+                            pts = t_str.split(':')
+                            try:
+                                return int(pts[0])*3600 + int(pts[1])*60 + (int(pts[2]) if len(pts)>2 else 0)
+                            except: return 0
+                        
+                        def format_t(sec):
+                            sec = sec % 86400
+                            return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
+                            
+                        rec_in = parse_t(fmt_start)
+                        rec_out = parse_t(fmt_end)
+                        if rec_out < rec_in:
+                            rec_out += 86400
+                            
+                        new_breaks = []
+                        for b in breaks:
+                            b_start = b.get("startTime")
+                            b_end = b.get("endTime")
+                            if not b_start or not b_end:
+                                new_breaks.append(b)
+                                continue
+                                
+                            b_in = parse_t(b_start)
+                            b_out = parse_t(b_end)
+                            if b_out < b_in:
+                                b_out += 86400
+                                
+                            overlap_start = max(rec_in, b_in)
+                            overlap_end = min(rec_out, b_out)
+                            
+                            if overlap_start < overlap_end:
+                                # There is overlap
+                                if rec_in <= b_in and rec_out >= b_out:
+                                    continue # fully engulfed, remove break
+                                elif b_in < rec_in and b_out > rec_out:
+                                    # Split into two
+                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                                elif b_in >= rec_in and b_out > rec_out:
+                                    # Trim start
+                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
+                                elif b_in < rec_in and b_out <= rec_out:
+                                    # Trim end
+                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
+                            else:
+                                new_breaks.append(b)
+                                
+                        breaks = new_breaks
+
                         punches.append({
                             "punchIn": fmt_start,
                             "punchOut": fmt_end,
@@ -4400,34 +6092,69 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     
                     # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
                     merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
-                    
                     # Recalculate workHours string
                     hours, remainder = divmod(int(new_accumulated), 3600)
                     minutes, _ = divmod(remainder, 60)
                     work_hours = f"{hours}h {minutes}m"
+
+                    # Determine active punch and status
+                    has_active = False
+                    active_punch_in = None
+                    for p in merged_punches:
+                        if not p.get("punchOut"):
+                            has_active = True
+                            active_punch_in = p.get("punchIn")
+                            break
+                    
+                    has_active_break = False
+                    for b in sorted_breaks:
+                        if not b.get("endTime"):
+                            has_active_break = True
+                            break
+
+                    new_status = 'Logged'
+                    new_checkout = attn.get('checkOut')
+                    
+                    set_dict = {
+                        'punches': merged_punches,
+                        'breaks': sorted_breaks,
+                        'accumulatedWorkSeconds': new_accumulated,
+                        'workHours': work_hours,
+                    }
+
+                    if has_active:
+                        new_status = 'On Break' if has_active_break else 'Active'
+                        new_checkout = None
+                        set_dict['lastPunchIn'] = active_punch_in
+                    else:
+                        if merged_punches:
+                            new_checkout = merged_punches[-1].get("punchOut")
+
+                    set_dict['status'] = new_status
+                    set_dict['checkOut'] = new_checkout
                     
                     await db.attendance.update_one(
                         {'_id': attn['_id']},
-                        {'$set': {
-                            'punches': merged_punches,
-                            'breaks': sorted_breaks,
-                            'accumulatedWorkSeconds': new_accumulated,
-                            'workHours': work_hours,
-                            'status': 'Logged'
-                        }}
+                        {'$set': set_dict}
                     )
             else:
                 reason = doc.get('reason', '')
                 
                 # Fuzzy search for attendance (find all records for the day)
+                emp_id = doc['employee_id']
+                query_or = [
+                    {'employeeId': {'$regex': f'^{re.escape(str(emp_id))}$', '$options': 'i'}},
+                    {'employee_id': {'$regex': f'^{re.escape(str(emp_id))}$', '$options': 'i'}},
+                    {'employeeName': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}},
+                    {'employee_name': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}}
+                ]
+                if ObjectId.is_valid(emp_id):
+                    query_or.append({'employeeId': ObjectId(emp_id)})
+                    query_or.append({'employee_id': ObjectId(emp_id)})
+                    
                 search_query = {
-                    '$or': [
-                        {'employeeId': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
-                        {'employee_id': {'$regex': f'^{re.escape(str(doc["employee_id"]))}$', '$options': 'i'}},
-                        {'employeeName': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}},
-                        {'employee_name': {'$regex': f'^{re.escape(str(doc.get("employee_name", "")))}', '$options': 'i'}}
-                    ],
-                    'date': doc['date']
+                    '$or': query_or,
+                    'date': {'$in': date_vals} if date_vals else doc.get('date')
                 }
                 print(f"DEBUG: Searching all attendance records for date: {doc['date']}")
                 cursor = db.attendance.find(search_query)
@@ -4439,7 +6166,14 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
     
                 # Helper to recalculate and save
                 async def apply_updates(attn_record, updated_breaks):
-                    if attn_record.get('checkIn') and attn_record.get('checkOut'):
+                    has_active = not attn_record.get('checkOut') or attn_record.get('checkOut') in [None, "--", "--:--", "", "-"]
+                    has_active_break = False
+                    for b in updated_breaks:
+                        if not b.get("endTime"):
+                            has_active_break = True
+                            break
+
+                    if not has_active and attn_record.get('checkIn') and attn_record.get('checkOut'):
                         try:
                             ci = datetime.strptime(attn_record['checkIn'], "%H:%M:%S" if ":" in attn_record['checkIn'] else "%H:%M")
                             co = datetime.strptime(attn_record['checkOut'], "%H:%M:%S" if ":" in attn_record['checkOut'] else "%H:%M")
@@ -4449,13 +6183,17 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                             attn_record['workHours'] = f"{int(h)}h {int(m)}m"
                         except Exception: pass
                     
+                    new_status = 'On Break' if (has_active and has_active_break) else ('Active' if has_active else 'Logged')
+                    new_checkout = None if has_active else attn_record.get('checkOut')
+                    
                     await db.attendance.update_one(
                         {'_id': attn_record['_id']},
                         {'$set': {
                             'breaks': updated_breaks,
                             'checkIn': attn_record.get('checkIn'),
+                            'checkOut': new_checkout,
                             'workHours': attn_record.get('workHours'),
-                            'status': 'Logged'
+                            'status': new_status
                         }}
                     )
     
@@ -4566,10 +6304,12 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
     if doc:
         try:
             status_title = "Approved" if status == "approved" else "Rejected"
+            rec_date = doc.get('date', '')
+            date_str = str(rec_date).split(' ')[0] if rec_date else ''
             emp_notification = {
                 "employee_id": doc["employee_id"],
                 "title": f"Time Recovery {status_title}",
-                "message": f"Your time recovery request for {doc['date']} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
+                "message": f"Your time recovery request for {date_str} ({doc.get('start_time', '')} - {doc.get('end_time', '')}) has been {status}.",
                 "type": "attendance",
                 "reference_id": str(doc["_id"]),
                 "is_read": False,
@@ -4587,14 +6327,87 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
 
     return fix_id(doc)
 
+async def _trigger_sales_target_recalculation(db, invoice_doc):
+    try:
+        client_name = invoice_doc.get("clientName") or ""
+        import re
+        client_name_escaped = re.escape(client_name)
+        lead = await db.leads.find_one({
+            "status": "Client Won",
+            "$or": [
+                {"company": {"$regex": f"^{client_name_escaped}$", "$options": "i"}},
+                {"contact": {"$regex": f"^{client_name_escaped}$", "$options": "i"}}
+            ]
+        })
+        
+        if lead:
+            assigned_to = lead.get("assignedTo", [])
+            if not isinstance(assigned_to, list):
+                assigned_to = [assigned_to] if assigned_to else []
+            
+            for emp_name in assigned_to:
+                if not emp_name:
+                    continue
+                if isinstance(emp_name, dict):
+                    emp_name = emp_name.get("value", "") or emp_name.get("label", "")
+                if not emp_name:
+                    continue
+                import re
+                emp_name_escaped = re.escape(str(emp_name).strip())
+                emp = await db.employees.find_one({"name": {"$regex": f"^{emp_name_escaped}$", "$options": "i"}})
+                if not emp:
+                    continue
+                
+                pd_str = invoice_doc.get("paymentDate") or invoice_doc.get("timestamp")
+                try:
+                    from datetime import datetime
+                    pd = datetime.fromisoformat(pd_str) if pd_str else get_now()
+                    month_name = pd.strftime("%B")
+                    week_num = (pd.day - 1) // 7 + 1
+                    emp_id_str = str(emp["_id"])
+                    
+                    await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Monthly")
+                    await recalculate_sales_target(db, emp_id_str, month_name, pd.year, "Weekly", week_num)
+                    
+                    emp_obj_id = ObjectId(emp_id_str) if len(emp_id_str) == 24 else None
+                    emp_query = [emp_id_str]
+                    if emp_obj_id:
+                        emp_query.append(emp_obj_id)
+                        
+                    custom_targets_cursor = db.sales_targets.find({
+                        "employeeId": {"$in": emp_query},
+                        "type": "Custom"
+                    })
+                    async for t in custom_targets_cursor:
+                        await recalculate_sales_target(
+                            db,
+                            emp_id_str,
+                            t.get("month"),
+                            t.get("year"),
+                            "Custom",
+                            startDate=t.get("startDate"),
+                            endDate=t.get("endDate")
+                        )
+                    await run_payroll_processing(db, month_name, pd.year)
+                except Exception as e:
+                    print(f"Error triggering recalculate_sales_target from invoice: {e}")
+    except Exception as e:
+        print(f"Global error in _trigger_sales_target_recalculation: {e}")
+
 # Invoice CRUD
 async def create_invoice(db, invoice: schemas.InvoiceCreate):
     invoice_dict = invoice.dict()
     invoice_dict["timestamp"] = get_now().isoformat()
+    if invoice_dict.get("status") == "Paid":
+        invoice_dict["paymentDate"] = get_now().isoformat()
     result = await db.invoices.insert_one(invoice_dict)
     invoice_dict["id"] = str(result.inserted_id)
     if "_id" in invoice_dict:
         invoice_dict.pop("_id")
+        
+    if invoice_dict.get("status") == "Paid":
+        await _trigger_sales_target_recalculation(db, invoice_dict)
+        
     return invoice_dict
 
 async def get_invoices(db, skip: int = 0, limit: int = 100):
@@ -4608,8 +6421,21 @@ async def get_invoice(db, invoice_id: str):
 
 async def update_invoice(db, invoice_id: str, invoice_update: schemas.InvoiceUpdate):
     update_data = invoice_update.dict(exclude_unset=True)
+    
+    existing = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
+    was_paid = existing.get("status") == "Paid" if existing else False
+    is_paid = update_data.get("status") == "Paid" if "status" in update_data else was_paid
+    
+    if is_paid and not was_paid:
+        update_data["paymentDate"] = get_now().isoformat()
+        
     await db.invoices.update_one({"_id": ObjectId(invoice_id)}, {"$set": update_data})
     updated_doc = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
+    
+    if is_paid and updated_doc:
+        if not was_paid or "incentiveAmountBase" in update_data:
+            await _trigger_sales_target_recalculation(db, updated_doc)
+                    
     return fix_id(updated_doc) if updated_doc else None
 
 async def delete_invoice(db, invoice_id: str):
@@ -4673,7 +6499,7 @@ async def resolve_referral_status(db, referral: dict) -> dict:
     return referral
 
 async def get_referrals(db, skip: int = 0, limit: int = 10000):
-    cursor = db.referrals.find().skip(skip).limit(limit)
+    cursor = db.referrals.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     referrals = [fix_id(row) for row in rows]
     
@@ -4686,7 +6512,7 @@ async def get_referrals(db, skip: int = 0, limit: int = 10000):
     return resolved_referrals
 
 async def get_employee_referrals(db, employee_id: str, skip: int = 0, limit: int = 10000):
-    cursor = db.referrals.find({"referredById": employee_id}).skip(skip).limit(limit)
+    cursor = db.referrals.find({"referredById": employee_id}).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     referrals = [fix_id(row) for row in rows]
     
@@ -4756,7 +6582,7 @@ async def create_document_template(db, template: schemas.DocumentTemplateCreate)
     return fix_id(doc)
 
 async def get_document_templates(db, skip: int = 0, limit: int = 100):
-    cursor = db.document_templates.find().skip(skip).limit(limit)
+    cursor = db.document_templates.find().sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -4778,7 +6604,7 @@ async def delete_document_template(db, template_id: str):
     return result.deleted_count > 0
 # Asset Category CRUD
 async def get_asset_categories(db, skip: int = 0, limit: int = 100):
-    cursor = db.asset_categories.find({"is_user_created": True}).skip(skip).limit(limit)
+    cursor = db.asset_categories.find({"is_user_created": True}).sort("_id", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
@@ -4965,10 +6791,165 @@ async def delete_asset_category(db, category_id: str, performed_by: str = "Syste
     return True
 
 # --- Schedule Operations ---
+async def _get_creds_and_persist(db, emp):
+    """Get Google credentials for an employee and persist refreshed tokens back to DB."""
+    token_data = emp.get("googleCalendarTokens")
+    if not token_data:
+        return None
+    try:
+        creds, refreshed_token_data = google_auth.get_credentials(token_data)
+        if refreshed_token_data:
+            # Token was refreshed — save the new access token back to the DB
+            await db.employees.update_one(
+                {"_id": emp["_id"]},
+                {"$set": {"googleCalendarTokens": refreshed_token_data}}
+            )
+            print(f"[Google Sync] Persisted refreshed token for employee {emp.get('name', emp['_id'])}")
+        return creds
+    except Exception as e:
+        print(f"[Google Sync] Error getting/refreshing credentials for {emp.get('name', emp['_id'])}: {e}")
+        return None
+
+async def sync_google_events(db, employee_id: str, start_date_str: str, end_date_str: str):
+    if not employee_id:
+        return
+        
+    query = {"employeeId": employee_id}
+    if ObjectId.is_valid(employee_id):
+        query = {"$or": [{"employeeId": employee_id}, {"_id": ObjectId(employee_id)}]}
+    emp = await db.employees.find_one(query)
+    
+    if not emp or not emp.get("googleCalendarTokens"):
+        return
+        
+    try:
+        creds = await _get_creds_and_persist(db, emp)
+        if not creds:
+            return
+            
+        tz = pytz.timezone('Asia/Kolkata')
+        
+        try:
+            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+        except Exception:
+            return
+            
+        try:
+            end_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+        except Exception:
+            end_dt = start_dt
+            
+        time_min_dt = tz.localize(datetime.combine(start_dt, datetime.min.time()))
+        time_max_dt = tz.localize(datetime.combine(end_dt, datetime.max.time()))
+        
+        time_min = time_min_dt.isoformat()
+        time_max = time_max_dt.isoformat()
+        
+        events = await asyncio.to_thread(google_calendar.list_events, creds, time_min, time_max)
+        
+        # Collect all Google event IDs returned from Google for this date range
+        google_event_ids_from_google = set()
+        
+        if events:
+            for event in events:
+                event_id = event.get('id')
+                if not event_id:
+                    continue
+                    
+                # Skip cancelled events
+                if event.get('status') == 'cancelled':
+                    continue
+                    
+                google_event_ids_from_google.add(event_id)
+                summary = event.get('summary', 'Google Calendar Event')
+                description = event.get('description', '')
+                
+                start = event.get('start', {})
+                end = event.get('end', {})
+                
+                start_time_str = start.get('dateTime') or start.get('date')
+                end_time_str = end.get('dateTime') or end.get('date')
+                
+                if not start_time_str or not end_time_str:
+                    continue
+                    
+                try:
+                    if 'T' in start_time_str:
+                        s_dt = datetime.fromisoformat(start_time_str).astimezone(tz)
+                        e_dt = datetime.fromisoformat(end_time_str).astimezone(tz)
+                    else:
+                        s_dt = datetime.strptime(start_time_str, "%Y-%m-%d")
+                        e_dt = datetime.strptime(end_time_str, "%Y-%m-%d")
+                except Exception:
+                    continue
+                    
+                local_start = s_dt.strftime("%H:%M")
+                local_end = e_dt.strftime("%H:%M")
+                
+                schedule_date = datetime.combine(s_dt.date(), datetime.min.time())
+                
+                await db.schedules.update_one(
+                    {"googleEventId": event_id},
+                    {"$set": {
+                        "employeeId": employee_id,
+                        "employeeName": emp.get("name") or "Unknown",
+                        "title": summary,
+                        "description": description,
+                        "date": schedule_date,
+                        "startTime": local_start,
+                        "endTime": local_end,
+                        "googleEventId": event_id,
+                        "type": "Google Event"
+                    }},
+                    upsert=True
+                )
+        
+        # --- Handle deleted Google events ---
+        # Find all local schedules with a googleEventId for this employee in this date range
+        # that are NOT in the set of events returned from Google — these were deleted in Google
+        date_variants = []
+        current = start_dt
+        while current <= end_dt:
+            date_variants.append(current.strftime("%Y-%m-%d"))
+            date_variants.append(current)
+            current += timedelta(days=1)
+        
+        local_google_schedules_cursor = db.schedules.find({
+            "employeeId": employee_id,
+            "googleEventId": {"$exists": True, "$ne": None},
+            "date": {"$in": date_variants}
+        })
+        local_google_schedules = await local_google_schedules_cursor.to_list(length=1000)
+        
+        for local_sched in local_google_schedules:
+            local_gid = local_sched.get("googleEventId")
+            if local_gid and local_gid not in google_event_ids_from_google:
+                # This event was deleted or cancelled in Google Calendar — remove it locally
+                await db.schedules.delete_one({"_id": local_sched["_id"]})
+                print(f"[Google Sync] Removed locally deleted Google event: {local_sched.get('title', 'Unknown')} (gid: {local_gid})")
+            
+    except Exception as e:
+        print(f"Error syncing Google Calendar events: {e}")
+
 async def get_schedules(db, employee_id: str = None, date_str: str = None, date_from: str = None, date_to: str = None):
+    if date_str or (date_from and date_to):
+        d_from = date_from or date_str
+        d_to = date_to or date_str
+        if employee_id:
+            await sync_google_events(db, employee_id, d_from, d_to)
+        else:
+            cursor = db.employees.find({"googleCalendarTokens": {"$exists": True, "$ne": None}})
+            employees_with_tokens = await cursor.to_list(length=1000)
+            tasks = [sync_google_events(db, str(emp["_id"]), d_from, d_to) for emp in employees_with_tokens]
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+        
     query = {}
     if employee_id:
-        query["employeeId"] = employee_id
+        query["$or"] = [
+            {"employeeId": employee_id},
+            {"attendees": employee_id}
+        ]
     if date_str:
         try:
             target_date = datetime.strptime(date_str, "%Y-%m-%d")
@@ -4979,7 +6960,6 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None, date_
         try:
             start = datetime.strptime(date_from, "%Y-%m-%d")
             end = datetime.strptime(date_to, "%Y-%m-%d")
-            # Build list of all date variants (string + datetime) for each day in range
             date_variants = []
             current = start
             while current <= end:
@@ -4994,24 +6974,92 @@ async def get_schedules(db, employee_id: str = None, date_str: str = None, date_
     return [fix_id(s) for s in schedules]
 
 async def create_schedule(db, schedule_data: dict):
+    # Try to push to Google Calendar
+    emp_id = schedule_data.get("employeeId")
+    if emp_id:
+        query = {"employeeId": emp_id}
+        if ObjectId.is_valid(emp_id):
+            query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+        emp = await db.employees.find_one(query)
+        if emp and emp.get("googleCalendarTokens"):
+            try:
+                creds = await _get_creds_and_persist(db, emp)
+                if creds:
+                    event_id = await asyncio.to_thread(google_calendar.create_event, creds, schedule_data)
+                    if event_id:
+                        schedule_data["googleEventId"] = event_id
+            except Exception as e:
+                print(f"Error syncing new schedule to Google Calendar: {e}")
+
     new_doc = await db.schedules.insert_one(schedule_data)
     created = await db.schedules.find_one({"_id": new_doc.inserted_id})
     return fix_id(created)
 
 async def update_schedule(db, schedule_id: str, schedule_data: dict):
-    if not ObjectId.is_valid(schedule_id):
-        return None
+    query = {"_id": ObjectId(schedule_id)} if ObjectId.is_valid(schedule_id) else {"_id": schedule_id}
+    
+    existing = await db.schedules.find_one(query)
+    if not existing:
+        existing = await db.schedules.find_one({"$or": [{"id": schedule_id}, {"googleEventId": schedule_id}]})
+        if not existing:
+            return None
+        query = {"_id": existing["_id"]}
+    
     await db.schedules.update_one(
-        {"_id": ObjectId(schedule_id)},
+        query,
         {"$set": schedule_data}
     )
-    updated = await db.schedules.find_one({"_id": ObjectId(schedule_id)})
+    updated = await db.schedules.find_one(query)
+    
+    # Sync update to Google Calendar
+    if updated and existing:
+        emp_id = updated.get("employeeId")
+        google_event_id = updated.get("googleEventId") or existing.get("googleEventId")
+        if emp_id and google_event_id:
+            query = {"employeeId": emp_id}
+            if ObjectId.is_valid(emp_id):
+                query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+            emp = await db.employees.find_one(query)
+            if emp and emp.get("googleCalendarTokens"):
+                try:
+                    creds = await _get_creds_and_persist(db, emp)
+                    if creds:
+                        await asyncio.to_thread(google_calendar.update_event, creds, google_event_id, updated)
+                except Exception as e:
+                    print(f"Error syncing updated schedule to Google Calendar: {e}")
+
     return fix_id(updated) if updated else None
 
 async def delete_schedule(db, schedule_id: str):
-    if not ObjectId.is_valid(schedule_id):
-        return False
-    res = await db.schedules.delete_one({"_id": ObjectId(schedule_id)})
+    query = {"_id": ObjectId(schedule_id)} if ObjectId.is_valid(schedule_id) else {"_id": schedule_id}
+    
+    existing = await db.schedules.find_one(query)
+    if not existing:
+        # Fallback to checking by string 'id' or 'googleEventId' just in case
+        existing = await db.schedules.find_one({"$or": [{"id": schedule_id}, {"googleEventId": schedule_id}]})
+        if not existing:
+            return False
+        query = {"_id": existing["_id"]}
+        
+    res = await db.schedules.delete_one(query)
+    
+    # Sync delete to Google Calendar
+    if res.deleted_count > 0 and existing:
+        emp_id = existing.get("employeeId")
+        google_event_id = existing.get("googleEventId")
+        if emp_id and google_event_id:
+            query = {"employeeId": emp_id}
+            if ObjectId.is_valid(emp_id):
+                query = {"$or": [{"employeeId": emp_id}, {"_id": ObjectId(emp_id)}]}
+            emp = await db.employees.find_one(query)
+            if emp and emp.get("googleCalendarTokens"):
+                try:
+                    creds = await _get_creds_and_persist(db, emp)
+                    if creds:
+                        await asyncio.to_thread(google_calendar.delete_event, creds, google_event_id)
+                except Exception as e:
+                    print(f"Error syncing deleted schedule to Google Calendar: {e}")
+                    
     return res.deleted_count > 0
 # --- User Activity Input Tracking Operations ---
 async def track_user_activity(db, employee_id: str, clicks: int, keystrokes: int, applications: Optional[dict] = None, domains: Optional[dict] = None):
@@ -5132,3 +7180,235 @@ async def update_pc_restrictions(db, hostname: str, block_chrome: Optional[bool]
     
     updated = await db.registered_pcs.find_one({"hostname": {"$regex": f"^{re.escape(hostname)}$", "$options": "i"}})
     return fix_id(updated) if updated else None
+# --- Content Calendar Operations ---
+async def get_all_content_calendar_entries(db):
+    try:
+        cursor = db.content_calendar_entries.find({})
+        entries = await cursor.to_list(length=5000)
+        return [fix_id(e) for e in entries]
+    except Exception as e:
+        raise e
+
+async def get_content_calendar_entries(db, client_id: str, month_year: str = None):
+    try:
+        query = {"clientId": client_id}
+        if month_year:
+            query["$or"] = [
+                {"monthYear": month_year},
+                {"postingDate": {"$regex": f"^{month_year}"}},
+                {"scriptDate": {"$regex": f"^{month_year}"}},
+                {"shootDate": {"$regex": f"^{month_year}"}},
+                {"editingStart": {"$regex": f"^{month_year}"}},
+                {"actualPostingDate": {"$regex": f"^{month_year}"}}
+            ]
+        cursor = db.content_calendar_entries.find(query)
+        entries = await cursor.to_list(length=1000)
+        return [fix_id(e) for e in entries]
+    except Exception as e:
+        import traceback
+        with open("error_log.txt", "w") as f:
+            f.write(traceback.format_exc())
+        raise e
+
+async def create_content_calendar_entry(db, entry_data: dict):
+    updated_by = entry_data.pop("updatedBy", "Unknown User")
+    entry_data["logs"] = [{
+        "timestamp": datetime.now(IST).isoformat(),
+        "action": "Row created",
+        "details": "Initial entry created",
+        "userName": updated_by
+    }]
+    new_doc = await db.content_calendar_entries.insert_one(entry_data)
+    created = await db.content_calendar_entries.find_one({"_id": new_doc.inserted_id})
+    return fix_id(created)
+
+async def update_content_calendar_entry(db, entry_id: str, update_data: dict):
+    if not ObjectId.is_valid(entry_id):
+        return None
+        
+    existing = await db.content_calendar_entries.find_one({"_id": ObjectId(entry_id)})
+    if not existing:
+        return None
+        
+    changes = []
+    updated_by = update_data.get("updatedBy", "Unknown User")
+    for key, val in update_data.items():
+        if key not in ["logs", "clientId", "monthYear", "id", "_id", "updated_at", "created_at", "updatedAt", "createdAt", "updatedBy"]:
+            old_val = existing.get(key)
+            if old_val != val:
+                changes.append(f"'{key}' changed to '{val or ''}'")
+                
+    if changes:
+        new_log = {
+            "timestamp": datetime.now(IST).isoformat(),
+            "action": "Row updated",
+            "details": ", ".join(changes),
+            "userName": updated_by
+        }
+        logs = existing.get("logs", [])
+        logs.append(new_log)
+        update_data["logs"] = logs
+        
+    await db.content_calendar_entries.update_one(
+        {"_id": ObjectId(entry_id)},
+        {"$set": update_data}
+    )
+    updated = await db.content_calendar_entries.find_one({"_id": ObjectId(entry_id)})
+    return fix_id(updated) if updated else None
+
+async def delete_content_calendar_entry(db, entry_id: str):
+    if not ObjectId.is_valid(entry_id):
+        return False
+    res = await db.content_calendar_entries.delete_one({"_id": ObjectId(entry_id)})
+    return res.deleted_count > 0
+
+async def get_content_calendar_settings(db, client_id: str, month_year: str):
+    settings = await db.content_calendar_settings.find_one({
+        "clientId": client_id,
+        "monthYear": month_year
+    })
+    if settings:
+        return fix_id(settings)
+    return None
+
+async def get_all_content_calendar_settings(db, month_year: str):
+    cursor = db.content_calendar_settings.find({"monthYear": month_year})
+    settings = await cursor.to_list(length=1000)
+    return [fix_id(s) for s in settings]
+
+async def upsert_content_calendar_settings(db, client_id: str, month_year: str, update_data: dict):
+    if "_id" in update_data:
+        del update_data["_id"]
+    await db.content_calendar_settings.update_one(
+        {"clientId": client_id, "monthYear": month_year},
+        {"$set": update_data},
+        upsert=True
+    )
+    return await get_content_calendar_settings(db, client_id, month_year)
+
+# Dynamic Feedback Forms
+
+async def create_feedback_form(db, form: schemas.FeedbackFormCreate, createdBy: str = "Unknown"):
+    form_dict = form.dict()
+    form_dict["createdAt"] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+    form_dict["createdBy"] = createdBy
+    res = await db.feedback_forms.insert_one(form_dict)
+    doc = await db.feedback_forms.find_one({"_id": res.inserted_id})
+    return fix_id(doc)
+
+async def get_feedback_form(db, form_id: str):
+    if not ObjectId.is_valid(form_id):
+        return None
+    doc = await db.feedback_forms.find_one({"_id": ObjectId(form_id)})
+    return fix_id(doc) if doc else None
+
+async def get_client_feedback_forms(db, client_id: str):
+    cursor = db.feedback_forms.find({"clientId": client_id}).sort("createdAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def create_feedback_response(db, response: schemas.FeedbackResponseCreate):
+    resp_dict = response.dict()
+    resp_dict["submittedAt"] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+    res = await db.feedback_responses.insert_one(resp_dict)
+    doc = await db.feedback_responses.find_one({"_id": res.inserted_id})
+    return fix_id(doc)
+
+async def get_all_feedback_responses(db):
+    cursor = db.feedback_responses.find().sort("submittedAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def get_all_feedback_forms(db):
+    cursor = db.feedback_forms.find().sort("createdAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def get_form_responses(db, form_id: str):
+    cursor = db.feedback_responses.find({"formId": form_id}).sort("submittedAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def get_client_form_responses(db, client_id: str):
+    cursor = db.feedback_responses.find({"clientId": client_id}).sort("submittedAt", -1)
+    return [fix_id(doc) async for doc in cursor]
+
+async def update_feedback_form(db, form_id: str, form_data: schemas.FeedbackFormCreate):
+    if not ObjectId.is_valid(form_id):
+        return None
+    
+    update_data = form_data.dict()
+    res = await db.feedback_forms.update_one(
+        {"_id": ObjectId(form_id)},
+        {"$set": update_data}
+    )
+    if res.modified_count == 0 and res.matched_count == 0:
+        return None
+    return await get_feedback_form(db, form_id)
+
+async def delete_feedback_form(db, form_id: str):
+    if not ObjectId.is_valid(form_id):
+        return False
+        
+    # Cascade delete responses first
+    await db.feedback_responses.delete_many({"formId": form_id})
+    
+    # Delete the form
+    res = await db.feedback_forms.delete_one({"_id": ObjectId(form_id)})
+    return res.deleted_count > 0
+
+# --- Other Work ---
+async def get_all_other_work(db):
+    cursor = db.other_work.find().sort("created_at", -1)
+    items = await cursor.to_list(length=5000)
+    return [fix_id(item) for item in items]
+
+async def create_other_work(db, data: dict):
+    from datetime import datetime
+    data["created_at"] = datetime.now().isoformat()
+    data["updated_at"] = datetime.now().isoformat()
+    if "logs" not in data or not data["logs"]:
+        data["logs"] = [{
+            "timestamp": data["created_at"],
+            "action": "Task created",
+            "details": f"Task '{data.get('title')}' created by {data.get('assignerName')}",
+            "userName": data.get('assignerName', "System")
+        }]
+    res = await db.other_work.insert_one(data)
+    doc = await db.other_work.find_one({"_id": res.inserted_id})
+    return fix_id(doc)
+
+async def update_other_work(db, work_id: str, update_data: dict):
+    from bson import ObjectId
+    from datetime import datetime
+    if not ObjectId.is_valid(work_id):
+        return None
+    existing = await db.other_work.find_one({"_id": ObjectId(work_id)})
+    if not existing:
+        return None
+    
+    update_data["updated_at"] = datetime.now().isoformat()
+    
+    changes = []
+    updater = update_data.pop("updatedBy", "System")
+    for k, v in update_data.items():
+        if k not in ["logs", "created_at", "updated_at"]:
+            if existing.get(k) != v:
+                changes.append(f"'{k}' changed to '{v}'")
+                
+    if changes:
+        logs = existing.get("logs", [])
+        logs.append({
+            "timestamp": datetime.now().isoformat(),
+            "action": "Task updated",
+            "details": ", ".join(changes),
+            "userName": updater
+        })
+        update_data["logs"] = logs
+        
+    await db.other_work.update_one({"_id": ObjectId(work_id)}, {"$set": update_data})
+    doc = await db.other_work.find_one({"_id": ObjectId(work_id)})
+    return fix_id(doc)
+
+async def delete_other_work(db, work_id: str):
+    from bson import ObjectId
+    if not ObjectId.is_valid(work_id):
+        return False
+    res = await db.other_work.delete_one({"_id": ObjectId(work_id)})
+    return res.deleted_count > 0

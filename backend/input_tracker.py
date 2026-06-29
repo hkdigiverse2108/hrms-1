@@ -27,6 +27,14 @@ _domain_durations = {}
 _last_global_activity_time = time.time()
 _state_lock = threading.Lock()
 
+_active_window_cache = {
+    "title": None,
+    "proc_name": None,
+    "pid": None,
+    "timestamp": 0.0
+}
+_active_window_cache_lock = threading.Lock()
+
 _active_employee_id = None
 _active_user_is_admin = False
 
@@ -59,6 +67,14 @@ if PLATFORM == "Windows":
     CloseHandle = ctypes.windll.kernel32.CloseHandle
     TerminateProcess = ctypes.windll.kernel32.TerminateProcess
     QueryFullProcessImageNameW = ctypes.windll.kernel32.QueryFullProcessImageNameW
+
+    GetTickCount = ctypes.windll.kernel32.GetTickCount
+    GetTickCount.restype = ctypes.c_uint
+
+    GetLastInputInfo = ctypes.windll.user32.GetLastInputInfo
+    GetLastInputInfo.argtypes = [ctypes.c_void_p]
+    GetLastInputInfo.restype = ctypes.c_bool
+
 
 elif PLATFORM == "Darwin":
     # macOS — pyobjc (AppKit)
@@ -224,8 +240,8 @@ def get_last_global_activity_time() -> float:
                 ]
             lii = LASTINPUTINFO()
             lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
-            if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
-                tick_count = ctypes.windll.kernel32.GetTickCount()
+            if GetLastInputInfo(ctypes.byref(lii)):
+                tick_count = GetTickCount()
                 idle_ms = (tick_count - lii.dwTime) & 0xFFFFFFFF
                 win_last_active = time.time() - (idle_ms / 1000.0)
                 with _state_lock:
@@ -373,7 +389,7 @@ def _get_window_title_macos(bundle_id: str) -> str:
 # Unified get_active_window_info
 # ─────────────────────────────────────────────────────────────────────────────
 
-def get_active_window_info():
+def _get_active_window_info_raw():
     """Cross-platform: returns (title, proc_name_or_bundle_id, pid)."""
     if PLATFORM == "Windows":
         return _get_active_window_info_windows()
@@ -381,6 +397,27 @@ def get_active_window_info():
         return _get_active_window_info_macos()
     else:
         return None, None, None
+
+def get_active_window_info():
+    global _active_window_cache
+    now = time.time()
+    # Cache duration: 0.5s on Windows, 2.5s on macOS to minimize heavy AppleScript process spawns
+    cache_duration = 2.5 if PLATFORM == "Darwin" else 0.5
+    
+    with _active_window_cache_lock:
+        if now - _active_window_cache["timestamp"] < cache_duration:
+            return _active_window_cache["title"], _active_window_cache["proc_name"], _active_window_cache["pid"]
+            
+    title, proc_name, pid = _get_active_window_info_raw()
+    
+    with _active_window_cache_lock:
+        _active_window_cache = {
+            "title": title,
+            "proc_name": proc_name,
+            "pid": pid,
+            "timestamp": now
+        }
+    return title, proc_name, pid
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Process kill — cross-platform
@@ -719,10 +756,18 @@ def _run_restrictions_monitor():
                     )
                     rule = future.result(timeout=5)
                 except Exception:
+                    try:
+                        future.cancel()
+                    except Exception:
+                        pass
                     pass
 
         if not rule:
             continue
+
+        with _state_lock:
+            if _active_user_is_admin:
+                continue
 
         try:
             title, proc_name, pid = get_active_window_info()
@@ -955,7 +1000,8 @@ async def set_active_user(employee_id: str):
             )
             print(f"[Tracker] User doc in tracker: {user_doc}", flush=True)
             with _state_lock:
-                if user_doc and str(user_doc.get("role", "")).lower() == "admin":
+                admin_roles = {"admin", "super admin", "superadmin", "administrator", "founder"}
+                if user_doc and str(user_doc.get("role", "")).lower().strip() in admin_roles:
                     _active_user_is_admin = True
                 else:
                     _active_user_is_admin = False

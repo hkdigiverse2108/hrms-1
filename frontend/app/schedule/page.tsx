@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { DatePicker, TimePicker, Popconfirm, Tooltip as AntTooltip, Select as AntSelect } from "antd";
 import dayjs from "dayjs";
-import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search } from "lucide-react";
+import { Plus, Loader2, ChevronLeft, ChevronRight, X, Search, CalendarCheck, RefreshCcw } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -28,16 +28,58 @@ const EMPLOYEE_COLORS = [
   { bg: "#e4c441", bgLight: "rgba(228,196,65,0.18)", border: "#e4c441", text: "#b89e00" },
 ];
 
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hour = Math.floor(i / 4);
+  const minute = (i % 4) * 15;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+  const displayString = `${displayHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  return { value: timeString, label: displayString };
+});
+
 type ViewMode = "day" | "week";
 
 export default function SchedulePage() {
-  const { user, getISTNow } = useUserContext();
+  const { user, getISTNow, updateUser } = useUserContext();
   const { checkPermission, isAdmin } = usePermissions();
+  const [isSyncing, setIsSyncing] = useState(false);
   const canAdd = isAdmin || checkPermission('schedule', 'canAdd');
   const canDeletePerm = isAdmin || checkPermission('schedule', 'canDelete');
   const [currentDate, setCurrentDate] = useState(dayjs(getISTNow()));
   const [calendarMonth, setCalendarMonth] = useState<Date>(dayjs(getISTNow()).toDate());
   const [schedules, setSchedules] = useState<any[]>([]);
+
+  // Sync user profile from server to detect Google Calendar tokens
+  const syncUserProfile = React.useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/employees/${user.id}`);
+      if (res.ok) {
+        const freshUser = await res.json();
+        if (freshUser && !freshUser.detail) {
+          const pRes = await fetch(`${API_URL}/user-permissions/${user.id}`);
+          const pData = pRes.ok ? await pRes.json() : { permissions: [] };
+          if (updateUser) {
+            updateUser({
+              ...freshUser,
+              permissions: pData?.permissions || []
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to sync user profile in schedule:", err);
+    }
+  }, [user?.id, updateUser]);
+
+  useEffect(() => {
+    syncUserProfile();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', syncUserProfile);
+      return () => window.removeEventListener('focus', syncUserProfile);
+    }
+  }, [syncUserProfile]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
@@ -61,6 +103,28 @@ export default function SchedulePage() {
     type: "meeting",
     attendees: [] as string[]
   });
+
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  /* ───── free slots state ───── */
+  const [freeSlots, setFreeSlots] = useState<{start: string, end: string}[]>([]);
+  const [isCheckingSlots, setIsCheckingSlots] = useState(false);
+
+  const resetForm = () => {
+    setEditingScheduleId(null);
+    setForm({
+      title: "",
+      description: "",
+      employeeId: user?.id || user?.employeeId || "",
+      employeeName: user?.name || "",
+      date: dayjs(getISTNow()).format("YYYY-MM-DD"),
+      startTime: defaultTimes.start,
+      endTime: defaultTimes.end,
+      type: "meeting",
+      attendees: [] as string[]
+    });
+  };
 
   const timelineRef = useRef<HTMLDivElement>(null);
 
@@ -102,6 +166,44 @@ export default function SchedulePage() {
     }
   }, [user, employees, selectedEmployeeIds.length]);
 
+  /* ───── fetch free slots ───── */
+  useEffect(() => {
+    const fetchFreeSlots = async () => {
+      if (!form.date || !form.employeeId || !createModalOpen) return;
+      const attendeeIds = [form.employeeId, ...(form.attendees || [])];
+      
+      setIsCheckingSlots(true);
+      try {
+        const res = await fetch(`${API_URL}/schedules/free-slots`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            employeeIds: attendeeIds,
+            date: form.date,
+            durationMins: 30
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setFreeSlots(data.freeSlots || []);
+        } else {
+          setFreeSlots([]);
+        }
+      } catch (err) {
+        console.error("Error fetching free slots:", err);
+        setFreeSlots([]);
+      } finally {
+        setIsCheckingSlots(false);
+      }
+    };
+    
+    // Use a small debounce to avoid spamming the API while selecting attendees
+    const timeoutId = setTimeout(() => {
+      fetchFreeSlots();
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [form.date, form.employeeId, form.attendees, createModalOpen]);
+
   /* scroll to current time on mount */
   useEffect(() => {
     if (!isLoading && timelineRef.current) {
@@ -118,6 +220,63 @@ export default function SchedulePage() {
       if (res.ok) setEmployees(await res.json());
     } catch (err) {
       console.error("Error fetching employees:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_URL}/auth/google/disconnect?employeeId=${user.id || user.employeeId}`, {
+        method: 'POST'
+      });
+      if (!res.ok) throw new Error("Failed to disconnect");
+      
+      toast.success("Google Calendar disconnected.");
+      window.location.href = "/schedule";
+    } catch (error) {
+      toast.error("Failed to disconnect Google Calendar.");
+    }
+  };
+
+  const handleManualSync = async () => {
+    if (!user || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const dateFrom = viewMode === "day"
+        ? currentDate.subtract(1, "day").format("YYYY-MM-DD")
+        : getWeekStart(currentDate).format("YYYY-MM-DD");
+      const dateTo = viewMode === "day"
+        ? currentDate.add(1, "day").format("YYYY-MM-DD")
+        : getWeekStart(currentDate).add(6, "day").format("YYYY-MM-DD");
+
+      const res = await fetch(`${API_URL}/schedules/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: user.id || user.employeeId,
+          dateFrom,
+          dateTo
+        })
+      });
+      if (res.ok) {
+        toast.success("Google Calendar synced successfully");
+        // Re-fetch schedules to show updated data
+        if (viewMode === "day") {
+          fetchSchedules(currentDate.format("YYYY-MM-DD"));
+        } else {
+          const start = getWeekStart(currentDate);
+          const end = start.add(6, "day");
+          fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
+        }
+      } else {
+        toast.error("Failed to sync Google Calendar");
+      }
+    } catch (err) {
+      toast.error("Error syncing with Google Calendar");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -147,7 +306,7 @@ export default function SchedulePage() {
     }
   };
 
-  const handleCreateSchedule = async () => {
+  const handleSave = async () => {
     if (!form.title || !form.employeeId || !form.startTime || !form.endTime) {
       toast.error("Please fill in all required fields");
       return;
@@ -156,18 +315,44 @@ export default function SchedulePage() {
       toast.error("End time must be after start time");
       return;
     }
-    // Check for overlap within current schedules if creating for the current date
-    if (form.date === currentDate.format("YYYY-MM-DD")) {
-      const isOverlap = schedules.some((s) => {
-        if (s.employeeId !== form.employeeId) return false;
-        // Overlap condition: max(start1, start2) < min(end1, end2)
-        const maxStart = form.startTime > s.startTime ? form.startTime : s.startTime;
-        const minEnd = form.endTime < s.endTime ? form.endTime : s.endTime;
-        return maxStart < minEnd;
-      });
+    // Check for overlap within currently loaded schedules
+    let overlapEmployee = false;
+    let overlapAttendee = false;
 
-      if (isOverlap) {
-        toast.error("This schedule overlaps with an existing schedule for this employee.");
+    schedules.forEach((s) => {
+      const sDate = typeof s.date === "string" ? s.date.split("T")[0] : dayjs(s.date).format("YYYY-MM-DD");
+      if (form.date !== sDate) return;
+      if (editingScheduleId && s.id === editingScheduleId) return;
+      
+      const maxStart = form.startTime > s.startTime ? form.startTime : s.startTime;
+      const minEnd = form.endTime < s.endTime ? form.endTime : s.endTime;
+      const overlaps = maxStart < minEnd;
+      
+      if (overlaps) {
+        // Check if this existing schedule involves the primary employee
+        if (String(s.employeeId) === String(form.employeeId) || (s.attendees || []).some((id: any) => String(id) === String(form.employeeId))) {
+          overlapEmployee = true;
+        }
+        // Check if this existing schedule involves any of the selected attendees
+        const involvesAnyAttendee = form.attendees.some(att => 
+          String(s.employeeId) === String(att) || (s.attendees || []).some((id: any) => String(id) === String(att))
+        );
+        if (involvesAnyAttendee) {
+          overlapAttendee = true;
+        }
+      }
+    });
+
+    if (overlapAttendee) {
+      toast.error("Cannot schedule. One or more attendees have an overlapping event.");
+      return;
+    }
+
+    if (overlapEmployee) {
+      if (String(form.employeeId) === String(user?.id || user?.employeeId)) {
+        toast.warning("Overlap detected in your schedule!");
+      } else {
+        toast.error("Cannot assign an overlapping schedule to someone else.");
         return;
       }
     }
@@ -176,14 +361,23 @@ export default function SchedulePage() {
     try {
       const selectedEmp = employees.find(e => e.id === form.employeeId || e.employeeId === form.employeeId);
       const empName = selectedEmp ? selectedEmp.name : (user?.name || "Unknown");
-      const res = await fetch(`${API_URL}/schedules`, {
-        method: "POST",
+      
+      const method = editingScheduleId ? "PUT" : "POST";
+      const url = editingScheduleId ? `${API_URL}/schedules/${editingScheduleId}` : `${API_URL}/schedules`;
+      
+      const payload: any = {
+        ...form,
+        employeeName: empName
+      };
+      
+      if (!editingScheduleId) {
+        payload.createdBy = user?.id || user?.employeeId;
+      }
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          employeeName: empName,
-          createdBy: user?.id || user?.employeeId
-        })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         toast.success("Schedule added successfully");
@@ -198,9 +392,13 @@ export default function SchedulePage() {
         } else {
           const start = getWeekStart(currentDate);
           const end = start.add(6, "day");
-          fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
+          if (newDate.isBefore(start) || newDate.isAfter(end)) {
+            setCurrentDate(newDate);
+          } else {
+            fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
+          }
         }
-        setForm(prev => ({ ...prev, title: "", description: "", attendees: [] }));
+        resetForm();
       } else {
         try {
           const errorData = await res.json();
@@ -218,10 +416,13 @@ export default function SchedulePage() {
   };
 
   const handleDeleteSchedule = async (scheduleId: string) => {
+    setIsDeleting(true);
     try {
       const res = await fetch(`${API_URL}/schedules/${scheduleId}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Schedule deleted successfully");
+        setCreateModalOpen(false);
+        resetForm();
         if (viewMode === "day") {
           fetchSchedules(currentDate.format("YYYY-MM-DD"));
         } else {
@@ -230,11 +431,30 @@ export default function SchedulePage() {
           fetchSchedulesRange(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
         }
       } else {
-        toast.error("Failed to delete schedule");
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.detail || errorData.message || "Failed to delete schedule");
       }
     } catch (err) {
       toast.error("Error connecting to server");
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const handleEditClick = (event: any) => {
+    setEditingScheduleId(event.id || event._id);
+    setForm({
+      title: event.title || "",
+      description: event.description || "",
+      employeeId: event.employeeId,
+      employeeName: event.employeeName || "",
+      date: dayjs(event.date).format("YYYY-MM-DD"),
+      startTime: event.startTime,
+      endTime: event.endTime,
+      type: event.type || "meeting",
+      attendees: event.attendees || []
+    });
+    setCreateModalOpen(true);
   };
 
   /* ───── helpers ───── */
@@ -398,16 +618,33 @@ export default function SchedulePage() {
     const startMin = timeToMinutes(event.startTime);
     const endMin = timeToMinutes(event.endTime);
     const top = Math.max(0, startMin);
-    const height = Math.max(20, Math.min(1440, endMin) - top);
+    const duration = Math.max(20, Math.min(1440, endMin) - top);
+    const height = Math.max(15, duration - 1.5); // Subtract 1.5px to create visual gap for back-to-back
     const color = getEmployeeColor(event.employeeId);
-    const canDelete = String(event.createdBy) === String(user?.id || user?.employeeId);
+    
+    const userId = String(user?.id || user?.employeeId);
+    const isAdminUser = user?.role === "Admin" || user?.role === "HR" || isAdmin;
+    const isOwner = String(event.employeeId) === userId;
+    const isCreator = String(event.createdBy) === userId;
+    const isAttendee = Array.isArray(event.attendees) && event.attendees.some((id: any) => String(id) === userId);
+    const canSeeDetails = isAdminUser || isOwner || isCreator || isAttendee;
+    
+    const displayTitle = canSeeDetails ? event.title : "Busy";
+    const canEditOrDelete = isOwner;
+    
     const colWidth = 100 / totalColumns;
     const leftPercent = column * colWidth;
     const widthPercent = colWidth - (compact ? 2 : 1.5);
 
     const eventBlock = (
       <div
-        className="absolute rounded-md overflow-hidden cursor-pointer transition-shadow hover:shadow-lg group"
+        onClick={(e) => {
+          if (canEditOrDelete) {
+            e.stopPropagation();
+            handleEditClick(event);
+          }
+        }}
+        className={`absolute rounded-md overflow-hidden transition-shadow ${canEditOrDelete ? 'cursor-pointer hover:shadow-lg' : 'cursor-default'} group`}
         style={{
           top: `${top}px`,
           height: `${height}px`,
@@ -421,13 +658,8 @@ export default function SchedulePage() {
         <div className={`${compact ? "p-0.5 px-1" : "p-1.5"} h-full flex flex-col relative`}>
           <div className="flex items-start justify-between gap-0.5">
             <div className={`${compact ? "text-[10px]" : "text-xs"} font-bold text-white truncate flex-1 leading-tight`}>
-              {event.title}
+              {displayTitle}
             </div>
-            {canDelete && !compact && (
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-px">
-                <X className="w-3 h-3 text-white/80 hover:text-white" />
-              </div>
-            )}
           </div>
           {height > 30 && (
             <div className={`${compact ? "text-[9px]" : "text-[10px]"} text-white/80 mt-0.5 truncate`}>
@@ -445,11 +677,11 @@ export default function SchedulePage() {
 
     const tooltipContent = (
       <div className="text-xs max-w-[200px]">
-        <div className="font-bold mb-1">{event.title}</div>
-        {event.createdBy && (
+        <div className="font-bold mb-1">{displayTitle}</div>
+        {canSeeDetails && event.createdBy && (
           <div><strong>Created By:</strong> {employees.find(e => String(e.id) === String(event.createdBy) || String(e.employeeId) === String(event.createdBy))?.name || "Unknown"}</div>
         )}
-        {event.attendees && event.attendees.length > 0 && (
+        {canSeeDetails && event.attendees && event.attendees.length > 0 && (
           <div className="mt-1">
             <strong>With:</strong> {
               event.attendees.map((id: string) => {
@@ -468,19 +700,8 @@ export default function SchedulePage() {
       </AntTooltip>
     );
 
-    return canDelete ? (
-      <Popconfirm
-        key={event.id}
-        title="Delete Schedule"
-        description="Are you sure you want to delete this schedule?"
-        onConfirm={() => handleDeleteSchedule(event.id)}
-        okText="Yes"
-        cancelText="No"
-      >
-        {wrappedEventBlock}
-      </Popconfirm>
-    ) : (
-      <React.Fragment key={event.id}>
+    return (
+      <React.Fragment key={event.id || Math.random()}>
         {wrappedEventBlock}
       </React.Fragment>
     );
@@ -538,16 +759,19 @@ export default function SchedulePage() {
         description="View and manage employee schedules."
       >
         {canAdd && (
-          <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+          <Dialog open={createModalOpen} onOpenChange={(open) => {
+            if (!open) resetForm();
+            setCreateModalOpen(open);
+          }}>
             <DialogTrigger asChild>
-              <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm">
+              <Button className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium shadow-sm" onClick={() => resetForm()}>
                 <Plus className="w-4 h-4 mr-2" />
                 Add Schedule
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px]">
+            <DialogContent className="sm:max-w-[450px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-xl font-bold">New Schedule Block</DialogTitle>
+                <DialogTitle className="text-xl font-bold">{editingScheduleId ? "Edit Schedule" : "New Schedule Block"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -618,6 +842,37 @@ export default function SchedulePage() {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* ───── Common Free Slots ───── */}
+                {form.employeeId && (form.attendees.length > 0) && form.date && (
+                  <div className="mt-3">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">Common Free Slots</label>
+                    {isCheckingSlots ? (
+                      <div className="text-xs text-slate-500 animate-pulse">Finding available times...</div>
+                    ) : freeSlots.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1 custom-scrollbar">
+                        {freeSlots.slice(0, 10).map((slot, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => {
+                              const s = slot.start.length === 5 ? slot.start + ":00" : slot.start;
+                              const e = slot.end.length === 5 ? slot.end + ":00" : slot.end;
+                              setForm({ ...form, startTime: s, endTime: e });
+                            }}
+                            className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-1 rounded cursor-pointer hover:bg-indigo-600 hover:text-white transition-colors"
+                          >
+                            {format12Hour(slot.start)} - {format12Hour(slot.end)}
+                          </div>
+                        ))}
+                        {freeSlots.length === 0 && <span className="text-xs text-slate-400">No common slots found.</span>}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1.5 rounded border border-amber-100">
+                        No common free slots available on this date.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -648,36 +903,37 @@ export default function SchedulePage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Start Time</label>
-                    <TimePicker
-                      className="w-full h-10"
-                      format="h:mm a"
-                      use12Hours
-                      value={dayjs(`2000-01-01 ${form.startTime}`)}
-                      onChange={t => {
-                        if (!t) { setForm({ ...form, startTime: "" }); return; }
-                        const newStart = t.format("HH:mm");
-                        if (form.endTime && newStart >= form.endTime) {
-                          const newEnd = t.add(1, 'hour').format("HH:mm");
-                          setForm({ ...form, startTime: newStart, endTime: newEnd });
-                        } else {
-                          setForm({ ...form, startTime: newStart });
-                        }
-                      }}
-                      minuteStep={15}
-                      getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                    />
+                    <Select value={form.startTime} onValueChange={v => {
+                      if (!v) { setForm({ ...form, startTime: "" }); return; }
+                      if (form.endTime && v >= form.endTime) {
+                        const newEnd = dayjs(`2000-01-01 ${v}`).add(1, 'hour').format("HH:mm");
+                        setForm({ ...form, startTime: v, endTime: newEnd });
+                      } else {
+                        setForm({ ...form, startTime: v });
+                      }
+                    }}>
+                      <SelectTrigger className="w-full h-10">
+                        <SelectValue placeholder="Start Time" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[250px]">
+                        {TIME_OPTIONS.map(opt => (
+                          <SelectItem key={`start-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">End Time</label>
-                    <TimePicker
-                      className="w-full h-10"
-                      format="h:mm a"
-                      use12Hours
-                      value={dayjs(`2000-01-01 ${form.endTime}`)}
-                      onChange={t => setForm({ ...form, endTime: t ? t.format("HH:mm") : "" })}
-                      minuteStep={15}
-                      getPopupContainer={(trigger) => trigger.parentNode as HTMLElement}
-                    />
+                    <Select value={form.endTime} onValueChange={v => setForm({ ...form, endTime: v })}>
+                      <SelectTrigger className="w-full h-10">
+                        <SelectValue placeholder="End Time" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[250px]">
+                        {TIME_OPTIONS.map(opt => (
+                          <SelectItem key={`end-${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -690,9 +946,35 @@ export default function SchedulePage() {
                   />
                 </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
-                <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleCreateSchedule}>Save Schedule</Button>
+              <DialogFooter className="flex items-center">
+                {editingScheduleId && (
+                  <Popconfirm
+                    title="Delete Schedule"
+                    description="Are you sure you want to delete this schedule?"
+                    onConfirm={() => handleDeleteSchedule(editingScheduleId)}
+                    okText="Yes"
+                    cancelText="No"
+                    getPopupContainer={(triggerNode) => triggerNode.parentNode as HTMLElement}
+                  >
+                    <Button 
+                      variant="outline" 
+                      className="mr-auto text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                      disabled={isSubmitting || isDeleting}
+                    >
+                      {isDeleting ? "Deleting..." : "Delete"}
+                    </Button>
+                  </Popconfirm>
+                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting || isDeleting}>Cancel</Button>
+                  <Button className="bg-brand-teal text-white hover:bg-brand-teal/90" onClick={handleSave} disabled={isSubmitting || isDeleting}>
+                    {isSubmitting ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                    ) : (
+                      editingScheduleId ? "Save Changes" : "Save Schedule"
+                    )}
+                  </Button>
+                </div>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -806,6 +1088,63 @@ export default function SchedulePage() {
                 );
               })}
             </div>
+
+            {/* Google Calendar Integration */}
+            <div className="p-4 border-t border-border bg-gray-50/80 shrink-0">
+              {user?.googleCalendarTokens ? (
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <div className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold px-3 py-2 rounded-lg flex items-center justify-center gap-2">
+                    <CalendarCheck className="h-4 w-4" />
+                    Google Calendar Connected
+                  </div>
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={handleManualSync}
+                    disabled={isSyncing}
+                    className="w-full text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5 hover:text-brand-teal h-8 text-xs font-medium"
+                  >
+                    <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                    {isSyncing ? 'Syncing...' : 'Sync Now'}
+                  </Button>
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={handleDisconnectGoogle}
+                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8 text-xs font-medium"
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  type="button"
+                  onClick={() => {
+                    if (user) {
+                      const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+                      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                      const baseApi = API_URL.startsWith('http') ? API_URL : `${origin}${API_URL}`;
+                      const authUrl = `${baseApi}/auth/google/url?employeeId=${user.id || user.employeeId}${isDesktop ? '&desktop=true' : ''}`;
+                      if (typeof window !== 'undefined' && (window as any).electronAPI?.openExternal) {
+                        (window as any).electronAPI.openExternal(authUrl);
+                      } else {
+                        window.open(authUrl, '_blank');
+                      }
+                    }
+                  }}
+                  className="w-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:text-brand-teal font-semibold text-xs shadow-sm"
+                >
+                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.36,22 12.22,22C17.74,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"
+                    />
+                  </svg>
+                  Connect Google Calendar
+                </Button>
+              )}
+            </div>
+
           </div>
         </div>
 

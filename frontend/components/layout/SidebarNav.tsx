@@ -86,10 +86,12 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     if (isAdmin || checkPermission('projects', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/projects">Projects</Link>, "/work-management/projects"));
     }
-    if (isAdmin || checkPermission('tasks', 'canView')) {
-      workManagementChildren.push(getItem(<Link href="/work-management/tasks">Tasks</Link>, "/work-management/tasks"));
+    const isTL = Boolean(user && (user.role?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'team leader'));
+    if (isAdmin || isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/tasks">Development</Link>, "/work-management/tasks"));
     }
-    if (isAdmin || checkPermission('daily-progress', 'canView')) {
+    const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
+    if (isAdmin || isHRUser || checkPermission('daily-progress', 'canView')) {
       workManagementChildren.push(getItem(<Link href="/work-management/daily-progress">Daily Progress</Link>, "/work-management/daily-progress"));
     }
     if (isAdmin || checkPermission('sales', 'canView')) {
@@ -99,7 +101,10 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       workManagementChildren.push(getItem(<Link href="/work-management/clients">Clients</Link>, "/work-management/clients"));
     }
     if (isAdmin || checkPermission('marketing', 'canView')) {
-      workManagementChildren.push(getItem(<Link href="/work-management/marketing-reports">Marketing Reports</Link>, "/work-management/marketing-reports"));
+      workManagementChildren.push(getItem(<Link href="/work-management/digital-marketing">Digital Marketing</Link>, "/work-management/digital-marketing"));
+    }
+    if (isAdmin || checkPermission('creative', 'canView')) {
+      workManagementChildren.push(getItem(<Link href="/work-management/smm">Social Media Management</Link>, "/work-management/smm"));
     }
 
     const employeeChildren: MenuItem[] = [];

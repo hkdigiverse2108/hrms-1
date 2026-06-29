@@ -38,6 +38,8 @@ import {
   DialogTitle, 
   DialogFooter 
 } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { TIME_OPTIONS } from "@/lib/constants"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -809,13 +811,14 @@ export default function HiringBoardPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="interviewTime" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Interview Time</Label>
-                    <Input 
-                      type="time" 
-                      id="interviewTime"
-                      min={formData.interviewDate === new Date().toLocaleDateString('en-CA') ? new Date().toTimeString().slice(0, 5) : undefined}
-                      value={formData.interviewTime}
-                      onChange={(e) => setFormData({...formData, interviewTime: e.target.value})}
-                    />
+                    <Select value={formData.interviewTime} onValueChange={(v) => setFormData({...formData, interviewTime: v})}>
+                      <SelectTrigger id="interviewTime" className="w-full h-10">
+                        <SelectValue placeholder="Time" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[250px]">
+                        {TIME_OPTIONS.map(opt => <SelectItem key={`time-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 

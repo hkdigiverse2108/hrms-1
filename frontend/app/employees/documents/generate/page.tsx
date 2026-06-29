@@ -175,12 +175,30 @@ export default function DocumentGeneratorPage() {
     const todayFormatted = dayjs().format('DD/MM/YYYY')
     const empName = extraFields.name || currentEmployee.name || `${currentEmployee.firstName} ${currentEmployee.lastName}`
     const empAddress = currentEmployee.address || 'Resident Address, City'
-    const startDateFormatted = extraFields.startDate ? dayjs(extraFields.startDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
-    const endDateFormatted = extraFields.endDate ? dayjs(extraFields.endDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
+    let userStartDate = extraFields.startDate
+    let userEndDate = extraFields.endDate
+    
+    if (templateData?.fields) {
+      const actualStartField = templateData.fields.find((f: string) => f.toLowerCase().replace(/\s+/g, '') === 'startdate' || f.toLowerCase() === 'start_date')
+      if (actualStartField && extraFields[actualStartField]) {
+        userStartDate = extraFields[actualStartField]
+      }
+      
+      const actualEndField = templateData.fields.find((f: string) => f.toLowerCase().replace(/\s+/g, '') === 'enddate' || f.toLowerCase() === 'end_date')
+      if (actualEndField && extraFields[actualEndField]) {
+        userEndDate = extraFields[actualEndField]
+      }
+    }
+    
+    const startDateFormatted = userStartDate ? dayjs(userStartDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
+    const endDateFormatted = userEndDate ? dayjs(userEndDate).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')
     const genderValue = extraFields.gender || currentEmployee?.gender || 'Male'
     const honorific = genderValue === 'Female' ? 'Ms.' : 'Mr.'
 
     let htmlContent = templateData.content
+
+    // Fix MS Word pasted non-breaking spaces preventing text wrap
+    htmlContent = htmlContent.replace(/&nbsp;/g, ' ')
 
     // Replace basic variables
     htmlContent = htmlContent.replace(/\{\{todayFormatted\}\}/g, todayFormatted)
@@ -193,8 +211,12 @@ export default function DocumentGeneratorPage() {
     
     // Replace all extraFields
     Object.keys(extraFields).forEach(key => {
-      const regex = new RegExp(`\{\{${key}\}\}`, 'g')
-      htmlContent = htmlContent.replace(regex, extraFields[key] || '')
+      let value = extraFields[key] || ''
+      if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        value = dayjs(value).format('DD/MM/YYYY')
+      }
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+      htmlContent = htmlContent.replace(regex, value)
     })
     
     // Replace all currentEmployee fields
@@ -216,6 +238,9 @@ export default function DocumentGeneratorPage() {
     ` : ''
     
     htmlContent = htmlContent.replace(/\{\{includeAcceptance\}\}/g, acceptanceHtml)
+
+    // Replace non-breaking spaces with normal spaces to prevent giant word blocks that force mid-word breaks
+    htmlContent = htmlContent.replace(/&nbsp;/g, ' ')
 
     setPreviewContent(htmlContent)
     toast.success('Document preview generated!')
@@ -330,17 +355,80 @@ export default function DocumentGeneratorPage() {
         el.classList.remove('opacity-30')
       })
 
-      const scale = 1
+      // --- AUTO PAGINATION TO PREVENT SLICED TEXT ---
+      // We must adjust the DOM *before* taking the snapshot.
+      let finalNodeHeight = nodeHeight;
+      const editorClone = clone.querySelector('.ql-editor') as HTMLElement;
+      if (editorClone) {
+        let currentPage = 1;
+        const pageHeightPx = 1123;
+        
+        // Dynamically measure the EXACT margin distance of the very first paragraph on Page 1.
+        // This ensures Page 2+ text perfectly aligns with the native template spacing!
+        let safeMarginTop = 150; // Fallback
+        const children = Array.from(editorClone.children);
+        for (let i = 0; i < children.length; i++) {
+          const el = children[i] as HTMLElement;
+          if (el.innerText.trim() !== '' || el.querySelector('img')) {
+            const cloneRect = clone.getBoundingClientRect();
+            const elRect = el.getBoundingClientRect();
+            safeMarginTop = elRect.top - cloneRect.top;
+            break;
+          }
+        }
+        
+        for (let i = 0; i < children.length; i++) {
+          const el = children[i] as HTMLElement;
+          
+          // Ignore empty manual Enters! If the user manually hit Enter to dodge the letterhead, 
+          // we let those empty paragraphs get sliced and swallowed so they don't stack on top of our auto-pagination gap!
+          const isEmpty = el.innerText.trim() === '' && !el.querySelector('img');
+          if (isEmpty) continue;
+          
+          const cloneRect = clone.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          
+          const absoluteTop = elRect.top - cloneRect.top;
+          const absoluteBottom = absoluteTop + elRect.height;
+          
+          const pageBoundary = currentPage * pageHeightPx;
+          
+          // If the element crosses the slice line OR falls dangerously close to the repeating letterhead
+          if ((absoluteTop < pageBoundary && absoluteBottom > pageBoundary - 15) || 
+              (absoluteTop >= pageBoundary && absoluteTop < pageBoundary + safeMarginTop)) {
+            
+            const targetTop = pageBoundary + safeMarginTop;
+            const pushAmount = targetTop - absoluteTop;
+            
+            const currentMarginTop = parseFloat(window.getComputedStyle(el).marginTop) || 0;
+            el.style.marginTop = `${currentMarginTop + pushAmount}px`;
+            
+            currentPage++;
+          } else if (absoluteTop >= pageBoundary + safeMarginTop) {
+            currentPage = Math.floor(absoluteTop / pageHeightPx) + 1;
+          }
+        }
+        
+        // Recalculate final node height after pagination adjustments
+        const finalCloneRect = clone.getBoundingClientRect();
+        const newPagesNeeded = Math.ceil(finalCloneRect.height / pageHeightPx);
+        finalNodeHeight = Math.max(pageHeightPx, newPagesNeeded * pageHeightPx);
+        
+        container.style.height = `${finalNodeHeight}px`;
+        clone.style.height = `${finalNodeHeight}px`;
+      }
+
+      const scale = 3
       const dataUrl = await domtoimage.toPng(clone, {
         bgcolor: '#ffffff',
         width: a4WidthPx * scale,
-        height: nodeHeight * scale,
+        height: finalNodeHeight * scale,
         cacheBust: true,
         style: {
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
           width: `${a4WidthPx}px`,
-          height: `${nodeHeight}px`,
+          height: `${finalNodeHeight}px`,
         }
       })
 
@@ -349,7 +437,7 @@ export default function DocumentGeneratorPage() {
 
       const pdf = new jsPDF('p', 'mm', 'a4')
       const pdfWidth = pdf.internal.pageSize.getWidth()
-      const pdfHeight = (nodeHeight * pdfWidth) / a4WidthPx
+      const pdfHeight = (finalNodeHeight * pdfWidth) / a4WidthPx
       
       const pageHeight = pdf.internal.pageSize.getHeight()
       let heightLeft = pdfHeight
@@ -769,7 +857,9 @@ export default function DocumentGeneratorPage() {
               </div>
               <CardContent className="p-6 space-y-6">
                 <div className="grid gap-4">
-                  {templateData?.fields
+                  {(selectedEmployee === 'manual' && !templateData?.fields?.includes('name')
+                    ? ['name', ...(templateData?.fields || [])]
+                    : (templateData?.fields || []))
                     .filter((field: string) => !(selectedEmployee !== 'manual' && field === 'name'))
                     .map((field: string) => (
                     <div key={field} className="space-y-2">
@@ -990,7 +1080,7 @@ export default function DocumentGeneratorPage() {
                             src={systemSettings.companyLetterheadUrl.startsWith('http') ? systemSettings.companyLetterheadUrl : `${API_URL}${systemSettings.companyLetterheadUrl}`} 
                             alt="Company Letterhead" 
                             className="w-full"
-                            style={{ objectFit: 'contain', objectPosition: 'top' }}
+                            style={{ objectFit: 'contain', objectPosition: 'top', mixBlendMode: 'multiply' }}
                           />
                         </div>
                       ))}

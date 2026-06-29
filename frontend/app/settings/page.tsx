@@ -21,7 +21,8 @@ import {
   Save,
   FileText,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Calendar
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -34,13 +35,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { API_URL } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-import { INDIAN_STATES } from "@/lib/constants";
+import { INDIAN_STATES, TIME_OPTIONS } from "@/lib/constants";
 
 
 export default function SettingsPage() {
   const { user, updateUser } = useUserContext();
   const { checkPermission, isAdmin } = usePermissions();
+  const canViewSettings = isAdmin || checkPermission('settings', 'canView');
+  const canEditSettings = isAdmin || checkPermission('settings', 'canEdit');
   const router = useRouter();
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,6 +113,24 @@ export default function SettingsPage() {
     }
   };
 
+  const handleToggleDailyProgressRejectDeduction = async (checked: boolean) => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dailyProgressRejectDeductionEnabled: checked })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleUpdateShiftSettings = async (key: string, value: any) => {
     setIsUpdating(true);
     try {
@@ -134,9 +156,11 @@ export default function SettingsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          officeStartTime: settings?.officeStartTime || "09:30",
+           officeStartTime: settings?.officeStartTime || "09:30",
           officeEndTime: settings?.officeEndTime || "18:30",
           lateBufferMins: settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10,
+          inactivityTimeoutEnabled: settings?.inactivityTimeoutEnabled ?? false,
+          inactivityTimeoutMins: settings?.inactivityTimeoutMins !== undefined ? settings.inactivityTimeoutMins : 5,
           allowedMonthlyPaidLeaves: settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1,
           companyGstin: settings?.companyGstin || "",
           companyAddress: settings?.companyAddress || "",
@@ -155,7 +179,12 @@ export default function SettingsPage() {
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
           invoiceColor2: settings?.invoiceColor2 || "#08304b",
-          defaultSac: settings?.defaultSac || ""
+          defaultSac: settings?.defaultSac || "",
+          defaultScriptDateOffset: settings?.defaultScriptDateOffset !== undefined ? settings.defaultScriptDateOffset : null,
+          defaultShootDateOffset: settings?.defaultShootDateOffset !== undefined ? settings.defaultShootDateOffset : null,
+          defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
+          defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
+          paymentDueDays: settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0
         })
       });
       if (res.ok) {
@@ -260,7 +289,7 @@ export default function SettingsPage() {
         title="Settings" 
         description="Manage your account preferences, system security, and module access."
       >
-        {isAdmin && (
+        {canEditSettings && (
           <Button 
             onClick={handleSaveAllSettings}
             disabled={isUpdating}
@@ -278,7 +307,7 @@ export default function SettingsPage() {
 
       <div className="space-y-6">
           {/* Access Control Card */}
-          {isAdmin && (
+          {canViewSettings && (
             <Card className="p-6 border-border shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-brand-light rounded-lg">
@@ -307,7 +336,28 @@ export default function SettingsPage() {
                         <Switch 
                           checked={settings?.latePunchDeductionEnabled ?? true}
                           onCheckedChange={handleToggleLatePunchDeduction}
-                          disabled={isUpdating || !isAdmin}
+                          disabled={isUpdating || !canEditSettings}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/30 mt-4">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-bold">Daily Progress Reject Salary Cut</Label>
+                          <Badge variant="outline" className="text-[9px] h-4 font-bold bg-white">PAYROLL</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground max-w-[400px]">
+                          When enabled, system will automatically deduct 1 day salary if an employee's Daily Progress is rejected.
+                        </p>
+                      </div>
+                      {isLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-brand-teal" />
+                      ) : (
+                        <Switch 
+                          checked={settings?.dailyProgressRejectDeductionEnabled ?? false}
+                          onCheckedChange={handleToggleDailyProgressRejectDeduction}
+                          disabled={isUpdating || !canEditSettings}
                         />
                       )}
                     </div>
@@ -349,30 +399,26 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-bold">Office Start Time</Label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="time" 
-                      className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
-                      value={settings?.officeStartTime || "09:30"}
-                      onChange={(e) => setSettings({...settings, officeStartTime: e.target.value})}
-                      disabled={isUpdating || !isAdmin}
-                    />
-                    <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">AM</div>
-                  </div>
+                  <Select value={settings?.officeStartTime || "09:30"} onValueChange={(v) => setSettings({...settings, officeStartTime: v})} disabled={isUpdating || !canEditSettings}>
+                    <SelectTrigger className="flex-1 h-10 px-3 rounded-lg border border-border text-sm w-full">
+                      <SelectValue placeholder="Start Time" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[250px]">
+                      {TIME_OPTIONS.map(opt => <SelectItem key={`start-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label className="text-sm font-bold">Office End Time</Label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="time" 
-                      className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm"
-                      value={settings?.officeEndTime || "18:30"}
-                      onChange={(e) => setSettings({...settings, officeEndTime: e.target.value})}
-                      disabled={isUpdating || !isAdmin}
-                    />
-                    <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">PM</div>
-                  </div>
+                  <Select value={settings?.officeEndTime || "18:30"} onValueChange={(v) => setSettings({...settings, officeEndTime: v})} disabled={isUpdating || !canEditSettings}>
+                    <SelectTrigger className="flex-1 h-10 px-3 rounded-lg border border-border text-sm w-full">
+                      <SelectValue placeholder="End Time" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[250px]">
+                      {TIME_OPTIONS.map(opt => <SelectItem key={`end-${opt.valueNoSec}`} value={opt.valueNoSec}>{opt.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -389,7 +435,7 @@ export default function SettingsPage() {
                         className="w-20 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
                         value={settings?.lateBufferMins !== undefined ? settings.lateBufferMins : 10}
                         onChange={(e) => setSettings({...settings, lateBufferMins: parseInt(e.target.value) || 0})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                       <span className="text-xs text-muted-foreground font-medium">minutes</span>
                     </div>
@@ -398,12 +444,48 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
+
+                <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-brand-teal" />
+                      <Label className="text-sm font-bold">Inactivity Auto-Punch-Out Recovery</Label>
+                    </div>
+                    <Switch
+                      checked={settings?.inactivityTimeoutEnabled ?? false}
+                      onCheckedChange={(checked) => setSettings({ ...settings, inactivityTimeoutEnabled: checked })}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    When enabled, the system will track user inactivity. If a user is inactive for the specified duration, they will be automatically punched out and shown the recovery popup.
+                  </p>
+                  
+                  {settings?.inactivityTimeoutEnabled && (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          className="w-20 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold bg-white"
+                          value={settings?.inactivityTimeoutMins !== undefined ? settings.inactivityTimeoutMins : 5}
+                          onChange={(e) => setSettings({ ...settings, inactivityTimeoutMins: parseInt(e.target.value) || 0 })}
+                          disabled={isUpdating || !canEditSettings}
+                          min={1}
+                        />
+                        <span className="text-xs text-muted-foreground font-medium">minutes</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Specify after how many minutes of inactivity the user should be prompted for recovery.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </Card>
 
           {/* Leave Configuration Card */}
-          {isAdmin && (
+          {canViewSettings && (
             <Card className="p-6 border-border shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-brand-light rounded-lg">
@@ -425,7 +507,7 @@ export default function SettingsPage() {
                         className="flex-1 h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
                         value={settings?.allowedMonthlyPaidLeaves !== undefined ? settings.allowedMonthlyPaidLeaves : 1}
                         onChange={(e) => setSettings({...settings, allowedMonthlyPaidLeaves: parseInt(e.target.value) || 0})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                         min={0}
                       />
                       <div className="bg-gray-50 border border-border px-3 rounded-lg flex items-center text-[10px] font-bold text-muted-foreground">DAYS</div>
@@ -446,7 +528,7 @@ export default function SettingsPage() {
           )}
 
           {/* Company Configuration Card */}
-          {isAdmin && (
+          {canViewSettings && (
             <Card className="p-6 border-border shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-blue-50 rounded-lg">
@@ -473,7 +555,7 @@ export default function SettingsPage() {
                       placeholder="Enter company's physical address"
                       value={settings?.companyAddress || ""}
                       onChange={(e) => setSettings({...settings, companyAddress: e.target.value})}
-                      disabled={isUpdating || !isAdmin}
+                      disabled={isUpdating || !canEditSettings}
                     />
                   </div>
 
@@ -486,7 +568,7 @@ export default function SettingsPage() {
                         placeholder="e.g. +91 87805 64463"
                         value={settings?.companyPhone || ""}
                         onChange={(e) => setSettings({...settings, companyPhone: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -497,7 +579,7 @@ export default function SettingsPage() {
                         placeholder="e.g. billing@hkdigiverse.com"
                         value={settings?.companyEmail || ""}
                         onChange={(e) => setSettings({...settings, companyEmail: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                   </div>
@@ -518,7 +600,7 @@ export default function SettingsPage() {
                         placeholder="e.g. 24AAXFN3372M1ZK"
                         value={settings?.companyGstin || ""}
                         onChange={(e) => setSettings({...settings, companyGstin: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -529,7 +611,7 @@ export default function SettingsPage() {
                         placeholder="e.g. AAXFN3372M"
                         value={settings?.companyPan || ""}
                         onChange={(e) => setSettings({...settings, companyPan: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -540,7 +622,7 @@ export default function SettingsPage() {
                         placeholder="e.g. ACK-1143"
                         value={settings?.companyLlpin || ""}
                         onChange={(e) => setSettings({...settings, companyLlpin: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -549,7 +631,7 @@ export default function SettingsPage() {
                         className="w-full h-10 px-3 border border-border rounded-md text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-teal cursor-pointer font-medium text-slate-700"
                         value={settings?.companyState || ""}
                         onChange={(e) => setSettings({...settings, companyState: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       >
                         <option value="">Select State...</option>
                         {INDIAN_STATES.map((state) => (
@@ -580,7 +662,7 @@ export default function SettingsPage() {
                         placeholder="e.g. Axis Bank"
                         value={settings?.bankName || ""}
                         onChange={(e) => setSettings({...settings, bankName: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -591,7 +673,7 @@ export default function SettingsPage() {
                         placeholder="e.g. 924020057377415"
                         value={settings?.bankAccountNumber || ""}
                         onChange={(e) => setSettings({...settings, bankAccountNumber: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                     <div className="space-y-2">
@@ -602,7 +684,7 @@ export default function SettingsPage() {
                         placeholder="e.g. UTIB0002891"
                         value={settings?.bankIfscCode || ""}
                         onChange={(e) => setSettings({...settings, bankIfscCode: e.target.value})}
-                        disabled={isUpdating || !isAdmin}
+                        disabled={isUpdating || !canEditSettings}
                       />
                     </div>
                   </div>
@@ -690,7 +772,7 @@ export default function SettingsPage() {
             </Card>
           )}
           {/* Invoice Configuration Card */}
-          {isAdmin && (
+          {canViewSettings && (
             <Card className="p-6 border-border shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-brand-light rounded-lg">
@@ -711,7 +793,7 @@ export default function SettingsPage() {
                       className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold uppercase"
                       value={settings?.taxInvoicePrefix || ""}
                       onChange={(e) => setSettings({...settings, taxInvoicePrefix: e.target.value.toUpperCase()})}
-                      disabled={isUpdating || user?.role !== 'Admin'}
+                      disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. INV"
                     />
                   </div>
@@ -725,7 +807,7 @@ export default function SettingsPage() {
                       className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold uppercase"
                       value={settings?.proformaInvoicePrefix || ""}
                       onChange={(e) => setSettings({...settings, proformaInvoicePrefix: e.target.value.toUpperCase()})}
-                      disabled={isUpdating || user?.role !== 'Admin'}
+                      disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. PINV"
                     />
                   </div>
@@ -739,8 +821,24 @@ export default function SettingsPage() {
                       className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold uppercase"
                       value={settings?.noTaxInvoicePrefix || ""}
                       onChange={(e) => setSettings({...settings, noTaxInvoicePrefix: e.target.value.toUpperCase()})}
-                      disabled={isUpdating || user?.role !== 'Admin'}
+                      disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. NINV"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Digital Marketing Payment Due Threshold (Days)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">Show "Payment Due" this many days before the actual payment date in the Digital Marketing module.</p>
+                    <input 
+                      type="number" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0}
+                      onChange={(e) => setSettings({...settings, paymentDueDays: parseInt(e.target.value) || 0})}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. 5"
+                      min="0"
                     />
                   </div>
                 </div>
@@ -759,14 +857,14 @@ export default function SettingsPage() {
                             className="w-10 h-10 rounded-lg cursor-pointer border border-border p-1 bg-white"
                             value={settings?.invoiceColor1 || "#08304b"}
                             onChange={(e) => setSettings({...settings, invoiceColor1: e.target.value})}
-                            disabled={isUpdating || user?.role !== 'Admin'}
+                            disabled={isUpdating || !canEditSettings}
                           />
                           <input 
                             type="text" 
                             className="w-24 h-10 px-2 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-xs font-mono uppercase"
                             value={settings?.invoiceColor1 || "#08304b"}
                             onChange={(e) => setSettings({...settings, invoiceColor1: e.target.value})}
-                            disabled={isUpdating || user?.role !== 'Admin'}
+                            disabled={isUpdating || !canEditSettings}
                           />
                         </div>
                       </div>
@@ -781,14 +879,14 @@ export default function SettingsPage() {
                             className="w-10 h-10 rounded-lg cursor-pointer border border-border p-1 bg-white"
                             value={settings?.invoiceColor2 || "#08304b"}
                             onChange={(e) => setSettings({...settings, invoiceColor2: e.target.value})}
-                            disabled={isUpdating || user?.role !== 'Admin'}
+                            disabled={isUpdating || !canEditSettings}
                           />
                           <input 
                             type="text" 
                             className="w-24 h-10 px-2 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-xs font-mono uppercase"
                             value={settings?.invoiceColor2 || "#08304b"}
                             onChange={(e) => setSettings({...settings, invoiceColor2: e.target.value})}
-                            disabled={isUpdating || user?.role !== 'Admin'}
+                            disabled={isUpdating || !canEditSettings}
                           />
                         </div>
                       </div>
@@ -799,6 +897,77 @@ export default function SettingsPage() {
                       style={{ background: `linear-gradient(135deg, ${settings?.invoiceColor1 || '#08304b'}, ${settings?.invoiceColor2 || '#08304b'})` }}>
                       TAX INVOICE GRADIENT PREVIEW
                     </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {canViewSettings && (
+            <Card className="bg-white border border-border/40 shadow-sm overflow-hidden mb-6">
+              <div className="border-b border-border/40 bg-slate-50/50 p-4 px-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-brand-teal/10 flex items-center justify-center text-brand-teal">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800 text-sm">SMM Content Calendar Defaults</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Global default day offsets for automatic date calculations.</p>
+                  </div>
+                </div>
+                {canEditSettings && (
+                  <Button 
+                    size="sm" 
+                    className="h-8 text-xs bg-brand-teal hover:bg-brand-teal/90"
+                    onClick={handleSaveAllSettings}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Save className="w-3 h-3 mr-1.5" />}
+                    Save Changes
+                  </Button>
+                )}
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Script Date Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultScriptDateOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultScriptDateOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Shoot Date Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultShootDateOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultShootDateOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Editing Start Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultEditingStartOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultEditingStartOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Approval Offset</Label>
+                    <Input 
+                      type="number" 
+                      className="w-full bg-white border-border focus-visible:ring-brand-teal"
+                      value={settings?.defaultApprovalOffset ?? ""}
+                      onChange={(e) => setSettings({...settings, defaultApprovalOffset: e.target.value ? Number(e.target.value) : undefined})}
+                      disabled={isUpdating || !canEditSettings}
+                    />
                   </div>
                 </div>
               </div>

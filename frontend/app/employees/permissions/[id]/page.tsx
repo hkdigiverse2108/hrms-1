@@ -70,7 +70,8 @@ const PERMISSION_GROUPS = [
       { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
       { moduleName: 'sales', displayName: 'Sales', tabUrl: '/work-management/sales' },
       { moduleName: 'clients', displayName: 'Clients', tabUrl: '/work-management/clients' },
-      { moduleName: 'marketing', displayName: 'Marketing Reports', tabUrl: '/work-management/marketing-reports' },
+      { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
+      { moduleName: 'creative', displayName: 'SMM', tabUrl: '/work-management/smm' },
     ]
   },
   {
@@ -97,6 +98,7 @@ const PERMISSION_GROUPS = [
     name: 'System',
     icon: Settings,
     modules: [
+      { moduleName: 'access-control', displayName: 'Access Control', tabUrl: '/employees/permissions' },
       { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
     ]
   },

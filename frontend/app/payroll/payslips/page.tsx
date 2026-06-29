@@ -73,7 +73,7 @@ const getPayslipNumber = (record: any, allPayrolls: any[]): string => {
   const sorted = [...filtered].sort((a, b) => {
     const idA = a.id || a._id || ''
     const idB = b.id || b._id || ''
-    return idA.localeCompare(idB)
+    return idB.localeCompare(idA)
   })
 
   // Find index of current record
@@ -266,8 +266,10 @@ function SinglePayslip({
             <td className="border-b border-black text-[13px] px-3 py-1.5 text-right"></td>
           </tr>
           <tr>
-            <td className="border-r border-b border-black text-[13px] px-3 py-1.5">Bonus / Incentives</td>
-            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 text-right font-medium">{otherEarnings.toLocaleString('en-IN')}</td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 align-top">
+              <div>Bonus / Incentives</div>
+            </td>
+            <td className="border-r border-b border-black text-[13px] px-3 py-1.5 text-right font-medium align-top">{otherEarnings.toLocaleString('en-IN')}</td>
             <td className="border-r border-b border-black text-[13px] px-3 py-1.5"></td>
             <td className="border-b border-black text-[13px] px-3 py-1.5 text-right"></td>
           </tr>
