@@ -1232,6 +1232,7 @@ class WMTaskBase(BaseModel):
     estimatedHours: Optional[float] = 0
     remarks: Optional[str] = None
     reasonForPending: Optional[str] = None
+    isApproved: Optional[bool] = False
     createdBy: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
@@ -1278,6 +1279,7 @@ class WMTaskUpdate(BaseModel):
     estimatedHours: Optional[float] = None
     remarks: Optional[str] = None
     reasonForPending: Optional[str] = None
+    isApproved: Optional[bool] = None
     
     # Phase & Hierarchy Fields
     phase: Optional[str] = None

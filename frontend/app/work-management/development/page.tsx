@@ -439,6 +439,33 @@ export default function TasksPage() {
     setEditingCell(null);
   };
 
+  const handleToggleApproveTask = async (taskId: string, approveState: boolean) => {
+    const prevTasks = [...tasks];
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isApproved: approveState } : t));
+    try {
+      const res = await fetch(`${API_URL}/wm-tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          isApproved: approveState,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        }),
+      });
+      if (!res.ok) {
+        setTasks(prevTasks);
+        toast.error(`Failed to ${approveState ? "approve" : "disapprove"} task`);
+      } else {
+        toast.success(`Task ${approveState ? "approved" : "disapproved"} successfully`);
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Error toggling task approval:", err);
+      setTasks(prevTasks);
+      toast.error(`An error occurred while ${approveState ? "approving" : "disapproving"} task`);
+    }
+  };
+
   const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)))
     .filter((d: any) => !["sales", "admin", "hr"].includes(d.toLowerCase()));
   const isCreativeDefault = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
@@ -1060,9 +1087,16 @@ export default function TasksPage() {
                   }`}
                 >
                   <div className="space-y-2.5">
-                    {filteredTasks
-                      .filter(t => t.status === stage.id)
-                      .map((task, index) => (
+                    {(() => {
+                      const stageTasks = filteredTasks.filter(t => t.status === stage.id);
+                      if (stage.id === "completed") {
+                        stageTasks.sort((a, b) => {
+                          const aApproved = a.isApproved ? 1 : 0;
+                          const bApproved = b.isApproved ? 1 : 0;
+                          return aApproved - bApproved;
+                        });
+                      }
+                      return stageTasks.map((task, index) => (
                         <Draggable key={task.id} draggableId={task.id} index={index}>
                           {(provided, snapshot) => (
                             <div
@@ -1090,18 +1124,23 @@ export default function TasksPage() {
                                       <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-400 hover:text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
                                     )}
                                   </div>
-                                  {isDueTask(task) && (
-                                    <div className="mb-2 flex items-center gap-1.5">
+                                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                    {isDueTask(task) && (
                                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-500 text-white uppercase tracking-wider shadow-sm animate-pulse">
                                         <AlertTriangle className="w-3 h-3" /> Due
                                       </span>
-                                      {(task.dueDate || task.postingDate) && (
-                                        <span className="text-[10px] font-bold text-rose-600">
-                                          Due: {task.dueDate || task.postingDate}
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
+                                    )}
+                                    {isDueTask(task) && (task.dueDate || task.postingDate) && (
+                                      <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                                        Due: {task.dueDate || task.postingDate}
+                                      </span>
+                                    )}
+                                    {task.isApproved && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-500 text-white uppercase tracking-wider shadow-sm">
+                                        Approved
+                                      </span>
+                                    )}
+                                  </div>
                                   <h4 className="font-medium text-[14.5px] text-slate-800 leading-snug break-words whitespace-pre-wrap">
                                     {task.title}
                                   </h4>
@@ -1125,18 +1164,37 @@ export default function TasksPage() {
                                       </div>
                                       <span className="truncate text-[12px]">{task.assignedToName || "Unassigned"}</span>
                                     </div>
-                                    {task.estimatedHours > 0 && (
-                                      <span className="shrink-0 text-[10px] font-black text-brand-teal bg-brand-teal/10 px-2 py-0.5 rounded-md border border-brand-teal/20 flex items-center gap-1">
-                                        ⏱️ {task.estimatedHours} hrs
-                                      </span>
-                                    )}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      {task.status === "completed" && (isUserAdmin || isTeamLeader) && (
+                                        <Button
+                                          size="sm"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            await handleToggleApproveTask(task.id, !task.isApproved);
+                                          }}
+                                          className={`h-6 px-2 text-[10px] font-bold rounded-md ${
+                                            task.isApproved 
+                                              ? "bg-amber-600 hover:bg-amber-700 text-white" 
+                                              : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                          }`}
+                                        >
+                                          {task.isApproved ? "Disapprove" : "Approve"}
+                                        </Button>
+                                      )}
+                                      {task.estimatedHours > 0 && (
+                                        <span className="shrink-0 text-[10px] font-black text-brand-teal bg-brand-teal/10 px-2 py-0.5 rounded-md border border-brand-teal/20 flex items-center gap-1">
+                                          ⏱️ {task.estimatedHours} hrs
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
                             </div>
                           )}
                         </Draggable>
-                      ))}
+                      ));
+                    })()}
                     {provided.placeholder}
                     {canAddTask && (
                       <div className="pt-2">
