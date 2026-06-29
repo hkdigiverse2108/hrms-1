@@ -1039,16 +1039,15 @@ export default function TasksPage() {
           </div>
         ) : (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex gap-4 h-full overflow-x-auto pb-4 items-start px-2">
+      <div className="flex gap-4 h-full overflow-x-auto pb-4 items-start px-2 custom-scrollbar">
         {STAGES.map(stage => (
-          <div key={stage.id} className="flex flex-col flex-1 min-w-[250px] h-full bg-slate-50/80 rounded-[20px] border border-slate-200 overflow-hidden shadow-sm">
+          <div key={stage.id} className="flex flex-col flex-1 min-w-[230px] h-full bg-slate-50/80 rounded-[20px] border border-slate-200 overflow-hidden shadow-sm">
             <div className="flex items-center justify-between p-4 pb-3">
               <h3 className={`font-semibold text-[15px] ${stage.color}`}>{stage.label}</h3>
               <div className="flex items-center gap-3 text-slate-500">
                 <span className="text-[13px] font-bold bg-slate-200/80 px-2 py-0.5 rounded-full text-slate-600">
                   {filteredTasks.filter(t => t.status === stage.id).length}
                 </span>
-                <MoreHorizontal className="w-5 h-5 cursor-pointer hover:text-slate-700 transition-colors" />
               </div>
             </div>
             
