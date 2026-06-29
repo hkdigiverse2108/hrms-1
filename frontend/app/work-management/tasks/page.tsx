@@ -361,6 +361,14 @@ export default function TasksPage() {
   const isCreativeDefault = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
   const showTableView = viewMode !== null ? viewMode === "table" : isCreativeDefault;
 
+  const isDueTask = (t: any) => {
+    if (!t.assignedToId || t.status === "completed") return false;
+    const taskDate = showTableView ? t.postingDate : t.dueDate;
+    if (!taskDate) return true;
+    const todayStr = new Date().toISOString().split('T')[0];
+    return taskDate <= todayStr || taskDate <= dateFilter;
+  };
+
   const filteredTasks = tasks.filter(t => {
     const assignee = employees.find(e => e.id === t.assignedToId);
     const taskDept = assignee?.department || t.department;
@@ -400,7 +408,7 @@ export default function TasksPage() {
     // Date Filtering
     if (!showAllTasks) {
       const taskDate = showTableView ? t.postingDate : t.dueDate;
-      if (taskDate !== dateFilter) return false;
+      if (taskDate !== dateFilter && !isDueTask(t)) return false;
     }
 
     return true;
@@ -422,15 +430,7 @@ export default function TasksPage() {
 
 
 
-  const isOverdue = (dateString: string, status: string) => {
-    if (!dateString || status === "completed") return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const [y, m, d] = dateString.split('-');
-    const dueDate = new Date(Number(y), Number(m) - 1, Number(d));
-    dueDate.setHours(0, 0, 0, 0);
-    return dueDate < today;
-  };
+
 
   if (permissionsLoading) {
     return (
@@ -605,7 +605,7 @@ export default function TasksPage() {
                           )}
                           <tr 
                       key={task.id} 
-                      className="hover:bg-slate-50/50 transition-colors group"
+                      className={`hover:bg-slate-50/50 transition-colors group ${isDueTask(task) ? 'bg-rose-50/40 border-l-4 border-l-rose-500' : ''}`}
                     >
                       <td className="px-4 py-3 text-center text-slate-400 font-medium">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                       
@@ -669,7 +669,14 @@ export default function TasksPage() {
                           ) : (
                             <div className="flex items-center gap-2 min-h-[20px]">
                               {col.key === 'title' ? (
-                                <span className="font-bold text-slate-800">{task[col.key]}</span>
+                                <div className="flex items-center gap-1.5">
+                                  {isDueTask(task) && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-500 text-white uppercase tracking-wider shrink-0 shadow-sm">
+                                      Due
+                                    </span>
+                                  )}
+                                  <span className="font-bold text-slate-800">{task[col.key]}</span>
+                                </div>
                               ) : col.key === 'projectId' || col.key === 'assignedToId' ? (
                                 <span className={`${col.key === 'projectId' ? 'text-brand-teal' : 'text-slate-600'} font-medium`}>
                                   {task[col.labelKey || col.key]}
@@ -782,6 +789,7 @@ export default function TasksPage() {
                             >
                               <div className={`p-4 rounded-xl transition-all cursor-pointer relative overflow-hidden ${
                                 snapshot.isDragging ? "opacity-90 scale-[1.02] shadow-xl ring-2 ring-brand-teal/20 bg-white" : 
+                                isDueTask(task) ? "bg-rose-50/40 hover:bg-rose-50/70 shadow-sm hover:shadow-md border-2 border-rose-400/80" :
                                 "bg-white hover:bg-slate-50 shadow-sm hover:shadow-md border border-slate-200 hover:border-brand-teal/30"
                               }`}>
                                 
@@ -792,6 +800,18 @@ export default function TasksPage() {
                                       <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-400 hover:text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
                                     )}
                                   </div>
+                                  {isDueTask(task) && (
+                                    <div className="mb-2 flex items-center gap-1.5">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-500 text-white uppercase tracking-wider shadow-sm animate-pulse">
+                                        <AlertTriangle className="w-3 h-3" /> Due
+                                      </span>
+                                      {(task.dueDate || task.postingDate) && (
+                                        <span className="text-[10px] font-bold text-rose-600">
+                                          Due: {task.dueDate || task.postingDate}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                   <h4 className="font-medium text-[14.5px] text-slate-800 leading-snug break-words whitespace-pre-wrap">
                                     {task.title}
                                   </h4>
