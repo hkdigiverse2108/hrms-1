@@ -2990,59 +2990,8 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
 
         await db.projects.update_one({"_id": ObjectId(project_id)}, update_query)
         
-<<<<<<< HEAD
         log_details, diffs = format_field_changes(old_project, update_data, f"Project '{old_project.get('title')}'")
         await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, projectId=project_id)
-=======
-        details = []
-        if "status" in update_data and old_project.get("status") != update_data["status"]:
-            details.append(f"Status changed to {update_data['status']}")
-        if "teamLeaderName" in update_data and old_project.get("teamLeaderName") != update_data["teamLeaderName"]:
-            details.append(f"Team Leader changed to {update_data['teamLeaderName']}")
-        
-        # Creative Field Logging
-        creative_fields_map = {
-            "services": "Services",
-            "post": "Post Count",
-            "reel": "Reel Count",
-            "festivalPost": "Festival Post requirement",
-            "graphicsRequired": "Graphics requirement",
-            "postRequired": "Post requirement",
-            "reelRequired": "Reel requirement"
-        }
-        
-        for field, label in creative_fields_map.items():
-            if field in update_data and old_project.get(field) != update_data[field]:
-                details.append(f"{label} changed to '{update_data[field]}'")
-                
-        # Assignment Logging
-        if "assignedScriptwriterId" in update_data and old_project.get("assignedScriptwriterId") != update_data["assignedScriptwriterId"]:
-            details.append(f"Assigned Scriptwriter updated")
-        if "assignedReelEditorId" in update_data and old_project.get("assignedReelEditorId") != update_data["assignedReelEditorId"]:
-            details.append(f"Assigned Reel Editor updated")
-        if "assignedPostDesignerId" in update_data and old_project.get("assignedPostDesignerId") != update_data["assignedPostDesignerId"]:
-            details.append(f"Assigned Post Designer updated")
-        if "assignedShooterId" in update_data and old_project.get("assignedShooterId") != update_data["assignedShooterId"]:
-            details.append(f"Assigned Shooter updated")
-        if "assignedApproverId" in update_data and old_project.get("assignedApproverId") != update_data["assignedApproverId"]:
-            details.append(f"Assigned Approver updated")
-        if "assignedPosterId" in update_data and old_project.get("assignedPosterId") != update_data["assignedPosterId"]:
-            details.append(f"Assigned Poster updated")
-            
-        # Payment Settings Logging
-        if "paymentStartDate" in update_data and old_project.get("paymentStartDate") != update_data["paymentStartDate"]:
-            details.append(f"Payment Start Date changed to {update_data['paymentStartDate']}")
-        if "paymentDurationMonths" in update_data and old_project.get("paymentDurationMonths") != update_data["paymentDurationMonths"]:
-            details.append(f"Payment Duration changed to {update_data['paymentDurationMonths']} months")
-        if "paymentEndDate" in update_data and old_project.get("paymentEndDate") != update_data["paymentEndDate"]:
-            details.append(f"Payment End Date changed to {update_data['paymentEndDate']}")
-        if "isPaymentReceived" in update_data and old_project.get("isPaymentReceived") != update_data["isPaymentReceived"]:
-            status = "Received" if update_data["isPaymentReceived"] else "Pending"
-            details.append(f"Payment status changed to {status}")
-        
-        log_details = f"Project '{old_project.get('title')}': " + (", ".join(details) if details else "Details updated")
-        await log_activity(db, "Updated", performedBy, userName, log_details, projectId=project_id)
->>>>>>> 6f2d167de58f602caf0a1bb13727e87c341f0175
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
@@ -6047,7 +5996,6 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                                 return int(pts[0])*3600 + int(pts[1])*60 + (int(pts[2]) if len(pts)>2 else 0)
                             except: return 0
                         
-<<<<<<< HEAD
                         def format_t(sec):
                             sec = sec % 86400
                             return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
@@ -6058,23 +6006,12 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                             rec_out += 86400
                             
                         new_breaks = []
-=======
-                    rec_in = parse_t(fmt_start)
-                    rec_out = parse_t(fmt_end)
-                    if rec_out < rec_in:
-                        rec_out += 86400
-                        
-                    new_breaks = []
-                    if recovery_type == "break":
-                        updated_break = False
->>>>>>> 6f2d167de58f602caf0a1bb13727e87c341f0175
                         for b in breaks:
                             b_start = b.get("startTime")
                             b_end = b.get("endTime")
                             if not b_start or not b_end:
                                 new_breaks.append(b)
                                 continue
-<<<<<<< HEAD
                                 
                             b_in = parse_t(b_start)
                             b_out = parse_t(b_end)
@@ -6097,58 +6034,10 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                                     new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
                                 elif b_in < rec_in and b_out <= rec_out:
                                     # Trim end
-=======
-                            
-                            b_in = parse_t(b_start)
-                            b_out = parse_t(b_end)
-                            if b_out < b_in:
-                                b_out += 86400
-                                
-                            overlap_start = max(rec_in, b_in)
-                            overlap_end = min(rec_out, b_out)
-                            if (overlap_start < overlap_end) or (abs(b_in - rec_in) < 60):
-                                b["startTime"] = fmt_start
-                                b["endTime"] = fmt_end
-                                b["duration"] = str(int((rec_out - rec_in) // 60))
-                                new_breaks.append(b)
-                                updated_break = True
-                            else:
-                                new_breaks.append(b)
-                        if not updated_break:
-                            new_breaks.append({
-                                "startTime": fmt_start,
-                                "endTime": fmt_end,
-                                "duration": str(int((rec_out - rec_in) // 60))
-                            })
-                    else:
-                        for b in breaks:
-                            b_start = b.get("startTime")
-                            b_end = b.get("endTime")
-                            if not b_start or not b_end:
-                                new_breaks.append(b)
-                                continue
-                            b_in = parse_t(b_start)
-                            b_out = parse_t(b_end)
-                            if b_out < b_in:
-                                b_out += 86400
-                                
-                            overlap_start = max(rec_in, b_in)
-                            overlap_end = min(rec_out, b_out)
-                            if overlap_start < overlap_end:
-                                if rec_in <= b_in and rec_out >= b_out:
-                                    continue
-                                elif b_in < rec_in and b_out > rec_out:
-                                    new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
-                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
-                                elif b_in >= rec_in and b_out > rec_out:
-                                    new_breaks.append({"startTime": format_t(rec_out), "endTime": b_end, "duration": str(int((b_out - rec_out)//60))})
-                                elif b_in < rec_in and b_out <= rec_out:
->>>>>>> 6f2d167de58f602caf0a1bb13727e87c341f0175
                                     new_breaks.append({"startTime": b_start, "endTime": format_t(rec_in), "duration": str(int((rec_in - b_in)//60))})
                             else:
                                 new_breaks.append(b)
                                 
-<<<<<<< HEAD
                         breaks = new_breaks
 
                         punches.append({
@@ -6165,30 +6054,6 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                     
                     # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
                     merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
-                    
-=======
-                    breaks = new_breaks
-
-                    if recovery_type != "break":
-                        punches.append({
-                            "punchIn": fmt_start,
-                            "punchOut": fmt_end,
-                            "type": recovery_type or "work"
-                        })
-
-                    # Sort/merge punches, sort breaks, and recalculate accumulated work seconds
-                    merged_punches, sorted_breaks, new_accumulated = recalculate_attendance_seconds(punches, breaks)
-                    
-                    if recovery_type != "break":
-                        expected_rec_sec = int(doc.get('recovery_minutes', 0)) * 60
-                        if expected_rec_sec <= 0 and duration_seconds > 0:
-                            expected_rec_sec = duration_seconds
-                        
-                        actual_inc = new_accumulated - old_accumulated
-                        if actual_inc < expected_rec_sec:
-                            new_accumulated += (expected_rec_sec - actual_inc)
-                    
->>>>>>> 6f2d167de58f602caf0a1bb13727e87c341f0175
                     # Recalculate workHours string
                     hours, remainder = divmod(int(new_accumulated), 3600)
                     minutes, _ = divmod(remainder, 60)
