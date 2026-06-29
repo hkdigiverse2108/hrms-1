@@ -3505,6 +3505,10 @@ def format_field_changes(old_doc: dict, update_data: dict, entity_prefix: str = 
         old_str = str(old_val)
         new_str = str(new_val)
         
+        if k == "isApproved":
+            old_str = "Approved" if old_val else "Not Approved"
+            new_str = "Approved" if new_val else "Not Approved"
+        
         if old_str.endswith(".0"): old_str = old_str[:-2]
         if new_str.endswith(".0"): new_str = new_str[:-2]
         
