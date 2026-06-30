@@ -1098,13 +1098,29 @@ export default function TasksPage() {
                   <div className="space-y-2.5">
                     {(() => {
                       const stageTasks = filteredTasks.filter(t => t.status === stage.id);
-                      if (stage.id === "completed") {
-                        stageTasks.sort((a, b) => {
+                      const priorityWeight: Record<string, number> = {
+                        urgent: 4,
+                        high: 3,
+                        medium: 2,
+                        low: 1
+                      };
+                      stageTasks.sort((a, b) => {
+                        if (stage.id === "completed") {
                           const aApproved = a.isApproved ? 1 : 0;
                           const bApproved = b.isApproved ? 1 : 0;
-                          return aApproved - bApproved;
-                        });
-                      }
+                          if (aApproved !== bApproved) {
+                            return aApproved - bApproved;
+                          }
+                        }
+                        const aDate = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+                        const bDate = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+                        if (aDate !== bDate) {
+                          return aDate - bDate;
+                        }
+                        const aPriority = priorityWeight[a.priority || "medium"] || 2;
+                        const bPriority = priorityWeight[b.priority || "medium"] || 2;
+                        return bPriority - aPriority;
+                      });
                       return stageTasks.map((task, index) => (
                         <Draggable 
                           key={task.id} 
