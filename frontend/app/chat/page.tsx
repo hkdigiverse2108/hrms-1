@@ -676,6 +676,7 @@ export default function ChatPage() {
   const [pdfViewerTitle, setPdfViewerTitle] = useState<string>("");
   const [editText, setEditText] = useState("");
   const [chatSummaries, setChatSummaries] = useState<Record<string, any>>({});
+  const [expandedVoterOptionId, setExpandedVoterOptionId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [forwardingMessage, setForwardingMessage] = useState<any>(null);
   const [forwardingMessages, setForwardingMessages] = useState<any[] | null>(null);
@@ -4644,34 +4645,46 @@ export default function ChatPage() {
                                                       </div>
                                                     </div>
                                                   </button>
-
-                                                  {voterEmployees.length > 0 && (
-                                                    <div className="flex items-center gap-1 mt-1 pl-2 animate-in fade-in duration-200">
-                                                      <div className="flex -space-x-1">
-                                                        {voterEmployees.slice(0, 3).map((voter: any, vi: number) => (
-                                                          <div
-                                                            key={voter.id || vi}
-                                                            className="w-4 h-4 rounded-full border border-white overflow-hidden shrink-0 bg-slate-100"
-                                                            title={voter.name || "User"}
-                                                          >
-                                                            {voter.profilePhoto ? (
-                                                              <img src={getAvatarUrl(voter.profilePhoto)} alt="" className="w-full h-full object-cover" />
-                                                            ) : (
-                                                              <div className="w-full h-full flex items-center justify-center text-[7px] font-bold text-slate-500 bg-slate-200">
-                                                                {(voter.name || "?")[0].toUpperCase()}
-                                                              </div>
-                                                            )}
-                                                          </div>
-                                                        ))}
-                                                      </div>
-                                                      <span className="text-[9px] font-medium truncate max-w-[180px] text-slate-400">
-                                                        {voterEmployees.length <= 2
-                                                          ? voterEmployees.map((v: any) => v.name || "User").join(", ")
-                                                          : `${voterEmployees.slice(0, 2).map((v: any) => v.name || "User").join(", ")} +${voterEmployees.length - 2}`
-                                                        }
-                                                      </span>
-                                                    </div>
-                                                  )}
+                                                   {voterEmployees.length > 0 && (
+                                                     <div className="flex flex-col gap-1.5 mt-1.5 pl-2 animate-in fade-in duration-200">
+                                                       <button
+                                                         type="button"
+                                                         onClick={(e) => {
+                                                           e.stopPropagation();
+                                                           const key = `${msg.id}-${option.id}`;
+                                                           setExpandedVoterOptionId(prev => prev === key ? null : key);
+                                                         }}
+                                                         className="flex items-center gap-2 hover:opacity-85 transition-opacity cursor-pointer text-left w-fit"
+                                                       >
+                                                         <div className="flex -space-x-1">
+                                                           {voterEmployees.slice(0, 3).map((voter: any, vi: number) => (
+                                                             <div
+                                                               key={voter.id || vi}
+                                                               className="w-4 h-4 rounded-full border border-white overflow-hidden shrink-0 bg-slate-100 shadow-2xs"
+                                                               title={voter.name || "User"}
+                                                             >
+                                                               {voter.profilePhoto ? (
+                                                                 <img src={getAvatarUrl(voter.profilePhoto)} alt="" className="w-full h-full object-cover" />
+                                                               ) : (
+                                                                 <div className="w-full h-full flex items-center justify-center text-[7px] font-bold text-slate-500 bg-slate-200">
+                                                                   {(voter.name || "?")[0].toUpperCase()}
+                                                                 </div>
+                                                               )}
+                                                             </div>
+                                                           ))}
+                                                         </div>
+                                                         <span className="text-[9px] font-bold text-slate-400 hover:text-brand-teal transition-colors">
+                                                           {voterEmployees.length} {voterEmployees.length === 1 ? "vote" : "votes"}
+                                                         </span>
+                                                       </button>
+                                                       
+                                                       {expandedVoterOptionId === `${msg.id}-${option.id}` && (
+                                                         <div className="text-[9px] font-semibold text-slate-500 leading-normal bg-slate-50/80 p-1.5 rounded-md border border-slate-200/50">
+                                                           {voterEmployees.map((v: any) => v.name || "User").join(", ")}
+                                                         </div>
+                                                       )}
+                                                     </div>
+                                                   )}
                                                 </div>
                                               );
                                             })}
