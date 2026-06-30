@@ -310,6 +310,16 @@ export default function TasksPage() {
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
     const taskId = draggableId;
+    const draggedTask = tasks.find(t => t.id === taskId);
+    
+    const isTLOrAdmin = isUserAdmin || isTeamLeader;
+    const isAssignedToSelf = draggedTask && (draggedTask.assignedToId === user?.id || (user && draggedTask.assignedToId === (user as any).employeeId));
+    
+    if (!isTLOrAdmin && !isAssignedToSelf) {
+      toast.error("You cannot move others' tasks");
+      return;
+    }
+
     const newStatus = destination.droppableId;
     
     await handleStatusChange(taskId, newStatus);
@@ -1097,7 +1107,11 @@ export default function TasksPage() {
                         });
                       }
                       return stageTasks.map((task, index) => (
-                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                        <Draggable 
+                          key={task.id} 
+                          draggableId={task.id} 
+                          index={index}
+                        >
                           {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
@@ -1156,7 +1170,6 @@ export default function TasksPage() {
                                       )}
                                     </div>
                                   )}
-                                  
                                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
                                     <div className="flex items-center gap-1.5 text-slate-600 font-semibold truncate">
                                       <div className="w-4 h-4 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[9px] font-black shrink-0">
