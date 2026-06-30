@@ -1165,6 +1165,7 @@ class ModuleNotebookUpdate(BaseModel):
     researchWork: str
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    noteId: Optional[str] = None
 
 class ModuleCommentCreate(BaseModel):
     moduleName: str

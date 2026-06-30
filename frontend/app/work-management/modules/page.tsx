@@ -120,7 +120,9 @@ export default function ModulesPage() {
   const [notebookContent, setNotebookContent] = useState("");
   const [newCommentText, setNewCommentText] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
-  const [isSavingNotebook, setIsSavingNotebook] = useState(false);
+   const [isSavingNotebook, setIsSavingNotebook] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteContent, setEditNoteContent] = useState("");
 
   // Filters State
   const [filterPhase, setFilterPhase] = useState<string>("all");
@@ -343,9 +345,10 @@ export default function ModulesPage() {
       
       if (pRes.ok) {
         const data = await pRes.json();
-        setProjects(data);
-        if (data.length > 0 && !selectedProjectId) {
-          setSelectedProjectId(data[0].id);
+        const devProjects = data.filter((p: any) => p.department === "Development");
+        setProjects(devProjects);
+        if (devProjects.length > 0 && !selectedProjectId) {
+          setSelectedProjectId(devProjects[0].id);
         }
       }
       
@@ -598,15 +601,57 @@ export default function ModulesPage() {
         })
       });
       if (res.ok) {
-        toast.success("Research notebook updated!");
-        setSelectedModule((prev: any) => ({ ...prev, researchWork: notebookContent }));
+        toast.success("Research note added!");
+        const updatedProj = await res.json();
+        const updatedModule = updatedProj.modules?.find((m: any) => m.name === selectedModule.name && m.phaseName === selectedModule.phaseName);
+        if (updatedModule) {
+          setSelectedModule(updatedModule);
+        }
+        setNotebookContent("");
         setIsEditingNotebook(false);
         fetchData();
       } else {
-        toast.error("Failed to update notebook");
+        toast.error("Failed to add research note");
       }
     } catch (err) {
-      console.error("Error updating notebook:", err);
+      console.error("Error adding research note:", err);
+      toast.error("An error occurred");
+    } finally {
+      setIsSavingNotebook(false);
+    }
+  };
+
+  const handleSaveEditedNote = async (noteId: string) => {
+    if (!selectedModule || !selectedProjectId) return;
+    setIsSavingNotebook(true);
+    try {
+      const res = await fetch(`${API_URL}/projects/${selectedProjectId}/modules/notebook`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          moduleName: selectedModule.name,
+          phaseName: selectedModule.phaseName || null,
+          researchWork: editNoteContent,
+          performedBy: user?.id || (user as any)?.employeeId || "Unknown",
+          userName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || "User",
+          noteId: noteId
+        })
+      });
+      if (res.ok) {
+        toast.success("Research note updated!");
+        const updatedProj = await res.json();
+        const updatedModule = updatedProj.modules?.find((m: any) => m.name === selectedModule.name && m.phaseName === selectedModule.phaseName);
+        if (updatedModule) {
+          setSelectedModule(updatedModule);
+        }
+        setEditingNoteId(null);
+        setEditNoteContent("");
+        fetchData();
+      } else {
+        toast.error("Failed to update research note");
+      }
+    } catch (err) {
+      console.error("Error updating research note:", err);
       toast.error("An error occurred");
     } finally {
       setIsSavingNotebook(false);
@@ -1036,12 +1081,12 @@ export default function ModulesPage() {
                                         </TableCell>
 
                                         <TableCell className="py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                          {canManageModule && (
-                                            <div className="flex items-center justify-center gap-2">
-                                              <button onClick={() => openEditModule(m, phase || null)} className="p-1.5 hover:bg-slate-200 rounded-md text-blue-600 transition-colors" title="Edit Notebook"><BookOpen className="w-4 h-4" /></button>
+                                          <div className="flex items-center justify-center gap-2">
+                                            <button onClick={() => openEditModule(m, phase || null)} className="p-1.5 hover:bg-slate-200 rounded-md text-blue-600 transition-colors" title="Research Notebook"><BookOpen className="w-4 h-4" /></button>
+                                            {canManageModule && (
                                               <button onClick={(e) => handleDeleteModule(e, m)} className="p-1.5 hover:bg-red-100 rounded-md text-red-500 transition-colors" title="Delete Module"><Trash2 className="w-4 h-4" /></button>
-                                            </div>
-                                          )}
+                                            )}
+                                          </div>
                                         </TableCell>
                                       </TableRow>
                                     );
@@ -1411,13 +1456,7 @@ export default function ModulesPage() {
 
             <TabsContent value="notebook" className="flex-1 min-h-0 p-6 m-0 overflow-hidden focus-visible:outline-none focus-visible:ring-0">
               {(() => {
-                const isAssignee = user && selectedModule && (
-                  selectedModule.assignedToId === user.id || 
-                  selectedModule.assignedToId === (user as any).employeeId
-                );
-                const isUnassigned = selectedModule && !selectedModule.assignedToId;
-                const isAdminOrTL = canManageModule;
-                const canEditResearch = Boolean(isAssignee || isUnassigned || isAdminOrTL);
+                const canEditResearch = true;
 
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-6 h-full min-h-0">
@@ -1432,34 +1471,30 @@ export default function ModulesPage() {
                           <Button 
                             size="sm" 
                             variant="outline" 
-                            onClick={() => setIsEditingNotebook(true)}
+                            onClick={() => {
+                              setNotebookContent("");
+                              setIsEditingNotebook(true);
+                            }}
                             className="h-8 text-xs font-bold text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5 cursor-pointer"
                           >
-                            <Pencil className="w-3 h-3 mr-1.5" />
-                            {selectedModule?.researchWork ? "Edit Notes" : "Add Notes"}
+                            <Plus className="w-3 h-3 mr-1.5" />
+                            Add Note
                           </Button>
                         )}
                         {isEditingNotebook && (
                           <div className="flex items-center gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => { setIsEditingNotebook(false); setNotebookContent(selectedModule?.researchWork || ""); }} className="h-8 text-xs font-semibold text-slate-500 cursor-pointer">
+                            <Button size="sm" variant="ghost" onClick={() => { setIsEditingNotebook(false); setNotebookContent(""); }} className="h-8 text-xs font-semibold text-slate-500 cursor-pointer">
                               Cancel
                             </Button>
                             <Button size="sm" onClick={handleSaveNotebook} disabled={isSavingNotebook} className="h-8 text-xs font-bold bg-brand-teal hover:bg-brand-teal/90 text-white shadow-sm cursor-pointer">
                               {isSavingNotebook && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
-                              Save Notes
+                              Save Note
                             </Button>
                           </div>
                         )}
                       </div>
 
                       <div className="flex-1 overflow-y-auto p-5 min-h-0 custom-scrollbar relative">
-                        {!canEditResearch && (
-                          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-amber-800 text-xs mb-4 shadow-2xs">
-                            <Eye className="w-4 h-4 text-amber-600 shrink-0" />
-                            <span>You have <strong>view-only access</strong> to this research work. You can collaborate by adding comments on the right.</span>
-                          </div>
-                        )}
-
                         {isEditingNotebook ? (
                           <div className="h-full flex flex-col -mx-2">
                             <style>{`
@@ -1476,27 +1511,89 @@ export default function ModulesPage() {
                               className="flex-1 flex flex-col notebook-editor"
                             />
                           </div>
+                        ) : (selectedModule?.researchNotes && selectedModule.researchNotes.length > 0) ? (
+                          <div className="space-y-4">
+                            {selectedModule.researchNotes.map((note: any, idx: number) => {
+                              const isOwnNote = user && (note.userId === user.id || note.userId === (user as any).employeeId);
+                              return (
+                                <div key={note.id || idx} className="p-4 bg-slate-50/40 border border-slate-200 rounded-xl shadow-xs">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                                        {note.userName ? note.userName[0] : 'U'}
+                                      </div>
+                                      <span className="font-bold text-xs text-slate-800">{note.userName}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-[10px] text-slate-400 font-semibold">
+                                        {note.createdAt} {note.editedAt && `(Edited ${note.editedAt})`}
+                                      </span>
+                                      {isOwnNote && editingNoteId !== note.id && (
+                                        <button 
+                                          onClick={() => {
+                                            setEditingNoteId(note.id);
+                                            setEditNoteContent(note.content);
+                                          }}
+                                          className="text-xs font-bold text-brand-teal hover:underline cursor-pointer"
+                                        >
+                                          Edit
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {editingNoteId === note.id ? (
+                                    <div className="space-y-3 mt-2">
+                                      <ReactQuill
+                                        theme="snow"
+                                        modules={quillModules}
+                                        value={editNoteContent}
+                                        onChange={setEditNoteContent}
+                                        className="bg-white rounded-lg"
+                                      />
+                                      <div className="flex justify-end gap-2">
+                                        <Button size="sm" variant="ghost" onClick={() => setEditingNoteId(null)} className="h-7 text-xs font-semibold">
+                                          Cancel
+                                        </Button>
+                                        <Button size="sm" onClick={() => handleSaveEditedNote(note.id)} disabled={isSavingNotebook} className="h-7 text-xs font-bold bg-brand-teal text-white">
+                                          {isSavingNotebook && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                                          Save
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="ql-container ql-snow border-none !font-sans">
+                                      <div 
+                                        className="ql-editor !p-0 text-slate-800 text-sm leading-relaxed whitespace-pre-wrap select-text"
+                                        dangerouslySetInnerHTML={{ __html: note.content }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         ) : selectedModule?.researchWork ? (
-                          <div className="ql-container ql-snow border-none !font-sans">
-                            <div 
-                              className="ql-editor !p-0 text-slate-800 text-sm leading-relaxed whitespace-pre-wrap select-text"
-                              dangerouslySetInnerHTML={{ __html: selectedModule.researchWork }}
-                            />
+                          <div className="p-4 bg-slate-50/40 border border-slate-200 rounded-xl shadow-xs">
+                            <div className="ql-container ql-snow border-none !font-sans">
+                              <div 
+                                className="ql-editor !p-0 text-slate-800 text-sm leading-relaxed whitespace-pre-wrap select-text"
+                                dangerouslySetInnerHTML={{ __html: selectedModule.researchWork }}
+                              />
+                            </div>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center justify-center h-full text-center py-16 text-slate-400">
                             <BookOpen className="w-12 h-12 stroke-1 mb-3 opacity-40 text-slate-300" />
-                            <p className="text-sm font-semibold text-slate-600">No Research Work Added</p>
+                            <p className="text-sm font-semibold text-slate-600">No Research Notes Added</p>
                             <p className="text-xs text-slate-400 mt-1 max-w-xs">Research notes, links, and documentation will appear here once added.</p>
-                            {canEditResearch && (
-                              <Button 
-                                size="sm" 
-                                onClick={() => setIsEditingNotebook(true)}
-                                className="mt-5 bg-brand-teal hover:bg-brand-teal/90 text-white font-bold text-xs h-9 px-4 shadow-sm cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5 mr-1.5" /> Start Research Work
-                              </Button>
-                            )}
+                            <Button 
+                              size="sm" 
+                              onClick={() => setIsEditingNotebook(true)}
+                              className="mt-5 bg-brand-teal hover:bg-brand-teal/90 text-white font-bold text-xs h-9 px-4 shadow-sm cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5 mr-1.5" /> Start Research Notes
+                            </Button>
                           </div>
                         )}
                       </div>

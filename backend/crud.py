@@ -3031,12 +3031,35 @@ async def update_module_notebook(db, project_id: str, payload: schemas.ModuleNot
         return None
     modules = project.get("modules") or []
     updated = False
+    from datetime import datetime
+    import uuid
     for m in modules:
         m_phase = m.get("phaseName") or ""
         p_phase = payload.phaseName or ""
         if m.get("name") == payload.moduleName and m_phase == p_phase:
+            if "researchNotes" not in m or not isinstance(m["researchNotes"], list):
+                m["researchNotes"] = []
+            
+            if payload.noteId:
+                # Edit existing note
+                for note in m["researchNotes"]:
+                    if note.get("id") == payload.noteId:
+                        note["content"] = payload.researchWork
+                        note["editedAt"] = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+                        updated = True
+                        break
+            else:
+                # Add new note
+                if payload.researchWork.strip():
+                    m["researchNotes"].append({
+                        "id": str(uuid.uuid4()),
+                        "content": payload.researchWork,
+                        "userName": payload.userName or "Unknown User",
+                        "userId": payload.performedBy or "Unknown",
+                        "createdAt": datetime.now().strftime("%Y-%m-%d %I:%M %p")
+                    })
+                    updated = True
             m["researchWork"] = payload.researchWork
-            updated = True
             break
             
     if updated:
