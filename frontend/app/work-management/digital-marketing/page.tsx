@@ -629,6 +629,7 @@ export default function MarketingReportsPage() {
   });
 
   const [quickAddData, setQuickAddData] = useState({
+    date: "",
     projectId: "",
     projectName: "",
     campaignName: "",
@@ -797,7 +798,8 @@ export default function MarketingReportsPage() {
   };
 
   const handleQuickAddSubmit = async (clientId: string, clientName: string) => {
-    if (!quickAddData.campaignName || !dateRange?.from) {
+    const chosenDate = quickAddData.date || (dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : "");
+    if (!quickAddData.campaignName || !chosenDate) {
       toast.error("Please enter a campaign name and ensure a date is selected.");
       return;
     }
@@ -814,9 +816,10 @@ export default function MarketingReportsPage() {
 
     setIsQuickAdding(true);
     try {
-      let submitDateStr = dateRange.from.toISOString();
-      if (dateRange.from) {
-         submitDateStr = new Date(Date.UTC(dateRange.from.getFullYear(), dateRange.from.getMonth(), dateRange.from.getDate())).toISOString();
+      let submitDateStr = new Date().toISOString();
+      if (chosenDate) {
+         const parsed = new Date(chosenDate);
+         submitDateStr = new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())).toISOString();
       }
 
       const response = await fetch(`${API_URL}/marketing/reports/daily`, {
@@ -842,6 +845,7 @@ export default function MarketingReportsPage() {
       if (response.ok) {
         toast.success("Daily report added successfully");
         setQuickAddData({
+          date: quickAddData.date,
           projectId: quickAddData.projectId,
           projectName: quickAddData.projectName,
           campaignName: "",
@@ -3040,6 +3044,16 @@ export default function MarketingReportsPage() {
                         </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div className="space-y-2">
+                        <Label>Date</Label>
+                        <Input 
+                          type="date"
+                          className="h-10 bg-white text-xs font-bold text-slate-700" 
+                          value={quickAddData.date || (dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : "")}
+                          onChange={(e) => setQuickAddData({...quickAddData, date: e.target.value})}
+                          required
+                        />
+                      </div>
                       <div className="space-y-2">
                         <Label>Project</Label>
                         {(() => {
