@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2 } from "lucide-react";
+import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, History } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -123,6 +123,9 @@ export default function ModulesPage() {
    const [isSavingNotebook, setIsSavingNotebook] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteContent, setEditNoteContent] = useState("");
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [projectLogs, setProjectLogs] = useState<any[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
   // Filters State
   const [filterPhase, setFilterPhase] = useState<string>("all");
@@ -658,6 +661,22 @@ export default function ModulesPage() {
     }
   };
 
+  const fetchProjectLogs = async () => {
+    if (!selectedProjectId) return;
+    setIsLoadingLogs(true);
+    setLogsOpen(true);
+    try {
+      const res = await fetch(`${API_URL}/task-logs?projectId=${selectedProjectId}`);
+      if (res.ok) {
+        setProjectLogs(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching project logs:", err);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCommentText.trim() || !selectedModule || !selectedProjectId) return;
@@ -786,6 +805,14 @@ export default function ModulesPage() {
                           className="h-7 text-xs font-bold gap-1.5 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
                         >
                           <Key className="w-3.5 h-3.5 text-brand-teal" /> Integrations & Credentials {(selectedProject.thirdPartyIntegrations?.length || 0) > 0 && `(${selectedProject.thirdPartyIntegrations.length})`}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={fetchProjectLogs}
+                          className="h-7 text-xs font-bold gap-1.5 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
+                        >
+                          <History className="w-3.5 h-3.5 text-brand-teal" /> View Activity Logs
                         </Button>
                       </div>
                     )}
@@ -1896,6 +1923,64 @@ export default function ModulesPage() {
                 Save Links & Credentials
               </Button>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Activity Logs Dialog */}
+      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 gap-0 bg-slate-50 border-slate-200 shadow-2xl">
+          <div className="p-6 pb-4 bg-white border-b border-slate-200 shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2.5">
+                  <History className="w-5 h-5 text-brand-teal" />
+                  Project Activity Logs
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500 mt-1">
+                  Historical record of all module and notebook changes for this project.
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+            {isLoadingLogs ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                <Loader2 className="w-8 h-8 animate-spin text-brand-teal mb-3" />
+                <p className="text-sm font-medium">Loading activity history...</p>
+              </div>
+            ) : projectLogs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
+                <History className="w-12 h-12 stroke-1 mb-3 opacity-40 text-slate-300" />
+                <p className="text-sm font-semibold text-slate-600">No Activity Logs Found</p>
+                <p className="text-xs text-slate-400 mt-1">Activities such as creating modules, updating stages, and adding research notes will be logged here.</p>
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {projectLogs.map((log: any) => (
+                  <div key={log.id} className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs transition-all hover:border-slate-300">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-brand-teal/10 text-brand-teal border border-brand-teal/20">
+                        {log.action}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-bold">{log.timestamp}</span>
+                    </div>
+                    <p className="text-sm text-slate-800 font-medium leading-relaxed">{log.details}</p>
+                    <div className="mt-2.5 pt-2 border-t border-slate-100/60 flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold">
+                      <span>Performed by:</span>
+                      <strong className="text-slate-700">{log.userName}</strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 border-t border-slate-200 bg-white flex justify-end shrink-0">
+            <Button variant="outline" onClick={() => setLogsOpen(false)} className="font-bold text-xs h-9 px-4 cursor-pointer">
+              Close History
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

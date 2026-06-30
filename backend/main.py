@@ -1314,18 +1314,35 @@ async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None
 async def create_wm_task(task: schemas.WMTaskCreate, db=Depends(get_db)):
     if task.status == "pending" and (not task.reasonForPending or not task.reasonForPending.strip()):
         raise HTTPException(status_code=400, detail="Reason for pending is required when marking a task as pending")
+    if task.status == "in-progress" and task.assignedToId:
+        existing = await db.wm_tasks.find_one({"assignedToId": task.assignedToId, "status": "in-progress"})
+        if existing:
+            raise HTTPException(status_code=400, detail="already a task in progress")
     return await crud.create_wm_task(db, task=task)
 
 @app.put("/wm-tasks/{task_id}", response_model=schemas.WMTask)
 async def update_wm_task(task_id: str, task_update: schemas.WMTaskUpdate, db=Depends(get_db)):
+    from bson import ObjectId
     if task_update.status == "pending":
         reason = task_update.reasonForPending
         if not reason or not reason.strip():
             # Check existing task in db
-            from bson import ObjectId
             existing = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
             if not existing or not existing.get("reasonForPending") or not existing.get("reasonForPending").strip():
                 raise HTTPException(status_code=400, detail="Reason for pending is required when marking a task as pending")
+                
+    if task_update.status == "in-progress":
+        current_task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+        assignee_id = task_update.assignedToId or (current_task.get("assignedToId") if current_task else None)
+        if assignee_id:
+            existing = await db.wm_tasks.find_one({
+                "assignedToId": assignee_id,
+                "status": "in-progress",
+                "_id": {"$ne": ObjectId(task_id)}
+            })
+            if existing:
+                raise HTTPException(status_code=400, detail="already a task in progress")
+
     updated = await crud.update_wm_task(db, task_id, task_update)
     if not updated:
         raise HTTPException(status_code=404, detail="Task not found")

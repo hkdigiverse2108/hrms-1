@@ -3003,6 +3003,36 @@ async def update_project(db, project_id: str, project_update: schemas.ProjectUpd
         
         log_details, diffs = format_field_changes(old_project, update_data, f"Project '{old_project.get('title')}'")
         await log_activity(db, "Updated", performedBy, userName, log_details, diffs=diffs, projectId=project_id)
+
+        # Log detailed module changes
+        if "modules" in update_data:
+            old_modules = old_project.get("modules") or []
+            new_modules = update_data.get("modules") or []
+            
+            # Check for additions
+            added_modules = [m for m in new_modules if not any(om.get("name") == m.get("name") and om.get("phaseName") == m.get("phaseName") for om in old_modules)]
+            # Check for deletions
+            deleted_modules = [m for m in old_modules if not any(nm.get("name") == m.get("name") and nm.get("phaseName") == m.get("phaseName") for nm in new_modules)]
+            # Check for updates
+            for nm in new_modules:
+                for om in old_modules:
+                    if nm.get("name") == om.get("name") and nm.get("phaseName") == om.get("phaseName"):
+                        changes = []
+                        for field in ["stage", "priority", "estimatedHours", "assignedToId", "dueDate"]:
+                            if nm.get(field) != om.get(field):
+                                old_val = om.get(field) or "None"
+                                new_val = nm.get(field) or "None"
+                                if field == "assignedToId":
+                                    old_val = om.get("assignedToName") or "Unassigned"
+                                    new_val = nm.get("assignedToName") or "Unassigned"
+                                changes.append(f"{field.replace('Id', '')}: '{old_val}' -> '{new_val}'")
+                        if changes:
+                            await log_activity(db, "Module Updated", performedBy, userName, f"Updated module '{nm.get('name')}' in project '{old_project.get('title')}': {', '.join(changes)}", projectId=project_id)
+            
+            for am in added_modules:
+                await log_activity(db, "Module Created", performedBy, userName, f"Added module '{am.get('name')}' to project '{old_project.get('title')}'", projectId=project_id)
+            for dm in deleted_modules:
+                await log_activity(db, "Module Deleted", performedBy, userName, f"Deleted module '{dm.get('name')}' from project '{old_project.get('title')}'", projectId=project_id)
         
         try:
             await ws_manager.broadcast_all("data_refresh", {"entity": "projects"})
@@ -3047,6 +3077,7 @@ async def update_module_notebook(db, project_id: str, payload: schemas.ModuleNot
                         note["content"] = payload.researchWork
                         note["editedAt"] = datetime.now().strftime("%Y-%m-%d %I:%M %p")
                         updated = True
+                        await log_activity(db, "Module Note Edited", payload.performedBy or "Unknown", payload.userName or "User", f"Edited a research note in module '{payload.moduleName}'", projectId=project_id)
                         break
             else:
                 # Add new note
@@ -3059,6 +3090,7 @@ async def update_module_notebook(db, project_id: str, payload: schemas.ModuleNot
                         "createdAt": datetime.now().strftime("%Y-%m-%d %I:%M %p")
                     })
                     updated = True
+                    await log_activity(db, "Module Note Added", payload.performedBy or "Unknown", payload.userName or "User", f"Added a new research note to module '{payload.moduleName}'", projectId=project_id)
             m["researchWork"] = payload.researchWork
             break
             

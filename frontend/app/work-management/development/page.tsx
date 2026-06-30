@@ -342,20 +342,19 @@ export default function TasksPage() {
       reason = inputReason.trim();
     }
 
-    const prevTasks = [...tasks];
-    const hasOtherInProgress = newStatus === "in-progress" && prevTasks.some(t => t.id !== taskId && t.assignedToId === assigneeId && t.status === "in-progress");
-    
+    if (newStatus === "in-progress" && assigneeId) {
+      const hasOtherInProgress = tasks.some(t => t.id !== taskId && t.assignedToId === assigneeId && t.status === "in-progress");
+      if (hasOtherInProgress) {
+        toast.error("already a task in progress");
+        return;
+      }
+    }
+
     const updatedTasks = tasks.map(t => {
       if (t.id === taskId) return { ...t, status: newStatus, reasonForPending: reason || t.reasonForPending };
-      if (newStatus === "in-progress" && assigneeId && t.assignedToId === assigneeId && t.status === "in-progress") {
-        return { ...t, status: "todo" };
-      }
       return t;
     });
     setTasks(updatedTasks);
-    if (hasOtherInProgress) {
-      toast.info("Previous in-progress task moved to To Do (only 1 task allowed in progress)");
-    }
 
     try {
       const payload: any = { 
