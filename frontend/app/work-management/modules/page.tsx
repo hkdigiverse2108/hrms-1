@@ -211,22 +211,32 @@ export default function ModulesPage() {
     setEditingCell(null);
   };
 
-  const handleQuickAddModule = async () => {
+  const [quickAddInputs, setQuickAddInputs] = useState<Record<string, any>>({});
+
+  const updateQuickAddInput = (phaseKey: string, field: string, value: any) => {
+    setQuickAddInputs(prev => ({
+      ...prev,
+      [phaseKey]: {
+        ...(prev[phaseKey] || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  const handleQuickAddModule = async (phaseName: string | null) => {
     if (!selectedProject) return;
-    if (!quickAddModule.name.trim()) {
+    const phaseKey = phaseName || "general";
+    const input = quickAddInputs[phaseKey] || {};
+    
+    if (!input.name?.trim()) {
       toast.error("Module name is required");
       return;
     }
 
     const project = selectedProject;
-    if (project.phases && project.phases.length > 0 && !quickAddModule.phaseName) {
-      toast.error("Please select a phase for the module");
-      return;
-    }
-
-    if (quickAddModule.dueDate) {
-      const moduleDate = new Date(quickAddModule.dueDate);
-      const phase = project.phases?.find((p: any) => p.name === quickAddModule.phaseName);
+    if (input.dueDate) {
+      const moduleDate = new Date(input.dueDate);
+      const phase = project.phases?.find((p: any) => p.name === phaseName);
       if (phase && phase.endDate) {
         if (moduleDate > new Date(phase.endDate)) {
           toast.error("Module deadline cannot exceed Phase deadline");
@@ -243,19 +253,19 @@ export default function ModulesPage() {
       }
     }
 
-    const finalAssignedId = quickAddModule.assignedToId || user?.id || "";
+    const finalAssignedId = input.assignedToId || user?.id || "";
     const assignee = employees.find(emp => emp.id === finalAssignedId);
     const creatorName = user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || null;
     
     const newModule = {
-      name: quickAddModule.name.trim(),
-      phaseName: quickAddModule.phaseName || null,
-      dueDate: quickAddModule.dueDate || null,
+      name: input.name.trim(),
+      phaseName: phaseName || null,
+      dueDate: input.dueDate || null,
       assignedToId: finalAssignedId,
       assignedToName: assignee ? `${assignee.firstName} ${assignee.lastName}` : (finalAssignedId === user?.id ? creatorName : null),
-      stage: quickAddModule.stage,
-      priority: quickAddModule.priority,
-      estimatedHours: quickAddModule.estimatedHours || 0
+      stage: input.stage || "todo",
+      priority: input.priority || "medium",
+      estimatedHours: input.estimatedHours || 0
     };
 
     const updatedModules = [...(project.modules || []), newModule];
@@ -273,15 +283,17 @@ export default function ModulesPage() {
       });
       if (res.ok) {
         toast.success("Module added successfully");
-        setQuickAddModule({
-          name: "",
-          phaseName: project.phases?.[0]?.name || "",
-          stage: "todo",
-          priority: "medium",
-          estimatedHours: 0,
-          assignedToId: "",
-          dueDate: ""
-        });
+        setQuickAddInputs(prev => ({
+          ...prev,
+          [phaseKey]: {
+            name: "",
+            stage: "todo",
+            priority: "medium",
+            estimatedHours: 0,
+            assignedToId: "",
+            dueDate: ""
+          }
+        }));
         fetchData();
       } else {
         toast.error("Failed to add module");
@@ -865,317 +877,126 @@ export default function ModulesPage() {
                       </Button>
                     )}
                   </div>
-                </div>
+                </div>                <div className="flex-1 bg-slate-50/30 overflow-y-auto min-h-0 custom-scrollbar">
+                  {(() => {
+                    const phases = selectedProject.phases || [];
+                    const modules = selectedProject.modules || [];
+                    
+                    const renderPhaseTable = (phaseName: string | null, displayName: string) => {
+                      const phaseModules = modules.filter((m: any) => {
+                        const matchPhase = phaseName === null ? !m.phaseName : m.phaseName === phaseName;
+                        const matchAssignee = filterAssignee === "all" || 
+                          (filterAssignee === "unassigned" ? !m.assignedToId : m.assignedToId === filterAssignee);
+                        return matchPhase && matchAssignee;
+                      });
 
-                <div className="flex-1 bg-slate-50/30 overflow-y-auto min-h-0">
-                  {(selectedProject.modules && selectedProject.modules.length > 0) ? (
-                    <div className="p-6 pt-4">
-                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                        <Table>
-                          <TableHeader className="bg-slate-50/80">
-                            <TableRow className="hover:bg-transparent">
-                              <TableHead className="font-bold text-slate-700 h-12">Module Name</TableHead>
-                              {selectedProject.phases?.length > 0 && (
-                                <TableHead className="font-bold text-slate-700 h-12">Phase</TableHead>
+                      // If there are no modules in this phase, and user cannot manage modules, hide the slab
+                      if (!canManageModule && phaseModules.length === 0) {
+                        return null;
+                      }
+
+                      const phaseKey = phaseName || "general";
+                      const input = quickAddInputs[phaseKey] || {
+                        name: "",
+                        stage: "todo",
+                        priority: "medium",
+                        estimatedHours: 0,
+                        assignedToId: "",
+                        dueDate: ""
+                      };
+
+                      return (
+                        <div key={phaseKey} className="p-6 pb-2">
+                          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+                            <div className="p-4 px-5 border-b border-slate-200 bg-slate-50/60 flex items-center justify-between">
+                              <h3 className="font-extrabold text-sm text-slate-800 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-brand-teal" />
+                                {displayName}
+                              </h3>
+                              {phaseName && (
+                                <span className="text-[10px] font-extrabold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-md shadow-2xs">
+                                  {phases.find((p: any) => p.name === phaseName)?.startDate} to {phases.find((p: any) => p.name === phaseName)?.endDate}
+                                </span>
                               )}
-                              <TableHead className="font-bold text-slate-700 h-12">Stage</TableHead>
-                              <TableHead className="font-bold text-slate-700 h-12">Priority</TableHead>
-<TableHead className="font-bold text-slate-700 h-12">Hours</TableHead>
-                              <TableHead className="font-bold text-slate-700 h-12">Assigned To</TableHead>
-                              <TableHead className="font-bold text-slate-700 h-12">Due Date</TableHead>
-                              <TableHead className="font-bold text-slate-700 h-12 w-24 text-center">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {(() => {
-                              const filteredModules = selectedProject.modules.filter((m: any) => {
-                                const matchPhase = filterPhase === "all" || m.phaseName === filterPhase;
-                                const matchAssignee = filterAssignee === "all" || 
-                                  (filterAssignee === "unassigned" ? !m.assignedToId : m.assignedToId === filterAssignee);
-                                return matchPhase && matchAssignee;
-                              });
+                            </div>
 
-                              return (
-                                <>
-                                  {filteredModules.map((m: any, i: number) => {
-                                    const phase = selectedProject.phases?.find((p: any) => p.name === m.phaseName);
-                                    return (
-                                      <TableRow 
-                                        key={i}
-                                        className="hover:bg-slate-50/50 transition-colors group"
-                                      >
-                                        <TableCell className="font-semibold text-slate-800 py-3 min-w-[200px]">
-                                          {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "name" ? (
-                                            <Input
-                                              defaultValue={m.name}
-                                              autoFocus
-                                              onBlur={(e) => handleInlineUpdateModule(m, "name", e.target.value)}
-                                              onKeyDown={(e) => {
-                                                if (e.key === "Enter") {
-                                                  handleInlineUpdateModule(m, "name", e.currentTarget.value);
-                                                } else if (e.key === "Escape") {
-                                                  setEditingCell(null);
-                                                }
-                                              }}
-                                              className="h-8 text-xs font-semibold"
-                                            />
-                                          ) : (
-                                            <div 
-                                              className="flex items-center gap-2.5 cursor-pointer" 
-                                              onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "name" })}
-                                            >
-                                              <div className="w-1.5 h-1.5 rounded-full bg-brand-teal shrink-0" />
-                                              <span className="truncate">{m.name}</span>
-                                            </div>
-                                          )}
-                                        </TableCell>
-
-                                        {selectedProject.phases?.length > 0 && (
-                                          <TableCell className="text-slate-600 font-medium py-3 min-w-[150px]">
-                                            {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "phaseName" ? (
-                                              <Select
-                                                value={m.phaseName || "none"}
-                                                onValueChange={(val) => handleInlineUpdateModule(m, "phaseName", val === "none" ? null : val)}
-                                              >
-                                                <SelectTrigger className="h-8 text-xs font-medium">
-                                                  <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  <SelectItem value="none">No Phase</SelectItem>
-                                                  {selectedProject.phases?.map((p: any) => (
-                                                    <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
-                                                  ))}
-                                                </SelectContent>
-                                              </Select>
-                                            ) : (
-                                              <div 
-                                                className="cursor-pointer"
-                                                onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "phaseName" })}
-                                              >
-                                                {m.phaseName || "—"}
-                                              </div>
-                                            )}
-                                          </TableCell>
-                                        )}
-
-                                        <TableCell className="py-3 min-w-[130px]">
-                                          {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "stage" ? (
-                                            <Select
-                                              value={m.stage || "todo"}
-                                              onValueChange={(val) => handleInlineUpdateModule(m, "stage", val)}
-                                            >
-                                              <SelectTrigger className="h-8 text-xs font-medium">
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                <SelectItem value="todo">To Do</SelectItem>
-                                                <SelectItem value="in-progress">In Progress</SelectItem>
-                                                <SelectItem value="bugs">Bugs</SelectItem>
-                                                <SelectItem value="onhold">On Hold</SelectItem>
-                                                <SelectItem value="pending">Pending</SelectItem>
-                                                <SelectItem value="completed">Completed</SelectItem>
-                                              </SelectContent>
-                                            </Select>
-                                          ) : (
-                                            <div 
-                                              className="cursor-pointer"
-                                              onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "stage" })}
-                                            >
-                                              <span className="capitalize text-[11px] font-bold tracking-wide bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md border border-slate-200">
-                                                {m.stage || "To Do"}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </TableCell>
-
-                                        <TableCell className="py-3 min-w-[110px]">
-                                          {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "priority" ? (
-                                            <Select
-                                              value={m.priority || "medium"}
-                                              onValueChange={(val) => handleInlineUpdateModule(m, "priority", val)}
-                                            >
-                                              <SelectTrigger className="h-8 text-xs font-medium">
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                <SelectItem value="low">Low</SelectItem>
-                                                <SelectItem value="medium">Medium</SelectItem>
-                                                <SelectItem value="high">High</SelectItem>
-                                                <SelectItem value="urgent">Urgent</SelectItem>
-                                              </SelectContent>
-                                            </Select>
-                                          ) : (
-                                            <div 
-                                              className="cursor-pointer"
-                                              onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "priority" })}
-                                            >
-                                              <span className={`capitalize text-[11px] font-bold tracking-wide px-2.5 py-1 rounded-md border ${
-                                                m.priority === 'urgent' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                m.priority === 'high' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                                                m.priority === 'low' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                'bg-blue-50 text-blue-700 border-blue-200'
-                                              }`}>
-                                                {m.priority || "Medium"}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </TableCell>
-
-                                        <TableCell className="py-3 min-w-[100px]">
-                                          {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "estimatedHours" ? (
-                                            <Input
-                                              type="number"
-                                              defaultValue={m.estimatedHours || 0}
-                                              autoFocus
-                                              onBlur={(e) => handleInlineUpdateModule(m, "estimatedHours", parseFloat(e.target.value) || 0)}
-                                              onKeyDown={(e) => {
-                                                if (e.key === "Enter") {
-                                                  handleInlineUpdateModule(m, "estimatedHours", parseFloat(e.currentTarget.value) || 0);
-                                                } else if (e.key === "Escape") {
-                                                  setEditingCell(null);
-                                                }
-                                              }}
-                                              className="h-8 text-xs font-semibold w-20"
-                                            />
-                                          ) : (
-                                            <div 
-                                              className="text-sm font-extrabold text-brand-teal cursor-pointer"
-                                              onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "estimatedHours" })}
-                                            >
-                                              {m.estimatedHours ? `${m.estimatedHours} hrs` : "—"}
-                                            </div>
-                                          )}
-                                        </TableCell>
-
-                                        <TableCell className="text-slate-600 py-3 min-w-[160px]">
-                                          {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "assignedToId" ? (
-                                            <Select
-                                              value={m.assignedToId || "unassigned"}
-                                              onValueChange={(val) => handleInlineUpdateModule(m, "assignedToId", val)}
-                                            >
-                                              <SelectTrigger className="h-8 text-xs font-medium">
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                <SelectItem value="unassigned">Unassigned</SelectItem>
-                                                {employees.map((e: any) => (
-                                                  <SelectItem key={e.id} value={e.id}>{e.firstName} {e.lastName}</SelectItem>
-                                                ))}
-                                              </SelectContent>
-                                            </Select>
-                                          ) : (
-                                            <div 
-                                              className="cursor-pointer"
-                                              onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "assignedToId" })}
-                                            >
-                                              {m.assignedToName ? (
-                                                <div className="flex items-center gap-1.5 text-sm font-medium"><User className="w-3.5 h-3.5 text-slate-400" /> {m.assignedToName}</div>
-                                              ) : (
-                                                <span className="text-slate-400 text-sm italic">Unassigned</span>
-                                              )}
-                                            </div>
-                                          )}
-                                        </TableCell>
-
-                                        <TableCell className="text-slate-600 py-3 min-w-[140px]">
-                                          {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "dueDate" ? (
-                                            <Input
-                                              type="date"
-                                              defaultValue={m.dueDate || ""}
-                                              autoFocus
-                                              onBlur={(e) => handleInlineUpdateModule(m, "dueDate", e.target.value || null)}
-                                              onKeyDown={(e) => {
-                                                if (e.key === "Enter") {
-                                                  handleInlineUpdateModule(m, "dueDate", e.currentTarget.value || null);
-                                                } else if (e.key === "Escape") {
-                                                  setEditingCell(null);
-                                                }
-                                              }}
-                                              className="h-8 text-xs font-semibold"
-                                            />
-                                          ) : (
-                                            <div 
-                                              className="cursor-pointer"
-                                              onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "dueDate" })}
-                                            >
-                                              {m.dueDate ? (
-                                                <div className="flex items-center gap-1.5 text-sm font-medium"><Calendar className="w-3.5 h-3.5 text-slate-400" /> {m.dueDate}</div>
-                                              ) : (
-                                                <span className="text-slate-400 text-sm italic">Not set</span>
-                                              )}
-                                            </div>
-                                          )}
-                                        </TableCell>
-
-                                        <TableCell className="py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                          <div className="flex items-center justify-center gap-2">
-                                            <button onClick={() => openEditModule(m, phase || null)} className="p-1.5 hover:bg-slate-200 rounded-md text-blue-600 transition-colors" title="Research Notebook"><BookOpen className="w-4 h-4" /></button>
-                                            {canManageModule && (
-                                              <button onClick={(e) => handleDeleteModule(e, m)} className="p-1.5 hover:bg-red-100 rounded-md text-red-500 transition-colors" title="Delete Module"><Trash2 className="w-4 h-4" /></button>
-                                            )}
-                                          </div>
-                                        </TableCell>
-                                      </TableRow>
-                                    );
-                                  })}
-
-                                  {canManageModule && (
-                                    <TableRow className="bg-slate-50/20 hover:bg-slate-50/35 border-t border-dashed border-slate-200">
-                                      <TableCell className="py-2.5">
+                            <Table>
+                              <TableHeader className="bg-slate-50/30">
+                                <TableRow className="hover:bg-transparent">
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Module Name</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Stage</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Priority</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Hours</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Assigned To</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Due Date</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2 w-24 text-center">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {phaseModules.map((m: any, idx: number) => (
+                                  <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                    <TableCell className="font-bold text-slate-800 py-3">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "name" ? (
                                         <Input
-                                          placeholder="+ Quick Add Module..."
-                                          value={quickAddModule.name}
-                                          onChange={(e) => setQuickAddModule(prev => ({ ...prev, name: e.target.value }))}
+                                          defaultValue={m.name}
+                                          onBlur={(e) => handleInlineUpdateModule(m, "name", e.target.value)}
                                           onKeyDown={(e) => {
-                                            if (e.key === "Enter") handleQuickAddModule();
+                                            if (e.key === "Enter") handleInlineUpdateModule(m, "name", (e.target as any).value);
                                           }}
-                                          className="h-8 text-xs font-medium"
+                                          autoFocus
+                                          className="h-8 text-xs font-bold"
                                         />
-                                      </TableCell>
-
-                                      {selectedProject.phases?.length > 0 && (
-                                        <TableCell className="py-2.5">
-                                          <Select
-                                            value={quickAddModule.phaseName}
-                                            onValueChange={(val) => setQuickAddModule(prev => ({ ...prev, phaseName: val }))}
+                                      ) : (
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-brand-teal" />
+                                          <span 
+                                            onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "name" })}
+                                            className={canManageModule ? "cursor-pointer hover:underline" : ""}
                                           >
-                                            <SelectTrigger className="h-8 text-xs font-medium bg-white">
-                                              <SelectValue placeholder="Select Phase" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              {selectedProject.phases?.map((p: any) => (
-                                                <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                        </TableCell>
+                                            {m.name}
+                                          </span>
+                                        </div>
                                       )}
+                                    </TableCell>
 
-                                      <TableCell className="py-2.5">
-                                        <Select
-                                          value={quickAddModule.stage}
-                                          onValueChange={(val) => setQuickAddModule(prev => ({ ...prev, stage: val }))}
+                                    <TableCell className="py-3">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "stage" ? (
+                                        <Select 
+                                          defaultValue={m.stage || "todo"} 
+                                          onValueChange={(val) => handleInlineUpdateModule(m, "stage", val)}
                                         >
-                                          <SelectTrigger className="h-8 text-xs font-medium bg-white">
+                                          <SelectTrigger className="h-8 text-xs bg-white">
                                             <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
                                             <SelectItem value="todo">To Do</SelectItem>
-                                            <SelectItem value="in-progress">In Progress</SelectItem>
-                                            <SelectItem value="bugs">Bugs</SelectItem>
-                                            <SelectItem value="onhold">On Hold</SelectItem>
-                                            <SelectItem value="pending">Pending</SelectItem>
+                                            <SelectItem value="in_progress">In Progress</SelectItem>
                                             <SelectItem value="completed">Completed</SelectItem>
                                           </SelectContent>
                                         </Select>
-                                      </TableCell>
-
-                                      <TableCell className="py-2.5">
-                                        <Select
-                                          value={quickAddModule.priority}
-                                          onValueChange={(val) => setQuickAddModule(prev => ({ ...prev, priority: val }))}
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "stage" })}
+                                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold capitalize ${
+                                            m.stage === "completed" 
+                                              ? "bg-green-100 text-green-800" 
+                                              : m.stage === "in_progress" 
+                                              ? "bg-blue-100 text-blue-800" 
+                                              : "bg-slate-100 text-slate-800"
+                                          } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
                                         >
-                                          <SelectTrigger className="h-8 text-xs font-medium bg-white">
+                                          {(m.stage || "todo").replace("_", " ")}
+                                        </span>
+                                      )}
+                                    </TableCell>
+
+                                    <TableCell className="py-3">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "priority" ? (
+                                        <Select 
+                                          defaultValue={m.priority || "medium"} 
+                                          onValueChange={(val) => handleInlineUpdateModule(m, "priority", val)}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs bg-white">
                                             <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
@@ -1185,84 +1006,264 @@ export default function ModulesPage() {
                                             <SelectItem value="urgent">Urgent</SelectItem>
                                           </SelectContent>
                                         </Select>
-                                      </TableCell>
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "priority" })}
+                                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
+                                            m.priority === "urgent"
+                                              ? "bg-red-100 text-red-800"
+                                              : m.priority === "high"
+                                              ? "bg-orange-100 text-orange-800"
+                                              : m.priority === "medium"
+                                              ? "bg-blue-100 text-blue-800"
+                                              : "bg-slate-100 text-slate-800"
+                                          } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
+                                        >
+                                          {m.priority || "medium"}
+                                        </span>
+                                      )}
+                                    </TableCell>
 
-                                      <TableCell className="py-2.5">
+                                    <TableCell className="py-3 font-semibold text-xs text-slate-600">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "estimatedHours" ? (
                                         <Input
                                           type="number"
-                                          placeholder="Hours"
-                                          value={quickAddModule.estimatedHours || ""}
-                                          onChange={(e) => setQuickAddModule(prev => ({ ...prev, estimatedHours: parseFloat(e.target.value) || 0 }))}
+                                          defaultValue={m.estimatedHours || 0}
+                                          onBlur={(e) => handleInlineUpdateModule(m, "estimatedHours", parseFloat(e.target.value) || 0)}
                                           onKeyDown={(e) => {
-                                            if (e.key === "Enter") handleQuickAddModule();
+                                            if (e.key === "Enter") handleInlineUpdateModule(m, "estimatedHours", parseFloat((e.target as any).value) || 0);
                                           }}
-                                          className="h-8 text-xs font-medium w-20 bg-white"
+                                          autoFocus
+                                          className="h-8 text-xs w-20"
                                         />
-                                      </TableCell>
-
-                                      <TableCell className="py-2.5">
-                                        <Select
-                                          value={quickAddModule.assignedToId || "unassigned"}
-                                          onValueChange={(val) => setQuickAddModule(prev => ({ ...prev, assignedToId: val === "unassigned" ? "" : val }))}
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "estimatedHours" })}
+                                          className={canManageModule ? "cursor-pointer hover:underline" : ""}
                                         >
-                                          <SelectTrigger className="h-8 text-xs font-medium bg-white">
-                                            <SelectValue placeholder="Assign To" />
+                                          {m.estimatedHours ? `${m.estimatedHours} hrs` : "—"}
+                                        </span>
+                                      )}
+                                    </TableCell>
+
+                                    <TableCell className="py-3">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "assignedToId" ? (
+                                        <Select 
+                                          defaultValue={m.assignedToId || "unassigned"} 
+                                          onValueChange={(val) => handleInlineUpdateModule(m, "assignedToId", val)}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs bg-white w-32">
+                                            <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
                                             <SelectItem value="unassigned">Unassigned</SelectItem>
-                                            {employees.map((e: any) => (
-                                              <SelectItem key={e.id} value={e.id}>{e.firstName} {e.lastName}</SelectItem>
+                                            {employees.map(emp => (
+                                              <SelectItem key={emp.id} value={emp.id}>
+                                                {emp.firstName} {emp.lastName}
+                                              </SelectItem>
                                             ))}
                                           </SelectContent>
                                         </Select>
-                                      </TableCell>
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "assignedToId" })}
+                                          className={`text-xs font-bold ${m.assignedToName ? "text-slate-700" : "text-slate-400 italic"} ${canManageModule ? "cursor-pointer hover:underline" : ""}`}
+                                        >
+                                          {m.assignedToName || "Unassigned"}
+                                        </span>
+                                      )}
+                                    </TableCell>
 
-                                      <TableCell className="py-2.5">
+                                    <TableCell className="py-3 text-xs font-semibold text-slate-600">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "dueDate" ? (
                                         <Input
                                           type="date"
-                                          value={quickAddModule.dueDate}
-                                          onChange={(e) => setQuickAddModule(prev => ({ ...prev, dueDate: e.target.value }))}
+                                          defaultValue={m.dueDate || ""}
+                                          onBlur={(e) => handleInlineUpdateModule(m, "dueDate", e.target.value || null)}
                                           onKeyDown={(e) => {
-                                            if (e.key === "Enter") handleQuickAddModule();
+                                            if (e.key === "Enter") handleInlineUpdateModule(m, "dueDate", (e.target as any).value || null);
                                           }}
-                                          className="h-8 text-xs font-medium bg-white"
+                                          autoFocus
+                                          className="h-8 text-xs w-32"
                                         />
-                                      </TableCell>
-
-                                      <TableCell className="py-2.5 text-center">
-                                        <Button
-                                          type="button"
-                                          onClick={handleQuickAddModule}
-                                          className="h-8 px-3 bg-brand-teal text-white hover:bg-brand-teal-light text-xs font-bold"
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "dueDate" })}
+                                          className={canManageModule ? "cursor-pointer hover:underline" : ""}
                                         >
-                                          Add
+                                          {m.dueDate || "Not set"}
+                                        </span>
+                                      )}
+                                    </TableCell>
+
+                                    <TableCell className="py-3 text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          onClick={() => handleOpenNotebook(m)}
+                                          className="w-7 h-7 text-brand-teal hover:bg-brand-teal/10 rounded-md cursor-pointer"
+                                          title="Open Notebook"
+                                        >
+                                          <BookOpen className="w-3.5 h-3.5" />
                                         </Button>
-                                      </TableCell>
-                                    </TableRow>
-                                  )}
-                                </>
-                              );
-                            })()}
-                          </TableBody>
-                        </Table>
+                                        {canManageModule && (
+                                          <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={() => handleDeleteModule(m)}
+                                            className="w-7 h-7 text-red-500 hover:bg-red-50 rounded-md cursor-pointer"
+                                            title="Delete Module"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+
+                                {canManageModule && (
+                                  <TableRow className="bg-slate-50/10 hover:bg-slate-50/20 border-t border-dashed border-slate-200">
+                                    <TableCell className="py-2.5">
+                                      <Input
+                                        placeholder="Add module..."
+                                        value={input.name || ""}
+                                        onChange={(e) => updateQuickAddInput(phaseKey, "name", e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleQuickAddModule(phaseName);
+                                        }}
+                                        className="h-8 text-xs font-semibold bg-white"
+                                      />
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Select 
+                                        value={input.stage || "todo"} 
+                                        onValueChange={(val) => updateQuickAddInput(phaseKey, "stage", val)}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs bg-white">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="todo">To Do</SelectItem>
+                                          <SelectItem value="in_progress">In Progress</SelectItem>
+                                          <SelectItem value="completed">Completed</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Select 
+                                        value={input.priority || "medium"} 
+                                        onValueChange={(val) => updateQuickAddInput(phaseKey, "priority", val)}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs bg-white">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="low">Low</SelectItem>
+                                          <SelectItem value="medium">Medium</SelectItem>
+                                          <SelectItem value="high">High</SelectItem>
+                                          <SelectItem value="urgent">Urgent</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Input
+                                        type="number"
+                                        placeholder="Hrs"
+                                        value={input.estimatedHours === undefined ? "" : input.estimatedHours}
+                                        onChange={(e) => updateQuickAddInput(phaseKey, "estimatedHours", parseFloat(e.target.value) || 0)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleQuickAddModule(phaseName);
+                                        }}
+                                        className="h-8 text-xs font-semibold bg-white w-20"
+                                      />
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Select 
+                                        value={input.assignedToId || "unassigned"} 
+                                        onValueChange={(val) => updateQuickAddInput(phaseKey, "assignedToId", val)}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs bg-white w-32">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="unassigned">Unassigned</SelectItem>
+                                          {employees.map(emp => (
+                                            <SelectItem key={emp.id} value={emp.id}>
+                                              {emp.firstName} {emp.lastName}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Input
+                                        type="date"
+                                        value={input.dueDate || ""}
+                                        onChange={(e) => updateQuickAddInput(phaseKey, "dueDate", e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleQuickAddModule(phaseName);
+                                        }}
+                                        className="h-8 text-xs font-medium bg-white"
+                                      />
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5 text-center">
+                                      <Button
+                                        type="button"
+                                        onClick={() => handleQuickAddModule(phaseName)}
+                                        className="h-8 px-3 bg-brand-teal text-white hover:bg-brand-teal-light text-xs font-bold cursor-pointer"
+                                      >
+                                        Add
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      );
+                    };
+
+                    const hasModulesOrPhases = (selectedProject.modules && selectedProject.modules.length > 0) || (phases.length > 0);
+
+                    if (!hasModulesOrPhases) {
+                      return (
+                        <div className="flex flex-col items-center justify-center h-full py-16">
+                          <div className="bg-white p-8 rounded-2xl border border-dashed border-slate-300 flex flex-col items-center max-w-md text-center">
+                            <Briefcase className="w-12 h-12 text-slate-300 mb-4" />
+                            <h3 className="text-xl font-bold text-slate-700 mb-2">No Modules Found</h3>
+                            <p className="text-sm text-slate-500 mb-6">This project does not have any modules set up yet. Get started by adding your first module.</p>
+                            <Button 
+                              onClick={() => openAddModal(null)}
+                              className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-11 px-6 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4 mr-1.5" /> Add Module
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="pb-8 space-y-2">
+                        {/* Render table for each phase */}
+                        {phases.map((p: any) => renderPhaseTable(p.name, p.name))}
+                        
+                        {/* Render General/Unassigned modules slab */}
+                        {((modules.some((m: any) => !m.phaseName) || phases.length === 0)) && 
+                          renderPhaseTable(null, "General / Unassigned Modules")
+                        }
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full py-16">
-                      <div className="bg-white p-8 rounded-2xl border border-dashed border-slate-300 flex flex-col items-center max-w-md text-center">
-                        <Briefcase className="w-12 h-12 text-slate-300 mb-4" />
-                        <h3 className="text-xl font-bold text-slate-700 mb-2">No Modules Found</h3>
-                        <p className="text-sm text-slate-500 mb-6">This project does not have any modules set up yet. Get started by adding your first module.</p>
-                        <Button 
-                          onClick={() => openAddModal(null)}
-                          className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-11 px-6"
-                        >
-                          <Plus className="w-5 h-5 mr-2" />
-                          Add First Module
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </>
             ) : (

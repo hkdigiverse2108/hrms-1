@@ -1112,8 +1112,23 @@ export default function TasksPage() {
                             return aApproved - bApproved;
                           }
                         }
-                        const aDate = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-                        const bDate = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+                        const aDue = isDueTask(a) ? 1 : 0;
+                        const bDue = isDueTask(b) ? 1 : 0;
+                        if (aDue !== bDue) {
+                          return bDue - aDue;
+                        }
+
+                        const parseTaskDate = (dateStr: any) => {
+                          if (!dateStr || String(dateStr).trim() === "" || String(dateStr).toLowerCase() === "none") {
+                            return Infinity;
+                          }
+                          const time = new Date(dateStr).getTime();
+                          return isNaN(time) ? Infinity : time;
+                        };
+
+                        const aDate = parseTaskDate(a.dueDate);
+                        const bDate = parseTaskDate(b.dueDate);
+                        
                         if (aDate !== bDate) {
                           return aDate - bDate;
                         }
