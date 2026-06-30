@@ -435,14 +435,6 @@ export default function MarketingReportsPage() {
         })
       });
       if (res.ok) {
-        if (projectEndDate !== (dailyMetricsProject.endDate ? dailyMetricsProject.endDate.split('T')[0] : "")) {
-           await fetch(`${API_URL}/projects/${dailyMetricsProject.id}`, {
-             method: "PUT",
-             headers: { "Content-Type": "application/json" },
-             body: JSON.stringify({ endDate: projectEndDate || null })
-           });
-           fetchProjects();
-        }
         toast.success("Daily metrics saved successfully");
         setDailyMetricsOpen(false);
       } else {
@@ -4127,26 +4119,27 @@ export default function MarketingReportsPage() {
             <div className="space-y-2 pt-2 border-t border-slate-100">
               <Label>Base End Date (Project Level)</Label>
               <Input
-                type="date"
-                value={projectEndDate}
-                onChange={(e) => setProjectEndDate(e.target.value)}
+                type="text"
+                readOnly
+                className="bg-slate-50 cursor-not-allowed font-medium text-slate-700 h-10"
+                value={dailyMetricsProject?.endDate ? format(new Date(dailyMetricsProject.endDate), 'dd MMM yyyy') : "Not Set"}
               />
             </div>
             {(() => {
-              if (!dailyMetricsProject || !projectEndDate) return null;
+              if (!dailyMetricsProject || !dailyMetricsProject.endDate) return null;
               
-              const endDateObj = new Date(projectEndDate);
+              const endDateObj = new Date(dailyMetricsProject.endDate);
               const days = calculateProjectDays(dailyMetricsProject);
               
               if (systemSettings?.addHoldDaysToEndDate !== false && days.onHold > 0) {
                 endDateObj.setDate(endDateObj.getDate() + days.onHold);
                 return (
                   <div className="space-y-2">
-                    <Label className="text-brand-teal">Calculated End Date (Added {days.onHold} On-Hold Days)</Label>
+                    <Label className="text-brand-teal font-bold">Calculated End Date (Added {days.onHold} On-Hold Days)</Label>
                     <Input
                       type="text"
                       readOnly
-                      className="bg-slate-50 cursor-not-allowed font-medium text-brand-teal"
+                      className="bg-emerald-50 cursor-not-allowed font-medium text-brand-teal border-emerald-200 h-10"
                       value={format(endDateObj, 'dd MMM yyyy')}
                     />
                   </div>
