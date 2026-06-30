@@ -383,6 +383,7 @@ export default function MarketingReportsPage() {
   const [dailyMetricsProject, setDailyMetricsProject] = useState<any>(null);
   const [dailyMetricsOpen, setDailyMetricsOpen] = useState(false);
   const [isDailyFullScreen, setIsDailyFullScreen] = useState(false);
+  const [taskFilterType, setTaskFilterType] = useState<"my" | "all">("all");
   const [dailyMetricsData, setDailyMetricsData] = useState({
     revenue: 0,
     followers: 0,
@@ -1535,7 +1536,18 @@ export default function MarketingReportsPage() {
       ? projects.some(p => p.id === r.projectId) 
       : true;
 
-    return matchesSearch && matchesClient && matchesDate && matchesMonth && isDMProject;
+    // Filter by User's assigned projects if "My Tasks" is selected
+    let matchesTaskType = true;
+    if (taskFilterType === "my" && user?.id) {
+      const assocProj = projects.find(p => String(p.id) === String(r.projectId));
+      if (assocProj) {
+        matchesTaskType = assocProj.assignedEmployeeId === user.id;
+      } else {
+        matchesTaskType = false;
+      }
+    }
+
+    return matchesSearch && matchesClient && matchesDate && matchesMonth && isDMProject && matchesTaskType;
   });
 
   const filteredMonthly = monthlyReports.filter((r) => {
@@ -2045,6 +2057,27 @@ export default function MarketingReportsPage() {
                 />
               </div>
             </div>
+            {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Task Scope</Label>
+                <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
+                  <button
+                    type="button"
+                    onClick={() => setTaskFilterType("my")}
+                    className={`px-3 text-xs font-bold rounded-md transition-all cursor-pointer ${taskFilterType === "my" ? "bg-white text-brand-teal shadow-2xs" : "text-slate-500 hover:text-slate-700"}`}
+                  >
+                    My Tasks
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaskFilterType("all")}
+                    className={`px-3 text-xs font-bold rounded-md transition-all cursor-pointer ${taskFilterType === "all" ? "bg-white text-brand-teal shadow-2xs" : "text-slate-500 hover:text-slate-700"}`}
+                  >
+                    All Tasks
+                  </button>
+                </div>
+              </div>
+            )}
             {activeTab !== "daily" && activeTab !== "analysis" && (
             <div className="w-[200px] space-y-1.5">
               <Label className="text-xs text-slate-500">Filter by Client</Label>
@@ -2263,6 +2296,24 @@ export default function MarketingReportsPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
+                {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
+                    <button
+                      type="button"
+                      onClick={() => setTaskFilterType("my")}
+                      className={`px-3 text-xs font-bold rounded-md transition-all cursor-pointer ${taskFilterType === "my" ? "bg-white text-brand-teal shadow-2xs" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      My Tasks
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTaskFilterType("all")}
+                      className={`px-3 text-xs font-bold rounded-md transition-all cursor-pointer ${taskFilterType === "all" ? "bg-white text-brand-teal shadow-2xs" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      All Tasks
+                    </button>
+                  </div>
+                )}
                 
                 <div className="w-[280px]">
                   <DateRangePicker
@@ -2337,8 +2388,14 @@ export default function MarketingReportsPage() {
                   const filteredClients = clients.filter((c) => {
                     const matchesSearch = c.companyName?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
                     const clientProjs = projects.filter((p) => p.clientId === c.id && p.department === "Digital Marketing");
-                    const hasActiveProject = clientProjs.some((p) => p.status !== "on-hold");
-                    return matchesSearch && hasActiveProject;
+                    const filteredProjs = clientProjs.filter((p) => {
+                      if (p.status === "on-hold") return false;
+                      if (taskFilterType === "my" && user?.id) {
+                        return p.assignedEmployeeId === user.id;
+                      }
+                      return true;
+                    });
+                    return matchesSearch && filteredProjs.length > 0;
                   });
                   
                   return (
