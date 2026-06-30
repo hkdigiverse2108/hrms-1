@@ -350,6 +350,7 @@ export default function TasksPage() {
       }
     }
 
+    const prevTasks = [...tasks];
     const updatedTasks = tasks.map(t => {
       if (t.id === taskId) return { ...t, status: newStatus, reasonForPending: reason || t.reasonForPending };
       return t;
@@ -373,8 +374,6 @@ export default function TasksPage() {
       if (!res.ok) {
         setTasks(prevTasks);
         toast.error("Failed to update task stage");
-      } else if (hasOtherInProgress) {
-        fetchData();
       }
     } catch (err) {
       console.error("Error updating task status:", err);

@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, History } from "lucide-react";
+import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, History, Shuffle } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -79,11 +79,11 @@ export default function ModulesPage() {
   const [loading, setLoading] = useState(true);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  const selectedProj = projects.find(p => p.id === selectedProjectId);
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
   const canManageModule = Boolean(user && (
     ['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') ||
     user.designation?.toLowerCase() === 'team leader' ||
-    selectedProj?.teamLeaderId === user.id ||
+    selectedProject?.teamLeaderId === user.id ||
     projects.some((p: any) => p.teamLeaderId === user.id)
   ));
 
@@ -311,21 +311,21 @@ export default function ModulesPage() {
   const [isSavingCreds, setIsSavingCreds] = useState(false);
 
   const handleOpenCreds = () => {
-    if (!selectedProj) return;
-    setCredFrontendLink(selectedProj.frontendLink || "");
-    setCredIntegrations(selectedProj.thirdPartyIntegrations || []);
+    if (!selectedProject) return;
+    setCredFrontendLink(selectedProject.frontendLink || "");
+    setCredIntegrations(selectedProject.thirdPartyIntegrations || []);
     setCredModalOpen(true);
   };
 
   const handleSaveCreds = async () => {
-    if (!selectedProj) return;
+    if (!selectedProject) return;
     setIsSavingCreds(true);
     try {
-      const res = await fetch(`${API_URL}/projects/${selectedProj.id}`, {
+      const res = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...selectedProj,
+          ...selectedProject,
           frontendLink: credFrontendLink,
           thirdPartyIntegrations: credIntegrations,
           performedBy: user?.id || "Unknown",
@@ -388,6 +388,92 @@ export default function ModulesPage() {
       setFormData(prev => ({ ...prev, assignedToId: user.id }));
     }
   }, [user]);
+
+  const projectTeamMembers = React.useMemo(() => {
+    if (!selectedProject) return [];
+    const ids = new Set<string>();
+    if (selectedProject.assignedEmployeeId) ids.add(selectedProject.assignedEmployeeId);
+    if (Array.isArray(selectedProject.assignedTeamIds)) {
+      selectedProject.assignedTeamIds.forEach((id: string) => ids.add(id));
+    }
+    if (Array.isArray(selectedProject.phases)) {
+      selectedProject.phases.forEach((p: any) => {
+        if (p.assignedToId) ids.add(p.assignedToId);
+        if (Array.isArray(p.assignedToIds)) p.assignedToIds.forEach((id: string) => ids.add(id));
+      });
+    }
+    return employees.filter(e => ids.has(e.id));
+  }, [selectedProject, employees]);
+
+  const handleAutoDistributeModules = async () => {
+    if (!selectedProject || !selectedProject.modules || selectedProject.modules.length === 0) {
+      toast.error("No modules to distribute");
+      return;
+    }
+    if (projectTeamMembers.length === 0) {
+      toast.error("No team members found for this project");
+      return;
+    }
+
+    // Sort modules by estimatedHours descending (Longest Processing Time first)
+    // Use 1 as a fallback weight if hours are not entered
+    const sortedModules = [...selectedProject.modules].sort((a, b) => {
+      const aHrs = a.estimatedHours || 1;
+      const bHrs = b.estimatedHours || 1;
+      return bHrs - aHrs;
+    });
+
+    // Initialize workload tracking
+    const team = projectTeamMembers;
+    const workload: Record<string, number> = {};
+    team.forEach(member => {
+      workload[member.id] = 0;
+    });
+
+    // Greedy assignment
+    const updatedModules = sortedModules.map(m => {
+      let lowestMember = team[0];
+      let lowestHours = Infinity;
+      
+      team.forEach(member => {
+        if (workload[member.id] < lowestHours) {
+          lowestHours = workload[member.id];
+          lowestMember = member;
+        }
+      });
+
+      const weight = m.estimatedHours || 1;
+      workload[lowestMember.id] += weight;
+      return {
+        ...m,
+        assignedToId: lowestMember.id,
+        assignedToName: `${lowestMember.firstName} ${lowestMember.lastName}`
+      };
+    });
+
+    try {
+      const res = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...selectedProject,
+          modules: updatedModules,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        })
+      });
+
+      if (res.ok) {
+        toast.success("Modules successfully distributed and balanced across the team!");
+        fetchData();
+      } else {
+        toast.error("Failed to save distributed modules");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error distributing modules");
+    }
+  };
 
   const openAddModal = (phase: any = null) => {
     setActivePhase(phase);
@@ -733,7 +819,6 @@ export default function ModulesPage() {
     }
   };
 
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   return (
     <div className="space-y-4 h-[calc(100vh-140px)] flex flex-col">
@@ -826,6 +911,16 @@ export default function ModulesPage() {
                         >
                           <History className="w-3.5 h-3.5 text-brand-teal" /> View Activity Logs
                         </Button>
+                        {canManageModule && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleAutoDistributeModules}
+                            className="h-7 text-xs font-bold gap-1.5 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
+                          >
+                            <Shuffle className="w-3.5 h-3.5 text-brand-teal" /> Auto-Distribute Modules
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -857,7 +952,7 @@ export default function ModulesPage() {
                       <SelectContent>
                         <SelectItem value="all">All Assignees</SelectItem>
                         <SelectItem value="unassigned">Unassigned</SelectItem>
-                        {employees.map(emp => (
+                        {projectTeamMembers.map(emp => (
                           <SelectItem key={emp.id} value={emp.id}>
                             {emp.firstName} {emp.lastName}
                           </SelectItem>
@@ -1057,7 +1152,7 @@ export default function ModulesPage() {
                                           </SelectTrigger>
                                           <SelectContent>
                                             <SelectItem value="unassigned">Unassigned</SelectItem>
-                                            {employees.map(emp => (
+                                            {projectTeamMembers.map(emp => (
                                               <SelectItem key={emp.id} value={emp.id}>
                                                 {emp.firstName} {emp.lastName}
                                               </SelectItem>
@@ -1101,7 +1196,7 @@ export default function ModulesPage() {
                                         <Button 
                                           variant="ghost" 
                                           size="icon" 
-                                          onClick={() => handleOpenNotebook(m)}
+                                          onClick={() => openEditModule(m, phases.find((p: any) => p.name === m.phaseName) || null)}
                                           className="w-7 h-7 text-brand-teal hover:bg-brand-teal/10 rounded-md cursor-pointer"
                                           title="Open Notebook"
                                         >
@@ -1111,7 +1206,7 @@ export default function ModulesPage() {
                                           <Button 
                                             variant="ghost" 
                                             size="icon" 
-                                            onClick={() => handleDeleteModule(m)}
+                                            onClick={(e) => handleDeleteModule(e, m)}
                                             className="w-7 h-7 text-red-500 hover:bg-red-50 rounded-md cursor-pointer"
                                             title="Delete Module"
                                           >
@@ -1193,7 +1288,7 @@ export default function ModulesPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                           <SelectItem value="unassigned">Unassigned</SelectItem>
-                                          {employees.map(emp => (
+                                          {projectTeamMembers.map(emp => (
                                             <SelectItem key={emp.id} value={emp.id}>
                                               {emp.firstName} {emp.lastName}
                                             </SelectItem>
@@ -1342,7 +1437,7 @@ export default function ModulesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {employees.map(emp => (
+                  {projectTeamMembers.map(emp => (
                     <SelectItem key={emp.id} value={emp.id}>
                       {emp.firstName} {emp.lastName}
                     </SelectItem>
@@ -1722,7 +1817,7 @@ export default function ModulesPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unassigned" className="text-xs">Unassigned</SelectItem>
-                          {employees.map(emp => (
+                          {projectTeamMembers.map(emp => (
                             <SelectItem key={emp.id} value={emp.id} className="text-xs">
                               {emp.firstName} {emp.lastName}
                             </SelectItem>
