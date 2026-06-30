@@ -2185,8 +2185,9 @@ export default function MarketingReportsPage() {
                 {(() => {
                   const filteredClients = clients.filter((c) => {
                     const matchesSearch = c.companyName?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
-                    const hasProject = isEmployee ? projects.some((p) => p.clientId === c.id) : true;
-                    return matchesSearch && hasProject;
+                    const clientProjs = projects.filter((p) => p.clientId === c.id && p.department === "Digital Marketing");
+                    const hasActiveProject = clientProjs.some((p) => p.status !== "on-hold");
+                    return matchesSearch && hasActiveProject;
                   });
                   
                   return (
