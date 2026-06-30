@@ -80,6 +80,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
@@ -221,6 +222,7 @@ export default function MarketingReportsPage() {
   const [activeTab, setActiveTab] = useState("daily");
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [projectRemarks, setProjectRemarks] = useState<any[]>([]);
+  const [showAddForm, setShowAddForm] = useState(true);
   const [editingRemarks, setEditingRemarks] = useState<string[]>([]);
 
   const handleUpdateProjectRemark = async (projectId: string, dateStr: string, remark: string, clientId?: string) => {
@@ -734,7 +736,7 @@ export default function MarketingReportsPage() {
     setLoading(true);
     try {
       let endpoint =
-        activeTab === "daily"
+        activeTab === "daily" || activeTab === "analysis"
           ? "/marketing/reports/daily"
           : "/marketing/reports/monthly";
       const params = new URLSearchParams();
@@ -744,7 +746,7 @@ export default function MarketingReportsPage() {
         params.append("userId", user.id);
         params.append("role", user.role);
       }
-      if (activeTab === "daily") {
+      if (activeTab === "daily" || activeTab === "analysis") {
         if (dateRange?.from) {
           const startStr = format(dateRange.from, "yyyy-MM-dd");
           const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
@@ -851,6 +853,7 @@ export default function MarketingReportsPage() {
           remarks: "",
         });
         fetchData();
+        fetchClients();
       } else {
         const error = await response.json();
         throw new Error(error.detail || "Failed to add report");
@@ -1980,7 +1983,7 @@ export default function MarketingReportsPage() {
                 />
               </div>
             </div>
-            {activeTab !== "daily" && (
+            {activeTab !== "daily" && activeTab !== "analysis" && (
             <div className="w-[200px] space-y-1.5">
               <Label className="text-xs text-slate-500">Filter by Client</Label>
               <Select
@@ -2160,9 +2163,9 @@ export default function MarketingReportsPage() {
           value="daily"
           className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"
         >
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-row min-h-0">
+          <ResizablePanelGroup direction="horizontal" className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 min-h-0">
             {/* Left Column: Client List */}
-            <div className="w-1/3 min-w-[280px] max-w-[350px] border-r border-slate-200 flex flex-col bg-slate-50/50">
+            <ResizablePanel defaultSize={25} minSize={15} maxSize={40} className="border-r border-slate-200 flex flex-col bg-slate-50/50">
               <div className="p-4 border-b border-slate-200 bg-white">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2228,20 +2231,32 @@ export default function MarketingReportsPage() {
                                                   ) : null}
                                                 </div>
                                                 {canEditMarketing && (
-                                                  <button
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setDailyMetricsProject(p);
-                                                      setProjectEndDate(p.endDate ? p.endDate.split('T')[0] : "");
-                                                      const dateStr = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : new Date().toISOString().split("T")[0];
-                                                      fetchDailyMetricsData(p.id, dateStr);
-                                                      setDailyMetricsOpen(true);
-                                                    }}
-                                                    className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all shrink-0"
-                                                    title="Daily Project Metrics"
-                                                  >
-                                                    <Settings className="w-[18px] h-[18px]" />
-                                                  </button>
+                                                  <div className="flex items-center gap-1 shrink-0">
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        fetchLogs(p, "project-remark");
+                                                      }}
+                                                      className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
+                                                      title="View Logs"
+                                                    >
+                                                      <History className="w-[18px] h-[18px]" />
+                                                    </button>
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setDailyMetricsProject(p);
+                                                        setProjectEndDate(p.endDate ? p.endDate.split('T')[0] : "");
+                                                        const dateStr = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : new Date().toISOString().split("T")[0];
+                                                        fetchDailyMetricsData(p.id, dateStr);
+                                                        setDailyMetricsOpen(true);
+                                                      }}
+                                                      className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
+                                                      title="Daily Project Metrics"
+                                                    >
+                                                      <Settings className="w-[18px] h-[18px]" />
+                                                    </button>
+                                                  </div>
                                                 )}
                                               </div>
                                             </div>
@@ -2260,11 +2275,14 @@ export default function MarketingReportsPage() {
                   );
                 })()}
               </div>
-            </div>
+            </ResizablePanel>
+
+            <ResizableHandle withHandle />
 
             {/* Right Column: Daily Reports Table */}
-            <div className="flex-1 flex flex-col bg-white overflow-hidden">
-              <div className="overflow-auto flex-1 custom-scrollbar">
+            <ResizablePanel defaultSize={75} className="flex flex-col bg-white overflow-hidden">
+
+              <div className="overflow-y-auto overflow-x-hidden flex-1 custom-scrollbar">
               <DragDropContext onDragEnd={handleDragEndDaily}>
                 <Table>
                   <TableHeader>
@@ -2293,12 +2311,6 @@ export default function MarketingReportsPage() {
                       </TableHead>
                       <TableHead className="w-12 text-center font-bold text-slate-700">
                         S.N
-                      </TableHead>
-                      <TableHead className="font-bold text-slate-700">
-                        Date
-                      </TableHead>
-                      <TableHead className="font-bold text-slate-700">
-                        Project
                       </TableHead>
                       <TableHead className="font-bold text-slate-700">
                         Campaign Name
@@ -2341,7 +2353,7 @@ export default function MarketingReportsPage() {
                         {loading ? (
                           <TableRow>
                             <TableCell
-                              colSpan={15}
+                              colSpan={13}
                               className="text-center py-20"
                             >
                               <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
@@ -2352,134 +2364,10 @@ export default function MarketingReportsPage() {
                           </TableRow>
                         ) : (
                           <>
-                            {/* Integrated Quick Add Row Removed as per user request */}
-
-                            {selectedClientFilter !== "all" && selectedClientFilter !== "" && canAddMarketing && (
-                              (() => {
-                                const activeClient = clients.find((c: any) => c.id === selectedClientFilter);
-                                const clientName = activeClient?.companyName || "";
-                                return (
-                                  <TableRow className="bg-brand-teal/5 border-b border-brand-teal/20 shadow-sm relative">
-                                    <TableCell colSpan={3} className="p-2 text-center text-xs text-brand-teal font-semibold">
-                                      Quick Add
-                                    </TableCell>
-                                    <TableCell className="p-2 text-xs text-slate-500 font-medium">
-                                      {dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : ""}
-                                    </TableCell>
-                                    <TableCell className="p-1 min-w-[120px]">
-                                      {(() => {
-                                        const clientProjs = projects.filter((p: any) => p.clientId === selectedClientFilter);
-                                        return clientProjs.length > 1 ? (
-                                          <Select
-                                            value={quickAddData.projectId}
-                                            onValueChange={(val) => {
-                                              const p = clientProjs.find((x: any) => x.id === val);
-                                              if (p) setQuickAddData({...quickAddData, projectId: p.id, projectName: p.title});
-                                            }}
-                                          >
-                                            <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="Project"/></SelectTrigger>
-                                            <SelectContent>
-                                              {clientProjs.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
-                                            </SelectContent>
-                                          </Select>
-                                        ) : (
-                                          <div className="text-xs truncate font-medium text-slate-600 px-2 py-1 bg-white rounded border border-slate-200">
-                                            {clientProjs[0]?.title || "N/A"}
-                                          </div>
-                                        );
-                                      })()}
-                                    </TableCell>
-                                    <TableCell className="p-1 min-w-[140px]">
-                                      <Input 
-                                        className="h-8 text-xs bg-white" 
-                                        placeholder="Campaign Name"
-                                        value={quickAddData.campaignName}
-                                        onChange={(e) => setQuickAddData({...quickAddData, campaignName: e.target.value})}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') handleQuickAddSubmit(selectedClientFilter, clientName);
-                                        }}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="p-1 min-w-[80px]">
-                                      <Input 
-                                        type="number"
-                                        className="h-8 text-xs bg-white text-center" 
-                                        placeholder="Reach"
-                                        value={quickAddData.reach || ""}
-                                        onChange={(e) => setQuickAddData({...quickAddData, reach: parseInt(e.target.value) || 0})}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="p-1 min-w-[90px]">
-                                      <Input 
-                                        type="number"
-                                        className="h-8 text-xs bg-white text-center" 
-                                        placeholder="Impressions"
-                                        value={quickAddData.impression || ""}
-                                        onChange={(e) => setQuickAddData({...quickAddData, impression: parseInt(e.target.value) || 0})}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="p-1 min-w-[70px]">
-                                      <Input 
-                                        type="number"
-                                        className="h-8 text-xs bg-white text-center" 
-                                        placeholder="Leads"
-                                        value={quickAddData.leads || ""}
-                                        onChange={(e) => setQuickAddData({...quickAddData, leads: parseInt(e.target.value) || 0})}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="p-1 text-center text-slate-400 text-xs">-</TableCell>
-                                    <TableCell className="p-1 text-center text-slate-400 text-xs">-</TableCell>
-                                    <TableCell className="p-1 min-w-[80px]">
-                                      <Input 
-                                        type="number" step="0.01"
-                                        className="h-8 text-xs bg-white text-center" 
-                                        placeholder="Spend"
-                                        value={quickAddData.spend || ""}
-                                        onChange={(e) => setQuickAddData({...quickAddData, spend: parseFloat(e.target.value) || 0})}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="p-1 min-w-[90px]">
-                                      <Input 
-                                        type="number" step="0.01"
-                                        className="h-8 text-xs bg-white text-center" 
-                                        placeholder="Cost Metric"
-                                        value={quickAddData.cpl || ""}
-                                        onChange={(e) => setQuickAddData({...quickAddData, cpl: parseFloat(e.target.value) || 0})}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="p-1 min-w-[100px]">
-                                      <Select
-                                        value={quickAddData.remarks}
-                                        onValueChange={(val) => setQuickAddData({...quickAddData, remarks: val})}
-                                      >
-                                        <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="Remark"/></SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="Positive">Positive</SelectItem>
-                                          <SelectItem value="Neutral">Neutral</SelectItem>
-                                          <SelectItem value="Negative">Negative</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </TableCell>
-                                    <TableCell className="p-1 text-center">
-                                      <Button 
-                                        size="sm" 
-                                        disabled={!quickAddData.campaignName || isQuickAdding}
-                                        onClick={() => handleQuickAddSubmit(selectedClientFilter, clientName)}
-                                        className="h-8 w-full bg-brand-teal hover:bg-brand-teal/90 text-white shadow-sm"
-                                      >
-                                        {isQuickAdding ? <Loader2 className="w-4 h-4 animate-spin"/> : <Plus className="w-4 h-4 mr-1"/>}
-                                        Add
-                                      </Button>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })()
-                            )}
-
                             {filteredDaily.length === 0 ? (
                               <TableRow>
                                 <TableCell
-                                  colSpan={16}
+                                  colSpan={14}
                                   className="text-center py-20 text-slate-400 italic"
                                 >
                                   {selectedClientFilter === "" ? "Please select a client from the left sidebar to view daily reports." : "No daily reports found."}
@@ -2577,19 +2465,6 @@ export default function MarketingReportsPage() {
                                                   </TableCell>
                                                   <TableCell className="text-center text-slate-400">
                                                     {globalIdx}
-                                                  </TableCell>
-
-                                                  <TableCell className="font-medium text-slate-600">
-                                                    {normalizeDate(report.date)}
-                                                  </TableCell>
-
-                                                  <TableCell className="font-semibold text-slate-600">
-                                                    <div className="flex flex-col items-start gap-1">
-                                                      <span>{getProjectNameForReport(report)}</span>
-                                                      {projects.find((p: any) => p.id === report.projectId)?.status === 'on-hold' && (
-                                                        <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
-                                                      )}
-                                                    </div>
                                                   </TableCell>
 
                                                   <TableCell className="text-slate-600">
@@ -2818,24 +2693,17 @@ export default function MarketingReportsPage() {
                                                   >
                                                     {editingRowId ===
                                                     report.id ? (
-                                                      <Select
+                                                      <Input
+                                                        className="h-8 text-xs bg-white"
+                                                        placeholder="Remark"
                                                         value={editFormData.remarks || ""}
-                                                        onValueChange={(val) =>
+                                                        onChange={(e) =>
                                                           setEditFormData({
                                                             ...editFormData,
-                                                            remarks: val,
+                                                            remarks: e.target.value,
                                                           })
                                                         }
-                                                      >
-                                                        <SelectTrigger className="h-8 text-xs">
-                                                          <SelectValue placeholder="Select" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                          <SelectItem value="Positive">Positive</SelectItem>
-                                                          <SelectItem value="Neutral">Neutral</SelectItem>
-                                                          <SelectItem value="Negative">Negative</SelectItem>
-                                                        </SelectContent>
-                                                      </Select>
+                                                      />
                                                     ) : (
                                                       report.remarks || "-"
                                                     )}
@@ -2974,7 +2842,7 @@ export default function MarketingReportsPage() {
                                         {/* Subtotal row for the group */}
                                         <TableRow className="bg-slate-50/80 font-medium">
                                           <TableCell
-                                            colSpan={5}
+                                            colSpan={4}
                                             className="text-right text-slate-600"
                                           >
                                             Total
@@ -3108,11 +2976,12 @@ export default function MarketingReportsPage() {
                       </TableBody>
                     )}
                   </Droppable>
+
                   {filteredDaily.length > 0 && (
                     <tfoot className="sticky bottom-0 z-20 bg-brand-teal/10 border-t-2 border-brand-teal/20 backdrop-blur-md shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                       <TableRow className="hover:bg-transparent">
                         <TableCell
-                          colSpan={5}
+                          colSpan={4}
                           className="text-right font-bold text-slate-900"
                         >
                           Grand Total
@@ -3151,7 +3020,140 @@ export default function MarketingReportsPage() {
                   )}
                 </Table>
               </DragDropContext>
+              
+              {selectedClientFilter !== "all" && selectedClientFilter !== "" && canAddMarketing && (
+                <div className="border-t border-slate-200 mt-2 bg-slate-50/30">
+                  {!showAddForm ? (
+                    <div className="p-4 flex justify-center">
+                      <Button variant="outline" className="border-dashed bg-slate-50/50 hover:bg-slate-50 text-brand-teal w-full max-w-sm" onClick={() => setShowAddForm(true)}>
+                        <Plus className="w-4 h-4 mr-2" /> Add New Entry
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="p-5 m-4 bg-white rounded-xl shadow-sm border border-slate-200">
+                      <div className="space-y-6">
+                        <div className="flex justify-between items-center border-b pb-3">
+                          <h3 className="text-lg font-semibold text-slate-800">New Daily Report</h3>
+                          <Button variant="ghost" size="icon" onClick={() => setShowAddForm(false)}>
+                            <X className="w-5 h-5"/>
+                          </Button>
+                        </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div className="space-y-2">
+                        <Label>Project</Label>
+                        {(() => {
+                          const clientProjs = projects.filter((p: any) => p.clientId === selectedClientFilter);
+                          return clientProjs.length > 1 ? (
+                            <Select
+                              value={quickAddData.projectId}
+                              onValueChange={(val) => {
+                                const p = clientProjs.find((x: any) => x.id === val);
+                                if (p) setQuickAddData({...quickAddData, projectId: p.id, projectName: p.title});
+                              }}
+                            >
+                              <SelectTrigger className="h-10 bg-white"><SelectValue placeholder="Project"/></SelectTrigger>
+                              <SelectContent>
+                                {clientProjs.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <div className="truncate font-medium text-slate-600 px-3 py-2 h-10 bg-slate-50 rounded-md border border-slate-200 flex items-center">
+                              {clientProjs[0]?.title || "N/A"}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Campaign Name</Label>
+                        <Input 
+                          className="h-10 bg-white" 
+                          placeholder="e.g. Awareness Campaign"
+                          value={quickAddData.campaignName}
+                          onChange={(e) => setQuickAddData({...quickAddData, campaignName: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Reach</Label>
+                        <Input 
+                          type="number"
+                          className="h-10 bg-white" 
+                          placeholder="0"
+                          value={quickAddData.reach || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, reach: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Impressions</Label>
+                        <Input 
+                          type="number"
+                          className="h-10 bg-white" 
+                          placeholder="0"
+                          value={quickAddData.impression || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, impression: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Leads</Label>
+                        <Input 
+                          type="number"
+                          className="h-10 bg-white" 
+                          placeholder="0"
+                          value={quickAddData.leads || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, leads: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Spend (₹)</Label>
+                        <Input 
+                          type="number" step="0.01"
+                          className="h-10 bg-white" 
+                          placeholder="0.00"
+                          value={quickAddData.spend || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, spend: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Cost Metric</Label>
+                        <Input 
+                          type="number" step="0.01"
+                          className="h-10 bg-white" 
+                          placeholder="0.00"
+                          value={quickAddData.cpl || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, cpl: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Remark</Label>
+                        <Input
+                          className="h-10 bg-white" 
+                          placeholder="Remark"
+                          value={quickAddData.remarks || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, remarks: e.target.value})}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-4 flex justify-end gap-3 border-t">
+                      <Button variant="outline" onClick={() => setShowAddForm(false)}>Cancel</Button>
+                      <Button 
+                         className="bg-brand-teal hover:bg-brand-teal/90 text-white" 
+                         disabled={!quickAddData.campaignName || isQuickAdding} 
+                         onClick={() => {
+                           const activeClient = clients.find((c: any) => c.id === selectedClientFilter);
+                           handleQuickAddSubmit(selectedClientFilter, activeClient?.companyName || "");
+                         }}
+                      >
+                        {isQuickAdding ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : null}
+                        Submit Entry
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+          )}
+        </div>
             <TablePagination
               totalItems={filteredDaily.length}
               itemsPerPage={dailyItemsPerPage}
@@ -3160,8 +3162,8 @@ export default function MarketingReportsPage() {
               onItemsPerPageChange={setDailyItemsPerPage}
               itemName="daily reports"
             />
-          </div>
-        </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
       </TabsContent>
 
         <TabsContent
@@ -3169,7 +3171,7 @@ export default function MarketingReportsPage() {
           className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"
         >
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
-            <div className="overflow-auto flex-1 custom-scrollbar">
+            <div className="overflow-y-auto overflow-x-hidden flex-1 custom-scrollbar">
               <DragDropContext onDragEnd={handleDragEndMonthly}>
                 <Table>
                   <TableHeader>
@@ -3478,15 +3480,39 @@ export default function MarketingReportsPage() {
           <TabsContent value="analysis" className="flex-1 overflow-y-auto mt-0 px-1 pb-10">
             <div className="space-y-6">
               {/* Date Filter */}
-              <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+              <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100 gap-4">
                 <h3 className="font-bold text-slate-800 text-lg">Marketing Analysis Dashboard</h3>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-slate-500">Date Range:</span>
-                  <DateRangePicker
-                    value={dateRange}
-                    onChange={setDateRange}
-                    className="w-[280px]"
-                  />
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-500 whitespace-nowrap">Filter by Brand:</span>
+                    <Select
+                      value={selectedClientFilter}
+                      onValueChange={setSelectedClientFilter}
+                    >
+                      <SelectTrigger className="w-[200px] h-9 bg-white">
+                        <SelectValue placeholder="All Brands" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Brands</SelectItem>
+                        {clients.map((client) => {
+                          const displayName = client.companyName || client.name || "Unknown";
+                          return (
+                            <SelectItem key={client.id} value={client.id}>
+                              {displayName} {client.name && client.companyName ? `(${client.name})` : ""}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-500 whitespace-nowrap">Date Range:</span>
+                    <DateRangePicker
+                      value={dateRange}
+                      onChange={setDateRange}
+                      className="w-[280px]"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -3794,24 +3820,16 @@ export default function MarketingReportsPage() {
 
               <div className="space-y-2">
                 <Label>Remarks</Label>
-                <Select
+                <Input
+                  placeholder="Add remark..."
                   value={dailyFormData.remarks || ""}
-                  onValueChange={(val) =>
+                  onChange={(e) =>
                     setDailyFormData({
                       ...dailyFormData,
-                      remarks: val,
+                      remarks: e.target.value,
                     })
                   }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select remark" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Positive">Positive</SelectItem>
-                    <SelectItem value="Neutral">Neutral</SelectItem>
-                    <SelectItem value="Negative">Negative</SelectItem>
-                  </SelectContent>
-                </Select>
+                />
               </div>
             </div>
             <DialogFooter>
