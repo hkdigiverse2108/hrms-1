@@ -1433,7 +1433,7 @@ class SystemSettingsBase(BaseModel):
     defaultShootDateOffset: Optional[int] = None
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
-    paymentDueDays: Optional[int] = 0
+    addHoldDaysToEndDate: Optional[bool] = True
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1467,7 +1467,7 @@ class SystemSettingsUpdate(BaseModel):
     defaultShootDateOffset: Optional[int] = None
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
-    paymentDueDays: Optional[int] = None
+    addHoldDaysToEndDate: Optional[bool] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1480,12 +1480,20 @@ class ProjectDailyRemarkBase(BaseModel):
     clientId: Optional[str] = None
     date: RobustDate
     remark: Optional[str] = None
+    revenue: float = 0
+    followers: int = 0
+    userRemark: Optional[str] = None
+    clientRemark: Optional[str] = None
 
 class ProjectDailyRemarkCreate(ProjectDailyRemarkBase):
     pass
 
 class ProjectDailyRemarkUpdate(BaseModel):
     remark: Optional[str] = None
+    revenue: Optional[float] = None
+    followers: Optional[int] = None
+    userRemark: Optional[str] = None
+    clientRemark: Optional[str] = None
 
 class ProjectDailyRemark(ProjectDailyRemarkBase):
     id: str

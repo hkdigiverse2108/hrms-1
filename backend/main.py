@@ -1462,10 +1462,12 @@ async def upsert_project_daily_remark(remark: schemas.ProjectDailyRemarkCreate, 
     return crud.fix_id(saved)
 
 @app.get("/marketing/project-remarks", response_model=List[schemas.ProjectDailyRemark])
-async def get_project_daily_remarks(clientId: Optional[str] = None, startDate: Optional[str] = None, endDate: Optional[str] = None, db=Depends(get_db)):
+async def get_project_daily_remarks(clientId: Optional[str] = None, projectId: Optional[str] = None, startDate: Optional[str] = None, endDate: Optional[str] = None, db=Depends(get_db)):
     query = {}
     if clientId:
         query["clientId"] = clientId
+    if projectId:
+        query["projectId"] = projectId
     if startDate and endDate:
         query["date"] = {"$gte": startDate, "$lte": endDate}
     elif startDate:

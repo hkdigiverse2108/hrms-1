@@ -184,7 +184,7 @@ export default function SettingsPage() {
           defaultShootDateOffset: settings?.defaultShootDateOffset !== undefined ? settings.defaultShootDateOffset : null,
           defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
           defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
-          paymentDueDays: settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0
+          addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true
         })
       });
       if (res.ok) {
@@ -828,17 +828,15 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-bold">Digital Marketing Payment Due Threshold (Days)</Label>
-                    <p className="text-[10px] text-muted-foreground mb-1">Show "Payment Due" this many days before the actual payment date in the Digital Marketing module.</p>
-                    <input 
-                      type="number" 
-                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
-                      value={settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0}
-                      onChange={(e) => setSettings({...settings, paymentDueDays: parseInt(e.target.value) || 0})}
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+                    <div>
+                      <Label className="text-sm font-bold">Add on-hold days to Digital Marketing Department Project End Date</Label>
+                      <p className="text-[10px] text-muted-foreground">Automatically add on-hold days to the calculated end date (Digital Marketing only).</p>
+                    </div>
+                    <Switch
+                      checked={settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true}
+                      onCheckedChange={(checked) => setSettings({...settings, addHoldDaysToEndDate: checked})}
                       disabled={isUpdating || !canEditSettings}
-                      placeholder="e.g. 5"
-                      min="0"
                     />
                   </div>
                 </div>
