@@ -3974,6 +3974,27 @@ async def create_marketing_daily_report(db, report: schemas.MarketingDailyReport
     report_dict = report.dict()
     if "date" in report_dict and hasattr(report_dict["date"], "strftime"):
         report_dict["date"] = report_dict["date"].strftime("%Y-%m-%d")
+        
+    if "campaignName" in report_dict and report_dict["campaignName"] and "clientId" in report_dict and report_dict["clientId"]:
+        client = await db.clients.find_one({"_id": ObjectId(report_dict["clientId"])})
+        if client:
+            campaigns = client.get("campaigns", [])
+            camp_name = report_dict["campaignName"]
+            exists = False
+            for c in campaigns:
+                if isinstance(c, str) and c == camp_name:
+                    exists = True
+                    break
+                elif isinstance(c, dict) and c.get("name") == camp_name:
+                    exists = True
+                    break
+            if not exists:
+                campaigns.append({"name": camp_name, "isActive": True})
+                await db.clients.update_one(
+                    {"_id": ObjectId(report_dict["clientId"])},
+                    {"$set": {"campaigns": campaigns}}
+                )
+
     result = await db.marketing_daily_reports.insert_one(report_dict)
     report_dict["id"] = str(result.inserted_id)
     return report_dict
