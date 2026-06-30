@@ -617,6 +617,7 @@ export default function MarketingReportsPage() {
     spend: 0,
     cpl: 0,
     remarks: "",
+    leadsFileUrl: "",
     campaignOptimization: false,
   });
 
@@ -631,6 +632,7 @@ export default function MarketingReportsPage() {
     spend: 0,
     cpl: 0,
     remarks: "",
+    leadsFileUrl: "",
   });
   const [isQuickAdding, setIsQuickAdding] = useState(false);
 
@@ -1122,6 +1124,65 @@ export default function MarketingReportsPage() {
         }
       }
       await handleInlineUpdate(id, "leadsFileUrl", "", type);
+      toast.success("Leads file removed successfully");
+    } catch (err) {
+      toast.error("Failed to remove leads file");
+    }
+  };
+
+  const handleUploadLeadsForm = async (e: React.ChangeEvent<HTMLInputElement>, target: "quick" | "edit") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size should be smaller than 10 MB");
+      e.target.value = '';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const uploadRes = await fetch(`${API_URL}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        toast.error("Failed to upload file");
+        return;
+      }
+
+      const { url } = await uploadRes.json();
+      if (target === "quick") {
+        setQuickAddData(prev => ({ ...prev, leadsFileUrl: url }));
+      } else {
+        setDailyFormData(prev => ({ ...prev, leadsFileUrl: url }));
+      }
+      toast.success("Leads file uploaded successfully");
+    } catch (err) {
+      toast.error("An error occurred during upload");
+    }
+  };
+
+  const handleRemoveLeadsFileForm = async (target: "quick" | "edit") => {
+    const fileUrl = target === "quick" ? quickAddData.leadsFileUrl : dailyFormData.leadsFileUrl;
+    try {
+      if (fileUrl) {
+        const parts = fileUrl.split('/uploads/');
+        if (parts.length > 1) {
+          const filename = parts[1];
+          await fetch(`${API_URL}/upload/${filename}`, {
+            method: "DELETE",
+          });
+        }
+      }
+      if (target === "quick") {
+        setQuickAddData(prev => ({ ...prev, leadsFileUrl: "" }));
+      } else {
+        setDailyFormData(prev => ({ ...prev, leadsFileUrl: "" }));
+      }
       toast.success("Leads file removed successfully");
     } catch (err) {
       toast.error("Failed to remove leads file");
@@ -2781,34 +2842,16 @@ export default function MarketingReportsPage() {
                                                             <History className="w-4 h-4" />
                                                           </Button>
 
-                                                          <input 
-                                                            type="file" 
-                                                            className="hidden" 
-                                                            id={`upload-leads-${report.id}`} 
-                                                            accept=".xlsx,.xls,.csv"
-                                                            onChange={(e) => handleUploadLeads(e, report.id, "daily", report.leadsFileUrl)}
-                                                          />
-                                                          <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                                                            title="Upload Leads"
-                                                            onClick={() => document.getElementById(`upload-leads-${report.id}`)?.click()}
-                                                          >
-                                                            <Upload className="w-4 h-4" />
-                                                          </Button>
                                                           {report.leadsFileUrl && (
-                                                            <>
-                                                              <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                                                title="Download Leads"
-                                                                onClick={() => handleDownloadLeads(report.leadsFileUrl)}
-                                                              >
-                                                                <FileSpreadsheet className="w-4 h-4" />
-                                                              </Button>
-                                                            </>
+                                                            <Button
+                                                              variant="ghost"
+                                                              size="icon"
+                                                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                              title="Download Leads"
+                                                              onClick={() => handleDownloadLeads(report.leadsFileUrl)}
+                                                            >
+                                                              <FileSpreadsheet className="w-4 h-4" />
+                                                            </Button>
                                                           )}
 
                                                           {canDeleteMarketing && (
@@ -3138,6 +3181,46 @@ export default function MarketingReportsPage() {
                           value={quickAddData.remarks || ""}
                           onChange={(e) => setQuickAddData({...quickAddData, remarks: e.target.value})}
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Leads File (Optional)</Label>
+                        {quickAddData.leadsFileUrl ? (
+                          <div className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg h-10">
+                            <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span className="text-xs font-semibold text-emerald-800 truncate flex-1">
+                              Leads File Uploaded
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                handleRemoveLeadsFileForm("quick");
+                              }}
+                              className="h-6 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-[10px] font-bold"
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <input 
+                              type="file" 
+                              id="quick-upload-leads"
+                              className="hidden" 
+                              accept=".xlsx,.xls,.csv"
+                              onChange={(e) => handleUploadLeadsForm(e, "quick")}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => document.getElementById("quick-upload-leads")?.click()}
+                              className="w-full h-10 border-dashed bg-white hover:bg-slate-50 text-slate-500 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <Upload className="w-4 h-4 text-slate-400" /> Upload Leads (.xlsx, .xls, .csv)
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
