@@ -33,6 +33,8 @@ import {
   FileSpreadsheet,
   FileX,
   Settings,
+  Maximize,
+  Minimize,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -380,6 +382,7 @@ export default function MarketingReportsPage() {
 
   const [dailyMetricsProject, setDailyMetricsProject] = useState<any>(null);
   const [dailyMetricsOpen, setDailyMetricsOpen] = useState(false);
+  const [isDailyFullScreen, setIsDailyFullScreen] = useState(false);
   const [dailyMetricsData, setDailyMetricsData] = useState({
     revenue: 0,
     followers: 0,
@@ -849,6 +852,7 @@ export default function MarketingReportsPage() {
           spend: 0,
           cpl: 0,
           remarks: "",
+          leadsFileUrl: "",
         });
         fetchData();
         fetchClients();
@@ -921,6 +925,7 @@ export default function MarketingReportsPage() {
           spend: 0,
           cpl: 0,
           remarks: "",
+          leadsFileUrl: "",
           campaignOptimization: false,
         });
         toast.success(
@@ -2024,7 +2029,7 @@ export default function MarketingReportsPage() {
           </TabsList>
         </div>
 
-        {activeTab !== "clients" && activeTab !== "tasks" && activeTab !== "analysis" && activeTab !== "progress" && activeTab !== "all_clients" && (
+        {activeTab !== "clients" && activeTab !== "tasks" && activeTab !== "analysis" && activeTab !== "progress" && activeTab !== "all_clients" && !isDailyFullScreen && (
           <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border shadow-sm mb-6">
             <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
               <Label className="text-xs text-slate-500">
@@ -2168,6 +2173,24 @@ export default function MarketingReportsPage() {
                   </Button>
                 </>
               )}
+              {activeTab === "daily" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-brand-teal hover:bg-brand-teal/5"
+                  onClick={() => setIsDailyFullScreen(!isDailyFullScreen)}
+                >
+                  {isDailyFullScreen ? (
+                    <>
+                      <Minimize className="w-4 h-4 mr-1.5" /> Minimize
+                    </>
+                  ) : (
+                    <>
+                      <Maximize className="w-4 h-4 mr-1.5" /> Maximize
+                    </>
+                  )}
+                </Button>
+              )}
               {activeTab === "monthly" && filteredMonthly.length > 0 && (
                 <>
                   <Button
@@ -2218,8 +2241,83 @@ export default function MarketingReportsPage() {
                 
         <TabsContent
           value="daily"
-          className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"
+          className={isDailyFullScreen ? "fixed inset-0 z-50 bg-slate-100 flex flex-col p-6 overflow-hidden" : "mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"}
         >
+          {isDailyFullScreen && (
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm shrink-0">
+              <div className="flex items-center gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">Daily Marketing Reports</h2>
+                  <p className="text-xs text-slate-500">Full Screen View</p>
+                </div>
+              </div>
+
+              {/* Filters inline in the header */}
+              <div className="flex flex-wrap items-center gap-4 flex-1 justify-center max-w-4xl">
+                <div className="flex-1 min-w-[200px] max-w-xs relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    placeholder="Filter reports..."
+                    className="pl-10 h-9 bg-white"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                
+                <div className="w-[280px]">
+                  <DateRangePicker
+                    value={dateRange}
+                    onChange={setDateRange}
+                  />
+                </div>
+
+                {(searchQuery || (dateRange?.from && dateRange?.to)) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 px-2 text-slate-500 hover:text-slate-700 cursor-pointer"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setDateRange({ from: new Date(), to: new Date() });
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {filteredDaily.length > 0 && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-brand-teal hover:bg-brand-teal/5"
+                      onClick={() => exportToPDF(getDailyExportData(), `Daily_Marketing_Report_${getTodayStr()}`)}
+                    >
+                      <Download className="w-4 h-4 mr-1.5" /> PDF
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-[#107c41] hover:bg-[#107c41]/5"
+                      onClick={() => exportToExcel(getDailyExportData(), `Daily_Marketing_Report_${getTodayStr()}`)}
+                    >
+                      <Download className="w-4 h-4 mr-1.5" /> Excel
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-3 text-xs font-bold text-slate-700 hover:text-brand-teal hover:bg-brand-teal/5"
+                  onClick={() => setIsDailyFullScreen(false)}
+                >
+                  <Minimize className="w-4 h-4 mr-1.5" /> Minimize
+                </Button>
+              </div>
+            </div>
+          )}
           <ResizablePanelGroup direction="horizontal" className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 min-h-0">
             {/* Left Column: Client List */}
             <ResizablePanel defaultSize={25} minSize={15} maxSize={40} className="border-r border-slate-200 flex flex-col bg-slate-50/50">
