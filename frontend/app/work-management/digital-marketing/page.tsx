@@ -3627,8 +3627,16 @@ export default function MarketingReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {projects.filter(p => p.department === "Digital Marketing").map(p => {
-                      const client = clients.find(c => c.id === p.clientId);
+                    {projects
+                      .filter(p => p.department === "Digital Marketing")
+                      .sort((a, b) => {
+                        if (!a.endDate && !b.endDate) return 0;
+                        if (!a.endDate) return 1;
+                        if (!b.endDate) return -1;
+                        return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+                      })
+                      .map(p => {
+                        const client = clients.find(c => c.id === p.clientId);
                       
                       let calculatedEndStr = "-";
                       if (p.endDate) {
