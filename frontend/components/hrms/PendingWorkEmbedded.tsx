@@ -208,7 +208,7 @@ export function PendingWorkEmbedded({
       if (entry.shootDate && !entry.shootLink && canSeeTask('Shoot')) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
       if (entry.editingStart && !entry.finalReelLink && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       if (entry.approval && entry.isApproved !== 'Yes' && canSeeTask('Approval')) tasks.push(enrich('Approval', entry.approval, 'approvals'));
-      if (entry.postingDate && entry.status !== 'Posted' && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
+      if (entry.postingDate && !entry.postingLinkOfIg && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
     otherWorkEntries.forEach(ow => {

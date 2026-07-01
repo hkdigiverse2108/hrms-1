@@ -124,7 +124,7 @@ export default function PendingWorkPage() {
       if (entry.shootDate && !entry.shootLink) clientsMap[clientId].tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
       if (entry.editingStart && !entry.finalReelLink) clientsMap[clientId].tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       if (entry.approval && entry.isApproved !== 'Yes') clientsMap[clientId].tasks.push(enrich('Approval', entry.approval, 'approvals'));
-      if (entry.postingDate && entry.status !== 'Posted') clientsMap[clientId].tasks.push(enrich('Posting', entry.postingDate, 'posts'));
+      if (entry.postingDate && !entry.postingLinkOfIg) clientsMap[clientId].tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
     return Object.values(clientsMap)
