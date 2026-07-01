@@ -776,6 +776,10 @@ export default function CreativeClientsPage() {
       case 'pending-work': return hasPendingWork;
       case 'meeting-done': return c.meetings && c.meetings.length > 0;
       case 'meeting-not-done': return !c.meetings || c.meetings.length === 0;
+      case 'approval-pending': return !calendarSettings[c.id]?.approvalStatus || calendarSettings[c.id]?.approvalStatus === "Pending";
+      case 'approval-approved': return calendarSettings[c.id]?.approvalStatus === "Approved by Client";
+      case 'approval-changes': return calendarSettings[c.id]?.approvalStatus === "Changes Requested";
+      case 'approval-rejected': return calendarSettings[c.id]?.approvalStatus === "Rejected";
       default: return true;
     }
   }).filter(c => {
@@ -1026,6 +1030,33 @@ export default function CreativeClientsPage() {
             <SelectContent>
               <SelectItem value="meeting-done">Meeting Done</SelectItem>
               <SelectItem value="meeting-not-done">Meeting Pending</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select 
+            value={
+              ["approval-pending", "approval-approved", "approval-changes", "approval-rejected"].includes(masterFilter) 
+                ? masterFilter 
+                : ""
+            } 
+            onValueChange={(val) => {
+              if (val) setMasterFilter(val);
+            }}
+          >
+            <SelectTrigger 
+              className={`w-[130px] h-9 border-none font-bold rounded-lg ${
+                ["approval-pending", "approval-approved", "approval-changes", "approval-rejected"].includes(masterFilter)
+                  ? "bg-white text-brand-teal shadow-sm" 
+                  : "bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
+              }`}
+            >
+              <SelectValue placeholder="CC Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="approval-pending">Pending</SelectItem>
+              <SelectItem value="approval-approved">Approved by Client</SelectItem>
+              <SelectItem value="approval-changes">Changes Requested</SelectItem>
+              <SelectItem value="approval-rejected">Rejected</SelectItem>
             </SelectContent>
           </Select>
         </div>
