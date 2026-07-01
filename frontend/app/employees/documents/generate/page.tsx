@@ -344,13 +344,6 @@ export default function DocumentGeneratorPage() {
       clone.style.position = 'relative'
       clone.style.transform = 'none'
       clone.style.boxShadow = 'none'
-      clone.style.overflow = 'hidden'
-      clone.style.overflowY = 'hidden'
-      const editorClone = clone.querySelector('.ql-editor') as HTMLElement
-      if (editorClone) {
-        editorClone.style.overflow = 'hidden'
-        editorClone.style.overflowY = 'hidden'
-      }
       
       // Get the actual height after setting the fixed width
       const nodeHeight = Math.max(1123, estimatedPages * 1123) // Force exact A4 page multiples
@@ -549,13 +542,6 @@ export default function DocumentGeneratorPage() {
       clone.style.position = 'relative'
       clone.style.transform = 'none'
       clone.style.boxShadow = 'none'
-      clone.style.overflow = 'hidden'
-      clone.style.overflowY = 'hidden'
-      const editorClone = clone.querySelector('.ql-editor') as HTMLElement
-      if (editorClone) {
-        editorClone.style.overflow = 'hidden'
-        editorClone.style.overflowY = 'hidden'
-      }
       
       // Get the actual height after setting the fixed width
       const nodeHeight = Math.max(1123, estimatedPages * 1123) // Force exact A4 page multiples
