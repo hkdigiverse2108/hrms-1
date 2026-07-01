@@ -1429,6 +1429,7 @@ class SystemSettingsBase(BaseModel):
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
     paymentDueDays: Optional[int] = 0
+    invoiceClientDepartments: Optional[List[str]] = []
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1463,6 +1464,7 @@ class SystemSettingsUpdate(BaseModel):
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
     paymentDueDays: Optional[int] = None
+    invoiceClientDepartments: Optional[List[str]] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str

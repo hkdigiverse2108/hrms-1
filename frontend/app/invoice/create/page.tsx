@@ -8,11 +8,14 @@ import {
   Send,
   RefreshCw,
   Loader2,
-  Upload
+  Upload,
+  ChevronsUpDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/common/PageHeader";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -44,6 +47,7 @@ export default function CreateInvoicePage() {
   const [clientGstin, setClientGstin] = useState("");
   const [clientState, setClientState] = useState("");
   const [clientDepartment, setClientDepartment] = useState("Billing Department");
+  const [availableDepartments, setAvailableDepartments] = useState<string[]>([]);
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceType, setInvoiceType] = useState("Tax Invoice");
   const [issueDate, setIssueDate] = useState("");
@@ -101,6 +105,9 @@ export default function CreateInvoicePage() {
         const data = await res.json();
         if (data.companyState) {
           setCompanyState(data.companyState);
+        }
+        if (data.invoiceClientDepartments) {
+          setAvailableDepartments(data.invoiceClientDepartments);
         }
       }
     } catch (err) {
@@ -540,12 +547,58 @@ export default function CreateInvoicePage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground">Client Department</label>
-                  <Input 
-                    value={clientDepartment}
-                    onChange={(e) => setClientDepartment(e.target.value)}
-                    placeholder="e.g. Finance & Accounts" 
-                    className="bg-white border-border h-11 font-medium text-slate-700" 
-                  />
+                  {availableDepartments.length > 0 ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between h-11 border-border bg-white text-slate-700 font-medium"
+                        >
+                          <span className="truncate">
+                            {clientDepartment || "Select Departments..."}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <div className="max-h-[250px] overflow-y-auto p-2 space-y-1">
+                          {availableDepartments.map(dept => {
+                            const isSelected = (clientDepartment || "").split(",").map(d => d.trim()).filter(Boolean).includes(dept);
+                            return (
+                              <div
+                                key={dept}
+                                className="flex items-center gap-3 px-3 py-2.5 hover:bg-brand-teal/5 rounded-md cursor-pointer transition-colors"
+                                onClick={() => {
+                                  const currentDepts = clientDepartment ? clientDepartment.split(",").map(d => d.trim()).filter(Boolean) : [];
+                                  if (currentDepts.includes(dept)) {
+                                    setClientDepartment(currentDepts.filter(d => d !== dept).join(", "));
+                                  } else {
+                                    setClientDepartment([...currentDepts, dept].join(", "));
+                                  }
+                                }}
+                              >
+                                <Checkbox 
+                                  checked={isSelected}
+                                  className={cn("data-[state=checked]:bg-brand-teal data-[state=checked]:border-brand-teal")}
+                                />
+                                <span className={cn("text-sm font-medium", isSelected ? "text-brand-teal" : "text-slate-700")}>
+                                  {dept}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <Input 
+                      value={clientDepartment}
+                      onChange={(e) => setClientDepartment(e.target.value)}
+                      placeholder="e.g. Finance & Accounts" 
+                      className="bg-white border-border h-11 font-medium text-slate-700" 
+                    />
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground">Client Phone</label>

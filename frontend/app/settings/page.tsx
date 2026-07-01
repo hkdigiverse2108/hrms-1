@@ -49,6 +49,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [deptInput, setDeptInput] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -175,6 +176,7 @@ export default function SettingsPage() {
           taxInvoicePrefix: settings?.taxInvoicePrefix || "INV",
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
           noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
+          invoiceClientDepartments: deptInput !== null ? deptInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.invoiceClientDepartments || []),
           companyLetterheadUrl: settings?.companyLetterheadUrl || null,
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
@@ -839,6 +841,25 @@ export default function SettingsPage() {
                       disabled={isUpdating || !canEditSettings}
                       placeholder="e.g. 5"
                       min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-1 md:col-span-2 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Client Departments (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These departments will appear in a dropdown when creating or editing an Invoice.</p>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={deptInput !== null ? deptInput : (settings?.invoiceClientDepartments || []).join(", ")}
+                      onChange={(e) => setDeptInput(e.target.value)}
+                      onBlur={(e) => {
+                        setSettings({...settings, invoiceClientDepartments: e.target.value.split(",").map(s => s.trim()).filter(Boolean)});
+                        setDeptInput(null);
+                      }}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. Billing Department, Support, Sales"
                     />
                   </div>
                 </div>
