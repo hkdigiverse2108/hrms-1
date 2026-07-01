@@ -17,6 +17,7 @@ import { Plus, Clock, Pencil, Trash2, Users } from 'lucide-react'
 import { DeleteConfirmDialog } from '@/components/hrms/delete-confirm-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { TIME_OPTIONS } from "@/lib/constants"
+import { formatTime12h } from '@/lib/utils'
 
 interface Shift {
   id: string
@@ -139,7 +140,7 @@ export default function ShiftsPage() {
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">
-                    {shift.startTime} - {shift.endTime}
+                    {formatTime12h(shift.startTime)} - {formatTime12h(shift.endTime)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

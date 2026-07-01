@@ -161,6 +161,14 @@ export function EmployeeForm({ initialData, onSubmit, isSubmitting, mode }: Empl
               }
             }
             sanitizedData[k] = (Array.isArray(reqDocs) ? reqDocs : []) as any;
+          } else if (k === 'startTime' || k === 'endTime') {
+            const strVal = String(value);
+            if (strVal.includes(':')) {
+              const parts = strVal.split(':');
+              sanitizedData[k] = `${parts[0]}:${parts[1]}`;
+            } else {
+              sanitizedData[k] = strVal;
+            }
           } else if (typeof value === 'object' && value !== null) {
             // Handle if backend returns an object for a field (e.g., department: {name: '...'})
             sanitizedData[k] = String((value as any).name || (value as any).title || (value as any).label || JSON.stringify(value)) as any

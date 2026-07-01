@@ -909,8 +909,8 @@ export default function EmployeeAttendanceListPage() {
                             ) : "-"}
                         </td>
                         <td className="px-4 py-4 text-slate-700 font-medium whitespace-nowrap">{totalWorkingStr}</td>
-                        <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${officeStartTime} AM)` : undefined) : record.remarks}>
-                          {(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${officeStartTime} AM)` : "-") : record.remarks}
+                        <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${formatTime12h(officeStartTime)})` : undefined) : record.remarks}>
+                          {(!record.remarks || record.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${formatTime12h(officeStartTime)})` : "-") : record.remarks}
                         </td>
                         <td className="px-4 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">

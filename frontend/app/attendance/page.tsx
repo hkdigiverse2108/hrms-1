@@ -1060,8 +1060,8 @@ export default function AttendancePage() {
                             ) : "-"}
                           </td>
                            <td className="px-4 py-4 font-medium text-foreground">{totalWorkingStr}</td>
-                          <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!row.remarks || row.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : undefined) : row.remarks}>
-                            {(!row.remarks || row.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${sysSettings?.officeStartTime || "09:30"} AM)` : "-") : row.remarks}
+                          <td className="px-4 py-4 text-[11px] text-muted-foreground max-w-[200px] truncate" title={(!row.remarks || row.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${formatTime12h(sysSettings?.officeStartTime || "09:30")})` : undefined) : row.remarks}>
+                            {(!row.remarks || row.remarks === "-") ? (isLate ? `Late punch-in; ${lateMinutes} mins after expected start (${formatTime12h(sysSettings?.officeStartTime || "09:30")})` : "-") : row.remarks}
                           </td>
                           <td className="px-4 py-4 text-right">
                               <div className="flex justify-end gap-2">
