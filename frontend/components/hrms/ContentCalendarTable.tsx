@@ -70,6 +70,36 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [showReasonDialog, setShowReasonDialog] = useState(false);
   const [pendingStatusChange, setPendingStatusChange] = useState<string | null>(null);
   const [statusChangeReason, setStatusChangeReason] = useState("");
+  const [overallMaxDate, setOverallMaxDate] = useState<Date | null>(null);
+
+  const fetchOverallMaxDate = async () => {
+    try {
+      const res = await fetch(`${API_URL}/content-calendar?clientId=${clientId}`);
+      if (res.ok) {
+        const data = await res.json();
+        let max = new Date(0);
+        let found = false;
+        data.forEach((e: any) => {
+          if (e.postingDate) {
+            const d = new Date(e.postingDate);
+            if (!isNaN(d.getTime()) && d > max) {
+              max = d;
+              found = true;
+            }
+          }
+        });
+        setOverallMaxDate(found ? max : null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (clientId) {
+      fetchOverallMaxDate();
+    }
+  }, [clientId, entries]);
 
   const handleOpenLogs = (entry: any) => {
     setCurrentLogs(entry.logs || []);
@@ -798,6 +828,12 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
               </div>
             )}
             </div>
+            {overallMaxDate && (
+              <div className="flex items-center gap-2 border border-orange-200 bg-orange-50 rounded-md px-3 h-9 text-sm shrink-0 shadow-sm">
+                <span className="font-medium text-orange-700">End Date:</span>
+                <span className="font-bold text-orange-900">{overallMaxDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+              </div>
+            )}
             <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
               <PopoverTrigger asChild>
               <Button variant="outline" className="w-[180px] justify-start text-left font-normal h-9 bg-white">
