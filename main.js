@@ -653,14 +653,18 @@ function setupAutoLaunch() {
 
 function setupTray() {
   try {
-    const iconPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'app', 'frontend', 'public', 'icon-light-32x32.png')
-      : path.join(__dirname, 'frontend', 'public', 'icon-light-32x32.png');
-      
-    const finalIconPath = fs.existsSync(iconPath) ? iconPath : undefined;
-    log(`Initializing system tray with icon: ${finalIconPath || 'default fallback'}`);
+    const iconPath = path.join(__dirname, 'frontend', 'public', 'favicon.ico');
+    const fallbackPath = path.join(__dirname, 'frontend', 'public', 'icon-light-32x32.png');
+    
+    let finalIconPath = fs.existsSync(iconPath) ? iconPath : (fs.existsSync(fallbackPath) ? fallbackPath : undefined);
+    log(`Initializing system tray with icon: ${finalIconPath || 'none'}`);
 
-    tray = new Tray(finalIconPath || path.join(__dirname, 'main.js'));
+    if (!finalIconPath) {
+      log('WARNING: No valid tray icon found.');
+      return;
+    }
+
+    tray = new Tray(finalIconPath);
     const contextMenu = Menu.buildFromTemplate([
       {
         label: 'Open HRMS',
