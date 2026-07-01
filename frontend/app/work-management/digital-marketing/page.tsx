@@ -439,8 +439,24 @@ export default function MarketingReportsPage() {
         })
       });
       if (res.ok) {
+        if (canChangeEndDate && projectEndDate) {
+          try {
+            await fetch(`${API_URL}/projects/${dailyMetricsProject.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                endDate: projectEndDate
+              })
+            });
+          } catch (projErr) {
+            console.error("Failed to save project end date:", projErr);
+          }
+        }
         toast.success("Daily metrics saved successfully");
         setDailyMetricsOpen(false);
+        fetchProjects();
+        fetchData();
+        fetchClients();
       } else {
         toast.error("Failed to save metrics");
       }
