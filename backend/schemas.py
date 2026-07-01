@@ -1434,6 +1434,7 @@ class SystemSettingsBase(BaseModel):
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
     addHoldDaysToEndDate: Optional[bool] = True
+    invoiceClientDepartments: Optional[List[str]] = []
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1468,6 +1469,7 @@ class SystemSettingsUpdate(BaseModel):
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
     addHoldDaysToEndDate: Optional[bool] = None
+    invoiceClientDepartments: Optional[List[str]] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1919,6 +1921,11 @@ class InvoiceLineItem(BaseModel):
     discountRate: Optional[float] = 0.0
     discountType: Optional[str] = "amount"
 
+class InvoiceIncentive(BaseModel):
+    employeeId: str
+    employeeName: str
+    amount: float
+
 class InvoiceBase(BaseModel):
     clientName: str
     clientAddress: Optional[str] = None
@@ -1948,6 +1955,12 @@ class InvoiceBase(BaseModel):
     incentiveAmountBase: Optional[float] = None
     createdBy: Optional[str] = None
     createdById: Optional[str] = None
+    endDate: Optional[str] = None
+    followUp: Optional[str] = None
+    sharedWith: Optional[List[str]] = []
+    accessManaged: Optional[bool] = False
+    totalIncentiveAmount: Optional[float] = 0.0
+    incentives: Optional[List[InvoiceIncentive]] = []
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1979,6 +1992,12 @@ class InvoiceUpdate(BaseModel):
     incentiveAmountBase: Optional[float] = None
     createdBy: Optional[str] = None
     createdById: Optional[str] = None
+    endDate: Optional[str] = None
+    followUp: Optional[str] = None
+    sharedWith: Optional[List[str]] = []
+    accessManaged: Optional[bool] = False
+    totalIncentiveAmount: Optional[float] = None
+    incentives: Optional[List[InvoiceIncentive]] = None
 
 class Invoice(InvoiceBase):
     id: str

@@ -2167,8 +2167,8 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db=Depends(get_db)):
     return await crud.create_invoice(db, invoice)
 
 @app.get("/invoices", response_model=List[schemas.Invoice])
-async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
-    return await crud.get_invoices(db, skip=skip, limit=limit)
+async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    return await crud.get_invoices(db, current_user, skip=skip, limit=limit)
 
 @app.get("/invoices/next-number")
 async def get_next_number(type: str = "Tax Invoice", taxType: str = "CGST+SGST", db=Depends(get_db)):
@@ -2176,8 +2176,8 @@ async def get_next_number(type: str = "Tax Invoice", taxType: str = "CGST+SGST",
     return {"nextInvoiceNumber": next_num}
 
 @app.get("/invoices/{invoice_id}", response_model=schemas.Invoice)
-async def read_invoice(invoice_id: str, db=Depends(get_db)):
-    db_invoice = await crud.get_invoice(db, invoice_id)
+async def read_invoice(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    db_invoice = await crud.get_invoice(db, invoice_id, current_user)
     if db_invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return db_invoice
@@ -2190,8 +2190,8 @@ async def update_invoice(invoice_id: str, invoice_update: schemas.InvoiceUpdate,
     return updated
 
 @app.post("/invoices/{invoice_id}/convert-to-tax", response_model=schemas.Invoice)
-async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db)):
-    db_invoice = await crud.get_invoice(db, invoice_id)
+async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    db_invoice = await crud.get_invoice(db, invoice_id, current_user)
     if not db_invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     if db_invoice.get("invoiceType") != "Proforma Invoice":
@@ -2214,7 +2214,7 @@ async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db)):
     return created_invoice
 
 @app.delete("/invoices/{invoice_id}")
-async def delete_invoice(invoice_id: str, db=Depends(get_db)):
+async def delete_invoice(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
     success = await crud.delete_invoice(db, invoice_id)
     if not success:
         raise HTTPException(status_code=404, detail="Invoice not found")

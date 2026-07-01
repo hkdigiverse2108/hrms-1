@@ -257,7 +257,7 @@ export function ClientForm({ initialData, onSubmit, isSubmitting, departments: p
                     <SelectTrigger className="h-8"><SelectValue placeholder="Select Employee" /></SelectTrigger>
                     <SelectContent>
                       {employees.map((emp) => (
-                        <SelectItem key={emp.id} value={`${emp.firstName} ${emp.lastName}`}>{emp.firstName} {emp.lastName}</SelectItem>
+                        <SelectItem key={emp.id} value={emp.id || `${emp.firstName} ${emp.lastName}`}>{emp.firstName} {emp.lastName}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

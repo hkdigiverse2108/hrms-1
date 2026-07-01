@@ -269,13 +269,14 @@ export function PendingWorkEmbedded({
     }
 
     // Apply Assigner Filter
-    if (filterAssigner !== 'all') {
-      filteredTasks = filteredTasks.filter(t => t.assignerName && t.assignerName === filterAssigner);
+    const assignerFilterName = filterAssigner !== 'all' ? (filterAssigner.includes('|') ? filterAssigner.split('|')[0] : filterAssigner) : 'all';
+    if (assignerFilterName !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.assignerName && t.assignerName === assignerFilterName);
     }
-
-    // Apply Assignee Filter
-    if (filterAssignee !== 'all') {
-      filteredTasks = filteredTasks.filter(t => t.assigneeName && t.assigneeName === filterAssignee);
+    
+    const assigneeFilterName = filterAssignee !== 'all' ? (filterAssignee.includes('|') ? filterAssignee.split('|')[0] : filterAssignee) : 'all';
+    if (assigneeFilterName !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.assigneeName && t.assigneeName === assigneeFilterName);
     }
 
     // Apply Search Query
@@ -451,11 +452,14 @@ export function PendingWorkEmbedded({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Assigned By: All</SelectItem>
-                {employees.map(emp => (
-                  <SelectItem key={`assigner-${emp.id}`} value={`${emp.firstName} ${emp.lastName}`}>
-                    {emp.firstName} {emp.lastName}
-                  </SelectItem>
-                ))}
+                {employees.map(emp => {
+                  const empName = `${emp.firstName} ${emp.lastName}`;
+                  return (
+                    <SelectItem key={`assigner-${emp.id}`} value={`${empName}|${emp.id}`}>
+                      {empName}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
 
@@ -465,11 +469,14 @@ export function PendingWorkEmbedded({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Assigned To: All</SelectItem>
-                {employees.map(emp => (
-                  <SelectItem key={`assignee-${emp.id}`} value={`${emp.firstName} ${emp.lastName}`}>
-                    {emp.firstName} {emp.lastName}
-                  </SelectItem>
-                ))}
+                {employees.map(emp => {
+                  const empName = `${emp.firstName} ${emp.lastName}`;
+                  return (
+                    <SelectItem key={`assignee-${emp.id}`} value={`${empName}|${emp.id}`}>
+                      {empName}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>

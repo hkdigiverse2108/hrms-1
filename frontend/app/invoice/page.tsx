@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useUser } from "@/hooks/useUser";
 import { 
   Plus, 
   Search, 
@@ -16,7 +17,11 @@ import {
   CheckCircle2,
   X,
   RotateCcw,
-  IndianRupee
+  IndianRupee,
+  Users,
+  ChevronsUpDown,
+  Gift,
+  Coins
 } from "lucide-react";
 import {
   Popover,
@@ -41,6 +46,7 @@ import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { TablePagination } from "@/components/common/TablePagination";
+import { IncentivesModal } from "./IncentivesModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +60,8 @@ const getStatusStyles = (status: string) => {
     case "Paid": return "bg-emerald-100 text-emerald-700 border-emerald-200";
     case "Pending": return "bg-amber-100 text-amber-700 border-amber-200";
     case "Overdue": return "bg-red-100 text-red-700 border-red-200";
+    case "Cancelled": return "bg-slate-100 text-slate-700 border-slate-300";
+    case "Payment Approval": return "bg-blue-100 text-blue-700 border-blue-200";
     default: return "bg-gray-100 text-gray-700 border-gray-200";
   }
 };
@@ -65,10 +73,25 @@ export default function AllInvoicesPage() {
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   
-  // Incentive Modal State
-  const [showIncentiveModal, setShowIncentiveModal] = useState(false);
-  const [incentiveAmountBase, setIncentiveAmountBase] = useState("");
+  const { user } = useUser();
+  const isAdmin = user?.role === "Admin";
+  
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
+  
+  // Access Modal State
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [accessInvoice, setAccessInvoice] = useState<any>(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  
+  // Follow Up Modal State
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [showIncentivesModal, setShowIncentivesModal] = useState(false);
+  
+  const [endDate, setEndDate] = useState("");
+  const [followUp, setFollowUp] = useState("");
+  const [isUpdatingFollowUp, setIsUpdatingFollowUp] = useState(false);
+
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedType, setSelectedType] = useState("All");
   
@@ -143,23 +166,46 @@ export default function AllInvoicesPage() {
     }
   };
 
-  const handleDelete = async (id: string, invoiceNumber: string) => {
+  const handleDelete = async (invoice: any) => {
+    const isProforma = invoice.invoiceType === "Proforma Invoice";
+    
     const isConfirmed = await confirm({
       title: "Delete Invoice",
-      message: `Are you sure you want to delete invoice ${invoiceNumber}? This action cannot be undone.`,
+      message: `Are you sure you want to delete invoice ${invoice.invoiceNumber}? This action cannot be undone.`,
       destructive: true,
-      confirmText: "Delete"
+      confirmText: "Delete",
+      secondaryActionText: isProforma ? "Cancel Invoice" : undefined,
+      onSecondaryAction: isProforma ? async () => {
+        try {
+          const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "Cancelled" })
+          });
+          if (res.ok) {
+            const updated = await res.json();
+            setInvoices(prev => prev.map(inv => inv.id === invoice.id ? updated : inv));
+            toast.success(`Invoice ${invoice.invoiceNumber} has been cancelled.`);
+          } else {
+            toast.error("Failed to cancel the invoice");
+          }
+        } catch (err) {
+          console.error(err);
+          toast.error("Network error cancelling the invoice");
+        }
+      } : undefined
     });
+
     if (!isConfirmed) return;
 
     try {
-      const res = await fetch(`${API_URL}/invoices/${id}`, {
+      const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
         method: "DELETE",
       });
 
       if (res.ok) {
-        setInvoices(invoices.filter(inv => inv.id !== id));
-        toast.success(`Invoice ${invoiceNumber} deleted successfully`);
+        setInvoices(prev => prev.filter(inv => inv.id !== invoice.id));
+        toast.success(`Invoice ${invoice.invoiceNumber} deleted successfully`);
       } else {
         toast.error("Failed to delete the invoice");
       }
@@ -169,50 +215,62 @@ export default function AllInvoicesPage() {
     }
   };
 
-  const handleMarkAsPaidClick = (invoice: any) => {
-    setActiveInvoiceId(invoice.id);
-    setIncentiveAmountBase(invoice.incentiveAmountBase !== undefined && invoice.incentiveAmountBase !== null ? invoice.incentiveAmountBase.toString() : "");
-    setShowIncentiveModal(true);
-  };
-
-  const executeMarkAsPaid = async () => {
+  const handleUpdateFollowUp = async () => {
     if (!activeInvoiceId) return;
-    
-    const activeInvoice = invoices.find(inv => inv.id === activeInvoiceId);
-    if (!activeInvoice) return;
-
-    const baseAmt = parseFloat(incentiveAmountBase);
-    if (isNaN(baseAmt) || baseAmt < 0) {
-      toast.error("Please enter a valid incentive amount");
-      return;
-    }
-
-    if (baseAmt > (activeInvoice.total || 0)) {
-      toast.error("Incentive base amount cannot exceed the invoice amount");
-      return;
-    }
-
-    setShowIncentiveModal(false);
-
+    setIsUpdatingFollowUp(true);
     try {
       const res = await fetch(`${API_URL}/invoices/${activeInvoiceId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Paid", incentiveAmountBase: baseAmt })
+        body: JSON.stringify({
+          endDate: endDate || null,
+          followUp: followUp || null
+        })
+      });
+
+      if (!res.ok) throw new Error("Failed to update invoice");
+      
+      const updatedInvoice = await res.json();
+      setInvoices(prev => prev.map(inv => inv.id === activeInvoiceId ? updatedInvoice : inv));
+      toast.success("Follow-up details updated successfully");
+      setShowFollowUpModal(false);
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error updating invoice");
+    } finally {
+      setIsUpdatingFollowUp(false);
+    }
+  };
+
+  const handleMarkAsPaid = async (invoice: any) => {
+    const actionTargetStatus = isAdmin ? "Paid" : "Payment Approval";
+    const actionLabel = isAdmin ? "Mark as Paid" : "Request Payment Approval";
+    
+    const isConfirmed = await confirm({
+      title: actionLabel,
+      message: `Are you sure you want to ${isAdmin ? "mark invoice " + invoice.invoiceNumber + " as Paid" : "request payment approval for invoice " + invoice.invoiceNumber}?`,
+      confirmText: "Confirm",
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: actionTargetStatus })
       });
 
       if (res.ok) {
         const updated = await res.json();
-        setInvoices(invoices.map(inv => inv.id === activeInvoiceId ? updated : inv));
-        toast.success(`Invoice marked as Paid!`);
+        setInvoices(invoices.map(inv => inv.id === invoice.id ? updated : inv));
+        toast.success(`Invoice updated to ${actionTargetStatus}!`);
       } else {
         toast.error("Failed to update status");
       }
     } catch (err) {
       console.error(err);
       toast.error("Network error updating status");
-    } finally {
-      setActiveInvoiceId(null);
     }
   };
 
@@ -234,6 +292,53 @@ export default function AllInvoicesPage() {
     } catch (err) {
       console.error(err);
       toast.error("Network error updating status");
+    }
+  };
+
+  const handleManageAccess = async (invoice: any) => {
+    setAccessInvoice(invoice);
+    
+    let shared = invoice.sharedWith || [];
+    // Only pre-fill creator if access hasn't been managed yet
+    if (!invoice.accessManaged && invoice.createdById && !shared.includes(invoice.createdById)) {
+      shared = [invoice.createdById, ...shared];
+    }
+    setSelectedUsers(shared);
+    setShowAccessModal(true);
+    
+    // Fetch users if not already fetched
+    if (users.length === 0) {
+      try {
+        const res = await fetch(`${API_URL}/employees`);
+        if (res.ok) {
+          const data = await res.json();
+          setUsers(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch users", err);
+      }
+    }
+  };
+
+  const handleSaveAccess = async () => {
+    if (!accessInvoice) return;
+    try {
+      const res = await fetch(`${API_URL}/invoices/${accessInvoice.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sharedWith: selectedUsers, accessManaged: true })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setInvoices(invoices.map(inv => inv.id === accessInvoice.id ? updated : inv));
+        toast.success("Access updated successfully");
+        setShowAccessModal(false);
+      } else {
+        toast.error("Failed to update access");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error updating access");
     }
   };
 
@@ -265,14 +370,19 @@ export default function AllInvoicesPage() {
   };
 
   // Filter invoices based on Search and Status Tab selection
-  const filteredInvoices = invoices.filter((invoice) => {
+  let filteredInvoices = invoices.filter((invoice) => {
     const matchesSearch = 
       (invoice.invoiceNumber?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
       (invoice.clientName?.toLowerCase() || "").includes(searchTerm.toLowerCase());
       
-    const matchesStatus = 
-      selectedStatus === "All" || 
-      invoice.status?.toLowerCase() === selectedStatus.toLowerCase();
+    let matchesStatus = false;
+    if (selectedStatus === "All") {
+      matchesStatus = true;
+    } else if (selectedStatus === "Upcoming") {
+      matchesStatus = !!invoice.endDate && invoice.status !== "Cancelled";
+    } else {
+      matchesStatus = invoice.status?.toLowerCase() === selectedStatus.toLowerCase();
+    }
 
     const matchesType = 
       selectedType === "All" || 
@@ -298,6 +408,14 @@ export default function AllInvoicesPage() {
            matchesPaymentMode && matchesTaxType && matchesMinAmount && matchesMaxAmount && 
            matchesDateFrom && matchesDateTo;
   });
+
+  if (selectedStatus === "Upcoming") {
+    filteredInvoices.sort((a, b) => {
+      if (!a.endDate) return 1;
+      if (!b.endDate) return -1;
+      return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+    });
+  }
 
   const uniqueClients = Array.from(new Set(invoices.map(inv => inv.clientName).filter(Boolean)));
   
@@ -339,7 +457,7 @@ export default function AllInvoicesPage() {
     setCurrentPage(1);
   }, [searchTerm, selectedStatus, selectedType]);
 
-  const statuses = ["All", "Paid", "Pending", "Overdue"];
+  const statuses = ["All", "Paid", "Pending", "Overdue", "Upcoming", "Cancelled", "Payment Approval"];
 
   return (
     <div className="space-y-6 pb-10">
@@ -583,59 +701,86 @@ export default function AllInvoicesPage() {
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
-                        {invoice.status !== "Paid" && (
+                        {isAdmin && (
                           <Button 
                             variant="ghost" 
                             size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-purple-600 hover:bg-purple-50"
+                            onClick={() => handleManageAccess(invoice)}
+                            title="Manage Access"
+                          >
+                            <Users className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {invoice.status !== "Paid" && !(invoice.status === "Payment Approval" && !isAdmin) && (
+                          <Button 
+                            variant="ghost" 
                             className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
-                            onClick={() => handleMarkAsPaidClick(invoice)}
-                            title="Mark as Paid"
+                            onClick={() => handleMarkAsPaid(invoice)}
+                            title={isAdmin && invoice.status === "Payment Approval" ? "Approve Payment" : (!isAdmin ? "Request Payment Approval" : "Mark as Paid")}
                           >
                             <CheckCircle2 className="w-4 h-4" />
                           </Button>
                         )}
                         {invoice.status === "Paid" && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleMarkAsUnpaid(invoice.id)}
+                            title="Mark as Unpaid"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {invoice.invoiceType === "Proforma Invoice" && (
                           <>
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50"
+                              className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
                               onClick={() => {
                                 setActiveInvoiceId(invoice.id);
-                                setIncentiveAmountBase(invoice.incentiveAmountBase !== undefined && invoice.incentiveAmountBase !== null ? invoice.incentiveAmountBase.toString() : "");
-                                setShowIncentiveModal(true);
+                                setEndDate(invoice.endDate || "");
+                                setFollowUp(invoice.followUp || "");
+                                setShowFollowUpModal(true);
                               }}
-                              title="Edit Incentive Base Amount"
+                              title="Set End Date & Follow Up"
                             >
-                              <IndianRupee className="w-4 h-4" />
+                              <CalendarIcon className="w-4 h-4" />
                             </Button>
+
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                              onClick={() => handleMarkAsUnpaid(invoice.id)}
-                              title="Mark as Unpaid"
+                              className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
+                              onClick={() => handleConvertToTaxInvoice(invoice.id)}
+                              title="Convert to Tax Invoice"
                             >
-                              <RotateCcw className="w-4 h-4" />
+                              <FileText className="w-4 h-4" />
                             </Button>
                           </>
                         )}
-                        {invoice.invoiceType === "Proforma Invoice" && (
+                        {invoice.invoiceType !== "Proforma Invoice" && (
                           <Button 
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
-                            onClick={() => handleConvertToTaxInvoice(invoice.id)}
-                            title="Convert to Tax Invoice"
+                            onClick={() => {
+                              setActiveInvoiceId(invoice.id);
+                              setAccessInvoice(invoice);
+                              setShowIncentivesModal(true);
+                            }}
+                            title="Manage Incentives"
                           >
-                            <FileText className="w-4 h-4" />
+                            <IndianRupee className="w-4 h-4" />
                           </Button>
                         )}
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleDelete(invoice.id, invoice.invoiceNumber)}
+                          onClick={() => handleDelete(invoice)}
                           title="Delete Invoice"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -660,38 +805,153 @@ export default function AllInvoicesPage() {
         />
       </div>
 
-      {/* Incentive Dialog */}
-      <Dialog open={showIncentiveModal} onOpenChange={setShowIncentiveModal}>
+
+      {/* Follow Up Dialog */}
+      <Dialog open={showFollowUpModal} onOpenChange={setShowFollowUpModal}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Enter Incentive Base Amount</DialogTitle>
+            <DialogTitle>Set Follow Up Details</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="incentiveAmountBase">Amount on which incentive is given</Label>
+              <Label htmlFor="endDate">End Date</Label>
               <Input
-                id="incentiveAmountBase"
-                type="number"
-                value={incentiveAmountBase}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const inv = invoices.find(i => i.id === activeInvoiceId);
-                  if (inv && val && parseFloat(val) > (inv.total || 0)) {
-                    toast.error("Incentive base amount cannot exceed the invoice amount");
-                    return;
-                  }
-                  setIncentiveAmountBase(val);
-                }}
-                placeholder="0.00"
+                id="endDate"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="followUp">Follow Up Remarks</Label>
+              <Input
+                id="followUp"
+                value={followUp}
+                onChange={(e) => setFollowUp(e.target.value)}
+                placeholder="Enter follow up details"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowIncentiveModal(false)}>Cancel</Button>
-            <Button onClick={executeMarkAsPaid} className="bg-[#15803D] hover:bg-[#15803D]/90 text-white font-medium">Confirm</Button>
+            <Button variant="outline" onClick={() => setShowFollowUpModal(false)}>Cancel</Button>
+            <Button onClick={handleUpdateFollowUp} disabled={isUpdatingFollowUp} className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium">
+              {isUpdatingFollowUp ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Manage Access Dialog */}
+      <Dialog open={showAccessModal} onOpenChange={setShowAccessModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Manage Access</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-slate-500 mb-4">
+              Select employees who should have access to invoice {accessInvoice?.invoiceNumber}.
+            </p>
+            <div className="space-y-4">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    Select Employees ({selectedUsers.length})
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[375px] p-0" align="start">
+                  <div className="max-h-[250px] overflow-y-auto p-2 space-y-1">
+                    {[...users]
+                      .filter(u => u.role !== "Admin" || u.id === accessInvoice?.createdById)
+                      .sort((a, b) => {
+                        // 1. Creator always first
+                        if (a.id === accessInvoice?.createdById) return -1;
+                        if (b.id === accessInvoice?.createdById) return 1;
+                        
+                        // 2. Selected users next
+                        const isSelectedA = selectedUsers.includes(a.id);
+                        const isSelectedB = selectedUsers.includes(b.id);
+                        if (isSelectedA && !isSelectedB) return -1;
+                        if (!isSelectedA && isSelectedB) return 1;
+                        
+                        // 3. Alphabetical
+                        const nameA = a.name || `${a.firstName} ${a.lastName}`;
+                        const nameB = b.name || `${b.firstName} ${b.lastName}`;
+                        return nameA.localeCompare(nameB);
+                      })
+                      .map(user => (
+                      <div 
+                        key={user.id} 
+                        onClick={() => {
+                          if (selectedUsers.includes(user.id)) {
+                            setSelectedUsers(selectedUsers.filter(id => id !== user.id));
+                          } else {
+                            setSelectedUsers([...selectedUsers, user.id]);
+                          }
+                        }}
+                        className={`flex items-center space-x-3 p-2 hover:bg-slate-100 rounded-md cursor-pointer transition-colors`}
+                      >
+                        <input 
+                          type="checkbox" 
+                          readOnly
+                          checked={selectedUsers.includes(user.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-brand-teal focus:ring-brand-teal"
+                        />
+                        <span className="text-sm font-medium text-slate-700 flex-1 truncate">
+                          {user.name || `${user.firstName} ${user.lastName}`} - {user.designation || "Employee"} {user.id === accessInvoice?.createdById && "(Creator)"}
+                        </span>
+                      </div>
+                    ))}
+                    {users.filter(u => u.role !== "Admin" || u.id === accessInvoice?.createdById).length === 0 && (
+                      <p className="text-sm text-slate-500 text-center py-4">No employees found to share with.</p>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Badges for selected users */}
+              {selectedUsers.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {selectedUsers.map(id => {
+                    const u = users.find(x => x.id === id);
+                    if (!u) return null;
+                    const isCreator = id === accessInvoice?.createdById;
+                    return (
+                      <span key={id} className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${isCreator ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-brand-teal/10 text-brand-teal border-brand-teal/20'}`}>
+                        {u.name || `${u.firstName} ${u.lastName}`} {isCreator && "(Creator)"}
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedUsers(selectedUsers.filter(uid => uid !== id));
+                          }}
+                          className="ml-1 text-brand-teal hover:text-brand-teal-light focus:outline-none"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAccessModal(false)}>Cancel</Button>
+            <Button onClick={handleSaveAccess} className="bg-brand-teal hover:bg-brand-teal-light text-white">Save Access</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Incentives Modal */}
+      <IncentivesModal
+        invoice={accessInvoice}
+        isOpen={showIncentivesModal}
+        onClose={() => setShowIncentivesModal(false)}
+        onSaved={(updatedInvoice) => {
+          setInvoices(prev => prev.map(inv => inv.id === updatedInvoice.id ? updatedInvoice : inv));
+        }}
+      />
     </div>
   );
 }
