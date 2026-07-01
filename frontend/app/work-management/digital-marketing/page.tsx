@@ -1484,12 +1484,7 @@ export default function MarketingReportsPage() {
       isZeroOrEmpty(r.cpl) &&
       isZeroOrEmpty(r.remarks);
 
-    // Hide inactive or on-hold rows for today or future dates, OR if they are unsubmitted empty placeholder rows for past dates
-    if (!isCurrentlyActive && (reportDate >= todayStr || isTrulyEmpty)) {
-      return false;
-    }
-
-    // Hide empty rows if the campaign/project is no longer active or was deleted (orphaned)
+    // Hide empty placeholder rows if the campaign/project is inactive, on-hold, or deleted
     if (!isCurrentlyActive && isTrulyEmpty) {
       return false;
     }
@@ -3241,7 +3236,14 @@ export default function MarketingReportsPage() {
                           type="date"
                           className="h-10 bg-white text-xs font-bold text-slate-700" 
                           value={quickAddData.date || (dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : "")}
-                          onChange={(e) => setQuickAddData({...quickAddData, date: e.target.value})}
+                          onChange={(e) => {
+                            const newDateStr = e.target.value;
+                            setQuickAddData({...quickAddData, date: newDateStr});
+                            if (newDateStr) {
+                              const newDateObj = new Date(newDateStr);
+                              setDateRange({ from: newDateObj, to: newDateObj });
+                            }
+                          }}
                           required
                         />
                       </div>
@@ -3935,9 +3937,14 @@ export default function MarketingReportsPage() {
                 <Input
                   type="date"
                   value={dailyFormData.date}
-                  onChange={(e) =>
-                    setDailyFormData({ ...dailyFormData, date: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const newDateStr = e.target.value;
+                    setDailyFormData({ ...dailyFormData, date: newDateStr });
+                    if (newDateStr) {
+                      const newDateObj = new Date(newDateStr);
+                      setDateRange({ from: newDateObj, to: newDateObj });
+                    }
+                  }}
                   required
                 />
               </div>
