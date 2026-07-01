@@ -932,7 +932,9 @@ function ProfileField({
           <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5 mb-1.5">
             {Icon && <Icon className="h-3.5 w-3.5 text-gray-300" />}
             {label}
-            <Lock className="h-2.5 w-2.5 text-gray-300 ml-1" title="Restricted field" />
+            <span title="Restricted field">
+              <Lock className="h-2.5 w-2.5 text-gray-300 ml-1" />
+            </span>
           </p>
           <p className="font-semibold text-gray-400 break-words text-xs">{value || '—'}</p>
         </div>
@@ -965,7 +967,11 @@ function ProfileField({
         {Icon && <Icon className="h-3.5 w-3.5 text-gray-500" />}
         {label}
         {required && <span className="text-red-500 font-bold">*</span>}
-        {disabled && <Lock className="h-2.5 w-2.5 text-muted-foreground ml-1" title="Restricted field" />}
+        {disabled && (
+          <span title="Restricted field">
+            <Lock className="h-2.5 w-2.5 text-muted-foreground ml-1" />
+          </span>
+        )}
       </label>
       
       {options ? (

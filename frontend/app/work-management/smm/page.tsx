@@ -496,7 +496,7 @@ export default function CreativeClientsPage() {
         // Filter for Creative department AND must have a creative project
         const validClientIds = new Set(Object.keys(projectMap));
         let filteredClients = clientsData.filter((c: any) => c.department?.includes("Creative") && validClientIds.has(c.id));
-        filteredClients.sort((a, b) => {
+        filteredClients.sort((a: any, b: any) => {
           const dateA = maxDatesLocal[a.id] ? maxDatesLocal[a.id].getTime() : Infinity;
           const dateB = maxDatesLocal[b.id] ? maxDatesLocal[b.id].getTime() : Infinity;
           return dateA - dateB;
@@ -504,7 +504,7 @@ export default function CreativeClientsPage() {
         setClients(filteredClients);
       } else {
         let filteredClients = clientsData.filter((c: any) => c.department?.includes("Creative"));
-        filteredClients.sort((a, b) => {
+        filteredClients.sort((a: any, b: any) => {
           const dateA = maxDatesLocal[a.id] ? maxDatesLocal[a.id].getTime() : Infinity;
           const dateB = maxDatesLocal[b.id] ? maxDatesLocal[b.id].getTime() : Infinity;
           return dateA - dateB;
