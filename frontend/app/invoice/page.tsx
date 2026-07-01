@@ -17,7 +17,9 @@ import {
   CheckCircle2,
   X,
   RotateCcw,
-  IndianRupee
+  IndianRupee,
+  Users,
+  ChevronsUpDown
 } from "lucide-react";
 import {
   Popover,
@@ -72,6 +74,12 @@ export default function AllInvoicesPage() {
   const isAdmin = user?.role === "Admin";
   
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
+  
+  // Access Modal State
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [accessInvoice, setAccessInvoice] = useState<any>(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   
   // Follow Up Modal State
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
@@ -279,6 +287,53 @@ export default function AllInvoicesPage() {
     } catch (err) {
       console.error(err);
       toast.error("Network error updating status");
+    }
+  };
+
+  const handleManageAccess = async (invoice: any) => {
+    setAccessInvoice(invoice);
+    
+    let shared = invoice.sharedWith || [];
+    // Only pre-fill creator if access hasn't been managed yet
+    if (!invoice.accessManaged && invoice.createdById && !shared.includes(invoice.createdById)) {
+      shared = [invoice.createdById, ...shared];
+    }
+    setSelectedUsers(shared);
+    setShowAccessModal(true);
+    
+    // Fetch users if not already fetched
+    if (users.length === 0) {
+      try {
+        const res = await fetch(`${API_URL}/employees`);
+        if (res.ok) {
+          const data = await res.json();
+          setUsers(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch users", err);
+      }
+    }
+  };
+
+  const handleSaveAccess = async () => {
+    if (!accessInvoice) return;
+    try {
+      const res = await fetch(`${API_URL}/invoices/${accessInvoice.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sharedWith: selectedUsers, accessManaged: true })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setInvoices(invoices.map(inv => inv.id === accessInvoice.id ? updated : inv));
+        toast.success("Access updated successfully");
+        setShowAccessModal(false);
+      } else {
+        toast.error("Failed to update access");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error updating access");
     }
   };
 
@@ -641,6 +696,17 @@ export default function AllInvoicesPage() {
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
+                        {isAdmin && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-purple-600 hover:bg-purple-50"
+                            onClick={() => handleManageAccess(invoice)}
+                            title="Manage Access"
+                          >
+                            <Users className="w-4 h-4" />
+                          </Button>
+                        )}
                         {invoice.status !== "Paid" && !(invoice.status === "Payment Approval" && !isAdmin) && (
                           <Button 
                             variant="ghost" 
@@ -753,6 +819,108 @@ export default function AllInvoicesPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>    </div>
+      </Dialog>
+
+      {/* Manage Access Dialog */}
+      <Dialog open={showAccessModal} onOpenChange={setShowAccessModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Manage Access</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-slate-500 mb-4">
+              Select employees who should have access to invoice {accessInvoice?.invoiceNumber}.
+            </p>
+            <div className="space-y-4">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    Select Employees ({selectedUsers.length})
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[375px] p-0" align="start">
+                  <div className="max-h-[250px] overflow-y-auto p-2 space-y-1">
+                    {[...users]
+                      .filter(u => u.role !== "Admin" || u.id === accessInvoice?.createdById)
+                      .sort((a, b) => {
+                        // 1. Creator always first
+                        if (a.id === accessInvoice?.createdById) return -1;
+                        if (b.id === accessInvoice?.createdById) return 1;
+                        
+                        // 2. Selected users next
+                        const isSelectedA = selectedUsers.includes(a.id);
+                        const isSelectedB = selectedUsers.includes(b.id);
+                        if (isSelectedA && !isSelectedB) return -1;
+                        if (!isSelectedA && isSelectedB) return 1;
+                        
+                        // 3. Alphabetical
+                        const nameA = a.name || `${a.firstName} ${a.lastName}`;
+                        const nameB = b.name || `${b.firstName} ${b.lastName}`;
+                        return nameA.localeCompare(nameB);
+                      })
+                      .map(user => (
+                      <div 
+                        key={user.id} 
+                        onClick={() => {
+                          if (selectedUsers.includes(user.id)) {
+                            setSelectedUsers(selectedUsers.filter(id => id !== user.id));
+                          } else {
+                            setSelectedUsers([...selectedUsers, user.id]);
+                          }
+                        }}
+                        className={`flex items-center space-x-3 p-2 hover:bg-slate-100 rounded-md cursor-pointer transition-colors`}
+                      >
+                        <input 
+                          type="checkbox" 
+                          readOnly
+                          checked={selectedUsers.includes(user.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-brand-teal focus:ring-brand-teal"
+                        />
+                        <span className="text-sm font-medium text-slate-700 flex-1 truncate">
+                          {user.name || `${user.firstName} ${user.lastName}`} - {user.designation || "Employee"} {user.id === accessInvoice?.createdById && "(Creator)"}
+                        </span>
+                      </div>
+                    ))}
+                    {users.filter(u => u.role !== "Admin" || u.id === accessInvoice?.createdById).length === 0 && (
+                      <p className="text-sm text-slate-500 text-center py-4">No employees found to share with.</p>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Badges for selected users */}
+              {selectedUsers.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {selectedUsers.map(id => {
+                    const u = users.find(x => x.id === id);
+                    if (!u) return null;
+                    const isCreator = id === accessInvoice?.createdById;
+                    return (
+                      <span key={id} className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${isCreator ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-brand-teal/10 text-brand-teal border-brand-teal/20'}`}>
+                        {u.name || `${u.firstName} ${u.lastName}`} {isCreator && "(Creator)"}
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedUsers(selectedUsers.filter(uid => uid !== id));
+                          }}
+                          className="ml-1 text-brand-teal hover:text-brand-teal-light focus:outline-none"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAccessModal(false)}>Cancel</Button>
+            <Button onClick={handleSaveAccess} className="bg-brand-teal hover:bg-brand-teal-light text-white">Save Access</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

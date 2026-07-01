@@ -6350,14 +6350,39 @@ async def create_invoice(db, invoice: schemas.InvoiceCreate):
         
     return invoice_dict
 
-async def get_invoices(db, skip: int = 0, limit: int = 100):
-    cursor = db.invoices.find().sort("timestamp", -1).skip(skip).limit(limit)
+async def get_invoices(db, current_user, skip: int = 0, limit: int = 100):
+    query = {}
+    if current_user.get("role") != "Admin":
+        user_id_str = str(current_user.get("sub"))
+        query = {
+            "$or": [
+                {"sharedWith": user_id_str},
+                {
+                    "createdById": user_id_str,
+                    "accessManaged": {"$ne": True}
+                }
+            ]
+        }
+    cursor = db.invoices.find(query).sort("timestamp", -1).skip(skip).limit(limit)
     rows = await cursor.to_list(length=limit)
     return [fix_id(row) for row in rows]
 
-async def get_invoice(db, invoice_id: str):
+async def get_invoice(db, invoice_id: str, current_user):
     row = await db.invoices.find_one({"_id": ObjectId(invoice_id)})
-    return fix_id(row) if row else None
+    if not row:
+        return None
+        
+    if current_user.get("role") != "Admin":
+        user_id_str = str(current_user.get("sub"))
+        created_by = row.get("createdById")
+        shared_with = row.get("sharedWith", [])
+        access_managed = row.get("accessManaged", False)
+        
+        # Has access if explicitly in shared_with OR (creator AND access is not yet managed)
+        if user_id_str not in shared_with and not (created_by == user_id_str and not access_managed):
+            return None
+            
+    return fix_id(row)
 
 async def update_invoice(db, invoice_id: str, invoice_update: schemas.InvoiceUpdate):
     update_data = invoice_update.dict(exclude_unset=True)

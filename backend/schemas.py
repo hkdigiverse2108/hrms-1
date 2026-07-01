@@ -1936,7 +1936,10 @@ class InvoiceBase(BaseModel):
     createdBy: Optional[str] = None
     createdById: Optional[str] = None
     endDate: Optional[str] = None
+    endDate: Optional[str] = None
     followUp: Optional[str] = None
+    sharedWith: Optional[List[str]] = []
+    accessManaged: Optional[bool] = False
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1970,6 +1973,8 @@ class InvoiceUpdate(BaseModel):
     createdById: Optional[str] = None
     endDate: Optional[str] = None
     followUp: Optional[str] = None
+    sharedWith: Optional[List[str]] = []
+    accessManaged: Optional[bool] = False
 
 class Invoice(InvoiceBase):
     id: str
