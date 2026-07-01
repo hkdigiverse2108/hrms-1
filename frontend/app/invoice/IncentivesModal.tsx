@@ -33,10 +33,14 @@ export function IncentivesModal({ invoice, isOpen, onClose, onSaved }: Incentive
   const [totalAmount, setTotalAmount] = useState<string>("");
   const [incentives, setIncentives] = useState<InvoiceIncentive[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [salesTargets, setSalesTargets] = useState<any[]>([]);
+  const [incentiveSlabs, setIncentiveSlabs] = useState<any[]>([]);
 
   useEffect(() => {
     if (isOpen) {
       fetchEmployees();
+      fetchTargetsAndSlabs();
       if (invoice) {
         setTotalAmount(invoice.totalIncentiveAmount?.toString() || "");
         setIncentives(invoice.incentives || []);
@@ -46,6 +50,19 @@ export function IncentivesModal({ invoice, isOpen, onClose, onSaved }: Incentive
       setIncentives([]);
     }
   }, [isOpen, invoice]);
+
+  const fetchTargetsAndSlabs = async () => {
+    try {
+      const [targetsRes, slabsRes] = await Promise.all([
+        fetch(`${API_URL}/sales-targets`),
+        fetch(`${API_URL}/incentive-slabs`)
+      ]);
+      if (targetsRes.ok) setSalesTargets(await targetsRes.json());
+      if (slabsRes.ok) setIncentiveSlabs(await slabsRes.json());
+    } catch (err) {
+      console.error("Failed to fetch targets/slabs", err);
+    }
+  };
 
   const fetchEmployees = async () => {
     try {
@@ -114,7 +131,8 @@ export function IncentivesModal({ invoice, isOpen, onClose, onSaved }: Incentive
       if (exists) {
         return prev.filter(i => i.employeeId !== emp.id);
       }
-      return [...prev, { employeeId: emp.id, employeeName: emp.name, amount: 0 }];
+      const fullName = emp.name || `${(emp as any).firstName || ''} ${(emp as any).lastName || ''}`.trim() || 'Unknown Employee';
+      return [...prev, { employeeId: emp.id, employeeName: fullName, amount: 0 }];
     });
   };
 
@@ -122,6 +140,70 @@ export function IncentivesModal({ invoice, isOpen, onClose, onSaved }: Incentive
     setIncentives(prev => prev.map(i => 
       i.employeeId === employeeId ? { ...i, amount: amount as any } : i
     ));
+  };
+
+  const calculateProjected = (employeeId: string, employeeName: string, amount: string | number) => {
+    const numAmount = parseFloat(amount as string) || 0;
+    if (numAmount <= 0) return 0;
+
+    const empSlabs = incentiveSlabs
+      .filter(s => s.employees && s.employees.some((name: string) => name.replace(/\s+/g, ' ').toLowerCase() === employeeName.replace(/\s+/g, ' ').toLowerCase()))
+      .sort((a, b) => a.minAmount - b.minAmount);
+      
+    if (empSlabs.length === 0) return 0;
+
+    let isRecurring = false;
+    let priorCumulative = 0;
+
+    const invoiceDate = new Date(invoice?.paymentDate || invoice?.issueDate || invoice?.timestamp || new Date());
+    
+    const target = salesTargets.find(t => {
+      if (t.employeeId !== employeeId) return false;
+      const start = new Date(t.startDate);
+      const end = new Date(t.endDate);
+      end.setHours(23,59,59,999);
+      return invoiceDate >= start && invoiceDate <= end;
+    });
+
+    if (target && target.breakdown) {
+      const idx = target.breakdown.findIndex((b: any) => b.invoiceId === invoice?.id);
+      let priorInvoices = [];
+      if (idx !== -1) {
+        isRecurring = target.breakdown[idx].isRecurring || false;
+        priorInvoices = target.breakdown.slice(0, idx);
+      } else {
+        const cName = (invoice?.clientName || "").trim().toLowerCase();
+        isRecurring = target.breakdown.some((b: any) => (b.clientName || "").trim().toLowerCase() === cName);
+        priorInvoices = target.breakdown;
+      }
+      priorCumulative = priorInvoices.reduce((sum: number, b: any) => sum + (b.incentiveBase || 0), 0);
+    }
+
+    const activeSlabs = empSlabs.filter(s => !!s.isRecurring === isRecurring);
+
+    let earned = 0;
+    let remaining = numAmount;
+    let currentCumulative = priorCumulative;
+    
+    for (const slab of activeSlabs) {
+      if (remaining <= 0) break;
+      
+      const slabMin = slab.minAmount || 0;
+      const slabMax = slab.maxAmount || Infinity;
+      
+      if (currentCumulative >= slabMax) continue;
+      
+      const availableInSlab = slabMax - Math.max(currentCumulative, slabMin);
+      const amountInSlab = Math.min(remaining, availableInSlab);
+      
+      if (amountInSlab > 0) {
+        earned += (amountInSlab * (slab.percentage || 0)) / 100;
+        remaining -= amountInSlab;
+        currentCumulative += amountInSlab;
+      }
+    }
+    
+    return earned;
   };
 
   const selectedEmployeeIds = incentives.map(i => i.employeeId);
@@ -162,8 +244,21 @@ export function IncentivesModal({ invoice, isOpen, onClose, onSaved }: Incentive
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                <div className="max-h-[200px] overflow-y-auto p-2 space-y-1">
-                  {employees.map(emp => {
+                <div className="p-2 border-b">
+                  <Input 
+                    placeholder="Search employees..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-8"
+                  />
+                </div>
+                <div className="max-h-[300px] overflow-y-auto p-2 space-y-1">
+                  {employees.filter(emp => {
+                    const fullName = emp.name || `${(emp as any).firstName || ''} ${(emp as any).lastName || ''}`.trim() || 'Unknown Employee';
+                    const normalizedFullName = fullName.replace(/\s+/g, ' ').toLowerCase();
+                    const normalizedSearch = searchQuery.replace(/\s+/g, ' ').toLowerCase();
+                    return normalizedFullName.includes(normalizedSearch);
+                  }).map(emp => {
                     const isSelected = selectedEmployeeIds.includes(emp.id);
                     return (
                       <div
@@ -173,7 +268,7 @@ export function IncentivesModal({ invoice, isOpen, onClose, onSaved }: Incentive
                       >
                         <Checkbox checked={isSelected} />
                         <span className={cn("text-sm", isSelected && "font-medium")}>
-                          {emp.name}
+                          {emp.name || `${(emp as any).firstName || ''} ${(emp as any).lastName || ''}`.trim() || 'Unknown Employee'}
                         </span>
                       </div>
                     );
@@ -187,18 +282,28 @@ export function IncentivesModal({ invoice, isOpen, onClose, onSaved }: Incentive
             <div className="space-y-3 pt-2">
               <Label>Individual Amounts</Label>
               <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
-                {incentives.map(inc => (
-                  <div key={inc.employeeId} className="flex items-center justify-between gap-3 bg-muted/50 p-2 rounded-md">
-                    <span className="text-sm font-medium truncate flex-1">{inc.employeeName}</span>
-                    <Input 
-                      type="number" 
-                      placeholder="Amount" 
-                      className="w-32 h-8"
-                      value={inc.amount === 0 && typeof inc.amount === 'number' ? "" : inc.amount}
-                      onChange={e => updateAmount(inc.employeeId, e.target.value)}
-                    />
-                  </div>
-                ))}
+                {incentives.map(inc => {
+                  const projected = calculateProjected(inc.employeeId, inc.employeeName, inc.amount);
+                  return (
+                    <div key={inc.employeeId} className="flex flex-col gap-1 bg-muted/50 p-2 rounded-md">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium truncate flex-1">{inc.employeeName}</span>
+                        <Input 
+                          type="number" 
+                          placeholder="Amount" 
+                          className="w-32 h-8"
+                          value={inc.amount === 0 && typeof inc.amount === 'number' ? "" : inc.amount}
+                          onChange={e => updateAmount(inc.employeeId, e.target.value)}
+                        />
+                      </div>
+                      {projected > 0 && (
+                        <div className="text-right text-xs font-semibold text-brand-teal">
+                          Earned Incentive: ₹{projected.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

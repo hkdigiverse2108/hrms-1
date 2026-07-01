@@ -5474,48 +5474,6 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
                     if not c_name_orig:
                         continue
                         
-                    import re
-                    c_name_escaped = re.escape(c_name_orig)
-                    regex_pattern = f"^\\s*{c_name_escaped}\\s*$"
-                    
-                    leads_cursor = db.leads.find({
-                        "status": "Client Won",
-                        "$or": [
-                            {"company": {"$regex": regex_pattern, "$options": "i"}},
-                            {"contact": {"$regex": regex_pattern, "$options": "i"}}
-                        ]
-                    })
-                    matching_leads = await leads_cursor.to_list(length=100)
-                    
-                    if not matching_leads:
-                        continue
-                        
-                    assigned_lead = None
-                    for lead in matching_leads:
-                        raw_assigned = lead.get("assignedTo", [])
-                        # safely extract names regardless of nesting or dicts
-                        def extract_names(item):
-                            if isinstance(item, list):
-                                res = []
-                                for x in item: res.extend(extract_names(x))
-                                return res
-                            elif isinstance(item, dict):
-                                return [item.get("value", "") or item.get("label", "")]
-                            else:
-                                return [str(item)]
-                                
-                        assigned_names = extract_names(raw_assigned)
-                        
-                        for name in assigned_names:
-                            if name and " ".join(name.split()).lower() == emp_name_norm:
-                                assigned_lead = lead
-                                break
-                        if assigned_lead:
-                            break
-                            
-                    if not assigned_lead:
-                        continue
-
                     inv_date_str = inv.get("paymentDate") or inv.get("issueDate") or inv.get("timestamp")
                     if not inv_date_str: continue
 
@@ -5552,18 +5510,88 @@ async def recalculate_sales_target(db, employee_id: str, month: Optional[str] = 
                             lead_week = (ld.day - 1) // 7 + 1
                             if lead_week != week:
                                 continue
+
+                    invoice_incentives = inv.get("incentives", [])
+                    is_matched = False
+                    explicit_amount = 0.0
                     
-                    actual_base = float(inv.get("subtotal", 0))
-                    raw_inc_base = inv.get("incentiveAmountBase")
-                    if raw_inc_base == "":
-                        inc_base = actual_base
+                    if invoice_incentives:
+                        for inc in invoice_incentives:
+                            if str(inc.get("employeeId")) == str(employee_id) or str(inc.get("employeeName", "")).strip().lower() == emp_name_norm:
+                                is_matched = True
+                                explicit_amount = float(inc.get("amount", 0))
+                                break
+                    
+                    category = "Other"
+                    if not is_matched and not invoice_incentives:
+                        import re
+                        c_name_escaped = re.escape(c_name_orig)
+                        regex_pattern = f"^\\s*{c_name_escaped}\\s*$"
+                        leads_cursor = db.leads.find({
+                            "status": "Client Won",
+                            "$or": [
+                                {"company": {"$regex": regex_pattern, "$options": "i"}},
+                                {"contact": {"$regex": regex_pattern, "$options": "i"}}
+                            ]
+                        })
+                        matching_leads = await leads_cursor.to_list(length=100)
+                        
+                        if matching_leads:
+                            assigned_lead = None
+                            for lead in matching_leads:
+                                raw_assigned = lead.get("assignedTo", [])
+                                def extract_names(item):
+                                    if isinstance(item, list):
+                                        res = []
+                                        for x in item: res.extend(extract_names(x))
+                                        return res
+                                    elif isinstance(item, dict):
+                                        return [item.get("value", "") or item.get("label", "")]
+                                    else:
+                                        return [str(item)]
+                                        
+                                assigned_names = extract_names(raw_assigned)
+                                for name in assigned_names:
+                                    if name and " ".join(name.split()).lower() == emp_name_norm:
+                                        assigned_lead = lead
+                                        break
+                                if assigned_lead:
+                                    break
+                            
+                            if assigned_lead:
+                                is_matched = True
+                                category = assigned_lead.get("category", "Other")
+                    elif is_matched:
+                        import re
+                        c_name_escaped = re.escape(c_name_orig)
+                        regex_pattern = f"^\\s*{c_name_escaped}\\s*$"
+                        lead = await db.leads.find_one({
+                            "status": "Client Won",
+                            "$or": [
+                                {"company": {"$regex": regex_pattern, "$options": "i"}},
+                                {"contact": {"$regex": regex_pattern, "$options": "i"}}
+                            ]
+                        })
+                        if lead:
+                            category = lead.get("category", "Other")
+
+                    if not is_matched:
+                        continue
+                        
+                    if invoice_incentives and is_matched:
+                        actual_base = explicit_amount
+                        inc_base = explicit_amount
                     else:
-                        inc_base = float(raw_inc_base if raw_inc_base is not None else actual_base)
+                        actual_base = float(inv.get("subtotal", 0))
+                        raw_inc_base = inv.get("incentiveAmountBase")
+                        if raw_inc_base == "":
+                            inc_base = actual_base
+                        else:
+                            inc_base = float(raw_inc_base if raw_inc_base is not None else actual_base)
                     
                     achievement += actual_base
                     incentive_achievement += inc_base
-                    
-                    category = assigned_lead.get("category", "Other") if assigned_lead else "Other"
+
                     is_recurring = inv in recurring_paid_invoices
                     
                     matched_invoices.append({
