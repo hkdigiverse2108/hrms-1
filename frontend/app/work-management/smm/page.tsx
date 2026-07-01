@@ -234,15 +234,6 @@ export default function CreativeClientsPage() {
   const [followupHistoryLogs, setFollowupHistoryLogs] = useState<any[]>([]);
   const [isLoadingFollowupHistory, setIsLoadingFollowupHistory] = useState(false);
   
-  const [paymentConfigOpen, setPaymentConfigOpen] = useState(false);
-  const [paymentConfigClient, setPaymentConfigClient] = useState<any>(null);
-  const [paymentFrequencyInput, setPaymentFrequencyInput] = useState("One-Time");
-  const [paymentCustomDaysInput, setPaymentCustomDaysInput] = useState("");
-  const [paymentAmountInput, setPaymentAmountInput] = useState("");
-  const [paymentDatesInput, setPaymentDatesInput] = useState<number[]>([]);
-  const [paymentLastDateInput, setPaymentLastDateInput] = useState("");
-  const [paymentNextDateInput, setPaymentNextDateInput] = useState("");
-  
   const [feedbackConfigOpen, setFeedbackConfigOpen] = useState(false);
   const [feedbackConfigProject, setFeedbackConfigProject] = useState<any>(null);
   const [feedbackTypeInput, setFeedbackTypeInput] = useState("Interval");
@@ -617,36 +608,6 @@ export default function CreativeClientsPage() {
     }
   };
 
-  const handleSavePaymentConfig = async () => {
-    if (!paymentConfigClient) return;
-    try {
-      const res = await fetch(`${API_URL}/clients/${paymentConfigClient.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          paymentFrequency: paymentFrequencyInput,
-          paymentCustomDays: parseInt(paymentCustomDaysInput) || null,
-          paymentAmount: parseFloat(paymentAmountInput) || 0,
-          paymentDatesOfMonth: paymentDatesInput,
-          lastPaymentDate: paymentLastDateInput || null,
-          nextPaymentDueDate: paymentNextDateInput || null,
-          performedBy: user?.id,
-          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
-        }),
-      });
-      if (res.ok) {
-        toast.success("Payment configuration saved");
-        setPaymentConfigOpen(false);
-        fetchClients();
-      } else {
-        toast.error("Failed to save payment configuration");
-      }
-    } catch (err) {
-      console.error("Error saving payment config:", err);
-      toast.error("An error occurred");
-    }
-  };
-
   const handleSaveTeamAssignment = async () => {
     if (!assignTeamClient) return;
     const project = clientProjects[assignTeamClient.id];
@@ -692,73 +653,6 @@ export default function CreativeClientsPage() {
       }
     } catch (err) {
       console.error("Error assigning team:", err);
-      toast.error("An error occurred");
-    }
-  };
-
-  const handleMarkPaymentDone = async (client: any) => {
-    const today = new Date().toISOString().split('T')[0];
-    let nextDate = null;
-    
-    if (client.paymentFrequency === "Monthly" && client.paymentDatesOfMonth?.length > 0) {
-      const d = new Date();
-      d.setMonth(d.getMonth() + 1);
-      d.setDate(client.paymentDatesOfMonth[0]);
-      nextDate = d.toISOString().split('T')[0];
-    } else if (client.paymentFrequency === "Half-Monthly" && client.paymentDatesOfMonth?.length > 0) {
-       const d = new Date();
-       d.setDate(d.getDate() + 15);
-       nextDate = d.toISOString().split('T')[0];
-    } else if (client.paymentFrequency === "Quarterly" && client.paymentDatesOfMonth?.length > 0) {
-       const d = new Date();
-       d.setMonth(d.getMonth() + 3);
-       d.setDate(client.paymentDatesOfMonth[0]);
-       nextDate = d.toISOString().split('T')[0];
-    } else if (client.paymentFrequency === "Yearly" && client.paymentDatesOfMonth?.length > 0) {
-       const d = new Date();
-       d.setFullYear(d.getFullYear() + 1);
-       d.setDate(client.paymentDatesOfMonth[0]);
-       nextDate = d.toISOString().split('T')[0];
-    } else if (client.paymentFrequency === "Custom" && client.paymentCustomDays) {
-       const d = new Date();
-       d.setDate(d.getDate() + client.paymentCustomDays);
-       nextDate = d.toISOString().split('T')[0];
-    }
-
-    try {
-      const res = await fetch(`${API_URL}/clients/${client.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          lastPaymentDate: today,
-          nextPaymentDueDate: nextDate,
-          performedBy: user?.id,
-          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
-        }),
-      });
-      if (res.ok) {
-        toast.success("Payment marked as done");
-        
-        const proj = clientProjects[client.id];
-        await fetch(`${API_URL}/task-logs`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "Payment Logged",
-            details: `Payment recorded on ${today}.`,
-            clientId: client.id,
-            projectId: proj?.id,
-            performedBy: user?.id,
-            userName: user?.name || `${user?.firstName} ${user?.lastName}`,
-          })
-        });
-
-        fetchClients();
-      } else {
-        toast.error("Failed to update payment");
-      }
-    } catch (err) {
-      console.error("Error marking payment done:", err);
       toast.error("An error occurred");
     }
   };
@@ -843,7 +737,6 @@ export default function CreativeClientsPage() {
     const projectStatus = clientProjects[c.id]?.status || "";
     const isOnHold = projectStatus.toLowerCase() === "on-hold";
     const isFollowupDue = clientProjects[c.id]?.nextFollowupDate && new Date(clientProjects[c.id].nextFollowupDate) <= new Date();
-    const isPaymentDue = c.nextPaymentDueDate && new Date(c.nextPaymentDueDate) <= new Date();
     
     const hasPendingWork = pendingCounts[c.id] > 0;
 
@@ -852,7 +745,6 @@ export default function CreativeClientsPage() {
       case 'whatsapp-pending': return !c.whatsappGroup;
       case 'greetings-sent': return !!c.greetingsMsgSent;
       case 'greetings-pending': return !c.greetingsMsgSent;
-      case 'payment-due': return !!isPaymentDue;
       case 'followup-due': return !!isFollowupDue;
       case 'active': return !isOnHold;
       case 'on-hold': return isOnHold;
@@ -996,7 +888,6 @@ export default function CreativeClientsPage() {
             { value: "active", label: "Active Projects" },
             { value: "work-group", label: "Work" },
             { value: "reviews", label: "Client Reviews" },
-            { value: "payment-due", label: "Payment Due" },
             { value: "followup-due", label: "Follow-up Due" },
             { value: "on-hold", label: "On Hold" },
           ].map(filter => {
@@ -1243,13 +1134,6 @@ export default function CreativeClientsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
-                      <div className="flex flex-col gap-2 mt-3 text-xs border-t border-slate-100 pt-3">
-                        {client.nextPaymentDueDate && new Date(client.nextPaymentDueDate) <= new Date() && (
-                          <div className="flex items-center justify-between text-rose-600 bg-rose-50 px-2 py-1.5 rounded font-medium border border-rose-100">
-                            Payment Alert
-                          </div>
-                        )}
-                      </div>
                       <div className="flex items-center justify-center gap-2.5">
                         {(() => {
                           const projectStatus = clientProjects[client.id]?.status || "";
@@ -1273,19 +1157,6 @@ export default function CreativeClientsPage() {
                           >
                             <AlertCircle className="w-3 h-3" />
                             Follow-up Due
-                          </Badge>
-                        )}
-                        {client.nextPaymentDueDate && new Date(client.nextPaymentDueDate) <= new Date() && (
-                          <Badge 
-                            className="bg-orange-50 text-orange-600 border-orange-200/60 flex items-center gap-1.5 shadow-sm cursor-pointer hover:bg-orange-100 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMarkPaymentDone(client);
-                            }}
-                            title="Click to mark as Paid"
-                          >
-                            <Banknote className="w-3 h-3" />
-                            Payment Due
                           </Badge>
                         )}
                       </div>
@@ -1340,19 +1211,6 @@ export default function CreativeClientsPage() {
                               setAssignTeamOpen(true);
                             }}>
                               <UserPlus className="w-4 h-4 mr-2" /> Assign Creative Team
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => {
-                              e.stopPropagation();
-                              setPaymentConfigClient(client);
-                              setPaymentFrequencyInput(client.paymentFrequency || "One-Time");
-                              setPaymentCustomDaysInput(client.paymentCustomDays ? String(client.paymentCustomDays) : "");
-                              setPaymentAmountInput(client.paymentAmount ? String(client.paymentAmount) : "");
-                              setPaymentDatesInput(client.paymentDatesOfMonth || []);
-                              setPaymentLastDateInput(client.lastPaymentDate || "");
-                              setPaymentNextDateInput(client.nextPaymentDueDate || "");
-                              setPaymentConfigOpen(true);
-                            }}>
-                              <CreditCard className="w-4 h-4 mr-2" /> Payment Settings
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
@@ -1667,102 +1525,6 @@ export default function CreativeClientsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Config Dialog */}
-      <Dialog open={paymentConfigOpen} onOpenChange={setPaymentConfigOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Payment Schedule Settings</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Payment Frequency</Label>
-              <Select value={paymentFrequencyInput} onValueChange={setPaymentFrequencyInput}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select frequency" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="One-Time">One-Time</SelectItem>
-                  <SelectItem value="Half-Monthly">Half-Monthly (Every 15 Days)</SelectItem>
-                  <SelectItem value="Monthly">Monthly</SelectItem>
-                  <SelectItem value="Quarterly">Quarterly</SelectItem>
-                  <SelectItem value="Yearly">Yearly</SelectItem>
-                  <SelectItem value="Custom">Custom (Interval)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Amount (Expected)</Label>
-              <Input 
-                type="number" 
-                placeholder="e.g. 5000" 
-                value={paymentAmountInput} 
-                onChange={(e) => setPaymentAmountInput(e.target.value)} 
-              />
-            </div>
-            
-            {paymentFrequencyInput === "Custom" && (
-              <div className="space-y-2">
-                <Label>Custom Interval (Days)</Label>
-                <Input 
-                  type="number" 
-                  placeholder="e.g. 45" 
-                  value={paymentCustomDaysInput} 
-                  onChange={(e) => setPaymentCustomDaysInput(e.target.value)} 
-                />
-              </div>
-            )}
-            
-            {["Monthly", "Half-Monthly", "Quarterly", "Yearly"].includes(paymentFrequencyInput) && (
-              <div className="space-y-2">
-                <Label>Select Dates of Month (1-31) {paymentFrequencyInput === 'Half-Monthly' && "(Pick 2 dates)"}</Label>
-                <div className="grid grid-cols-7 gap-1">
-                  {Array.from({length: 31}, (_, i) => i + 1).map(date => (
-                    <div 
-                      key={date}
-                      className={`text-xs text-center p-1 cursor-pointer rounded ${paymentDatesInput.includes(date) ? 'bg-orange-500 text-white' : 'hover:bg-slate-100'}`}
-                      onClick={() => {
-                        if (paymentDatesInput.includes(date)) {
-                          setPaymentDatesInput(paymentDatesInput.filter(d => d !== date));
-                        } else {
-                          setPaymentDatesInput([...paymentDatesInput, date]);
-                        }
-                      }}
-                    >
-                      {date}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Last Payment Date</Label>
-                <Input 
-                  type="date" 
-                  value={paymentLastDateInput} 
-                  onChange={(e) => setPaymentLastDateInput(e.target.value)} 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Next Due Date</Label>
-                <Input 
-                  type="date" 
-                  value={paymentNextDateInput} 
-                  onChange={(e) => setPaymentNextDateInput(e.target.value)} 
-                />
-              </div>
-            </div>
-            
-            <div className="pt-4 flex justify-end gap-2 border-t mt-4">
-              <Button variant="outline" onClick={() => setPaymentConfigOpen(false)}>Cancel</Button>
-              <Button className="bg-orange-600 text-white hover:bg-orange-700" onClick={handleSavePaymentConfig}>Save Configuration</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
       {/* Assign Team Dialog */}
       <Dialog open={assignTeamOpen} onOpenChange={setAssignTeamOpen}>
         <DialogContent className="max-w-md">
