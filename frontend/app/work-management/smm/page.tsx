@@ -405,6 +405,7 @@ export default function CreativeClientsPage() {
   }, []);
 
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
+  const [clientMaxDates, setClientMaxDates] = useState<Record<string, Date>>({});
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
   const [calendarSettings, setCalendarSettings] = useState<Record<string, any>>({});
   const currentMonthYear = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
@@ -444,6 +445,7 @@ export default function CreativeClientsPage() {
         clientsData = await res.json();
       }
 
+      let maxDatesLocal: Record<string, Date> = {};
       if (ccRes.ok) {
         const entries = await ccRes.json();
         const counts: Record<string, number> = {};
@@ -458,8 +460,18 @@ export default function CreativeClientsPage() {
           if (pending > 0) {
             counts[entry.clientId] = (counts[entry.clientId] || 0) + pending;
           }
+
+          if (entry.postingDate) {
+            const d = new Date(entry.postingDate);
+            if (!isNaN(d.getTime())) {
+              if (!maxDatesLocal[entry.clientId] || d > maxDatesLocal[entry.clientId]) {
+                maxDatesLocal[entry.clientId] = d;
+              }
+            }
+          }
         });
         setPendingCounts(counts);
+        setClientMaxDates(maxDatesLocal);
       }
       
       if (settingsRes && settingsRes.ok) {
@@ -483,9 +495,21 @@ export default function CreativeClientsPage() {
         
         // Filter for Creative department AND must have a creative project
         const validClientIds = new Set(Object.keys(projectMap));
-        setClients(clientsData.filter((c: any) => c.department?.includes("Creative") && validClientIds.has(c.id)));
+        let filteredClients = clientsData.filter((c: any) => c.department?.includes("Creative") && validClientIds.has(c.id));
+        filteredClients.sort((a, b) => {
+          const dateA = maxDatesLocal[a.id] ? maxDatesLocal[a.id].getTime() : Infinity;
+          const dateB = maxDatesLocal[b.id] ? maxDatesLocal[b.id].getTime() : Infinity;
+          return dateA - dateB;
+        });
+        setClients(filteredClients);
       } else {
-        setClients(clientsData.filter((c: any) => c.department?.includes("Creative")));
+        let filteredClients = clientsData.filter((c: any) => c.department?.includes("Creative"));
+        filteredClients.sort((a, b) => {
+          const dateA = maxDatesLocal[a.id] ? maxDatesLocal[a.id].getTime() : Infinity;
+          const dateB = maxDatesLocal[b.id] ? maxDatesLocal[b.id].getTime() : Infinity;
+          return dateA - dateB;
+        });
+        setClients(filteredClients);
       }
 
       if (empRes.ok) {
@@ -1025,7 +1049,8 @@ export default function CreativeClientsPage() {
             <table className="w-full text-left text-sm text-slate-600">
               <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
                 <tr>
-                  <th className="px-6 py-4 whitespace-nowrap sticky left-0 z-20 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Company</th>
+                  <th className="px-6 py-4 whitespace-nowrap sticky left-0 z-20 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[250px] w-[250px] max-w-[250px]">Company</th>
+                  <th className="px-6 py-4 text-center whitespace-nowrap sticky left-[250px] z-20 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[120px] w-[120px] max-w-[120px]">End Date</th>
                   <th className="px-6 py-4 whitespace-nowrap">Project</th>
                   <th className="px-6 py-4 whitespace-nowrap">Contact Name</th>
                   <th className="px-6 py-4 whitespace-nowrap">Phone</th>
@@ -1038,25 +1063,27 @@ export default function CreativeClientsPage() {
               <tbody className="divide-y divide-slate-100">
                 {filteredClients.map((client) => (
                   <tr key={client.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-10 bg-white group-hover:bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
-                          onClick={() => router.push(`/work-management/smm/${client.id}`)}
-                        >
-                          {client.companyName || "N/A"}
-                        </div>
-                        {pendingCounts[client.id] > 0 && (
-                          <Badge 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/work-management/smm/pending?client=${client.id}`);
-                            }}
-                            className="bg-rose-700 hover:bg-rose-800 text-[10px] px-1.5 py-0 cursor-pointer"
+                    <td className="px-6 py-4 whitespace-normal sticky left-0 z-10 bg-white group-hover:bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] transition-colors min-w-[250px] w-[250px] max-w-[250px] overflow-hidden">
+                      <div className="flex flex-col gap-1.5 items-start">
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="font-semibold text-brand-teal text-base underline underline-offset-2 hover:text-brand-teal/80 transition-colors cursor-pointer pl-2"
+                            onClick={() => router.push(`/work-management/smm/${client.id}`)}
                           >
-                            {pendingCounts[client.id]} Pending
-                          </Badge>
-                        )}
+                            {client.companyName || "N/A"}
+                          </div>
+                          {pendingCounts[client.id] > 0 && (
+                            <Badge 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/work-management/smm/pending?client=${client.id}`);
+                              }}
+                              className="bg-rose-700 hover:bg-rose-800 text-[10px] px-1.5 py-0 cursor-pointer"
+                            >
+                              {pendingCounts[client.id]} Pending
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       {calendarSettings[client.id] && calendarSettings[client.id].approvalStatus && calendarSettings[client.id].approvalStatus !== "Approved by Client" && calendarSettings[client.id].approvalStatus !== "Pending" && (
                         <div className="mt-2 text-[10px] font-medium text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100 inline-block w-full max-w-full">
@@ -1067,6 +1094,17 @@ export default function CreativeClientsPage() {
                             </div>
                           )}
                         </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center whitespace-nowrap sticky left-[250px] z-10 bg-white group-hover:bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] transition-colors min-w-[120px] w-[120px] max-w-[120px]">
+                      {clientMaxDates[client.id] ? (
+                        <div className="inline-flex">
+                          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 shadow-sm text-xs font-semibold px-2.5 py-0.5 rounded-md">
+                            {clientMaxDates[client.id].toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </Badge>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 italic text-xs">N/A</span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
