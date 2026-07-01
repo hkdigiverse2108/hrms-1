@@ -1935,6 +1935,8 @@ class InvoiceBase(BaseModel):
     incentiveAmountBase: Optional[float] = None
     createdBy: Optional[str] = None
     createdById: Optional[str] = None
+    endDate: Optional[str] = None
+    followUp: Optional[str] = None
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1966,6 +1968,8 @@ class InvoiceUpdate(BaseModel):
     incentiveAmountBase: Optional[float] = None
     createdBy: Optional[str] = None
     createdById: Optional[str] = None
+    endDate: Optional[str] = None
+    followUp: Optional[str] = None
 
 class Invoice(InvoiceBase):
     id: str

@@ -54,6 +54,8 @@ const getStatusStyles = (status: string) => {
     case "Paid": return "bg-emerald-100 text-emerald-700 border-emerald-200";
     case "Pending": return "bg-amber-100 text-amber-700 border-amber-200";
     case "Overdue": return "bg-red-100 text-red-700 border-red-200";
+    case "Cancelled": return "bg-slate-100 text-slate-700 border-slate-300";
+    case "Payment Approval": return "bg-blue-100 text-blue-700 border-blue-200";
     default: return "bg-gray-100 text-gray-700 border-gray-200";
   }
 };
@@ -65,10 +67,14 @@ export default function AllInvoicesPage() {
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   
-  // Incentive Modal State
-  const [showIncentiveModal, setShowIncentiveModal] = useState(false);
-  const [incentiveAmountBase, setIncentiveAmountBase] = useState("");
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
+  
+  // Follow Up Modal State
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [endDate, setEndDate] = useState("");
+  const [followUp, setFollowUp] = useState("");
+  const [isUpdatingFollowUp, setIsUpdatingFollowUp] = useState(false);
+
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedType, setSelectedType] = useState("All");
   
@@ -169,41 +175,52 @@ export default function AllInvoicesPage() {
     }
   };
 
-  const handleMarkAsPaidClick = (invoice: any) => {
-    setActiveInvoiceId(invoice.id);
-    setIncentiveAmountBase(invoice.incentiveAmountBase !== undefined && invoice.incentiveAmountBase !== null ? invoice.incentiveAmountBase.toString() : "");
-    setShowIncentiveModal(true);
-  };
-
-  const executeMarkAsPaid = async () => {
+  const handleUpdateFollowUp = async () => {
     if (!activeInvoiceId) return;
-    
-    const activeInvoice = invoices.find(inv => inv.id === activeInvoiceId);
-    if (!activeInvoice) return;
-
-    const baseAmt = parseFloat(incentiveAmountBase);
-    if (isNaN(baseAmt) || baseAmt < 0) {
-      toast.error("Please enter a valid incentive amount");
-      return;
-    }
-
-    if (baseAmt > (activeInvoice.total || 0)) {
-      toast.error("Incentive base amount cannot exceed the invoice amount");
-      return;
-    }
-
-    setShowIncentiveModal(false);
-
+    setIsUpdatingFollowUp(true);
     try {
       const res = await fetch(`${API_URL}/invoices/${activeInvoiceId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Paid", incentiveAmountBase: baseAmt })
+        body: JSON.stringify({
+          endDate: endDate || null,
+          followUp: followUp || null
+        })
+      });
+
+      if (!res.ok) throw new Error("Failed to update invoice");
+      
+      const updatedInvoice = await res.json();
+      setInvoices(prev => prev.map(inv => inv.id === activeInvoiceId ? updatedInvoice : inv));
+      toast.success("Follow-up details updated successfully");
+      setShowFollowUpModal(false);
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error updating invoice");
+    } finally {
+      setIsUpdatingFollowUp(false);
+    }
+  };
+
+  const handleMarkAsPaid = async (invoice: any) => {
+    const isConfirmed = await confirm({
+      title: "Mark as Paid",
+      message: `Are you sure you want to mark invoice ${invoice.invoiceNumber} as Paid?`,
+      confirmText: "Confirm",
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Paid" })
       });
 
       if (res.ok) {
         const updated = await res.json();
-        setInvoices(invoices.map(inv => inv.id === activeInvoiceId ? updated : inv));
+        setInvoices(invoices.map(inv => inv.id === invoice.id ? updated : inv));
         toast.success(`Invoice marked as Paid!`);
       } else {
         toast.error("Failed to update status");
@@ -211,8 +228,6 @@ export default function AllInvoicesPage() {
     } catch (err) {
       console.error(err);
       toast.error("Network error updating status");
-    } finally {
-      setActiveInvoiceId(null);
     }
   };
 
@@ -265,14 +280,19 @@ export default function AllInvoicesPage() {
   };
 
   // Filter invoices based on Search and Status Tab selection
-  const filteredInvoices = invoices.filter((invoice) => {
+  let filteredInvoices = invoices.filter((invoice) => {
     const matchesSearch = 
       (invoice.invoiceNumber?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
       (invoice.clientName?.toLowerCase() || "").includes(searchTerm.toLowerCase());
       
-    const matchesStatus = 
-      selectedStatus === "All" || 
-      invoice.status?.toLowerCase() === selectedStatus.toLowerCase();
+    let matchesStatus = false;
+    if (selectedStatus === "All") {
+      matchesStatus = true;
+    } else if (selectedStatus === "Upcoming") {
+      matchesStatus = !!invoice.endDate;
+    } else {
+      matchesStatus = invoice.status?.toLowerCase() === selectedStatus.toLowerCase();
+    }
 
     const matchesType = 
       selectedType === "All" || 
@@ -298,6 +318,14 @@ export default function AllInvoicesPage() {
            matchesPaymentMode && matchesTaxType && matchesMinAmount && matchesMaxAmount && 
            matchesDateFrom && matchesDateTo;
   });
+
+  if (selectedStatus === "Upcoming") {
+    filteredInvoices.sort((a, b) => {
+      if (!a.endDate) return 1;
+      if (!b.endDate) return -1;
+      return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+    });
+  }
 
   const uniqueClients = Array.from(new Set(invoices.map(inv => inv.clientName).filter(Boolean)));
   
@@ -339,7 +367,7 @@ export default function AllInvoicesPage() {
     setCurrentPage(1);
   }, [searchTerm, selectedStatus, selectedType]);
 
-  const statuses = ["All", "Paid", "Pending", "Overdue"];
+  const statuses = ["All", "Paid", "Pending", "Overdue", "Upcoming", "Cancelled", "Payment Approval"];
 
   return (
     <div className="space-y-6 pb-10">
@@ -586,50 +614,50 @@ export default function AllInvoicesPage() {
                         {invoice.status !== "Paid" && (
                           <Button 
                             variant="ghost" 
-                            size="icon" 
                             className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
-                            onClick={() => handleMarkAsPaidClick(invoice)}
+                            onClick={() => handleMarkAsPaid(invoice)}
                             title="Mark as Paid"
                           >
                             <CheckCircle2 className="w-4 h-4" />
                           </Button>
                         )}
                         {invoice.status === "Paid" && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleMarkAsUnpaid(invoice.id)}
+                            title="Mark as Unpaid"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {invoice.invoiceType === "Proforma Invoice" && (
                           <>
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50"
+                              className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
                               onClick={() => {
                                 setActiveInvoiceId(invoice.id);
-                                setIncentiveAmountBase(invoice.incentiveAmountBase !== undefined && invoice.incentiveAmountBase !== null ? invoice.incentiveAmountBase.toString() : "");
-                                setShowIncentiveModal(true);
+                                setEndDate(invoice.endDate || "");
+                                setFollowUp(invoice.followUp || "");
+                                setShowFollowUpModal(true);
                               }}
-                              title="Edit Incentive Base Amount"
+                              title="Set End Date & Follow Up"
                             >
-                              <IndianRupee className="w-4 h-4" />
+                              <CalendarIcon className="w-4 h-4" />
                             </Button>
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                              onClick={() => handleMarkAsUnpaid(invoice.id)}
-                              title="Mark as Unpaid"
+                              className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
+                              onClick={() => handleConvertToTaxInvoice(invoice.id)}
+                              title="Convert to Tax Invoice"
                             >
-                              <RotateCcw className="w-4 h-4" />
+                              <FileText className="w-4 h-4" />
                             </Button>
                           </>
-                        )}
-                        {invoice.invoiceType === "Proforma Invoice" && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
-                            onClick={() => handleConvertToTaxInvoice(invoice.id)}
-                            title="Convert to Tax Invoice"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </Button>
                         )}
                         <Button 
                           variant="ghost" 
@@ -660,35 +688,39 @@ export default function AllInvoicesPage() {
         />
       </div>
 
-      {/* Incentive Dialog */}
-      <Dialog open={showIncentiveModal} onOpenChange={setShowIncentiveModal}>
+
+      {/* Follow Up Dialog */}
+      <Dialog open={showFollowUpModal} onOpenChange={setShowFollowUpModal}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Enter Incentive Base Amount</DialogTitle>
+            <DialogTitle>Set Follow Up Details</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="incentiveAmountBase">Amount on which incentive is given</Label>
+              <Label htmlFor="endDate">End Date</Label>
               <Input
-                id="incentiveAmountBase"
-                type="number"
-                value={incentiveAmountBase}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const inv = invoices.find(i => i.id === activeInvoiceId);
-                  if (inv && val && parseFloat(val) > (inv.total || 0)) {
-                    toast.error("Incentive base amount cannot exceed the invoice amount");
-                    return;
-                  }
-                  setIncentiveAmountBase(val);
-                }}
-                placeholder="0.00"
+                id="endDate"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="followUp">Follow Up Remarks</Label>
+              <Input
+                id="followUp"
+                value={followUp}
+                onChange={(e) => setFollowUp(e.target.value)}
+                placeholder="Enter follow up details"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowIncentiveModal(false)}>Cancel</Button>
-            <Button onClick={executeMarkAsPaid} className="bg-[#15803D] hover:bg-[#15803D]/90 text-white font-medium">Confirm</Button>
+            <Button variant="outline" onClick={() => setShowFollowUpModal(false)}>Cancel</Button>
+            <Button onClick={handleUpdateFollowUp} disabled={isUpdatingFollowUp} className="bg-brand-teal hover:bg-brand-teal/90 text-white font-medium">
+              {isUpdatingFollowUp ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
