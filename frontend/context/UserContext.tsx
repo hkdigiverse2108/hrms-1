@@ -153,6 +153,29 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     initializeUser();
   }, []);
+
+  useEffect(() => {
+    const handleLocalUserUpdate = () => {
+      const stored = localStorage.getItem('user');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setUser(prev => {
+            if (JSON.stringify(prev) !== stored) {
+              return parsed;
+            }
+            return prev;
+          });
+        } catch (e) {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+    };
+    window.addEventListener('local-user-updated', handleLocalUserUpdate);
+    return () => window.removeEventListener('local-user-updated', handleLocalUserUpdate);
+  }, []);
   
   const login = (userData: User & { token?: string }) => {
     localStorage.setItem('user', JSON.stringify(userData));

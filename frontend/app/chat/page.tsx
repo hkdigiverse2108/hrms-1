@@ -226,6 +226,146 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   );
 };
 
+const VideoAttachment = ({ msg, setPreviewImageMsgId }: { msg: any; setPreviewImageMsgId: (id: string | null) => void }) => {
+  const handleAction = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (msg._optimistic) return;
+    setPreviewImageMsgId(msg.id);
+  };
+
+  const extension = msg.attachmentName ? msg.attachmentName.split('.').pop()?.toUpperCase() : "VIDEO";
+
+  return (
+    <div className={cn(
+      "relative rounded-lg overflow-hidden border border-black/10 max-w-full group/video cursor-pointer bg-black",
+      msg.text ? "mb-1" : "mb-0"
+    )}>
+      {/* Video Thumbnail Placeholder */}
+      <div 
+        onClick={handleAction}
+        className="relative w-[280px] sm:w-[360px] h-[200px] flex items-center justify-center bg-slate-950"
+      >
+        <video
+          src={
+            msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
+              msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
+                `${API_URL}${msg.attachmentUrl}`
+          }
+          className="w-full h-full object-cover opacity-60 pointer-events-none"
+        />
+        
+        {/* Loader Overlay (Optimistic) */}
+        {msg._optimistic ? (
+          <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center backdrop-blur-xs select-none">
+            <div className="w-12 h-12 border-4 border-brand-teal border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-white text-[11px] font-bold mt-2">
+              Uploading...
+            </span>
+          </div>
+        ) : (
+          /* Play Button Overlay */
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20 hover:bg-black/35 transition-all select-none">
+            <div className="w-14 h-14 rounded-full bg-black/50 text-white flex items-center justify-center border border-white/20 shadow-md">
+              <Play className="w-6 h-6 fill-current ml-0.5" />
+            </div>
+            <span className="text-white text-[11px] font-bold mt-2 drop-shadow-md">
+              {extension}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const FileAttachment = ({ msg, handleOpenAttachment, renderCheckmarks }: { msg: any; handleOpenAttachment: (url: string, filename: string) => Promise<void>; renderCheckmarks: (msg: any, isImageOverlay: boolean) => React.ReactNode }) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const cleanAttachmentName = msg.attachmentName ? msg.attachmentName.replace(/^[a-f0-9]+_/, "") : "";
+  const isPdf = msg.attachmentName && /\.pdf$/i.test(msg.attachmentName);
+
+  const handleAction = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (msg._optimistic || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await handleOpenAttachment(msg.attachmentUrl, msg.attachmentName);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const cleanUrl = msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl : msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+
+  return (
+    <div 
+      onClick={handleAction}
+      className={cn(
+        "rounded-xl overflow-hidden mb-1.5 border w-[280px] sm:w-[320px] relative group/file cursor-pointer transition-all hover:shadow-xs",
+        msg.isMe ? "bg-[#d9fdd3] border-[#c3ebbc]" : "bg-white border-[#e2e5e7]"
+      )}
+    >
+      {/* PDF Thumbnail Preview (if applicable) */}
+      {isPdf && !msg._optimistic && (
+        <div className="w-full h-[140px] overflow-hidden bg-slate-50 relative border-b border-black/5 select-none">
+          <iframe
+            src={`${cleanUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+            className="w-[116%] h-full pointer-events-none border-none origin-top"
+            scrolling="no"
+            style={{ overflow: 'hidden' }}
+            title="PDF Preview"
+          />
+          <div className="absolute inset-0 bg-transparent z-10" />
+        </div>
+      )}
+
+      {/* File Info Box */}
+      <div className="flex items-center gap-3 p-3 relative">
+        <div className="p-2 rounded-lg bg-rose-50 border border-rose-100 shrink-0">
+          <FileIcon className="w-6 h-6 text-rose-500 fill-rose-100" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-xs truncate text-[#111b21]">{cleanAttachmentName}</p>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-[10px] text-[#667781] truncate">
+              {msg._optimistic ? "Uploading..." : isDownloading ? "Downloading..." : isPdf ? "PDF Document" : "Click to download"}
+            </p>
+            {(!msg.text || msg.text === `Sent a file: ${msg.attachmentName}` || msg.text === `Sent a file: ${cleanAttachmentName}`) && (
+              <span className="text-[9px] text-[#667781] ml-2 flex items-center gap-1 select-none whitespace-nowrap">
+                {dayjs(msg.timestamp).format("hh:mm A")}
+                {renderCheckmarks(msg, false)}
+              </span>
+            )}
+          </div>
+        </div>
+        
+        {/* Download arrow icon on the right side of the card */}
+        {!msg._optimistic && !isDownloading && (
+          <div className="w-7 h-7 rounded-full bg-black/5 flex items-center justify-center text-slate-500 group-hover/file:bg-brand-teal/10 group-hover/file:text-brand-teal transition-all shrink-0">
+            <Download className="w-4 h-4" />
+          </div>
+        )}
+        {isDownloading && (
+          <div className="w-7 h-7 flex items-center justify-center shrink-0">
+            <div className="w-4 h-4 border-2 border-brand-teal border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        )}
+      </div>
+
+      {/* Upload loader overlay if optimistic */}
+      {msg._optimistic && (
+        <div className="absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-xs z-10">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg shadow-sm border border-slate-100">
+            <div className="w-4 h-4 border-2 border-brand-teal border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-xs font-semibold text-slate-600">Sending...</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface MessageTextProps {
   text: string;
   isMeBubble?: boolean;
@@ -719,8 +859,12 @@ export default function ChatPage() {
     };
   }, [pendingAttachments]);
 
-  const imageMessages = useMemo(() => {
-    return currentMessages.filter(msg => msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName));
+  const mediaMessages = useMemo(() => {
+    return currentMessages.filter(msg => 
+      msg.attachmentName && 
+      !msg.isVoice && 
+      (/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) || /\.(mp4|webm|ogg|mov|mkv)$/i.test(msg.attachmentName))
+    );
   }, [currentMessages]);
 
   const currentPreviewMsg = useMemo(() => {
@@ -728,18 +872,18 @@ export default function ChatPage() {
   }, [currentMessages, previewImageMsgId]);
 
   const currentPreviewIndex = useMemo(() => {
-    return imageMessages.findIndex(m => m.id === previewImageMsgId);
-  }, [imageMessages, previewImageMsgId]);
+    return mediaMessages.findIndex(m => m.id === previewImageMsgId);
+  }, [mediaMessages, previewImageMsgId]);
 
   const handlePrevImage = () => {
     if (currentPreviewIndex > 0) {
-      setPreviewImageMsgId(imageMessages[currentPreviewIndex - 1].id);
+      setPreviewImageMsgId(mediaMessages[currentPreviewIndex - 1].id);
     }
   };
 
   const handleNextImage = () => {
-    if (currentPreviewIndex < imageMessages.length - 1) {
-      setPreviewImageMsgId(imageMessages[currentPreviewIndex + 1].id);
+    if (currentPreviewIndex < mediaMessages.length - 1) {
+      setPreviewImageMsgId(mediaMessages[currentPreviewIndex + 1].id);
     }
   };
 
@@ -1100,18 +1244,18 @@ export default function ChatPage() {
     };
   }, [pendingAttachments.length]);
 
-  // Arrow key navigation for image preview
+  // Arrow key navigation for media preview
   useEffect(() => {
     if (!previewImageMsgId) return;
 
     const handleArrowKeys = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") {
         if (currentPreviewIndex > 0) {
-          setPreviewImageMsgId(imageMessages[currentPreviewIndex - 1].id);
+          setPreviewImageMsgId(mediaMessages[currentPreviewIndex - 1].id);
         }
       } else if (e.key === "ArrowRight") {
-        if (currentPreviewIndex < imageMessages.length - 1) {
-          setPreviewImageMsgId(imageMessages[currentPreviewIndex + 1].id);
+        if (currentPreviewIndex < mediaMessages.length - 1) {
+          setPreviewImageMsgId(mediaMessages[currentPreviewIndex + 1].id);
         }
       }
     };
@@ -1120,7 +1264,7 @@ export default function ChatPage() {
     return () => {
       window.removeEventListener("keydown", handleArrowKeys);
     };
-  }, [previewImageMsgId, currentPreviewIndex, imageMessages]);
+  }, [previewImageMsgId, currentPreviewIndex, mediaMessages]);
 
   const [showCreatePoll, setShowCreatePoll] = useState(false);
   const [pollData, setPollData] = useState({
@@ -1841,83 +1985,6 @@ export default function ChatPage() {
 
           // Notification logic: only when we already had messages and new ones arrived
           if (prevReal.length > 0 && hasNewMessages) {
-            const lastMsg = marked[marked.length - 1];
-            const chatId = selectedChat.id || selectedChat.employeeId;
-            const isMuted = mutedChats.includes(chatId);
-
-            if (!lastMsg.isMe && !isMuted && !globalDndEnabled) {
-              const pref = chatNotificationPrefs[chatId] || { mode: globalDefaultMode, sound: globalDefaultSound };
-              const resolvedMode = pref.mode === "default" || !pref.mode ? globalDefaultMode : pref.mode;
-              const resolvedSound = pref.sound === "default" || !pref.sound ? globalDefaultSound : pref.sound;
-
-              const isMention = (() => {
-                if (!lastMsg.text) return false;
-                const mentions = lastMsg.text.match(/@\w+/g);
-                if (!mentions) return false;
-                const firstName = user?.firstName?.toLowerCase() || "";
-                const lastName = user?.lastName?.toLowerCase() || "";
-                const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
-                const strippedFullName = fullName.replace(/\s+/g, "");
-
-                return mentions.some((m: string) => {
-                  const mentionName = m.substring(1).toLowerCase();
-                  if (!mentionName) return false;
-                  return (
-                    (firstName && firstName === mentionName) ||
-                    (lastName && lastName === mentionName) ||
-                    (fullName && fullName.includes(mentionName)) ||
-                    (strippedFullName && strippedFullName === mentionName)
-                  );
-                });
-              })();
-
-              const isPersonal = !lastMsg.groupId;
-              if (resolvedMode === "all" || (resolvedMode === "mentions" && (isMention || isPersonal))) {
-                playTestSound(resolvedSound);
-
-                const isTabInactive = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
-                if (isTabInactive && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-                  const senderName = selectedChat.name || lastMsg.sender || "Colleague";
-                  const body = lastMsg.text || "Sent an attachment";
-                  const title = "HariKrushn DigiVerse LLP";
-                  const notificationBody = `${senderName}\n${body}`;
-
-                  let avatarUrl = "/favicon.ico";
-                  const avatarPath = selectedChat.avatar || selectedChat.profilePhoto || lastMsg.senderAvatar;
-                  if (avatarPath) {
-                    const resolved = getAvatarUrl(avatarPath);
-                    if (resolved) {
-                      avatarUrl = resolved.startsWith("/")
-                        ? `${window.location.origin}${resolved}`
-                        : resolved;
-                    }
-                  }
-
-                  if ((window as any).electronAPI && typeof (window as any).electronAPI.showNotification === 'function') {
-                    (window as any).electronAPI.showNotification(title, {
-                      body: notificationBody,
-                      icon: "/favicon.ico",
-                      clickUrl: `/chat?chatId=${selectedChat.id || selectedChat.employeeId}&chatType=${selectedChat.type || 'personal'}`
-                    });
-                  } else if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-                    const notif = new Notification(title, {
-                      body: notificationBody,
-                      icon: avatarUrl
-                    });
-                    notif.onclick = () => {
-                      if (typeof window !== "undefined") {
-                        if ((window as any).electronAPI && (window as any).electronAPI.focusWindow) {
-                          (window as any).electronAPI.focusWindow();
-                        } else {
-                          window.focus();
-                        }
-                      }
-                    };
-                  }
-                }
-              }
-            }
-
             // Scroll to bottom when new messages arrive
             shouldScrollToBottom.current = true;
             setTimeout(() => {
@@ -3821,7 +3888,13 @@ export default function ChatPage() {
         )}
       >
         {isDragging && selectedChat && (
-          <div className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200">
+          <div 
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200"
+          >
             <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 border border-brand-teal/20 scale-100 transition-all">
               <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center animate-bounce">
                 <Paperclip className="w-8 h-8 text-brand-teal" />
@@ -4419,7 +4492,14 @@ export default function ChatPage() {
                                 <div className="relative group/msg max-w-full w-fit">
                                   <div
                                     className={cn(
-                                      "whatsapp-bubble text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text w-fit relative flow-root",
+                                      "whatsapp-bubble text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text relative flow-root",
+                                      (msg.attachmentName && !msg.isVoice && /\.(mp4|webm|ogg|mov|mkv)$/i.test(msg.attachmentName))
+                                        ? "w-[280px] sm:w-[360px]"
+                                        : (msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) || imageGroups[msg.id]
+                                          ? "w-[280px] sm:w-[360px]"
+                                          : (msg.attachmentName && !msg.isVoice)
+                                            ? "w-[280px] sm:w-[320px]"
+                                            : "w-fit",
                                       (msg.attachmentName || imageGroups[msg.id])
                                         ? (
                                           (msg.text || (imageGroups[msg.id] && imageGroups[msg.id].some(g => g.text && g.text.trim())))
@@ -4500,69 +4580,25 @@ export default function ChatPage() {
                                               {renderCheckmarks(msg, true)}
                                             </div>
                                           )}
+                                          {/* Upload loader overlay if optimistic */}
+                                          {msg._optimistic && (
+                                            <div className="absolute inset-0 bg-black/45 flex flex-col items-center justify-center backdrop-blur-xs select-none">
+                                              <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                                              <span className="text-white text-[10px] font-bold mt-1.5">Uploading...</span>
+                                            </div>
+                                          )}
                                         </div>
                                       )
                                     )}
 
+                                    {/* Video Attachment */}
+                                    {msg.attachmentName && !msg.isVoice && /\.(mp4|webm|ogg|mov|mkv)$/i.test(msg.attachmentName) && (
+                                      <VideoAttachment msg={msg} setPreviewImageMsgId={setPreviewImageMsgId} />
+                                    )}
+
                                     {/* File Attachment */}
-                                    {msg.attachmentName && !msg.isVoice && !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) && (
-                                      <div className={cn(
-                                        "rounded-xl overflow-hidden mb-1.5 border w-[280px] sm:w-[320px]",
-                                        msg.isMe ? "bg-[#d9fdd3] border-[#c3ebbc]" : "bg-white border-[#e2e5e7]"
-                                      )}>
-                                        {/* PDF Thumbnail Preview */}
-                                        {isPdf && (
-                                          <div className="w-full h-[140px] overflow-hidden bg-slate-50 relative border-b border-black/5 select-none">
-                                            <iframe
-                                              src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                                              className="w-[116%] h-full pointer-events-none border-none origin-top"
-                                              scrolling="no"
-                                              style={{ overflow: 'hidden' }}
-                                              title="PDF Preview"
-                                            />
-                                            <div className="absolute inset-0 bg-transparent z-10" />
-                                          </div>
-                                        )}
-
-                                        {/* File Info Box */}
-                                        <div className="flex items-center gap-3 p-3">
-                                          <div className="p-2 rounded-lg bg-rose-50 border border-rose-100 shrink-0">
-                                            <FileIcon className="w-6 h-6 text-rose-500 fill-rose-100" />
-                                          </div>
-                                          <div className="min-w-0 flex-1">
-                                            <p className="font-bold text-xs truncate text-[#111b21]">{cleanAttachmentName}</p>
-                                            <div className="flex items-center justify-between mt-1">
-                                              <p className="text-[10px] text-[#667781] truncate">
-                                                {isPdf ? "PDF Document" : "Click to download"}
-                                              </p>
-                                              {(!msg.text || isDefaultSentFileText) && (
-                                                <span className="text-[9px] text-[#667781] ml-2 flex items-center gap-1 select-none whitespace-nowrap">
-                                                  {dayjs(msg.timestamp).format("hh:mm A")}
-                                                  {renderCheckmarks(msg, false)}
-                                                </span>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        {/* Action Buttons (Open / Save As) */}
-                                        <div className="grid grid-cols-2 border-t border-black/5 text-xs text-[#00a884] font-bold text-center select-none bg-black/[0.01]">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleOpenAttachment(msg.attachmentUrl, msg.attachmentName)}
-                                            className="py-2.5 hover:bg-black/5 transition-colors border-r border-black/5 cursor-pointer active:bg-black/10"
-                                          >
-                                            Open
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDownload(msg.attachmentUrl, msg.attachmentName)}
-                                            className="py-2.5 hover:bg-black/5 transition-colors cursor-pointer active:bg-black/10"
-                                          >
-                                            Save as...
-                                          </button>
-                                        </div>
-                                      </div>
+                                    {msg.attachmentName && !msg.isVoice && !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) && !(/\.(mp4|webm|ogg|mov|mkv)$/i.test(msg.attachmentName)) && (
+                                      <FileAttachment msg={msg} handleOpenAttachment={handleOpenAttachment} renderCheckmarks={renderCheckmarks} />
                                     )}
 
                                     {/* Voice Message */}
@@ -4744,7 +4780,11 @@ export default function ChatPage() {
                                       msg.text &&
                                       msg.text !== `Poll: ${msg.poll?.question}` &&
                                       !isDefaultSentFileText && (
-                                        <div className={cn("inline-block text-[#111b21] max-w-full")}>
+                                        <div className={cn(
+                                          (msg.replyToText || msg.attachmentName || imageGroups[msg.id]) ? "block w-full" : "inline-block",
+                                          (msg.attachmentName || imageGroups[msg.id]) ? "px-2.5 pt-1.5 pb-1" : "",
+                                          "text-[#111b21] max-w-full"
+                                        )}>
                                           <MessageText
                                             text={msg.text}
                                             isMeBubble={msg.isMe}
@@ -6136,33 +6176,47 @@ export default function ChatPage() {
             )}
 
             {currentPreviewMsg && (
-              <img
-                src={
-                  currentPreviewMsg.attachmentUrl?.startsWith('blob:') ? currentPreviewMsg.attachmentUrl :
-                    currentPreviewMsg.attachmentUrl?.startsWith('http') ? currentPreviewMsg.attachmentUrl :
-                      `${API_URL}${currentPreviewMsg.attachmentUrl}`
-                }
-                alt={currentPreviewMsg.attachmentName}
-                className="max-w-full max-h-[75vh] object-contain select-none shadow-2xl rounded-sm"
-              />
+              /\.(mp4|webm|ogg|mov|mkv)$/i.test(currentPreviewMsg.attachmentName || "") ? (
+                <video
+                  src={
+                    currentPreviewMsg.attachmentUrl?.startsWith('blob:') ? currentPreviewMsg.attachmentUrl :
+                      currentPreviewMsg.attachmentUrl?.startsWith('http') ? currentPreviewMsg.attachmentUrl :
+                        `${API_URL}${currentPreviewMsg.attachmentUrl}`
+                  }
+                  controls
+                  autoPlay
+                  className="max-w-full max-h-[75vh] object-contain shadow-2xl rounded-sm"
+                />
+              ) : (
+                <img
+                  src={
+                    currentPreviewMsg.attachmentUrl?.startsWith('blob:') ? currentPreviewMsg.attachmentUrl :
+                      currentPreviewMsg.attachmentUrl?.startsWith('http') ? currentPreviewMsg.attachmentUrl :
+                        `${API_URL}${currentPreviewMsg.attachmentUrl}`
+                  }
+                  alt={currentPreviewMsg.attachmentName}
+                  className="max-w-full max-h-[75vh] object-contain select-none shadow-2xl rounded-sm"
+                />
+              )
             )}
 
             {/* Right Nav Arrow */}
-            {currentPreviewIndex < imageMessages.length - 1 && (
-              <button
-                onClick={handleNextImage}
-                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
-              >
-                <ChevronLeft className="w-6 h-6 rotate-180" />
-              </button>
+            {currentPreviewIndex < mediaMessages.length - 1 && (
+               <button
+                 onClick={handleNextImage}
+                 className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
+               >
+                 <ChevronLeft className="w-6 h-6 rotate-180" />
+               </button>
             )}
           </div>
 
           {/* Bottom Thumbnail Strip Carousel */}
-          {imageMessages.length > 1 && (
+          {mediaMessages.length > 1 && (
             <div className="h-20 bg-[#f0f2f5] border-t border-slate-200 flex items-center justify-center gap-2 p-2 shrink-0 overflow-x-auto">
-              {imageMessages.map((msg) => {
+              {mediaMessages.map((msg) => {
                 const isSelected = msg.id === previewImageMsgId;
+                const isVideo = msg.attachmentName && /\.(mp4|webm|ogg|mov|mkv)$/i.test(msg.attachmentName);
                 const thumbUrl = msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
                   msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
                     `${API_URL}${msg.attachmentUrl}`;
@@ -6175,7 +6229,16 @@ export default function ChatPage() {
                       isSelected ? "border-brand-teal scale-105" : "border-slate-300 opacity-50 hover:opacity-100"
                     )}
                   >
-                    <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                    {isVideo ? (
+                      <div className="relative w-full h-full bg-slate-900 flex items-center justify-center">
+                        <video src={thumbUrl} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/35 flex items-center justify-center text-white">
+                          <Play className="w-4 h-4 fill-current" />
+                        </div>
+                      </div>
+                    ) : (
+                      <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                    )}
                   </div>
                 );
               })}
