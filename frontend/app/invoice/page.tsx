@@ -19,7 +19,8 @@ import {
   RotateCcw,
   IndianRupee,
   Users,
-  ChevronsUpDown
+  ChevronsUpDown,
+  Gift
 } from "lucide-react";
 import {
   Popover,
@@ -44,6 +45,7 @@ import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { TablePagination } from "@/components/common/TablePagination";
+import { IncentivesModal } from "./IncentivesModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,6 +85,8 @@ export default function AllInvoicesPage() {
   
   // Follow Up Modal State
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [showIncentivesModal, setShowIncentivesModal] = useState(false);
+  
   const [endDate, setEndDate] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [isUpdatingFollowUp, setIsUpdatingFollowUp] = useState(false);
@@ -744,6 +748,7 @@ export default function AllInvoicesPage() {
                             >
                               <CalendarIcon className="w-4 h-4" />
                             </Button>
+
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -755,6 +760,19 @@ export default function AllInvoicesPage() {
                             </Button>
                           </>
                         )}
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
+                          onClick={() => {
+                            setActiveInvoiceId(invoice.id);
+                            setAccessInvoice(invoice);
+                            setShowIncentivesModal(true);
+                          }}
+                          title="Manage Incentives"
+                        >
+                          <Gift className="w-4 h-4" />
+                        </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
@@ -921,6 +939,16 @@ export default function AllInvoicesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Incentives Modal */}
+      <IncentivesModal
+        invoice={accessInvoice}
+        isOpen={showIncentivesModal}
+        onClose={() => setShowIncentivesModal(false)}
+        onSaved={(updatedInvoice) => {
+          setInvoices(prev => prev.map(inv => inv.id === updatedInvoice.id ? updatedInvoice : inv));
+        }}
+      />
     </div>
   );
 }

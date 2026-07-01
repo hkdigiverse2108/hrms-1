@@ -1908,6 +1908,11 @@ class InvoiceLineItem(BaseModel):
     discountRate: Optional[float] = 0.0
     discountType: Optional[str] = "amount"
 
+class InvoiceIncentive(BaseModel):
+    employeeId: str
+    employeeName: str
+    amount: float
+
 class InvoiceBase(BaseModel):
     clientName: str
     clientAddress: Optional[str] = None
@@ -1938,10 +1943,11 @@ class InvoiceBase(BaseModel):
     createdBy: Optional[str] = None
     createdById: Optional[str] = None
     endDate: Optional[str] = None
-    endDate: Optional[str] = None
     followUp: Optional[str] = None
     sharedWith: Optional[List[str]] = []
     accessManaged: Optional[bool] = False
+    totalIncentiveAmount: Optional[float] = 0.0
+    incentives: Optional[List[InvoiceIncentive]] = []
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1977,6 +1983,8 @@ class InvoiceUpdate(BaseModel):
     followUp: Optional[str] = None
     sharedWith: Optional[List[str]] = []
     accessManaged: Optional[bool] = False
+    totalIncentiveAmount: Optional[float] = None
+    incentives: Optional[List[InvoiceIncentive]] = None
 
 class Invoice(InvoiceBase):
     id: str
