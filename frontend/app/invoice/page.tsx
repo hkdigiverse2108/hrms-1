@@ -20,7 +20,8 @@ import {
   IndianRupee,
   Users,
   ChevronsUpDown,
-  Gift
+  Gift,
+  Coins
 } from "lucide-react";
 import {
   Popover,
@@ -760,19 +761,21 @@ export default function AllInvoicesPage() {
                             </Button>
                           </>
                         )}
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
-                          onClick={() => {
-                            setActiveInvoiceId(invoice.id);
-                            setAccessInvoice(invoice);
-                            setShowIncentivesModal(true);
-                          }}
-                          title="Manage Incentives"
-                        >
-                          <Gift className="w-4 h-4" />
-                        </Button>
+                        {invoice.invoiceType !== "Proforma Invoice" && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-brand-teal hover:bg-brand-teal/10"
+                            onClick={() => {
+                              setActiveInvoiceId(invoice.id);
+                              setAccessInvoice(invoice);
+                              setShowIncentivesModal(true);
+                            }}
+                            title="Manage Incentives"
+                          >
+                            <IndianRupee className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="icon" 

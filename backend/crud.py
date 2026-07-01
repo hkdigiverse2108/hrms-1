@@ -6451,7 +6451,7 @@ async def get_next_invoice_number(db, invoice_type: str = "Tax Invoice", tax_typ
         else:
             prefix = settings.get("taxInvoicePrefix", "INV")
     
-    max_num = 0
+    used_nums = set()
     for inv in invoices:
         num_str = inv.get("invoiceNumber", "")
         # ONLY match the current prefix format
@@ -6460,12 +6460,14 @@ async def get_next_invoice_number(db, invoice_type: str = "Tax Invoice", tax_typ
         if match_simple:
             try:
                 num = int(match_simple.group(1))
-                if num > max_num:
-                    max_num = num
+                used_nums.add(num)
             except ValueError:
                 pass
                 
-    next_num = max_num + 1
+    next_num = 1
+    while next_num in used_nums:
+        next_num += 1
+        
     return f"{prefix}-{next_num:03d}"
 
 # Referral (Reference) CRUD
