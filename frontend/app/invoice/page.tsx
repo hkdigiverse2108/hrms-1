@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useUser } from "@/hooks/useUser";
 import { 
   Plus, 
   Search, 
@@ -66,6 +67,9 @@ export default function AllInvoicesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  
+  const { user } = useUser();
+  const isAdmin = user?.role === "Admin";
   
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
   
@@ -149,23 +153,46 @@ export default function AllInvoicesPage() {
     }
   };
 
-  const handleDelete = async (id: string, invoiceNumber: string) => {
+  const handleDelete = async (invoice: any) => {
+    const isProforma = invoice.invoiceType === "Proforma Invoice";
+    
     const isConfirmed = await confirm({
       title: "Delete Invoice",
-      message: `Are you sure you want to delete invoice ${invoiceNumber}? This action cannot be undone.`,
+      message: `Are you sure you want to delete invoice ${invoice.invoiceNumber}? This action cannot be undone.`,
       destructive: true,
-      confirmText: "Delete"
+      confirmText: "Delete",
+      secondaryActionText: isProforma ? "Cancel Invoice" : undefined,
+      onSecondaryAction: isProforma ? async () => {
+        try {
+          const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "Cancelled" })
+          });
+          if (res.ok) {
+            const updated = await res.json();
+            setInvoices(prev => prev.map(inv => inv.id === invoice.id ? updated : inv));
+            toast.success(`Invoice ${invoice.invoiceNumber} has been cancelled.`);
+          } else {
+            toast.error("Failed to cancel the invoice");
+          }
+        } catch (err) {
+          console.error(err);
+          toast.error("Network error cancelling the invoice");
+        }
+      } : undefined
     });
+
     if (!isConfirmed) return;
 
     try {
-      const res = await fetch(`${API_URL}/invoices/${id}`, {
+      const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
         method: "DELETE",
       });
 
       if (res.ok) {
-        setInvoices(invoices.filter(inv => inv.id !== id));
-        toast.success(`Invoice ${invoiceNumber} deleted successfully`);
+        setInvoices(prev => prev.filter(inv => inv.id !== invoice.id));
+        toast.success(`Invoice ${invoice.invoiceNumber} deleted successfully`);
       } else {
         toast.error("Failed to delete the invoice");
       }
@@ -203,9 +230,12 @@ export default function AllInvoicesPage() {
   };
 
   const handleMarkAsPaid = async (invoice: any) => {
+    const actionTargetStatus = isAdmin ? "Paid" : "Payment Approval";
+    const actionLabel = isAdmin ? "Mark as Paid" : "Request Payment Approval";
+    
     const isConfirmed = await confirm({
-      title: "Mark as Paid",
-      message: `Are you sure you want to mark invoice ${invoice.invoiceNumber} as Paid?`,
+      title: actionLabel,
+      message: `Are you sure you want to ${isAdmin ? "mark invoice " + invoice.invoiceNumber + " as Paid" : "request payment approval for invoice " + invoice.invoiceNumber}?`,
       confirmText: "Confirm",
     });
 
@@ -215,13 +245,13 @@ export default function AllInvoicesPage() {
       const res = await fetch(`${API_URL}/invoices/${invoice.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Paid" })
+        body: JSON.stringify({ status: actionTargetStatus })
       });
 
       if (res.ok) {
         const updated = await res.json();
         setInvoices(invoices.map(inv => inv.id === invoice.id ? updated : inv));
-        toast.success(`Invoice marked as Paid!`);
+        toast.success(`Invoice updated to ${actionTargetStatus}!`);
       } else {
         toast.error("Failed to update status");
       }
@@ -289,7 +319,7 @@ export default function AllInvoicesPage() {
     if (selectedStatus === "All") {
       matchesStatus = true;
     } else if (selectedStatus === "Upcoming") {
-      matchesStatus = !!invoice.endDate;
+      matchesStatus = !!invoice.endDate && invoice.status !== "Cancelled";
     } else {
       matchesStatus = invoice.status?.toLowerCase() === selectedStatus.toLowerCase();
     }
@@ -611,12 +641,12 @@ export default function AllInvoicesPage() {
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
-                        {invoice.status !== "Paid" && (
+                        {invoice.status !== "Paid" && !(invoice.status === "Payment Approval" && !isAdmin) && (
                           <Button 
                             variant="ghost" 
                             className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
                             onClick={() => handleMarkAsPaid(invoice)}
-                            title="Mark as Paid"
+                            title={isAdmin && invoice.status === "Payment Approval" ? "Approve Payment" : (!isAdmin ? "Request Payment Approval" : "Mark as Paid")}
                           >
                             <CheckCircle2 className="w-4 h-4" />
                           </Button>
@@ -663,7 +693,7 @@ export default function AllInvoicesPage() {
                           variant="ghost" 
                           size="icon" 
                           className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleDelete(invoice.id, invoice.invoiceNumber)}
+                          onClick={() => handleDelete(invoice)}
                           title="Delete Invoice"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -723,7 +753,6 @@ export default function AllInvoicesPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </div>
+      </Dialog>    </div>
   );
 }

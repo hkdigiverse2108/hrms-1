@@ -18,6 +18,8 @@ interface ConfirmOptions {
   confirmText?: string;
   cancelText?: string;
   destructive?: boolean;
+  secondaryActionText?: string;
+  onSecondaryAction?: () => void;
 }
 
 interface ConfirmContextType {
@@ -49,6 +51,14 @@ export const ConfirmProvider = ({ children }: { children: ReactNode }) => {
     setIsOpen(false);
   };
 
+  const handleSecondaryAction = () => {
+    if (options.onSecondaryAction) {
+      options.onSecondaryAction();
+    }
+    if (resolver) resolver(false);
+    setIsOpen(false);
+  };
+
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
@@ -66,6 +76,15 @@ export const ConfirmProvider = ({ children }: { children: ReactNode }) => {
             <AlertDialogCancel onClick={handleCancel}>
               {options.cancelText || "Cancel"}
             </AlertDialogCancel>
+            {options.secondaryActionText && (
+              <button
+                type="button"
+                onClick={handleSecondaryAction}
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-slate-200 text-slate-900 hover:bg-slate-300 h-10 py-2 px-4"
+              >
+                {options.secondaryActionText}
+              </button>
+            )}
             <AlertDialogAction 
               onClick={handleConfirm}
               className={options.destructive ? "bg-red-600 hover:bg-red-700 text-white focus:ring-red-600" : "bg-brand-teal hover:bg-brand-teal-light text-white focus:ring-brand-teal"}
