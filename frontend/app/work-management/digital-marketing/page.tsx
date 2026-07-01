@@ -1523,9 +1523,7 @@ export default function MarketingReportsPage() {
       matchesDate = true;
     }
 
-    const matchesMonth =
-      isPendingRow || isDueRow || monthFilter.includes("all") ||
-      (r.date && monthFilter.some(m => normalizeDate(r.date).split("-")[1] === monthMap[m]));
+    const matchesMonth = true;
       
     const isDMProject = r.projectId 
       ? projects.some(p => p.id === r.projectId) 
@@ -2520,6 +2518,9 @@ export default function MarketingReportsPage() {
                       <TableHead className="w-12 text-center font-bold text-slate-700">
                         S.N
                       </TableHead>
+                      <TableHead className="font-bold text-slate-700 w-28">
+                        Date
+                      </TableHead>
                       <TableHead className="font-bold text-slate-700">
                         Campaign Name
                       </TableHead>
@@ -2561,7 +2562,7 @@ export default function MarketingReportsPage() {
                         {loading ? (
                           <TableRow>
                             <TableCell
-                              colSpan={13}
+                              colSpan={14}
                               className="text-center py-20"
                             >
                               <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
@@ -2575,7 +2576,7 @@ export default function MarketingReportsPage() {
                             {filteredDaily.length === 0 ? (
                               <TableRow>
                                 <TableCell
-                                  colSpan={14}
+                                  colSpan={15}
                                   className="text-center py-20 text-slate-400 italic"
                                 >
                                   {selectedClientFilter === "" ? "Please select a client from the left sidebar to view daily reports." : "No daily reports found."}
@@ -2673,6 +2674,16 @@ export default function MarketingReportsPage() {
                                                   </TableCell>
                                                   <TableCell className="text-center text-slate-400">
                                                     {globalIdx}
+                                                  </TableCell>
+                                                  <TableCell className="text-slate-600 font-semibold text-xs whitespace-nowrap">
+                                                    {report.date ? (() => {
+                                                      try {
+                                                        const parsed = new Date(report.date);
+                                                        return format(parsed, "dd MMM yyyy");
+                                                      } catch (e) {
+                                                        return report.date;
+                                                      }
+                                                    })() : "N/A"}
                                                   </TableCell>
 
                                                   <TableCell className="text-slate-600">
@@ -3032,7 +3043,7 @@ export default function MarketingReportsPage() {
                                         {/* Subtotal row for the group */}
                                         <TableRow className="bg-slate-50/80 font-medium">
                                           <TableCell
-                                            colSpan={4}
+                                            colSpan={5}
                                             className="text-right text-slate-600"
                                           >
                                             Total
@@ -3171,7 +3182,7 @@ export default function MarketingReportsPage() {
                     <tfoot className="sticky bottom-0 z-20 bg-brand-teal/10 border-t-2 border-brand-teal/20 backdrop-blur-md shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                       <TableRow className="hover:bg-transparent">
                         <TableCell
-                          colSpan={4}
+                          colSpan={5}
                           className="text-right font-bold text-slate-900"
                         >
                           Grand Total
