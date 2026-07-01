@@ -1057,7 +1057,7 @@ export default function CreativeClientsPage() {
                   <th className="px-6 py-4 whitespace-nowrap">Email</th>
                   <th className="px-6 py-4 whitespace-nowrap">Services</th>
                   <th className="px-6 py-4 text-center whitespace-nowrap">Status</th>
-                  <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
+                  <th className="px-6 py-4 text-right whitespace-nowrap sticky right-0 z-20 bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1199,7 +1199,7 @@ export default function CreativeClientsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-right align-middle whitespace-nowrap">
+                    <td className="px-6 py-4 text-right align-middle whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 shadow-[-1px_0_0_0_#e2e8f0] transition-colors">
                       <div className="flex items-center justify-end gap-1.5 opacity-100 transition-all duration-200">
                         <SmmMeetingDialog 
                           client={client} 
