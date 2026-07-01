@@ -4941,9 +4941,9 @@ export default function ChatPage() {
                       onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
                       className="w-full flex items-end gap-3 bg-transparent px-2"
                     >
-                      <div className="flex-1 flex flex-col bg-white rounded-[24px] border border-slate-200 shadow-xs overflow-hidden">
+                      <div className="flex-1 flex flex-col bg-white rounded-[24px] border border-slate-200 shadow-xs">
                         {replyingTo && (
-                          <div className="relative flex items-center justify-between bg-slate-50/70 p-2.5 border-l-4 border-brand-teal border-b border-slate-100 animate-in slide-in-from-bottom-2">
+                          <div className="relative flex items-center justify-between bg-slate-50/70 p-2.5 border-l-4 border-brand-teal border-b border-slate-100 animate-in slide-in-from-bottom-2 rounded-t-[24px]">
                             <div className="min-w-0 flex-1 pl-2">
                               <p className="text-[11px] font-bold text-brand-teal uppercase">
                                 Replying to {replyingTo.isMe ? "Yourself" : (replyingTo.sender || selectedChat.name)}
@@ -5062,8 +5062,8 @@ export default function ChatPage() {
                                     </div>
                                     <div className="space-y-0.5">
                                       {filteredEmployees.map((emp, idx) => {
-                                        const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
-                                        const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                                        const empName = emp.name || [emp.firstName, emp.lastName].filter(Boolean).join(' ') || "Employee";
+                                        const initials = empName.split(' ').filter(Boolean).map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
                                         const isActive = idx === activeTagIndex;
                                         return (
                                           <button
