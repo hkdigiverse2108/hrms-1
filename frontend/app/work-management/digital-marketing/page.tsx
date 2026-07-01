@@ -2010,20 +2010,20 @@ export default function MarketingReportsPage() {
               Creative Tasks
             </TabsTrigger>
             {user?.role?.toLowerCase() === 'admin' && (
-              <>
-                <TabsTrigger
-                  value="analysis"
-                  className="px-6 py-2 rounded-md transition-all"
-                >
-                  Analysis
-                </TabsTrigger>
-                <TabsTrigger
-                  value="all_clients"
-                  className="px-6 py-2 rounded-md transition-all"
-                >
-                  All Clients
-                </TabsTrigger>
-              </>
+              <TabsTrigger
+                value="analysis"
+                className="px-6 py-2 rounded-md transition-all"
+              >
+                Analysis
+              </TabsTrigger>
+            )}
+            {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'team leader') && (
+              <TabsTrigger
+                value="all_clients"
+                className="px-6 py-2 rounded-md transition-all"
+              >
+                All Clients
+              </TabsTrigger>
             )}
             {!isAdmin && (
               <TabsTrigger
@@ -3873,7 +3873,7 @@ export default function MarketingReportsPage() {
             </div>
           </TabsContent>
         )}
-        {user?.role?.toLowerCase() === 'admin' && (
+        {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'team leader') && (
           <TabsContent value="all_clients" className="m-0 flex-1 overflow-auto h-full mt-4 px-1 pb-10">
             <div className="bg-white rounded-xl shadow-sm border p-5">
               <h3 className="font-bold text-slate-800 text-lg mb-4">All Clients & Projects (Digital Marketing)</h3>

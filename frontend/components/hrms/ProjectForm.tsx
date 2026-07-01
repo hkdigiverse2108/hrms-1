@@ -177,6 +177,7 @@ function PhaseMemberMultiSelect({
 }
 
 export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = true, currentUser }: ProjectFormProps) {
+  const isTeamLeader = currentUser?.role === "Team Leader" || currentUser?.designation?.toLowerCase() === "team leader";
   const [formData, setFormData] = useState<ProjectFormData>({
     ...defaultFormData,
     ...initialData,
@@ -249,7 +250,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.department === "Development") {
-      if (isAdmin && !formData.endDate) {
+      if ((isAdmin || isTeamLeader) && !formData.endDate) {
         toast.error("Client Deadline (End Date) is compulsory for Development projects.");
         return;
       }
@@ -445,7 +446,7 @@ export function ProjectForm({ initialData, onSubmit, isSubmitting, isAdmin = tru
             required
           />
         </div>
-        {isAdmin && (
+        {(isAdmin || isTeamLeader) && (
           <div className="space-y-2">
             <Label htmlFor="endDate">
               {formData.department === "Development" ? (
