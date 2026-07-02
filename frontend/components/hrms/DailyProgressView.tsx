@@ -123,9 +123,9 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
         if (['Team Leader', 'Manager', 'Social Media Manager'].includes(emp.role || '') || emp.role?.toLowerCase() === 'admin') {
            responsiblePerson = 'HR / Admin'
         } else {
-           const tls = employees.filter(e => e.department?.toLowerCase() === emp.department?.toLowerCase() && e.role === 'Team Leader')
+           const tls = employees.filter((e: any) => e.department?.toLowerCase() === emp.department?.toLowerCase() && e.role === 'Team Leader')
            if (tls.length > 0) {
-             responsiblePerson = tls.map(t => t.name || `${t.firstName} ${t.lastName}`).join(', ')
+             responsiblePerson = tls.map((t: any) => t.name || `${t.firstName} ${t.lastName}`).join(', ')
            } else {
              responsiblePerson = 'Admin'
            }
