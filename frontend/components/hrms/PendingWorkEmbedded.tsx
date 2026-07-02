@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList, X, Check, Edit2, History } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList, X, Check, Edit2, History, ArrowLeftRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +47,12 @@ export function PendingWorkEmbedded({
   const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null);
   const [editingRemarkValue, setEditingRemarkValue] = useState<string>('');
   const [editingIsClientIssue, setEditingIsClientIssue] = useState<boolean>(false);
+  
+  const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferringTask, setTransferringTask] = useState<any>(null);
+  const [selectedReceiverId, setSelectedReceiverId] = useState<string>('');
   
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<any[]>([]);
@@ -99,6 +105,75 @@ export function PendingWorkEmbedded({
     }
   };
 
+  const handleOpenTransferModal = (task: any) => {
+    setTransferringTask(task);
+    setSelectedReceiverId('');
+    setIsTransferModalOpen(true);
+  };
+
+  const handleSendTransferRequest = async () => {
+    if (!selectedReceiverId) {
+      toast.error("Please select an employee to transfer this task to.");
+      return;
+    }
+    const receiver = employees.find((e: any) => e.id === selectedReceiverId);
+    if (!receiver) {
+      toast.error("Selected employee not found.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/work-transfer-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: transferringTask.id,
+          taskType: transferringTask.isOtherWork ? "other-work" : "content-calendar",
+          taskName: transferringTask.taskName,
+          stage: transferringTask.stage,
+          senderId: currentUser.id,
+          senderName: currentUser.name || `${currentUser.firstName} ${currentUser.lastName || ''}`.trim(),
+          receiverId: receiver.id,
+          receiverName: `${receiver.firstName} ${receiver.lastName || ''}`.trim(),
+        }),
+      });
+      if (response.ok) {
+        toast.success("Transfer request sent successfully.");
+        setIsTransferModalOpen(false);
+        fetchData();
+      } else {
+        const err = await response.json();
+        toast.error(err.detail || "Failed to send transfer request.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send transfer request.");
+    }
+  };
+
+  const handleRespondRequest = async (requestId: string, status: 'Accepted' | 'Rejected') => {
+    try {
+      const response = await fetch(`${API_URL}/work-transfer-requests/${requestId}/respond`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (response.ok) {
+        toast.success(`Transfer request ${status.toLowerCase()} successfully.`);
+        fetchData();
+      } else {
+        const err = await response.json();
+        toast.error(err.detail || `Failed to ${status.toLowerCase()} request.`);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(`Failed to ${status.toLowerCase()} request.`);
+    }
+  };
+
+  const getPendingTransferRequest = (item: any) => {
+    return outgoingRequests.find(r => r.taskId === item.id && r.stage === item.stage && r.status === 'Pending');
+  };
+
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
@@ -124,6 +199,19 @@ export function PendingWorkEmbedded({
         fetch(`${API_URL}/other-work/all`),
         fetch(`${API_URL}/employees`)
       ]);
+
+      if (user?.id) {
+        const [incomingRes, outgoingRes] = await Promise.all([
+          fetch(`${API_URL}/work-transfer-requests/incoming/${user.id}`),
+          fetch(`${API_URL}/work-transfer-requests/outgoing/${user.id}`)
+        ]);
+        if (incomingRes.ok) {
+          setIncomingRequests(await incomingRes.json());
+        }
+        if (outgoingRes.ok) {
+          setOutgoingRequests(await outgoingRes.json());
+        }
+      }
       
       if (entriesRes.ok && clientsRes.ok) {
         const fetchedEntries = await entriesRes.json();
@@ -180,17 +268,17 @@ export function PendingWorkEmbedded({
         let assigneeId = null;
         let assignerId = project.teamLeaderId || client?.teamLeaderId;
         
-        if (stage === 'Script') assigneeId = project.assignedScriptwriterId || client?.assignedScriptwriterId;
-        if (stage === 'Shoot') assigneeId = project.assignedShooterId || client?.assignedShooterId;
+        if (stage === 'Script') assigneeId = entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId;
+        if (stage === 'Shoot') assigneeId = entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId;
         if (stage === 'Editing') {
           if (entry.postReel === 'Post') {
-            assigneeId = project.assignedPostDesignerId || client?.assignedPostDesignerId;
+            assigneeId = entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
           } else {
-            assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId;
+            assigneeId = entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId;
           }
         }
-        if (stage === 'Approval') assigneeId = project.assignedApproverId || client?.assignedApproverId;
-        if (stage === 'Posting') assigneeId = project.assignedPosterId || client?.assignedPosterId;
+        if (stage === 'Approval') assigneeId = entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId;
+        if (stage === 'Posting') assigneeId = entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId;
 
         const assignee = employees.find((e: any) => e.id === assigneeId);
         const assigner = employees.find((e: any) => e.id === assignerId);
@@ -216,17 +304,17 @@ export function PendingWorkEmbedded({
         const uId = user?.id;
         if (!uId) return false;
         
-        if (stage === 'Script') return (project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
-        if (stage === 'Shoot') return (project.assignedShooterId || client?.assignedShooterId) === uId;
+        if (stage === 'Script') return (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
+        if (stage === 'Shoot') return (entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId) === uId;
         if (stage === 'Editing') {
           if (entry.postReel === 'Post') {
-            return (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+            return (entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
           } else {
-            return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId;
+            return (entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId) === uId;
           }
         }
-        if (stage === 'Approval') return (project.assignedApproverId || client?.assignedApproverId) === uId;
-        if (stage === 'Posting') return (project.assignedPosterId || client?.assignedPosterId) === uId;
+        if (stage === 'Approval') return (entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId) === uId;
+        if (stage === 'Posting') return (entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId) === uId;
         
         return true;
       };
@@ -399,6 +487,55 @@ export function PendingWorkEmbedded({
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
+      {/* Incoming Requests Panel */}
+      {incomingRequests.filter(r => r.status === 'Pending').length > 0 && (
+        <div className="bg-indigo-50/50 border-b border-indigo-100 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ArrowLeftRight className="w-4 h-4 text-indigo-600 animate-pulse" />
+            <h3 className="font-bold text-slate-800 text-sm">Incoming Task Transfer Requests</h3>
+            <span className="bg-indigo-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+              {incomingRequests.filter(r => r.status === 'Pending').length}
+            </span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {incomingRequests.filter(r => r.status === 'Pending').map(req => (
+              <div key={req.id} className="bg-white border border-indigo-100/60 rounded-xl p-3.5 flex flex-col justify-between shadow-sm">
+                <div>
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                      {req.stage}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {new Date(req.createdDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-slate-800 text-xs mt-2 line-clamp-1">{req.taskName}</h4>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Sent by: <span className="font-semibold text-slate-700">{req.senderName}</span>
+                  </p>
+                </div>
+                <div className="flex gap-2 mt-3.5 justify-end">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="text-[10px] h-7 px-3 text-slate-600 border-slate-200 hover:bg-slate-50 rounded-lg font-medium"
+                    onClick={() => handleRespondRequest(req.id, 'Rejected')}
+                  >
+                    Reject
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="text-[10px] h-7 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-xs"
+                    onClick={() => handleRespondRequest(req.id, 'Accepted')}
+                  >
+                    Accept
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Filters Bar */}
       <div className="flex flex-col border-b border-slate-200 bg-slate-50/50">
         {/* Top Header Row */}
@@ -720,6 +857,23 @@ export function PendingWorkEmbedded({
                                 </Button>
                               </>
                             )}
+                            {getPendingTransferRequest(item) ? (
+                              <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded font-semibold whitespace-nowrap">
+                                Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
+                              </span>
+                            ) : (
+                              item.assigneeId === currentUser?.id && (
+                                <Button
+                                  onClick={() => handleOpenTransferModal(item)}
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Transfer Task"
+                                  className="h-8 w-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                                >
+                                  <ArrowLeftRight className="w-4 h-4" />
+                                </Button>
+                              )
+                            )}
                             <Button
                               onClick={() => handleOpenLogs(item)}
                               variant="ghost"
@@ -732,6 +886,23 @@ export function PendingWorkEmbedded({
                           </>
                         ) : (
                           <>
+                            {getPendingTransferRequest(item) ? (
+                              <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded font-semibold whitespace-nowrap">
+                                Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
+                              </span>
+                            ) : (
+                              item.assigneeId === currentUser?.id && (
+                                <Button
+                                  onClick={() => handleOpenTransferModal(item)}
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Transfer Task"
+                                  className="h-8 w-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                                >
+                                  <ArrowLeftRight className="w-4 h-4" />
+                                </Button>
+                              )
+                            )}
                             <Button
                               onClick={() => handleOpenLogs(item)}
                               variant="ghost"
@@ -838,6 +1009,59 @@ export function PendingWorkEmbedded({
           <div className="p-4 bg-white border-t border-slate-200 flex justify-end">
             <Button onClick={() => setLogsDialogOpen(false)} className="bg-brand-teal hover:bg-brand-teal/90 text-white px-8 rounded-lg font-bold shadow-sm h-10">
               Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <ArrowLeftRight className="w-5 h-5 text-indigo-600" />
+              Transfer Task
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs space-y-1.5">
+              <div>Task Name: <span className="font-semibold text-slate-800">{transferringTask?.taskName}</span></div>
+              <div>Stage: <span className="font-semibold text-slate-800">{transferringTask?.stage}</span></div>
+              <div>Client: <span className="font-semibold text-slate-800">{transferringTask?.clientDisplayName}</span></div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700 block">Select Employee to Transfer To</label>
+              <Select value={selectedReceiverId} onValueChange={setSelectedReceiverId}>
+                <SelectTrigger className="w-full focus:ring-brand-teal focus:border-brand-teal">
+                  <SelectValue placeholder="Choose employee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees
+                    .filter((emp: any) => {
+                      if (emp.id === currentUser?.id) return false;
+                      if (!currentUser?.department) return true;
+                      return emp.department?.toLowerCase() === currentUser?.department?.toLowerCase();
+                    })
+                    .map((emp: any) => {
+                      const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
+                      return (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {name} ({emp.role || 'Employee'})
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <Button variant="outline" onClick={() => setIsTransferModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-indigo-600 hover:bg-indigo-750 text-white font-semibold"
+              onClick={handleSendTransferRequest}
+            >
+              Send Request
             </Button>
           </div>
         </DialogContent>

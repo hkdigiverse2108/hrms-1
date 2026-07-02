@@ -2214,6 +2214,12 @@ class ContentCalendarEntryBase(BaseModel):
     logs: Optional[List[dict]] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
+    assignedScriptwriterId: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedPosterId: Optional[str] = None
 
 class ContentCalendarEntryCreate(ContentCalendarEntryBase):
     pass
@@ -2241,9 +2247,35 @@ class ContentCalendarEntryUpdate(BaseModel):
     updatedBy: Optional[str] = None
     remark: Optional[str] = None
     remarkStage: Optional[str] = None
+    assignedScriptwriterId: Optional[str] = None
+    assignedShooterId: Optional[str] = None
+    assignedReelEditorId: Optional[str] = None
+    assignedPostDesignerId: Optional[str] = None
+    assignedApproverId: Optional[str] = None
+    assignedPosterId: Optional[str] = None
 
 class ContentCalendarEntry(ContentCalendarEntryBase):
     id: str
+    class Config:
+        from_attributes = True
+
+class WorkTransferRequestBase(BaseModel):
+    taskId: str
+    taskType: str
+    taskName: str
+    stage: str
+    senderId: str
+    senderName: str
+    receiverId: str
+    receiverName: str
+    status: str = "Pending"
+
+class WorkTransferRequestCreate(WorkTransferRequestBase):
+    pass
+
+class WorkTransferRequest(WorkTransferRequestBase):
+    id: str
+    createdDate: str
     class Config:
         from_attributes = True
 

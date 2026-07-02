@@ -3160,6 +3160,34 @@ async def delete_other_work(entry_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"message": "Entry deleted successfully"}
 
+# --- Work Transfer Request API ---
+@app.post("/work-transfer-requests", response_model=schemas.WorkTransferRequest)
+async def create_transfer_request(request: schemas.WorkTransferRequestCreate, db=Depends(get_db)):
+    try:
+        return await crud.create_transfer_request(db, request.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/work-transfer-requests/incoming/{employee_id}", response_model=List[schemas.WorkTransferRequest])
+async def get_incoming_transfer_requests(employee_id: str, db=Depends(get_db)):
+    return await crud.get_incoming_transfer_requests(db, employee_id)
+
+@app.get("/work-transfer-requests/outgoing/{employee_id}", response_model=List[schemas.WorkTransferRequest])
+async def get_outgoing_transfer_requests(employee_id: str, db=Depends(get_db)):
+    return await crud.get_outgoing_transfer_requests(db, employee_id)
+
+@app.put("/work-transfer-requests/{request_id}/respond", response_model=schemas.WorkTransferRequest)
+async def respond_to_transfer_request(request_id: str, payload: dict, db=Depends(get_db)):
+    status = payload.get("status")
+    if status not in ["Accepted", "Rejected"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    updated = await crud.respond_to_transfer_request(db, request_id, status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return updated
+
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
