@@ -226,6 +226,133 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
   );
 };
 
+const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+    const audio = new Audio(fullUrl);
+    audioRef.current = audio;
+
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+    };
+
+    const handleTimeUpdate = () => {
+      setProgress((audio.currentTime / (audio.duration || 1)) * 100);
+      setCurrentTime(audio.currentTime);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentTime(0);
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audio.pause();
+    };
+  }, [msg.attachmentUrl]);
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(err => {
+          console.error("Audio playback failed:", err);
+          toast.error("Could not play audio message.");
+        });
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    if (audioRef.current && duration) {
+      const newTime = (val / 100) * duration;
+      audioRef.current.currentTime = newTime;
+      setProgress(val);
+      setCurrentTime(newTime);
+    }
+  };
+
+  const formatTime = (time: number) => {
+    if (isNaN(time) || time === Infinity) return "0:00";
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const displayTime = isPlaying || currentTime > 0
+    ? formatTime(currentTime)
+    : formatTime(duration || msg.voiceDuration || 0);
+
+  const msgTime = dayjs(msg.timestamp).format("h:mm a");
+
+  return (
+    <div className={cn(
+      "flex items-center gap-3.5 p-3 rounded-2xl mb-1 w-[320px] max-w-full bg-white border border-slate-100/80 shadow-xs",
+      isMe ? "ml-auto" : "mr-auto"
+    )}>
+      {/* Play/Pause Button */}
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-slate-800 hover:bg-slate-100 transition-colors focus:outline-none"
+      >
+        {isPlaying ? (
+          <Pause className="w-5 h-5 fill-current text-slate-800" />
+        ) : (
+          <Play className="w-5 h-5 fill-current text-slate-800 ml-0.5" />
+        )}
+      </button>
+
+      {/* Progress & Duration */}
+      <div className="flex-1 flex flex-col justify-center min-w-0">
+        <div className="relative w-full flex items-center h-4 group">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="0.1"
+            value={progress}
+            onChange={handleSliderChange}
+            className="w-full h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-sky-500 focus:outline-none focus:ring-0
+                       [&::-webkit-slider-runnable-track]:bg-slate-100 [&::-webkit-slider-runnable-track]:rounded-lg
+                       [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 
+                       [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-sky-500 [&::-webkit-slider-thumb]:transition-transform"
+            style={{
+              background: `linear-gradient(to right, #0ea5e9 0%, #0ea5e9 ${progress}%, #e2e8f0 ${progress}%, #e2e8f0 100%)`
+            }}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] text-slate-400 font-semibold mt-0.5 select-none">
+          <span>{displayTime}</span>
+          <span>{msgTime}</span>
+        </div>
+      </div>
+
+      {/* Headphone Yellow Circle */}
+      <div className="w-11 h-11 rounded-full bg-amber-500 hover:bg-amber-600 active:scale-95 transition-all flex items-center justify-center text-white shrink-0 shadow-sm">
+        <Headphones className="w-5 h-5" />
+      </div>
+    </div>
+  );
+};
+
 const VideoAttachment = ({ msg, setPreviewImageMsgId }: { msg: any; setPreviewImageMsgId: (id: string | null) => void }) => {
   const handleAction = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -4569,7 +4696,7 @@ export default function ChatPage() {
                                                   `${API_URL}${msg.attachmentUrl}`
                                             }
                                             alt={msg.attachmentName}
-                                            className="max-w-[280px] sm:max-w-[360px] max-h-[300px] w-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                                            className="max-w-[280px] sm:max-w-[360px] max-h-[300px] object-contain cursor-pointer hover:opacity-95 transition-opacity bg-slate-50 border border-slate-100 rounded-lg"
                                             onLoad={() => scrollToBottom(true)}
                                             onClick={() => setPreviewImageMsgId(msg.id)}
                                           />
@@ -4596,8 +4723,16 @@ export default function ChatPage() {
                                       <VideoAttachment msg={msg} setPreviewImageMsgId={setPreviewImageMsgId} />
                                     )}
 
+                                    {/* Audio Attachment */}
+                                    {msg.attachmentName && !msg.isVoice && /\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(msg.attachmentName) && (
+                                      <AudioMessagePlayer msg={msg} isMe={msg.isMe} />
+                                    )}
+
                                     {/* File Attachment */}
-                                    {msg.attachmentName && !msg.isVoice && !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) && !(/\.(mp4|webm|ogg|mov|mkv)$/i.test(msg.attachmentName)) && (
+                                    {msg.attachmentName && !msg.isVoice && 
+                                      !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) && 
+                                      !(/\.(mp4|webm|ogg|mov|mkv)$/i.test(msg.attachmentName)) && 
+                                      !(/\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(msg.attachmentName)) && (
                                       <FileAttachment msg={msg} handleOpenAttachment={handleOpenAttachment} renderCheckmarks={renderCheckmarks} />
                                     )}
 
@@ -6449,6 +6584,23 @@ export default function ChatPage() {
                         const fullUrl = contextMenu.msg.attachmentUrl.startsWith('http')
                           ? contextMenu.msg.attachmentUrl
                           : `${API_URL}${contextMenu.msg.attachmentUrl}`;
+
+                        try {
+                          const response = await fetch(fullUrl);
+                          const originalBlob = await response.blob();
+                          if (originalBlob.type === 'image/png') {
+                            await navigator.clipboard.write([
+                              new ClipboardItem({
+                                [originalBlob.type]: originalBlob
+                              })
+                            ]);
+                            toast.success("Image copied to clipboard!");
+                            setContextMenu(null);
+                            return;
+                          }
+                        } catch (fetchErr) {
+                          console.warn("Direct image copy failed, using canvas fallback", fetchErr);
+                        }
 
                         const img = new Image();
                         img.crossOrigin = "anonymous";

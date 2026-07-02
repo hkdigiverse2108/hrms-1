@@ -386,6 +386,10 @@ export default function DashboardPage() {
  
   const fetchStatus = async () => {
     try {
+      const userRole = user?.role?.toLowerCase() || "employee";
+      const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
+      if (isAdmin) return;
+
       const res = await fetch(`${API_URL}/attendance/status/${user?.id}`);
       if (res.ok) {
         const data = await res.json();
