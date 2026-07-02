@@ -85,6 +85,11 @@ interface WMTaskFormProps {
 export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment }: WMTaskFormProps) {
   const { user } = useUser();
   const isExistingTask = Boolean((initialData as any)?.id || (initialData as any)?._id);
+  const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
+  const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id) || 
+                       user?.role?.toLowerCase() === "team leader" || 
+                       user?.designation?.toLowerCase() === "team leader";
+  const isRegularEmployee = !isAdmin && !isTeamLeader;
   const defaultAssignee = !isExistingTask ? (initialData?.assignedToId || user?.id || "") : (initialData?.assignedToId || "");
 
   const [formData, setFormData] = useState<WMTaskFormData>({
@@ -341,9 +346,9 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         <div className="space-y-2">
           <Label htmlFor="assignedToId">Assign Member</Label>
           <Select 
-            value={formData.assignedToId ?? ""} 
+            value={isRegularEmployee && !isExistingTask ? (user?.id || "") : (formData.assignedToId ?? "")} 
             onValueChange={(v) => handleChange("assignedToId", v)}
-            disabled={isLoadingMeta}
+            disabled={isLoadingMeta || isRegularEmployee}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Member"} />

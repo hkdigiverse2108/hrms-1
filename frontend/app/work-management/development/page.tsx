@@ -118,6 +118,7 @@ export default function TasksPage() {
   }, [user]);
 
   const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin" || hasFullTasksAccess;
+  const isRegularEmployee = !isAdmin && !isTeamLeader;
 
   useEffect(() => {
     if (user && !isAdmin && user.department) {
@@ -960,9 +961,9 @@ export default function TasksPage() {
                       ].map((col) => (
                         <td 
                           key={col.key} 
-                          className={`px-4 py-3 ${col.type !== 'readonly' && canEditTask ? 'cursor-text hover:bg-brand-teal/5 transition-colors' : ''}`}
+                          className={`px-4 py-3 ${col.type !== 'readonly' && canEditTask && (col.key !== 'assignedToId' || !isRegularEmployee) ? 'cursor-text hover:bg-brand-teal/5 transition-colors' : ''}`}
                           style={{ minWidth: col.minWidth }}
-                          onClick={() => col.type !== 'readonly' && canEditTask && setEditingCell({ id: task.id, field: col.key })}
+                          onClick={() => col.type !== 'readonly' && canEditTask && (col.key !== 'assignedToId' || !isRegularEmployee) && setEditingCell({ id: task.id, field: col.key })}
                         >
                           {editingCell?.id === task.id && editingCell?.field === col.key ? (
                             col.type === 'select' ? (
