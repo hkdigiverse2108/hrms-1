@@ -90,9 +90,9 @@ export default function EmployeeAttendanceListPage() {
   const [attendance, setAttendance] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
 
-  // Filter out admin employees from the attendance list
+  // Filter out admin and inactive employees from the attendance list
   const nonAdminEmployees = useMemo(() => 
-    employees.filter(emp => emp.role?.toLowerCase() !== 'admin'),
+    employees.filter(emp => emp.role?.toLowerCase() !== 'admin' && emp.status?.toLowerCase() !== 'inactive'),
     [employees]
   );
   const [isLoading, setIsLoading] = useState(true);

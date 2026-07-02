@@ -1860,7 +1860,7 @@ async def get_attendance_status(db, employee_id: str):
 
 async def punch_in(db, employee_id: str, punch_in_time: Optional[str] = None):
     employee = await get_employee(db, employee_id)
-    if not employee:
+    if not employee or employee.get("status", "").lower() == "inactive":
         return None
 
     await auto_close_stale_open_sessions(db, employee_id)
