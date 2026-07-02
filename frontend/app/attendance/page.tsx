@@ -23,7 +23,9 @@ import {
   Coffee,
   Pencil,
   Trash2,
-  Plus
+  Plus,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { API_URL, getAvatarUrl } from "@/lib/config";
 import { useUserContext } from "@/context/UserContext";
@@ -80,6 +82,8 @@ export default function AttendancePage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<dayjs.Dayjs>(dayjs());
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const [editForm, setEditForm] = useState<any>({
@@ -220,6 +224,12 @@ export default function AttendancePage() {
     if (selectedEmployeeId !== "all") {
       result = result.filter((a: any) => a.employeeId === selectedEmployeeId);
     }
+    if (selectedDate) {
+      result = result.filter((a: any) => {
+        const recordDate = a.date ? (typeof a.date === 'string' ? a.date.split('T')[0].split(' ')[0] : dayjs(a.date).format('YYYY-MM-DD')) : '';
+        return recordDate === selectedDate;
+      });
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter((a: any) => 
@@ -229,7 +239,7 @@ export default function AttendancePage() {
       );
     }
     return result;
-  }, [attendance, selectedEmployeeId, searchQuery]);
+  }, [attendance, selectedEmployeeId, selectedDate, searchQuery]);
 
   useEffect(() => {
     calculateStats(filteredAttendance);
@@ -502,16 +512,44 @@ export default function AttendancePage() {
   );
  
   const CalendarWidget = () => {
-    const istNow = dayjs(getISTNow());
+    const istNow = calendarMonth;
     const daysInMonth = istNow.daysInMonth();
     const firstDayOfMonth = istNow.startOf('month').day();
+
+    // Filter records by selected employee to show relevant indicators
+    const empFilteredAttendance = selectedEmployeeId === "all" 
+      ? attendance 
+      : attendance.filter((a: any) => a.employeeId === selectedEmployeeId);
+
+    const presentDaysInMonth = empFilteredAttendance.filter(a => {
+      const recordDate = dayjs(a.date);
+      return recordDate.month() === istNow.month() && 
+             recordDate.year() === istNow.year() &&
+             a.checkIn && a.checkIn !== "--" && a.checkIn !== "--:--";
+    }).length;
 
     return (
       <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-foreground text-lg">{istNow.format("MMMM YYYY")}</h3>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setCalendarMonth(prev => prev.subtract(1, 'month'))}
+              className="p-1 hover:bg-gray-100 rounded-md transition-colors"
+              title="Previous Month"
+            >
+              <ChevronLeft className="w-5 h-5 text-muted-foreground" />
+            </button>
+            <h3 className="font-bold text-foreground text-lg min-w-[120px] text-center">{istNow.format("MMMM YYYY")}</h3>
+            <button 
+              onClick={() => setCalendarMonth(prev => prev.add(1, 'month'))}
+              className="p-1 hover:bg-gray-100 rounded-md transition-colors"
+              title="Next Month"
+            >
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
+          </div>
           <div className="bg-brand-light/50 text-brand-teal text-xs font-medium px-2 py-1 rounded-md">
-            {stats.presentDays} present
+            {presentDaysInMonth} present
           </div>
         </div>
         <div className="grid grid-cols-7 gap-y-2 text-center text-sm mb-2">
@@ -531,7 +569,15 @@ export default function AttendancePage() {
             // Render days of the month
             for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
               const isToday = dayNum === istNow.date();
-              const hasRecord = filteredAttendance.some(a => {
+              const cellDateStr = istNow.date(dayNum).format("YYYY-MM-DD");
+              const isSelected = selectedDate === cellDateStr;
+
+              // Filter records by selected employee to show relevant indicators
+              const empFilteredAttendance = selectedEmployeeId === "all" 
+                ? attendance 
+                : attendance.filter((a: any) => a.employeeId === selectedEmployeeId);
+
+              const hasRecord = empFilteredAttendance.some(a => {
                 const recordDate = dayjs(a.date);
                 return recordDate.date() === dayNum && 
                        recordDate.month() === istNow.month() && 
@@ -541,9 +587,20 @@ export default function AttendancePage() {
               days.push(
                 <div 
                   key={dayNum} 
-                  className={`py-2 rounded-md m-0.5 text-xs ${
-                    isToday ? 'bg-brand-teal text-white font-bold shadow-sm' : 
-                    hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium' : 'text-foreground bg-gray-50'
+                  onClick={() => {
+                    if (isSelected) {
+                      setSelectedDate(null);
+                    } else {
+                      setSelectedDate(cellDateStr);
+                    }
+                  }}
+                  className={`py-2 rounded-md m-0.5 text-xs cursor-pointer transition-all hover:scale-105 ${
+                    isToday ? (
+                      isSelected ? 'bg-brand-teal text-white font-bold ring-2 ring-brand-teal ring-offset-2' : 'bg-brand-teal text-white font-bold shadow-sm'
+                    ) : (
+                      isSelected ? 'bg-brand-teal text-white font-bold ring-2 ring-brand-teal ring-offset-1' :
+                      hasRecord ? 'bg-brand-light/40 text-brand-teal font-medium hover:bg-brand-light/60' : 'text-foreground bg-gray-50 hover:bg-gray-100'
+                    )
                   }`}
                 >
                   {dayNum}
@@ -855,6 +912,18 @@ export default function AttendancePage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+                {selectedDate && (
+                  <div className="flex items-center gap-1.5 bg-brand-light text-brand-teal px-3 py-1 rounded-full text-xs font-semibold border border-brand-teal/20 shadow-sm animate-fade-in">
+                    <span>Date: {dayjs(selectedDate).format("DD MMM YYYY")}</span>
+                    <button 
+                      onClick={() => setSelectedDate(null)} 
+                      className="hover:text-red-500 font-bold ml-1 focus:outline-none"
+                      title="Clear date filter"
+                    >
+                      ✕
+                    </button>
                   </div>
                 )}
               </div>
