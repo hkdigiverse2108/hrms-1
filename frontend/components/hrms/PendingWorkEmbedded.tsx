@@ -33,6 +33,7 @@ export function PendingWorkEmbedded({
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterStage, setFilterStage] = useState<string>('all');
@@ -98,6 +99,14 @@ export function PendingWorkEmbedded({
   };
 
   useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch (err) {
+        console.error("Failed to parse user from localStorage", err);
+      }
+    }
     fetchData();
   }, []);
 
@@ -361,6 +370,8 @@ export function PendingWorkEmbedded({
     return filteredTasks;
   }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees]);
 
+  const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
       {/* Filters Bar */}
@@ -461,39 +472,43 @@ export function PendingWorkEmbedded({
               </Select>
             )}
 
-            <Select value={filterAssigner} onValueChange={setFilterAssigner}>
-              <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                <SelectValue placeholder="Assigned By" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Assigned By: All</SelectItem>
-                {employees.map(emp => {
-                  const empName = `${emp.firstName} ${emp.lastName}`;
-                  return (
-                    <SelectItem key={`assigner-${emp.id}`} value={`${empName}|${emp.id}`}>
-                      {empName}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+            {isAdminOrTL && (
+              <>
+                <Select value={filterAssigner} onValueChange={setFilterAssigner}>
+                  <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                    <SelectValue placeholder="Assigned By" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Assigned By: All</SelectItem>
+                    {employees.map(emp => {
+                      const empName = `${emp.firstName} ${emp.lastName}`;
+                      return (
+                        <SelectItem key={`assigner-${emp.id}`} value={`${empName}|${emp.id}`}>
+                          {empName}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
 
-            <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-              <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                <SelectValue placeholder="Assigned To" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Assigned To: All</SelectItem>
-                {employees.map(emp => {
-                  const empName = `${emp.firstName} ${emp.lastName}`;
-                  return (
-                    <SelectItem key={`assignee-${emp.id}`} value={`${empName}|${emp.id}`}>
-                      {empName}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+                <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+                  <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                    <SelectValue placeholder="Assigned To" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Assigned To: All</SelectItem>
+                    {employees.map(emp => {
+                      const empName = `${emp.firstName} ${emp.lastName}`;
+                      return (
+                        <SelectItem key={`assignee-${emp.id}`} value={`${empName}|${emp.id}`}>
+                          {empName}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
           </div>
         </div>
       </div>
