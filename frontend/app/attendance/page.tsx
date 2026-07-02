@@ -126,8 +126,8 @@ export default function AttendancePage() {
         adminIdsRef.current = new Set(
           data.filter((e: any) => e.role?.toLowerCase() === 'admin').map((e: any) => e.id)
         );
-        // Filter out admin employees - they don't have attendance
-        setAllEmployees(data.filter((e: any) => e.role?.toLowerCase() !== 'admin'));
+        // Filter out admin and inactive employees - they don't have attendance
+        setAllEmployees(data.filter((e: any) => e.role?.toLowerCase() !== 'admin' && e.status?.toLowerCase() !== 'inactive'));
       }
     } catch (err) {
       console.error("Error fetching employees:", err);
