@@ -170,7 +170,8 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') assigneeId = project.assignedScriptwriterId || client?.assignedScriptwriterId;
         if (stage === 'Shoot') assigneeId = project.assignedShooterId || client?.assignedShooterId;
-        if (stage === 'Editing') assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
+        if (stage === 'Reel / Editing') assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId;
+        if (stage === 'Post / Graphics') assigneeId = project.assignedPostDesignerId || client?.assignedPostDesignerId;
         if (stage === 'Approval') assigneeId = project.assignedApproverId || client?.assignedApproverId;
         if (stage === 'Posting') assigneeId = project.assignedPosterId || client?.assignedPosterId;
 
@@ -197,16 +198,32 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') return (project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
         if (stage === 'Shoot') return (project.assignedShooterId || client?.assignedShooterId) === uId;
-        if (stage === 'Editing') return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId || (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+        if (stage === 'Reel / Editing') return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId;
+        if (stage === 'Post / Graphics') return (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
         if (stage === 'Approval') return (project.assignedApproverId || client?.assignedApproverId) === uId;
         if (stage === 'Posting') return (project.assignedPosterId || client?.assignedPosterId) === uId;
         
         return true;
       };
 
+      const isReel = (entry.postReel || "").toLowerCase() === 'reel';
+      const isPost = (entry.postReel || "").toLowerCase() === 'post';
+
       if (entry.scriptDate && !entry.scriptLink && canSeeTask('Script')) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
       if (entry.shootDate && !entry.shootLink && canSeeTask('Shoot')) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
-      if (entry.editingStart && !entry.finalReelLink && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
+      
+      if (entry.editingStart && canSeeTask('Reel / Editing') && isReel && !entry.finalReelLink) {
+        tasks.push(enrich('Reel / Editing', entry.editingStart, 'edits'));
+      }
+      if (entry.editingStart && canSeeTask('Post / Graphics') && isPost && !entry.finalPostLink) {
+        tasks.push(enrich('Post / Graphics', entry.editingStart, 'edits'));
+      }
+      if (entry.editingStart && !isReel && !isPost && !entry.finalReelLink && !entry.finalPostLink) {
+        if (canSeeTask('Reel / Editing')) {
+          tasks.push(enrich('Reel / Editing', entry.editingStart, 'edits'));
+        }
+      }
+
       if (entry.approval && entry.isApproved !== 'Yes' && canSeeTask('Approval')) tasks.push(enrich('Approval', entry.approval, 'approvals'));
       if (entry.postingDate && !entry.postingLinkOfIg && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
@@ -419,11 +436,12 @@ export function PendingWorkEmbedded({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Stages</SelectItem>
-                  <SelectItem value="script">Script</SelectItem>
-                  <SelectItem value="shoot">Shoot</SelectItem>
-                  <SelectItem value="editing">Editing</SelectItem>
-                  <SelectItem value="approval">Approval</SelectItem>
-                  <SelectItem value="posting">Posting</SelectItem>
+                  <SelectItem value="script">Scripting</SelectItem>
+                  <SelectItem value="shoot">Shoot / Videography</SelectItem>
+                  <SelectItem value="reel / editing">Reel / Editing</SelectItem>
+                  <SelectItem value="post / graphics">Post / Graphics</SelectItem>
+                  <SelectItem value="approval">Approval / QC</SelectItem>
+                  <SelectItem value="posting">Posting / Publisher</SelectItem>
                 </SelectContent>
               </Select>
             )}
