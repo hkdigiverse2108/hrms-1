@@ -33,17 +33,18 @@ interface UserPermissionsModalProps {
 
 const DEFAULT_MODULES = [
   { moduleName: 'dashboard', displayName: 'Dashboard', tabUrl: '/' },
-  { moduleName: 'employees', displayName: 'Employee Management', tabUrl: '/employees' },
+  { moduleName: 'employees', displayName: 'Employee List', tabUrl: '/employees' },
   { moduleName: 'payroll', displayName: 'Payroll', tabUrl: '/payroll' },
   { moduleName: 'attendance', displayName: 'Attendance', tabUrl: '/attendance' },
   { moduleName: 'leave', displayName: 'Leave', tabUrl: '/leave' },
   { moduleName: 'projects', displayName: 'Projects', tabUrl: '/work-management/projects' },
-  { moduleName: 'tasks', displayName: 'Tasks', tabUrl: '/work-management/tasks' },
+  { moduleName: 'tasks', displayName: 'Development', tabUrl: '/work-management/development' },
+  { moduleName: 'personal-tasks', displayName: 'Tasks', tabUrl: '/tasks' },
   { moduleName: 'daily-progress', displayName: 'Daily Progress', tabUrl: '/work-management/daily-progress' },
   { moduleName: 'marketing', displayName: 'Digital Marketing', tabUrl: '/work-management/digital-marketing' },
-  { moduleName: 'creative', displayName: 'SMM', tabUrl: '/work-management/smm' },
-  { moduleName: 'remarks', displayName: 'Remarks', tabUrl: '/remarks' },
-  { moduleName: 'review', displayName: 'Review', tabUrl: '/review' },
+  { moduleName: 'creative', displayName: 'Social Media Management', tabUrl: '/work-management/smm' },
+  { moduleName: 'remarks', displayName: 'Penalty', tabUrl: '/penalty' },
+  { moduleName: 'review', displayName: 'Remarks', tabUrl: '/remarks' },
   { moduleName: 'invoice', displayName: 'Invoice', tabUrl: '/invoice' },
   { moduleName: 'chat', displayName: 'Chat', tabUrl: '/chat' },
   { moduleName: 'settings', displayName: 'Settings', tabUrl: '/settings' },
@@ -75,7 +76,7 @@ export function UserPermissionsModal({
           // Merge existing permissions with default modules to handle new modules
           const merged = DEFAULT_MODULES.map(def => {
             const existing = data.permissions.find((p: any) => p.moduleName === def.moduleName)
-            return existing || { ...def, canAdd: false, canEdit: false, canDelete: false, canView: false }
+            return existing ? { ...existing, displayName: def.displayName, tabUrl: def.tabUrl } : { ...def, canAdd: false, canEdit: false, canDelete: false, canView: false }
           })
           setPermissions(merged)
         } else {

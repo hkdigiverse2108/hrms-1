@@ -2,9 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
+<<<<<<< HEAD:frontend/app/work-management/tasks/page.tsx
 import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Hand, CheckCircle, XCircle } from "lucide-react";
+=======
+import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown } from "lucide-react";
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb:frontend/app/work-management/development/page.tsx
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { WMTaskForm, WMTaskFormData } from "@/components/hrms/WMTaskForm";
 import { API_URL } from "@/lib/config";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +26,8 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
@@ -34,7 +41,7 @@ const STAGES = [
   { id: "in-progress", label: "In Progress", color: "text-blue-700 bg-transparent", lineColor: "bg-blue-500" },
   { id: "bugs", label: "Bugs", color: "text-red-700 bg-transparent", lineColor: "bg-red-500" },
   { id: "onhold", label: "On Hold", color: "text-amber-700 bg-transparent", lineColor: "bg-amber-500" },
-  { id: "fix-bugs", label: "Fix Bugs", color: "text-orange-700 bg-transparent", lineColor: "bg-orange-500" },
+  { id: "pending", label: "Pending", color: "text-purple-700 bg-transparent", lineColor: "bg-purple-500" },
   { id: "completed", label: "Completed", color: "text-green-700 bg-transparent", lineColor: "bg-emerald-500" },
 ];
 
@@ -55,6 +62,10 @@ export default function TasksPage() {
   const canDeleteTask = isUserAdmin || checkPermission('tasks', 'canDelete') || isTeamLeader;
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
+  const [employeeFilterOpen, setEmployeeFilterOpen] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
+  const [projectFilterOpen, setProjectFilterOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -71,6 +82,20 @@ export default function TasksPage() {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  const [pendingReasonOpen, setPendingReasonOpen] = useState(false);
+  const [pendingReasonText, setPendingReasonText] = useState("");
+  const [pendingReasonCallback, setPendingReasonCallback] = useState<{
+    resolve: (reason: string | null) => void;
+  } | null>(null);
+
+  const getPendingReason = () => {
+    return new Promise<string | null>((resolve) => {
+      setPendingReasonText("");
+      setPendingReasonCallback({ resolve });
+      setPendingReasonOpen(true);
+    });
+  };
   const [quickAddStage, setQuickAddStage] = useState<string | null>(null);
   const [quickAddTitle, setQuickAddTitle] = useState("");
   const [quickAddProjectId, setQuickAddProjectId] = useState<string>("");
@@ -79,7 +104,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedDepartment, dateFilter, showAllTasks]);
+  }, [searchTerm, selectedDepartment, selectedEmployeeId, selectedProjectId, dateFilter, showAllTasks]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -102,6 +127,7 @@ export default function TasksPage() {
   }, [user]);
 
   const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin" || hasFullTasksAccess;
+  const isRegularEmployee = !isAdmin && !isTeamLeader;
 
   useEffect(() => {
     if (user && !isAdmin && user.department) {
@@ -180,7 +206,8 @@ export default function TasksPage() {
         performedBy: user?.id,
         userName: user?.name || `${user?.firstName} ${user?.lastName}`,
         department: selectedDepartment === 'all' && user?.department ? user.department : (selectedDepartment !== 'all' ? selectedDepartment : 'Development'),
-        assignedToId: "",
+        assignedToId: user?.id || "",
+        assignedToName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || "Unassigned",
       };
 
       const res = await fetch(`${API_URL}/wm-tasks`, {
@@ -296,21 +323,66 @@ export default function TasksPage() {
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
     const taskId = draggableId;
+    const draggedTask = tasks.find(t => t.id === taskId);
+    
+    const isTLOrAdmin = isUserAdmin || isTeamLeader;
+    const isAssignedToSelf = draggedTask && (draggedTask.assignedToId === user?.id || (user && draggedTask.assignedToId === (user as any).employeeId));
+    
+    if (!isTLOrAdmin && !isAssignedToSelf) {
+      toast.error("You cannot move others' tasks");
+      return;
+    }
+
     const newStatus = destination.droppableId;
     
+    await handleStatusChange(taskId, newStatus);
+  };
+
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
+    const draggedTask = tasks.find(t => t.id === taskId);
+    const assigneeId = draggedTask?.assignedToId;
+    
+    let reason = "";
+    if (newStatus === "pending") {
+      const inputReason = await getPendingReason();
+      if (inputReason === null) {
+        return; // User cancelled
+      }
+      if (!inputReason.trim()) {
+        toast.error("A reason is required to mark a task as Pending.");
+        return;
+      }
+      reason = inputReason.trim();
+    }
+
+    if (newStatus === "in-progress" && assigneeId) {
+      const hasOtherInProgress = tasks.some(t => t.id !== taskId && t.assignedToId === assigneeId && t.status === "in-progress");
+      if (hasOtherInProgress) {
+        toast.error("already a task in progress");
+        return;
+      }
+    }
+
     const prevTasks = [...tasks];
-    const updatedTasks = tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
+    const updatedTasks = tasks.map(t => {
+      if (t.id === taskId) return { ...t, status: newStatus, reasonForPending: reason || t.reasonForPending };
+      return t;
+    });
     setTasks(updatedTasks);
 
     try {
+      const payload: any = { 
+        status: newStatus,
+        performedBy: user?.id,
+        userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+      };
+      if (reason) {
+        payload.reasonForPending = reason;
+      }
       const res = await fetch(`${API_URL}/wm-tasks/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          status: newStatus,
-          performedBy: user?.id,
-          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         setTasks(prevTasks);
@@ -329,6 +401,20 @@ export default function TasksPage() {
         performedBy: user?.id,
         userName: user?.name || `${user?.firstName} ${user?.lastName}`,
       };
+
+      if (field === 'status' && value === 'pending') {
+        const inputReason = await getPendingReason();
+        if (inputReason === null) {
+          setEditingCell(null);
+          return; // User cancelled
+        }
+        if (!inputReason.trim()) {
+          toast.error("A reason is required to mark a task as Pending.");
+          setEditingCell(null);
+          return;
+        }
+        payload.reasonForPending = inputReason.trim();
+      }
 
       // Special handling for derived fields
       if (field === 'projectId') {
@@ -350,13 +436,23 @@ export default function TasksPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
+        const targetTask = tasks.find(t => t.id === taskId);
+        const targetAssignee = payload.assignedToId || targetTask?.assignedToId;
+        const hasOtherInProgress = field === 'status' && value === 'in-progress' && tasks.some(t => t.id !== taskId && t.assignedToId === targetAssignee && t.status === 'in-progress');
+
         setTasks(prev => prev.map(t => {
           if (t.id === taskId) {
-            const updated = { ...t, ...payload };
-            return updated;
+            return { ...t, ...payload };
+          }
+          if (field === 'status' && value === 'in-progress' && targetAssignee && t.assignedToId === targetAssignee && t.status === 'in-progress') {
+            return { ...t, status: 'todo' };
           }
           return t;
         }));
+        if (hasOtherInProgress) {
+          toast.info("Previous in-progress task moved to To Do (only 1 task allowed in progress)");
+          fetchData();
+        }
       }
     } catch (err) {
       console.error("Error updating field:", err);
@@ -364,10 +460,46 @@ export default function TasksPage() {
     setEditingCell(null);
   };
 
+  const handleToggleApproveTask = async (taskId: string, approveState: boolean) => {
+    const prevTasks = [...tasks];
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isApproved: approveState } : t));
+    try {
+      const res = await fetch(`${API_URL}/wm-tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          isApproved: approveState,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        }),
+      });
+      if (!res.ok) {
+        setTasks(prevTasks);
+        toast.error(`Failed to ${approveState ? "approve" : "disapprove"} task`);
+      } else {
+        toast.success(`Task ${approveState ? "approved" : "disapproved"} successfully`);
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Error toggling task approval:", err);
+      setTasks(prevTasks);
+      toast.error(`An error occurred while ${approveState ? "approving" : "disapproving"} task`);
+    }
+  };
+
   const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)))
     .filter((d: any) => !["sales", "admin", "hr"].includes(d.toLowerCase()));
   const isCreativeDefault = selectedDepartment.toLowerCase() === "creative" || (selectedDepartment === "all" && user?.department?.toLowerCase() === "creative");
   const showTableView = viewMode !== null ? viewMode === "table" : isCreativeDefault;
+
+  const isDueTask = (t: any) => {
+    if (!t.assignedToId || t.status === "completed") return false;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const taskDate = showTableView ? t.postingDate : t.dueDate;
+    if (!taskDate) return false;
+    if (taskDate <= todayStr || taskDate <= dateFilter) return true;
+    return false;
+  };
 
   const filteredTasks = tasks.filter(t => {
     const assignee = employees.find(e => e.id === t.assignedToId);
@@ -399,6 +531,16 @@ export default function TasksPage() {
       if (dept !== selectedDepartment) return false;
     }
 
+    // Employee Filter (for Admin)
+    if (selectedEmployeeId !== "all") {
+      if (t.assignedToId !== selectedEmployeeId) return false;
+    }
+
+    // Project Filter
+    if (selectedProjectId !== "all") {
+      if (t.projectId !== selectedProjectId) return false;
+    }
+
     const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           t.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.assignedToName?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -408,7 +550,7 @@ export default function TasksPage() {
     // Date Filtering
     if (!showAllTasks) {
       const taskDate = showTableView ? t.postingDate : t.dueDate;
-      if (taskDate !== dateFilter) return false;
+      if (taskDate !== dateFilter && !isDueTask(t)) return false;
     }
 
     return true;
@@ -430,15 +572,7 @@ export default function TasksPage() {
 
 
 
-  const isOverdue = (dateString: string, status: string) => {
-    if (!dateString || status === "completed") return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const [y, m, d] = dateString.split('-');
-    const dueDate = new Date(Number(y), Number(m) - 1, Number(d));
-    dueDate.setHours(0, 0, 0, 0);
-    return dueDate < today;
-  };
+
 
   if (permissionsLoading) {
     return (
@@ -486,6 +620,68 @@ export default function TasksPage() {
               />
             </DialogContent>
           </Dialog>
+
+          <Dialog open={pendingReasonOpen} onOpenChange={(open) => {
+            if (!open) {
+              if (pendingReasonCallback) {
+                pendingReasonCallback.resolve(null);
+                setPendingReasonCallback(null);
+              }
+              setPendingReasonOpen(false);
+            }
+          }}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-bold">Reason for Pending</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="customReasonForPending" className="text-sm font-semibold text-slate-700">
+                    Please provide a reason why this task is pending (Client Side):
+                  </Label>
+                  <textarea
+                    id="customReasonForPending"
+                    className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="e.g. Waiting for client response on design feedback"
+                    value={pendingReasonText}
+                    onChange={(e) => setPendingReasonText(e.target.value)}
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (pendingReasonCallback) {
+                        pendingReasonCallback.resolve(null);
+                        setPendingReasonCallback(null);
+                      }
+                      setPendingReasonOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-brand-teal text-white hover:bg-brand-teal-light"
+                    onClick={() => {
+                      if (!pendingReasonText.trim()) {
+                        toast.error("Reason is required");
+                        return;
+                      }
+                      if (pendingReasonCallback) {
+                        pendingReasonCallback.resolve(pendingReasonText.trim());
+                        setPendingReasonCallback(null);
+                      }
+                      setPendingReasonOpen(false);
+                    }}
+                  >
+                    Submit
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </PageHeader>
 
@@ -510,6 +706,151 @@ export default function TasksPage() {
         </div>
         
         <div className="flex items-center gap-2">
+          {(() => {
+            const activeProjects = projects.filter(p => {
+              const isNotCompleted = p.status?.toLowerCase() !== "completed" && p.status?.toLowerCase() !== "cancelled";
+              if (!isNotCompleted) return false;
+              if (selectedDepartment !== "all") {
+                return p.department?.toLowerCase() === selectedDepartment.toLowerCase();
+              }
+              return true;
+            });
+            const selectedProj = projects.find(p => p.id === selectedProjectId);
+            return (
+              <Popover open={projectFilterOpen} onOpenChange={setProjectFilterOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={projectFilterOpen}
+                    className="h-9 text-xs font-bold bg-white border border-slate-200 rounded-lg px-3 outline-none text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition-all justify-between min-w-[150px] max-w-[200px] truncate"
+                  >
+                    <span className="truncate">
+                      {selectedProjectId === "all"
+                        ? "All Active Projects"
+                        : selectedProj
+                        ? selectedProj.title
+                        : "Select Project"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[240px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search active project..." className="h-8 text-xs" />
+                    <CommandList>
+                      <CommandEmpty>No project found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="All Active Projects"
+                          onSelect={() => {
+                            setSelectedProjectId("all");
+                            setProjectFilterOpen(false);
+                          }}
+                          className="text-xs cursor-pointer font-medium"
+                        >
+                          <Check
+                            className={`mr-2 h-3.5 w-3.5 text-brand-teal ${
+                              selectedProjectId === "all" ? "opacity-100" : "opacity-0"
+                            }`}
+                          />
+                          All Active Projects
+                        </CommandItem>
+                        {activeProjects.map((proj) => (
+                          <CommandItem
+                            key={proj.id}
+                            value={proj.title}
+                            onSelect={() => {
+                              setSelectedProjectId(proj.id);
+                              setProjectFilterOpen(false);
+                            }}
+                            className="text-xs cursor-pointer font-medium"
+                          >
+                            <Check
+                              className={`mr-2 h-3.5 w-3.5 text-brand-teal ${
+                                selectedProjectId === proj.id ? "opacity-100" : "opacity-0"
+                              }`}
+                            />
+                            <span className="truncate">{proj.title}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            );
+          })()}
+          {isAdmin && (() => {
+            const selectedEmp = employees.find(e => e.id === selectedEmployeeId);
+            return (
+              <Popover open={employeeFilterOpen} onOpenChange={setEmployeeFilterOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={employeeFilterOpen}
+                    className="h-9 text-xs font-bold bg-white border border-slate-200 rounded-lg px-3 outline-none text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition-all justify-between min-w-[160px] max-w-[220px] truncate"
+                  >
+                    <span className="truncate">
+                      {selectedEmployeeId === "all"
+                        ? "All Employees"
+                        : selectedEmp
+                        ? `${selectedEmp.firstName} ${selectedEmp.lastName}`
+                        : "Select Employee"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[220px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search employee..." className="h-8 text-xs" />
+                    <CommandList>
+                      <CommandEmpty>No employee found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="All Employees"
+                          onSelect={() => {
+                            setSelectedEmployeeId("all");
+                            setEmployeeFilterOpen(false);
+                          }}
+                          className="text-xs cursor-pointer font-medium"
+                        >
+                          <Check
+                            className={`mr-2 h-3.5 w-3.5 text-brand-teal ${
+                              selectedEmployeeId === "all" ? "opacity-100" : "opacity-0"
+                            }`}
+                          />
+                          All Employees
+                        </CommandItem>
+                        {employees.map((emp) => {
+                          const fullName = `${emp.firstName} ${emp.lastName}`;
+                          return (
+                            <CommandItem
+                              key={emp.id}
+                              value={fullName}
+                              onSelect={() => {
+                                setSelectedEmployeeId(emp.id);
+                                setEmployeeFilterOpen(false);
+                              }}
+                              className="text-xs cursor-pointer font-medium"
+                            >
+                              <Check
+                                className={`mr-2 h-3.5 w-3.5 text-brand-teal ${
+                                  selectedEmployeeId === emp.id ? "opacity-100" : "opacity-0"
+                                }`}
+                              />
+                              {fullName}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            );
+          })()}
           <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
             <button 
               type="button"
@@ -543,19 +884,6 @@ export default function TasksPage() {
               📋 Table
             </button>
           </div>
-
-          {!showAllTasks && (
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 h-9">
-              <Calendar className="w-3.5 h-3.5 text-brand-teal" />
-              <input 
-                type="date" 
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="text-xs font-bold bg-transparent outline-none border-none p-0"
-              />
-            </div>
-          )}
-
 
         </div>
       </div>
@@ -613,7 +941,7 @@ export default function TasksPage() {
                           )}
                           <tr 
                       key={task.id} 
-                      className="hover:bg-slate-50/50 transition-colors group"
+                      className={`hover:bg-slate-50/50 transition-colors group ${isDueTask(task) ? 'bg-rose-50/40 border-l-4 border-l-rose-500' : ''}`}
                     >
                       <td className="px-4 py-3 text-center text-slate-400 font-medium">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                       
@@ -645,9 +973,9 @@ export default function TasksPage() {
                       ].map((col) => (
                         <td 
                           key={col.key} 
-                          className={`px-4 py-3 ${col.type !== 'readonly' && canEditTask ? 'cursor-text hover:bg-brand-teal/5 transition-colors' : ''}`}
+                          className={`px-4 py-3 ${col.type !== 'readonly' && canEditTask && (col.key !== 'assignedToId' || !isRegularEmployee) ? 'cursor-text hover:bg-brand-teal/5 transition-colors' : ''}`}
                           style={{ minWidth: col.minWidth }}
-                          onClick={() => col.type !== 'readonly' && canEditTask && setEditingCell({ id: task.id, field: col.key })}
+                          onClick={() => col.type !== 'readonly' && canEditTask && (col.key !== 'assignedToId' || !isRegularEmployee) && setEditingCell({ id: task.id, field: col.key })}
                         >
                           {editingCell?.id === task.id && editingCell?.field === col.key ? (
                             col.type === 'select' ? (
@@ -677,7 +1005,14 @@ export default function TasksPage() {
                           ) : (
                             <div className="flex items-center gap-2 min-h-[20px]">
                               {col.key === 'title' ? (
-                                <span className="font-bold text-slate-800">{task[col.key]}</span>
+                                <div className="flex items-center gap-1.5">
+                                  {isDueTask(task) && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-500 text-white uppercase tracking-wider shrink-0 shadow-sm">
+                                      Due
+                                    </span>
+                                  )}
+                                  <span className="font-bold text-slate-800">{task[col.key]}</span>
+                                </div>
                               ) : col.key === 'projectId' || col.key === 'assignedToId' ? (
                                 <span className={`${col.key === 'projectId' ? 'text-brand-teal' : 'text-slate-600'} font-medium`}>
                                   {task[col.labelKey || col.key]}
@@ -748,16 +1083,21 @@ export default function TasksPage() {
           </div>
         ) : (
     <DragDropContext onDragEnd={onDragEnd}>
+<<<<<<< HEAD:frontend/app/work-management/tasks/page.tsx
       <div className="flex gap-4 h-full overflow-x-auto pb-4 px-2">
         {STAGES.map(stage => (
           <div key={stage.id} className="flex flex-col flex-1 min-w-[320px] max-w-[400px] h-full bg-slate-50/80 rounded-[20px] border border-slate-200 overflow-hidden shadow-sm">
+=======
+      <div className="flex gap-4 h-full overflow-x-auto pb-4 items-start px-2 custom-scrollbar">
+        {STAGES.map(stage => (
+          <div key={stage.id} className="flex flex-col flex-1 min-w-[230px] h-full bg-slate-50/80 rounded-[20px] border border-slate-200 overflow-hidden shadow-sm">
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb:frontend/app/work-management/development/page.tsx
             <div className="flex items-center justify-between p-4 pb-3">
               <h3 className={`font-semibold text-[15px] ${stage.color}`}>{stage.label}</h3>
               <div className="flex items-center gap-3 text-slate-500">
                 <span className="text-[13px] font-bold bg-slate-200/80 px-2 py-0.5 rounded-full text-slate-600">
                   {filteredTasks.filter(t => t.status === stage.id).length}
                 </span>
-                <MoreHorizontal className="w-5 h-5 cursor-pointer hover:text-slate-700 transition-colors" />
               </div>
             </div>
             
@@ -771,10 +1111,52 @@ export default function TasksPage() {
                   }`}
                 >
                   <div className="space-y-2.5">
-                    {filteredTasks
-                      .filter(t => t.status === stage.id)
-                      .map((task, index) => (
-                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                    {(() => {
+                      const stageTasks = filteredTasks.filter(t => t.status === stage.id);
+                      const priorityWeight: Record<string, number> = {
+                        urgent: 4,
+                        high: 3,
+                        medium: 2,
+                        low: 1
+                      };
+                      stageTasks.sort((a, b) => {
+                        if (stage.id === "completed") {
+                          const aApproved = a.isApproved ? 1 : 0;
+                          const bApproved = b.isApproved ? 1 : 0;
+                          if (aApproved !== bApproved) {
+                            return aApproved - bApproved;
+                          }
+                        }
+                        const aDue = isDueTask(a) ? 1 : 0;
+                        const bDue = isDueTask(b) ? 1 : 0;
+                        if (aDue !== bDue) {
+                          return bDue - aDue;
+                        }
+
+                        const parseTaskDate = (dateStr: any) => {
+                          if (!dateStr || String(dateStr).trim() === "" || String(dateStr).toLowerCase() === "none") {
+                            return Infinity;
+                          }
+                          const time = new Date(dateStr).getTime();
+                          return isNaN(time) ? Infinity : time;
+                        };
+
+                        const aDate = parseTaskDate(a.dueDate);
+                        const bDate = parseTaskDate(b.dueDate);
+                        
+                        if (aDate !== bDate) {
+                          return aDate - bDate;
+                        }
+                        const aPriority = priorityWeight[a.priority || "medium"] || 2;
+                        const bPriority = priorityWeight[b.priority || "medium"] || 2;
+                        return bPriority - aPriority;
+                      });
+                      return stageTasks.map((task, index) => (
+                        <Draggable 
+                          key={task.id} 
+                          draggableId={task.id} 
+                          index={index}
+                        >
                           {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
@@ -790,6 +1172,7 @@ export default function TasksPage() {
                             >
                               <div className={`p-4 rounded-xl transition-all cursor-pointer relative overflow-hidden flex flex-col min-h-[140px] ${
                                 snapshot.isDragging ? "opacity-90 scale-[1.02] shadow-xl ring-2 ring-brand-teal/20 bg-white" : 
+                                isDueTask(task) ? "bg-rose-50/40 hover:bg-rose-50/70 shadow-sm hover:shadow-md border-2 border-rose-400/80" :
                                 "bg-white hover:bg-slate-50 shadow-sm hover:shadow-md border border-slate-200 hover:border-brand-teal/30"
                               }`}>
                                 
@@ -798,6 +1181,23 @@ export default function TasksPage() {
                                     <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-brand-teal" title="View Logs"><History className="w-3.5 h-3.5" /></button>
                                     {canDeleteTask && (
                                       <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-400 hover:text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    )}
+                                  </div>
+                                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                    {isDueTask(task) && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-500 text-white uppercase tracking-wider shadow-sm animate-pulse">
+                                        <AlertTriangle className="w-3 h-3" /> Due
+                                      </span>
+                                    )}
+                                    {isDueTask(task) && (task.dueDate || task.postingDate) && (
+                                      <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                                        Due: {task.dueDate || task.postingDate}
+                                      </span>
+                                    )}
+                                    {task.isApproved && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-500 text-white uppercase tracking-wider shadow-sm">
+                                        Approved
+                                      </span>
                                     )}
                                   </div>
                                   <h4 className="font-medium text-[14.5px] text-slate-800 leading-snug break-words whitespace-pre-wrap">
@@ -816,26 +1216,49 @@ export default function TasksPage() {
 
                                     </div>
                                   )}
+<<<<<<< HEAD:frontend/app/work-management/tasks/page.tsx
                                   
                                   <div className="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+=======
+                                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb:frontend/app/work-management/development/page.tsx
                                     <div className="flex items-center gap-1.5 text-slate-600 font-semibold truncate">
                                       <div className="w-4 h-4 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center text-[9px] font-black shrink-0">
                                         {(task.assignedToName || "U")[0].toUpperCase()}
                                       </div>
                                       <span className="truncate text-[12px]">{task.assignedToName || "Unassigned"}</span>
                                     </div>
-                                    {task.estimatedHours > 0 && (
-                                      <span className="shrink-0 text-[10px] font-black text-brand-teal bg-brand-teal/10 px-2 py-0.5 rounded-md border border-brand-teal/20 flex items-center gap-1">
-                                        ⏱️ {task.estimatedHours} hrs
-                                      </span>
-                                    )}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      {task.status === "completed" && (isUserAdmin || isTeamLeader) && (
+                                        <Button
+                                          size="sm"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            await handleToggleApproveTask(task.id, !task.isApproved);
+                                          }}
+                                          className={`h-6 px-2 text-[10px] font-bold rounded-md ${
+                                            task.isApproved 
+                                              ? "bg-amber-600 hover:bg-amber-700 text-white" 
+                                              : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                          }`}
+                                        >
+                                          {task.isApproved ? "Disapprove" : "Approve"}
+                                        </Button>
+                                      )}
+                                      {task.estimatedHours > 0 && (
+                                        <span className="shrink-0 text-[10px] font-black text-brand-teal bg-brand-teal/10 px-2 py-0.5 rounded-md border border-brand-teal/20 flex items-center gap-1">
+                                          ⏱️ {task.estimatedHours} hrs
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
                             </div>
                           )}
                         </Draggable>
-                      ))}
+                      ));
+                    })()}
                     {provided.placeholder}
                   </div>
                 </div>

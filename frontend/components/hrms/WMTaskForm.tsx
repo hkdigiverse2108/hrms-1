@@ -22,6 +22,7 @@ export interface WMTaskFormData {
   priority: string;
   moduleName?: string;
   remarks?: string;
+  reasonForPending?: string;
   createdDate?: string;
   
   // Graphics fields
@@ -56,6 +57,7 @@ const defaultFormData: WMTaskFormData = {
   priority: "medium",
   moduleName: "",
   remarks: "",
+  reasonForPending: "",
   postingDate: "",
   postingDay: "",
   reelPost: "Post",
@@ -81,26 +83,50 @@ interface WMTaskFormProps {
 }
 
 export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment }: WMTaskFormProps) {
-  const [formData, setFormData] = useState<WMTaskFormData>({
-    ...defaultFormData,
-    ...initialData,
-  });
+  const { user } = useUser();
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoadingMeta, setIsLoadingMeta] = useState(true);
   const [distributedList, setDistributedList] = useState<any[]>([]);
   const { user } = useUser();
 
+  const isExistingTask = Boolean((initialData as any)?.id || (initialData as any)?._id);
+  const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
+  const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id) || 
+                       user?.role?.toLowerCase() === "team leader" || 
+                       user?.designation?.toLowerCase() === "team leader";
+  const isRegularEmployee = !isAdmin && !isTeamLeader;
+  const defaultAssignee = !isExistingTask ? (initialData?.assignedToId || user?.id || "") : (initialData?.assignedToId || "");
+
+  const [formData, setFormData] = useState<WMTaskFormData>({
+    ...defaultFormData,
+    assignedToId: defaultAssignee,
+    ...initialData,
+  });
+
   useEffect(() => {
     fetchMetadata();
   }, []);
 
   useEffect(() => {
+    setFormData(prev => {
+      const isExisting = Boolean((initialData as any)?.id || (initialData as any)?._id);
+      if (!isExisting && !prev.assignedToId && user?.id) {
+        return { ...prev, assignedToId: user.id };
+      }
+      return prev;
+    });
+  }, [user]);
+
+  useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
+    const isExisting = Boolean((initialData as any)?.id || (initialData as any)?._id);
+    const assignee = !isExisting ? (initialData?.assignedToId || user?.id || "") : (initialData?.assignedToId || "");
     setFormData({
       ...defaultFormData,
       dueDate: today,
       ...initialData,
+      assignedToId: assignee,
     });
   }, [initialData]);
 
@@ -146,7 +172,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
           newData.projectId = "";
         }
         const currentEmployee = employees.find(e => e.id === prev.assignedToId);
-        if (currentEmployee && currentEmployee.department?.toLowerCase() !== value.toLowerCase()) {
+        if (currentEmployee && currentEmployee.department && currentEmployee.department.toLowerCase() !== value.toLowerCase()) {
           newData.assignedToId = "";
         }
       }
@@ -235,6 +261,10 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.status === "pending" && !formData.reasonForPending?.trim()) {
+      toast.error("Reason for pending is required when marking a task as Pending");
+      return;
+    }
     if (selectedProject) {
       if (formData.dueDate && selectedProject.endDate && new Date(formData.dueDate) > new Date(selectedProject.endDate)) {
         toast.error("Task deadline cannot exceed Project deadline");
@@ -304,9 +334,9 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
         <div className="space-y-2">
           <Label htmlFor="assignedToId">Assign Member</Label>
           <Select 
-            value={formData.assignedToId ?? ""} 
+            value={isRegularEmployee && !isExistingTask ? (user?.id || "") : (formData.assignedToId ?? "")} 
             onValueChange={(v) => handleChange("assignedToId", v)}
-            disabled={isLoadingMeta}
+            disabled={isLoadingMeta || isRegularEmployee}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder={isLoadingMeta ? "Loading..." : "Select Member"} />
@@ -404,7 +434,7 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
               <SelectItem value="in-progress">In Progress</SelectItem>
               <SelectItem value="bugs">Bugs</SelectItem>
               <SelectItem value="onhold">On Hold</SelectItem>
-              <SelectItem value="fix-bugs">Fix Bugs</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
@@ -445,105 +475,19 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
               className="font-extrabold border-brand-teal/40 bg-brand-teal/5 text-brand-teal h-9 text-xs max-w-[200px]"
             />
           </div>
+        </div>
+      )}
 
-          {selectedProject && (
-            <div className="p-4 bg-slate-50 border border-brand-teal/30 rounded-xl space-y-3 shadow-2xs">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <h4 className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5 uppercase">
-                    ⚡ Team Auto-Distribution & Manual Override
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Auto-distribute tasks amongst selected team members for this project ({projectTeamMembers.length} members).
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={handleCalculateDistribution}
-                    className="h-7 text-xs font-extrabold border-brand-teal text-brand-teal hover:bg-brand-teal/10 shadow-2xs"
-                  >
-                    🤖 Auto-Distribute Hours
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setDistributedList(prev => [...prev, { title: formData.title ? `${formData.title} (Part ${prev.length + 1})` : `Task ${prev.length + 1}`, hours: formData.estimatedHours || 4, assignedToId: projectTeamMembers[prev.length % (projectTeamMembers.length || 1)]?.id || formData.assignedToId || "" }])}
-                    className="h-7 text-xs font-bold bg-white text-slate-700 border-slate-200"
-                  >
-                    + Split / Add Deliverable
-                  </Button>
-                </div>
-              </div>
-
-              {distributedList.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-slate-200">
-                  <Label className="text-[10px] uppercase font-extrabold text-slate-500">
-                    Distributed Tasks Table (Manual Override Assignee)
-                  </Label>
-                  <div className="space-y-2">
-                    {distributedList.map((dt, idx) => (
-                      <div key={idx} className="flex flex-wrap items-center gap-2 p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                        <Input
-                          value={dt.title}
-                          onChange={(e) => {
-                            const arr = [...distributedList];
-                            arr[idx].title = e.target.value;
-                            setDistributedList(arr);
-                          }}
-                          placeholder="Task item title"
-                          className="h-8 text-xs font-semibold flex-1 min-w-[140px]"
-                        />
-                        <div className="w-24 flex items-center gap-1 bg-slate-50 border rounded-lg px-2 h-8">
-                          <span className="text-[10px] text-slate-400 font-bold">Hrs:</span>
-                          <input
-                            type="number"
-                            step="0.5"
-                            value={dt.hours}
-                            onChange={(e) => {
-                              const arr = [...distributedList];
-                              arr[idx].hours = parseFloat(e.target.value) || 0;
-                              setDistributedList(arr);
-                            }}
-                            className="w-full bg-transparent text-xs font-bold outline-none border-none text-brand-teal"
-                          />
-                        </div>
-                        <Select
-                          value={dt.assignedToId || ""}
-                          onValueChange={(val) => {
-                            const arr = [...distributedList];
-                            arr[idx].assignedToId = val;
-                            setDistributedList(arr);
-                          }}
-                        >
-                          <SelectTrigger className="w-[170px] h-8 text-xs font-extrabold bg-brand-teal/5 border-brand-teal/20 text-brand-teal">
-                            <SelectValue placeholder="Assignee (Override)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {projectTeamMembers.map(emp => (
-                              <SelectItem key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => setDistributedList(prev => prev.filter((_, i) => i !== idx))}
-                          className="h-7 w-7 text-red-500 hover:bg-red-50 shrink-0"
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+      {formData.status === "pending" && (
+        <div className="space-y-2">
+          <Label htmlFor="reasonForPending" className="after:content-['_*'] after:text-red-500">Reason for Pending</Label>
+          <Input
+            id="reasonForPending"
+            placeholder="Required: Why is this task pending?"
+            value={formData.reasonForPending ?? ""}
+            onChange={(e) => handleChange("reasonForPending", e.target.value)}
+            required
+          />
         </div>
       )}
 

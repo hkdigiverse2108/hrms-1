@@ -73,12 +73,13 @@ const STATUS_REASONS: Record<string, string[]> = {
   "Client Lost": ["Budget too high", "Lost to competitor", "Not interested", "No response", "Other"]
 };
 
-const isAssignedTo = (assignedToData: any, employeeName: string | undefined | null) => {
-  if (!employeeName) return false;
+const isAssignedTo = (assignedToData: any, employeeNameOrValue: string | undefined | null) => {
+  if (!employeeNameOrValue) return false;
+  const employeeName = employeeNameOrValue.includes('|') ? employeeNameOrValue.split('|')[0] : employeeNameOrValue;
   if (Array.isArray(assignedToData)) {
-    return assignedToData.includes(employeeName);
+    return assignedToData.some((a: any) => (typeof a === 'string' ? a : (a.value || a.label)) === employeeName);
   }
-  return assignedToData === employeeName;
+  return (typeof assignedToData === 'string' ? assignedToData : (assignedToData?.value || assignedToData?.label)) === employeeName;
 };
 
 const extractName = (val: any): string => {
@@ -1522,9 +1523,10 @@ export default function SalesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Employees</SelectItem>
-                  {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => (
-                    <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
-                  ))}
+                  {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                    const empName = emp.name || emp.firstName || "";
+                    return <SelectItem key={emp.id} value={`${empName}|${emp.id}`}>{empName}</SelectItem>;
+                  })}
                 </SelectContent>
               </Select>
             )}
@@ -1731,7 +1733,7 @@ export default function SalesPage() {
                                     toast.error("Please select an employee first");
                                     return;
                                   }
-                                  setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0, employees: slabTab === "employee" ? [selectedSlabEmployee] : [], clientCategories: [], isRecurring: false });
+                                  setSlabForm({ minAmount: 0, maxAmount: 0, percentage: 0, employees: slabTab === "employee" && selectedSlabEmployee ? [selectedSlabEmployee.split('|')[0]] : [], clientCategories: [], isRecurring: false });
                                 }}
                               >
                                 <Plus className="w-3 h-3 mr-1" /> Add Slab
@@ -1739,7 +1741,7 @@ export default function SalesPage() {
                             </DialogTrigger>
                             <DialogContent className="max-w-sm">
                               <DialogHeader>
-                                <DialogTitle>{slabTab === "global" ? "Add Common Slab" : `Add Slab for ${selectedSlabEmployee}`}</DialogTitle>
+                                <DialogTitle>{slabTab === "global" ? "Add Common Slab" : `Add Slab for ${selectedSlabEmployee.split('|')[0]}`}</DialogTitle>
                               </DialogHeader>
                               <div className="space-y-4 py-4">
                                 <div className="grid grid-cols-2 gap-4">
@@ -1908,7 +1910,7 @@ export default function SalesPage() {
                                   <SelectContent>
                                     {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
                                       const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
-                                      return <SelectItem key={emp.id} value={empName}>{empName}</SelectItem>
+                                      return <SelectItem key={emp.id} value={`${empName}|${emp.id}`}>{empName}</SelectItem>
                                     })}
                                   </SelectContent>
                                 </Select>
@@ -1916,10 +1918,10 @@ export default function SalesPage() {
                               
                               {selectedSlabEmployee ? (
                                 <div className="border border-slate-100 rounded-lg overflow-hidden divide-y divide-slate-100">
-                                  {incentiveSlabs.filter(s => s.employees && s.employees.includes(selectedSlabEmployee)).length === 0 ? (
+                                  {incentiveSlabs.filter(s => s.employees && s.employees.includes(selectedSlabEmployee.split('|')[0])).length === 0 ? (
                                     <div className="p-4 text-center text-xs text-slate-400 bg-slate-50/50">No custom slabs for this employee. Common slabs will apply.</div>
                                   ) : (
-                                    incentiveSlabs.filter(s => s.employees && s.employees.includes(selectedSlabEmployee)).map(slab => (
+                                    incentiveSlabs.filter(s => s.employees && s.employees.includes(selectedSlabEmployee.split('|')[0])).map(slab => (
                                       <div key={slab.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50 bg-white">
                                         <div className="space-y-1">
                                           <div className="flex items-center gap-2">
@@ -2195,9 +2197,10 @@ export default function SalesPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Employees</SelectItem>
-                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales').map(emp => (
-                          <SelectItem key={emp.id} value={emp.name || emp.firstName}>{emp.name || emp.firstName}</SelectItem>
-                        ))}
+                        {employees.filter(emp => emp.department?.toLowerCase() === 'sales' || emp.role?.toLowerCase() === 'admin').map(emp => {
+                            const empName = emp.name || emp.firstName || "";
+                            return <SelectItem key={emp.id} value={`${empName}|${emp.id}`}>{empName}</SelectItem>;
+                          })}
                       </SelectContent>
                     </Select>
                     <div className="relative">

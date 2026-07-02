@@ -68,7 +68,10 @@ import {
   Crop,
   Type,
   PenTool,
-  MessageSquare
+  MessageSquare,
+  Headphones,
+  Share2,
+  Flag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -143,17 +146,166 @@ const ChatLink = ({ href, target, rel, className, children, onClick, textColor }
   );
 };
 
-const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
-  const { confirm } = useConfirm();
+// Shared audio controller to prevent multiple audios playing simultaneously
+const audioController = {
+  current: null as HTMLAudioElement | null,
+  pauseCurrent() {
+    if (this.current) {
+      this.current.pause();
+      this.current = null;
+    }
+  }
+};
+
+const VoicePreviewPlayer = ({ blob, duration, onDelete }: { blob: Blob; duration: number; onDelete: () => void }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const urlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(blob);
+    urlRef.current = url;
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.src = url;
+    audioRef.current = audio;
+
+    const handleTimeUpdate = () => {
+      if (audio.duration && isFinite(audio.duration)) {
+        setProgress((audio.currentTime / audio.duration) * 100);
+        setCurrentTime(audio.currentTime);
+      }
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentTime(0);
+    };
+
+    const handleLoadedMetadata = () => {
+      if (audio.duration && isFinite(audio.duration)) {
+        setCurrentTime(0);
+      }
+    };
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.pause();
+      audio.src = '';
+      if (urlRef.current) {
+        URL.revokeObjectURL(urlRef.current);
+        urlRef.current = null;
+      }
+    };
+  }, [blob]);
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(() => {});
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    if (audioRef.current && audioRef.current.duration) {
+      const newTime = (val / 100) * audioRef.current.duration;
+      audioRef.current.currentTime = newTime;
+      setProgress(val);
+      setCurrentTime(newTime);
+    }
+  };
+
+  const formatTime = (time: number) => {
+    if (isNaN(time) || time === Infinity || time === 0) return "0:00";
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const displayTime = isPlaying || currentTime > 0
+    ? formatTime(currentTime)
+    : formatTime(duration);
+
+  return (
+    <div className="flex-1 flex items-center gap-1.5 bg-[#f0f2f5] px-2 py-1.5 rounded-xl border border-slate-200/60 animate-in fade-in duration-300">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-red-500 hover:bg-red-100 rounded-full shrink-0"
+        onClick={onDelete}
+      >
+        <Trash2 className="w-4 h-4" />
+      </Button>
+
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] hover:bg-black/5 transition-colors focus:outline-none"
+      >
+        {isPlaying ? (
+          <Pause className="w-[18px] h-[18px] fill-current" />
+        ) : (
+          <Play className="w-[18px] h-[18px] fill-current ml-0.5" />
+        )}
+      </button>
+
+      <div className="flex-1 flex flex-col justify-center min-w-0 gap-[3px]">
+        <div className="relative w-full h-[3px] rounded-full bg-[#d1d5db] overflow-visible">
+          <div
+            className="absolute left-0 top-0 h-full rounded-full bg-[#06cf9c] transition-none"
+            style={{ width: `${progress}%` }}
+          />
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="0.1"
+            value={progress}
+            onChange={handleSliderChange}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-[10px] h-[10px] rounded-full bg-[#06cf9c] shadow-sm pointer-events-none transition-none z-20"
+            style={{ left: `calc(${progress}% - 5px)` }}
+          />
+        </div>
+      </div>
+
+      <span className="text-[10px] text-[#667781] tabular-nums shrink-0">{displayTime}</span>
+    </div>
+  );
+};
+
+const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
     const audio = new Audio(fullUrl);
     audioRef.current = audio;
+
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+    };
 
     const handleTimeUpdate = () => {
       setProgress((audio.currentTime / (audio.duration || 1)) * 100);
@@ -164,14 +316,22 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
       setIsPlaying(false);
       setProgress(0);
       setCurrentTime(0);
+      if (audioController.current === audio) {
+        audioController.current = null;
+      }
     };
 
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
 
     return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
+      if (audioController.current === audio) {
+        audioController.current = null;
+      }
       audio.pause();
     };
   }, [msg.attachmentUrl]);
@@ -181,6 +341,8 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
       if (isPlaying) {
         audioRef.current.pause();
       } else {
+        audioController.pauseCurrent();
+        audioController.current = audioRef.current;
         audioRef.current.play().catch(err => {
           console.error("Audio playback failed:", err);
           toast.error("Could not play voice message. The file might be missing or unsupported.");
@@ -190,38 +352,584 @@ const VoiceMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
     }
   };
 
-  const displayTime = currentTime > 0 || isPlaying
-    ? `${Math.floor(currentTime / 60)}:${String(Math.floor(currentTime % 60)).padStart(2, '0')}`
-    : msg.voiceDuration
-      ? `${Math.floor(msg.voiceDuration / 60)}:${String(Math.floor(msg.voiceDuration % 60)).padStart(2, '0')}`
-      : "0:00";
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    if (audioRef.current && duration) {
+      const newTime = (val / 100) * duration;
+      audioRef.current.currentTime = newTime;
+      setProgress(val);
+      setCurrentTime(newTime);
+    }
+  };
+
+  const formatTime = (time: number) => {
+    if (isNaN(time) || time === Infinity) return "0:00";
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const displayTime = isPlaying || currentTime > 0
+    ? formatTime(currentTime)
+    : formatTime(duration || msg.voiceDuration || 0);
+
+  const totalTime = formatTime(duration || msg.voiceDuration || 0);
+  const msgTime = dayjs(msg.timestamp).format("h:mm a");
+
+  const playButton = (
+    <button
+      type="button"
+      onClick={togglePlay}
+      className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] hover:bg-black/5 transition-colors focus:outline-none"
+    >
+      {isPlaying ? (
+        <Pause className="w-[18px] h-[18px] fill-current" />
+      ) : (
+        <Play className="w-[18px] h-[18px] fill-current ml-0.5" />
+      )}
+    </button>
+  );
+
+  const progressSection = (
+    <div className="flex-1 flex flex-col justify-center min-w-0 gap-[3px]">
+      <div className="relative w-full h-[3px] rounded-full bg-[#d1d5db] overflow-visible">
+        <div
+          className="absolute left-0 top-0 h-full rounded-full bg-[#06cf9c] transition-none"
+          style={{ width: `${progress}%` }}
+        />
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="0.1"
+          value={progress}
+          onChange={handleSliderChange}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 w-[10px] h-[10px] rounded-full bg-[#06cf9c] shadow-sm pointer-events-none transition-none z-20"
+          style={{ left: `calc(${progress}% - 5px)` }}
+        />
+      </div>
+      <div className="flex items-center justify-between select-none">
+        <span className="text-[10px] text-[#667781] tabular-nums">{isPlaying ? displayTime : totalTime}</span>
+        <span className="text-[10px] text-[#667781] tabular-nums">{msgTime}</span>
+      </div>
+    </div>
+  );
+
+  const headphoneIcon = (
+    <div className="w-9 h-9 rounded-full bg-[#f59e0b] hover:bg-[#d97706] active:scale-95 transition-all flex items-center justify-center text-white shrink-0 cursor-pointer shadow-sm">
+      <Headphones className="w-[18px] h-[18px]" />
+    </div>
+  );
 
   return (
     <div className={cn(
-      "flex items-center gap-3 p-2 rounded-xl mb-2 min-w-[200px]",
-      isMe ? "bg-white/10" : "bg-gray-50"
+      "rounded-xl mb-0.5 w-[300px] sm:w-[330px] max-w-full px-1.5 py-1",
+      isMe
+        ? "bg-[#d9fdd3] ml-auto rounded-tr-none"
+        : "bg-white mr-auto rounded-tl-none"
     )}>
-      <Button
-        size="icon"
-        variant="ghost"
-        className={cn("h-9 w-9 rounded-full shrink-0", isMe ? "text-white hover:bg-white/20" : "text-brand-teal hover:bg-brand-teal/10")}
-        onClick={togglePlay}
-      >
-        {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
-      </Button>
-      <div className="flex-1 space-y-1">
-        <div className="relative h-1 w-full rounded-full">
-          <div className="absolute inset-0 bg-current opacity-20 rounded-full" />
-          <div
-            className="absolute top-0 left-0 h-full bg-current transition-all duration-100 ease-linear rounded-full"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <div className="flex justify-between text-[9px] opacity-70 font-bold uppercase">
-          <span>{displayTime}</span>
-          <span>Voice Note</span>
+      <div className="flex items-center gap-1.5">
+        {isMe ? (
+          <>
+            {playButton}
+            {progressSection}
+            {headphoneIcon}
+          </>
+        ) : (
+          <>
+            {headphoneIcon}
+            {playButton}
+            {progressSection}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const AudioMessagePlayer = ({ msg, isMe }: { msg: any; isMe: boolean }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.src = fullUrl;
+    audioRef.current = audio;
+
+    const handleLoadedMetadata = () => {
+      if (audio.duration && isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+
+    const handleDurationChange = () => {
+      if (audio.duration && isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+
+    const handleTimeUpdate = () => {
+      setProgress((audio.currentTime / (audio.duration || 1)) * 100);
+      setCurrentTime(audio.currentTime);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentTime(0);
+      if (audioController.current === audio) {
+        audioController.current = null;
+      }
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('durationchange', handleDurationChange);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('durationchange', handleDurationChange);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      if (audioController.current === audio) {
+        audioController.current = null;
+      }
+      audio.pause();
+      audio.src = '';
+    };
+  }, [msg.attachmentUrl]);
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioController.pauseCurrent();
+        audioController.current = audioRef.current;
+        audioRef.current.play().catch(err => {
+          console.error("Audio playback failed:", err);
+          toast.error("Could not play audio message.");
+        });
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    if (audioRef.current && duration) {
+      const newTime = (val / 100) * duration;
+      audioRef.current.currentTime = newTime;
+      setProgress(val);
+      setCurrentTime(newTime);
+    }
+  };
+
+  const formatTime = (time: number) => {
+    if (isNaN(time) || time === Infinity || time === 0) return "0:00";
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const displayTime = isPlaying || currentTime > 0
+    ? formatTime(currentTime)
+    : formatTime(duration || msg.voiceDuration || 0);
+
+  const totalTime = formatTime(duration || msg.voiceDuration || 0);
+  const msgTime = dayjs(msg.timestamp).format("h:mm a");
+
+  const playButton = (
+    <button
+      type="button"
+      onClick={togglePlay}
+      className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[#54656f] hover:bg-black/5 transition-colors focus:outline-none"
+    >
+      {isPlaying ? (
+        <Pause className="w-[18px] h-[18px] fill-current" />
+      ) : (
+        <Play className="w-[18px] h-[18px] fill-current ml-0.5" />
+      )}
+    </button>
+  );
+
+  const progressSection = (
+    <div className="flex-1 flex flex-col justify-center min-w-0 gap-[3px]">
+      <div className="relative w-full h-[3px] rounded-full bg-[#d1d5db] overflow-visible">
+        <div
+          className="absolute left-0 top-0 h-full rounded-full bg-[#06cf9c] transition-none"
+          style={{ width: `${progress}%` }}
+        />
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="0.1"
+          value={progress}
+          onChange={handleSliderChange}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 w-[10px] h-[10px] rounded-full bg-[#06cf9c] shadow-sm pointer-events-none transition-none z-20"
+          style={{ left: `calc(${progress}% - 5px)` }}
+        />
+      </div>
+      <div className="flex items-center justify-between select-none">
+        <span className="text-[10px] text-[#667781] tabular-nums">{isPlaying ? displayTime : totalTime}</span>
+        <span className="text-[10px] text-[#667781] tabular-nums">{msgTime}</span>
+      </div>
+    </div>
+  );
+
+  const headphoneIcon = (
+    <div className="w-9 h-9 rounded-full bg-[#f59e0b] hover:bg-[#d97706] active:scale-95 transition-all flex items-center justify-center text-white shrink-0 cursor-pointer shadow-sm">
+      <Headphones className="w-[18px] h-[18px]" />
+    </div>
+  );
+
+  return (
+    <div className={cn(
+      "rounded-xl mb-0.5 w-[300px] sm:w-[330px] max-w-full px-1.5 py-1",
+      isMe
+        ? "bg-[#d9fdd3] ml-auto rounded-tr-none"
+        : "bg-white mr-auto rounded-tl-none"
+    )}>
+      <div className="flex items-center gap-1.5">
+        {isMe ? (
+          <>
+            {playButton}
+            {progressSection}
+            {headphoneIcon}
+          </>
+        ) : (
+          <>
+            {headphoneIcon}
+            {playButton}
+            {progressSection}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SmartMediaAttachment = ({ msg, isMe, setPreviewImageMsgId }: { msg: any; isMe: boolean; setPreviewImageMsgId: (id: string | null) => void }) => {
+  const [isAudioOnly, setIsAudioOnly] = useState<boolean | null>(null);
+
+  const cleanName = msg.attachmentName ? msg.attachmentName.replace(/^[a-f0-9]+_/, "").toLowerCase() : "";
+  const isWhatsAppAudio = cleanName.startsWith("whatsapp audio") || cleanName.includes("whatsapp audio");
+  const isAudioExtension = /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName || "");
+
+  useEffect(() => {
+    if (isWhatsAppAudio || isAudioExtension) {
+      setIsAudioOnly(true);
+      return;
+    }
+    if (!msg.attachmentUrl) {
+      setIsAudioOnly(false);
+      return;
+    }
+    const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = fullUrl;
+    const handleLoaded = () => {
+      setIsAudioOnly(video.videoHeight === 0 || video.videoWidth === 0);
+      video.src = '';
+    };
+    const handleError = () => {
+      setIsAudioOnly(true);
+      video.src = '';
+    };
+    video.addEventListener('loadedmetadata', handleLoaded);
+    video.addEventListener('error', handleError);
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoaded);
+      video.removeEventListener('error', handleError);
+      video.src = '';
+    };
+  }, [msg.attachmentUrl, isWhatsAppAudio, isAudioExtension]);
+
+  if (isAudioOnly === null) {
+    return (
+      <div className={cn(
+        "rounded-xl mb-0.5 w-[300px] sm:w-[330px] max-w-full px-1.5 py-1",
+        isMe
+          ? "bg-[#d9fdd3] ml-auto rounded-tr-none"
+          : "bg-white mr-auto rounded-tl-none border border-slate-100/80 shadow-xs"
+      )}>
+        <div className="flex items-center gap-1.5">
+          <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center bg-black/5">
+            <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+          <div className="flex-1 text-[10px] text-[#667781]">Loading audio...</div>
         </div>
       </div>
+    );
+  }
+
+  if (isAudioOnly) {
+    return <AudioMessagePlayer msg={msg} isMe={isMe} />;
+  }
+
+  return <VideoAttachment msg={msg} setPreviewImageMsgId={setPreviewImageMsgId} />;
+};
+
+const SmartPreviewAttachment = ({ msg }: { msg: any }) => {
+  const [isAudioOnly, setIsAudioOnly] = useState<boolean | null>(null);
+
+  const cleanName = msg.attachmentName ? msg.attachmentName.replace(/^[a-f0-9]+_/, "").toLowerCase() : "";
+  const isWhatsAppAudio = cleanName.startsWith("whatsapp audio") || cleanName.includes("whatsapp audio");
+  const isAudioExtension = /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName || "");
+
+  useEffect(() => {
+    if (isWhatsAppAudio || isAudioExtension) {
+      setIsAudioOnly(true);
+      return;
+    }
+    if (!msg.attachmentUrl) {
+      setIsAudioOnly(false);
+      return;
+    }
+    const fullUrl = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = fullUrl;
+    const handleLoaded = () => {
+      setIsAudioOnly(video.videoHeight === 0 || video.videoWidth === 0);
+      video.src = '';
+    };
+    const handleError = () => {
+      setIsAudioOnly(true);
+      video.src = '';
+    };
+    video.addEventListener('loadedmetadata', handleLoaded);
+    video.addEventListener('error', handleError);
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoaded);
+      video.removeEventListener('error', handleError);
+      video.src = '';
+    };
+  }, [msg.attachmentUrl, isWhatsAppAudio, isAudioExtension]);
+
+  if (isAudioOnly === null) {
+    return (
+      <div className="flex flex-col items-center justify-center w-full max-w-lg p-8">
+        <div className="w-10 h-10 border-3 border-slate-300 border-t-brand-teal rounded-full animate-spin" />
+        <span className="text-slate-400 text-sm mt-3">Loading...</span>
+      </div>
+    );
+  }
+
+  if (isAudioOnly) {
+    return (
+      <div className="flex flex-col items-center justify-center w-full max-w-lg">
+        <AudioMessagePlayer msg={msg} isMe={msg.isMe || false} />
+      </div>
+    );
+  }
+
+  return (
+    <video
+      src={
+        msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
+          msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
+            `${API_URL}${msg.attachmentUrl}`
+      }
+      controls
+      autoPlay
+      className="max-w-full max-h-[75vh] object-contain shadow-2xl rounded-sm"
+    />
+  );
+};
+
+const VideoAttachment = ({ msg, setPreviewImageMsgId }: { msg: any; setPreviewImageMsgId: (id: string | null) => void }) => {
+  const handleAction = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (msg._optimistic) return;
+    setPreviewImageMsgId(msg.id);
+  };
+
+  const msgTime = dayjs(msg.timestamp).format("h:mm a");
+
+  return (
+    <div className={cn(
+      "relative rounded-lg overflow-hidden border border-black/10 max-w-full group/video cursor-pointer bg-black",
+      msg.text ? "mb-1" : "mb-0"
+    )}>
+      {/* Video Thumbnail Placeholder */}
+      <div 
+        onClick={handleAction}
+        className="relative w-[280px] sm:w-[360px] h-[200px] flex items-center justify-center bg-slate-950"
+      >
+        <video
+          src={
+            msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
+              msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
+                `${API_URL}${msg.attachmentUrl}`
+          }
+          className="w-full h-full object-cover opacity-60 pointer-events-none"
+        />
+        
+        {/* Loader Overlay (Optimistic) */}
+        {msg._optimistic ? (
+          <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center backdrop-blur-xs select-none">
+            <div className="w-12 h-12 border-4 border-brand-teal border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-white text-[11px] font-bold mt-2">
+              Uploading...
+            </span>
+          </div>
+        ) : (
+          /* Play Button Overlay */
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20 hover:bg-black/35 transition-all select-none">
+            <div className="w-14 h-14 rounded-full bg-black/50 text-white flex items-center justify-center border border-white/20 shadow-md">
+              <Play className="w-6 h-6 fill-current ml-0.5" />
+            </div>
+          </div>
+        )}
+
+        {/* Timestamp overlay */}
+        {!msg._optimistic && (
+          <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-[10px] text-white bg-black/40 px-2 py-0.5 rounded-[10px] select-none backdrop-blur-xs">
+            <span>{msgTime}</span>
+            {msg.isMe && (
+              <span className="text-[#53bdeb]">
+                <svg viewBox="0 0 16 11" width="16" height="11" className="fill-current">
+                  <path d="M11.071.653a.457.457 0 0 0-.304-.102-.493.493 0 0 0-.381.178l-6.19 7.636-2.011-2.095a.463.463 0 0 0-.336-.146.47.47 0 0 0-.336.146l-.738.759a.445.445 0 0 0 0 .64l2.573 2.541a.958.958 0 0 0 .336.218.93.93 0 0 0 .414.086c.153-.015.295-.08.414-.218l6.647-8.202a.449.449 0 0 0-.102-.64l-.756-.76zm-2.727 0a.457.457 0 0 0-.304-.102.493.493 0 0 0-.381.178l-6.19 7.636-1.005-1.048-.369.381 1.534 1.534a.958.958 0 0 0 .336.218.93.93 0 0 0 .414.086c.153-.015.295-.08.414-.218l6.647-8.202a.449.449 0 0 0-.102-.64l-.389-.443z"/>
+                </svg>
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const FileAttachment = ({ msg, handleOpenAttachment, renderCheckmarks }: { msg: any; handleOpenAttachment: (url: string, filename: string) => Promise<void>; renderCheckmarks: (msg: any, isImageOverlay: boolean) => React.ReactNode }) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [pdfLoadError, setPdfLoadError] = useState(false);
+  const [pdfReady, setPdfReady] = useState(false);
+  const cleanAttachmentName = msg.attachmentName ? msg.attachmentName.replace(/^[a-f0-9]+_/, "") : "";
+  const isPdf = msg.attachmentName && /\.pdf$/i.test(msg.attachmentName);
+
+  const handleAction = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (msg._optimistic || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await handleOpenAttachment(msg.attachmentUrl, msg.attachmentName);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const cleanUrl = msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl : msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+
+  useEffect(() => {
+    if (!isPdf || msg._optimistic) return;
+    const fullUrl = cleanUrl.startsWith('http') ? cleanUrl : `${API_URL}${cleanUrl}`;
+    fetch(fullUrl, { method: 'HEAD' })
+      .then(res => {
+        const ct = res.headers.get('content-type') || '';
+        if (res.ok && (ct.includes('pdf') || ct.includes('octet-stream'))) {
+          setPdfReady(true);
+        } else {
+          setPdfLoadError(true);
+        }
+      })
+      .catch(() => setPdfLoadError(true));
+  }, [cleanUrl, isPdf, msg._optimistic]);
+
+  return (
+    <div 
+      onClick={handleAction}
+      className={cn(
+        "rounded-xl overflow-hidden mb-1.5 border w-[280px] sm:w-[320px] relative group/file cursor-pointer transition-all hover:shadow-xs",
+        msg.isMe ? "bg-[#d9fdd3] border-[#c3ebbc]" : "bg-white border-[#e2e5e7]"
+      )}
+    >
+      {/* PDF Thumbnail Preview */}
+      {isPdf && !msg._optimistic && pdfReady && (
+        <div className="w-full h-[140px] overflow-hidden bg-slate-50 relative border-b border-black/5 select-none">
+          <iframe
+            src={`${cleanUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+            className="w-[116%] h-full pointer-events-none border-none origin-top"
+            scrolling="no"
+            style={{ overflow: 'hidden' }}
+            title="PDF Preview"
+          />
+          <div className="absolute inset-0 bg-transparent z-10" />
+        </div>
+      )}
+
+      {/* PDF fallback icon when preview fails or not ready */}
+      {isPdf && (pdfLoadError || !pdfReady) && !msg._optimistic && (
+        <div className="w-full h-[100px] overflow-hidden bg-slate-50 relative border-b border-black/5 select-none flex flex-col items-center justify-center gap-2">
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-100">
+            <FileIcon className="w-8 h-8 text-rose-500 fill-rose-100" />
+          </div>
+          <span className="text-[10px] text-[#667781] font-medium">PDF Document</span>
+        </div>
+      )}
+
+      {/* File Info Box */}
+      <div className="flex items-center gap-3 p-3 relative">
+        <div className="p-2 rounded-lg bg-rose-50 border border-rose-100 shrink-0">
+          <FileIcon className="w-6 h-6 text-rose-500 fill-rose-100" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-xs truncate text-[#111b21]">{cleanAttachmentName}</p>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-[10px] text-[#667781] truncate">
+              {msg._optimistic ? "Uploading..." : isDownloading ? "Downloading..." : isPdf ? "PDF Document" : "Click to download"}
+            </p>
+            {(!msg.text || msg.text === `Sent a file: ${msg.attachmentName}` || msg.text === `Sent a file: ${cleanAttachmentName}`) && (
+              <span className="text-[9px] text-[#667781] ml-2 flex items-center gap-1 select-none whitespace-nowrap">
+                {dayjs(msg.timestamp).format("hh:mm A")}
+                {renderCheckmarks(msg, false)}
+              </span>
+            )}
+          </div>
+        </div>
+        
+        {/* Download arrow icon on the right side of the card */}
+        {!msg._optimistic && !isDownloading && (
+          <div className="w-7 h-7 rounded-full bg-black/5 flex items-center justify-center text-slate-500 group-hover/file:bg-brand-teal/10 group-hover/file:text-brand-teal transition-all shrink-0">
+            <Download className="w-4 h-4" />
+          </div>
+        )}
+        {isDownloading && (
+          <div className="w-7 h-7 flex items-center justify-center shrink-0">
+            <div className="w-4 h-4 border-2 border-brand-teal border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        )}
+      </div>
+
+      {/* Upload loader overlay if optimistic */}
+      {msg._optimistic && (
+        <div className="absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-xs z-10">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg shadow-sm border border-slate-100">
+            <div className="w-4 h-4 border-2 border-brand-teal border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-xs font-semibold text-slate-600">Sending...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -317,6 +1025,16 @@ const parseMonospace = (text: string): React.ReactNode => {
 
 const parseFormatting = (text: string): React.ReactNode => {
   return parseMonospace(text);
+};
+
+const stripFormatting = (text: string | null | undefined): string => {
+  if (!text) return "";
+  return text
+    .replace(/```([\s\S]+?)```/g, "$1")
+    .replace(/`(?!\s)([^`]+?)(?<!\s)`/g, "$1")
+    .replace(/\*(?!\s)([^*]+?)(?<!\s)\*/g, "$1")
+    .replace(/_(?!\s)([^_]+?)(?<!\s)_/g, "$1")
+    .replace(/~(?!\s)([^~]+?)(?<!\s)~/g, "$1");
 };
 
 const highlightAndFormat = (text: string, searchQuery?: string): React.ReactNode => {
@@ -666,6 +1384,7 @@ export default function ChatPage() {
   const [pdfViewerTitle, setPdfViewerTitle] = useState<string>("");
   const [editText, setEditText] = useState("");
   const [chatSummaries, setChatSummaries] = useState<Record<string, any>>({});
+  const [expandedVoterOptionId, setExpandedVoterOptionId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [forwardingMessage, setForwardingMessage] = useState<any>(null);
   const [forwardingMessages, setForwardingMessages] = useState<any[] | null>(null);
@@ -708,8 +1427,12 @@ export default function ChatPage() {
     };
   }, [pendingAttachments]);
 
-  const imageMessages = useMemo(() => {
-    return currentMessages.filter(msg => msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName));
+  const mediaMessages = useMemo(() => {
+    return currentMessages.filter(msg => 
+      msg.attachmentName && 
+      !msg.isVoice && 
+      (/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName) || /\.(mp4|mov|mkv)$/i.test(msg.attachmentName) || /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName))
+    );
   }, [currentMessages]);
 
   const currentPreviewMsg = useMemo(() => {
@@ -717,18 +1440,18 @@ export default function ChatPage() {
   }, [currentMessages, previewImageMsgId]);
 
   const currentPreviewIndex = useMemo(() => {
-    return imageMessages.findIndex(m => m.id === previewImageMsgId);
-  }, [imageMessages, previewImageMsgId]);
+    return mediaMessages.findIndex(m => m.id === previewImageMsgId);
+  }, [mediaMessages, previewImageMsgId]);
 
   const handlePrevImage = () => {
     if (currentPreviewIndex > 0) {
-      setPreviewImageMsgId(imageMessages[currentPreviewIndex - 1].id);
+      setPreviewImageMsgId(mediaMessages[currentPreviewIndex - 1].id);
     }
   };
 
   const handleNextImage = () => {
-    if (currentPreviewIndex < imageMessages.length - 1) {
-      setPreviewImageMsgId(imageMessages[currentPreviewIndex + 1].id);
+    if (currentPreviewIndex < mediaMessages.length - 1) {
+      setPreviewImageMsgId(mediaMessages[currentPreviewIndex + 1].id);
     }
   };
 
@@ -1089,18 +1812,18 @@ export default function ChatPage() {
     };
   }, [pendingAttachments.length]);
 
-  // Arrow key navigation for image preview
+  // Arrow key navigation for media preview
   useEffect(() => {
     if (!previewImageMsgId) return;
 
     const handleArrowKeys = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") {
         if (currentPreviewIndex > 0) {
-          setPreviewImageMsgId(imageMessages[currentPreviewIndex - 1].id);
+          setPreviewImageMsgId(mediaMessages[currentPreviewIndex - 1].id);
         }
       } else if (e.key === "ArrowRight") {
-        if (currentPreviewIndex < imageMessages.length - 1) {
-          setPreviewImageMsgId(imageMessages[currentPreviewIndex + 1].id);
+        if (currentPreviewIndex < mediaMessages.length - 1) {
+          setPreviewImageMsgId(mediaMessages[currentPreviewIndex + 1].id);
         }
       }
     };
@@ -1109,7 +1832,7 @@ export default function ChatPage() {
     return () => {
       window.removeEventListener("keydown", handleArrowKeys);
     };
-  }, [previewImageMsgId, currentPreviewIndex, imageMessages]);
+  }, [previewImageMsgId, currentPreviewIndex, mediaMessages]);
 
   const [showCreatePoll, setShowCreatePoll] = useState(false);
   const [pollData, setPollData] = useState({
@@ -1404,6 +2127,8 @@ export default function ChatPage() {
   const recordingTimerRef = useRef<any>(null);
   const typingTimeoutRef = useRef<any>(null);
   const isSendingRef = useRef(false);
+  const recordingActionRef = useRef<'preview' | 'send' | 'delete'>('preview');
+  const recordingStartTimeRef = useRef<number>(0);
 
 
   const prevMessagesLength = useRef(0);
@@ -1830,83 +2555,6 @@ export default function ChatPage() {
 
           // Notification logic: only when we already had messages and new ones arrived
           if (prevReal.length > 0 && hasNewMessages) {
-            const lastMsg = marked[marked.length - 1];
-            const chatId = selectedChat.id || selectedChat.employeeId;
-            const isMuted = mutedChats.includes(chatId);
-
-            if (!lastMsg.isMe && !isMuted && !globalDndEnabled) {
-              const pref = chatNotificationPrefs[chatId] || { mode: globalDefaultMode, sound: globalDefaultSound };
-              const resolvedMode = pref.mode === "default" || !pref.mode ? globalDefaultMode : pref.mode;
-              const resolvedSound = pref.sound === "default" || !pref.sound ? globalDefaultSound : pref.sound;
-
-              const isMention = (() => {
-                if (!lastMsg.text) return false;
-                const mentions = lastMsg.text.match(/@\w+/g);
-                if (!mentions) return false;
-                const firstName = user?.firstName?.toLowerCase() || "";
-                const lastName = user?.lastName?.toLowerCase() || "";
-                const fullName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim().toLowerCase();
-                const strippedFullName = fullName.replace(/\s+/g, "");
-
-                return mentions.some((m: string) => {
-                  const mentionName = m.substring(1).toLowerCase();
-                  if (!mentionName) return false;
-                  return (
-                    (firstName && firstName === mentionName) ||
-                    (lastName && lastName === mentionName) ||
-                    (fullName && fullName.includes(mentionName)) ||
-                    (strippedFullName && strippedFullName === mentionName)
-                  );
-                });
-              })();
-
-              const isPersonal = !lastMsg.groupId;
-              if (resolvedMode === "all" || (resolvedMode === "mentions" && (isMention || isPersonal))) {
-                playTestSound(resolvedSound);
-
-                const isTabInactive = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
-                if (isTabInactive && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-                  const senderName = selectedChat.name || lastMsg.sender || "Colleague";
-                  const body = lastMsg.text || "Sent an attachment";
-                  const title = "HariKrushn DigiVerse LLP";
-                  const notificationBody = `${senderName}\n${body}`;
-
-                  let avatarUrl = "/favicon.ico";
-                  const avatarPath = selectedChat.avatar || selectedChat.profilePhoto || lastMsg.senderAvatar;
-                  if (avatarPath) {
-                    const resolved = getAvatarUrl(avatarPath);
-                    if (resolved) {
-                      avatarUrl = resolved.startsWith("/")
-                        ? `${window.location.origin}${resolved}`
-                        : resolved;
-                    }
-                  }
-
-                  if ((window as any).electronAPI && typeof (window as any).electronAPI.showNotification === 'function') {
-                    (window as any).electronAPI.showNotification(title, {
-                      body: notificationBody,
-                      icon: "/favicon.ico",
-                      clickUrl: `/chat?chatId=${selectedChat.id || selectedChat.employeeId}&chatType=${selectedChat.type || 'personal'}`
-                    });
-                  } else if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-                    const notif = new Notification(title, {
-                      body: notificationBody,
-                      icon: avatarUrl
-                    });
-                    notif.onclick = () => {
-                      if (typeof window !== "undefined") {
-                        if ((window as any).electronAPI && (window as any).electronAPI.focusWindow) {
-                          (window as any).electronAPI.focusWindow();
-                        } else {
-                          window.focus();
-                        }
-                      }
-                    };
-                  }
-                }
-              }
-            }
-
             // Scroll to bottom when new messages arrive
             shouldScrollToBottom.current = true;
             setTimeout(() => {
@@ -2344,15 +2992,30 @@ export default function ChatPage() {
       return;
     }
     const fullUrl = url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith(API_URL) ? url : `${API_URL}${url}`;
-    const cleanFilename = filename.replace(/^[a-f0-9]+_/, "");
+    let cleanFilename = filename.replace(/^[a-f0-9]+_/, "");
 
     try {
       const response = await fetch(fullUrl);
       if (!response.ok) {
         toast.error(`Failed to download: File not found or unavailable on the server.`);
-        return; // Don't throw to avoid Next.js error overlay, just exit.
+        return;
       }
       const blob = await response.blob();
+
+      const ext = cleanFilename.includes('.') ? '' : (
+        blob.type.includes('pdf') ? '.pdf' :
+        blob.type.includes('webm') ? '.webm' :
+        blob.type.includes('mp3') || blob.type.includes('mpeg') ? '.mp3' :
+        blob.type.includes('ogg') ? '.ogg' :
+        blob.type.includes('wav') ? '.wav' :
+        blob.type.includes('mp4') ? '.mp4' :
+        blob.type.includes('jpeg') || blob.type.includes('jpg') ? '.jpg' :
+        blob.type.includes('png') ? '.png' :
+        blob.type.includes('gif') ? '.gif' :
+        '.bin'
+      );
+      if (ext) cleanFilename += ext;
+
       const blobUrl = window.URL.createObjectURL(blob);
 
       const link = document.createElement('a');
@@ -2364,7 +3027,6 @@ export default function ChatPage() {
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
     } catch (err) {
       console.warn("Download fallback:", err);
-      // Fallback to direct link if fetch fails
       window.open(fullUrl, '_blank');
     }
   };
@@ -2769,6 +3431,60 @@ export default function ChatPage() {
     }
   };
 
+  const handleToggleStarMessage = async (msgId: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/messages/${msgId}/toggle-star?user_id=${user.id}`, { method: 'POST' });
+      if (res.ok) {
+        fetchMessages();
+        toast.success("Message starred!");
+      }
+    } catch (err) {
+      console.error("Error toggling star:", err);
+    }
+  };
+
+  const handleShareMessage = async (msg: any) => {
+    const url = msg.attachmentUrl
+      ? (msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`)
+      : `${window.location.origin}/chat?msg=${msg.id}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'HRMS Message', text: msg.text || '', url });
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          navigator.clipboard.writeText(url);
+          toast.success("Link copied to clipboard!");
+        }
+      }
+    } else {
+      navigator.clipboard.writeText(url);
+      toast.success("Link copied to clipboard!");
+    }
+  };
+
+  const handleOpenWith = (msg: any) => {
+    if (msg.attachmentUrl) {
+      const url = msg.attachmentUrl.startsWith('http') ? msg.attachmentUrl : `${API_URL}${msg.attachmentUrl}`;
+      window.open(url, '_blank');
+    }
+  };
+
+  const handleReportMessage = async (msgId: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_URL}/chat/messages/${msgId}/report?user_id=${user.id}`, { method: 'POST' });
+      if (res.ok) {
+        toast.success("Message reported.");
+      } else {
+        toast.error("Failed to report message.");
+      }
+    } catch (err) {
+      console.error("Error reporting message:", err);
+      toast.error("Failed to report message.");
+    }
+  };
+
   const scrollToMessage = (msgId: string) => {
     shouldScrollToBottom.current = false;
     const element = document.getElementById(`msg-${msgId}`);
@@ -2873,13 +3589,51 @@ export default function ChatPage() {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        setVoicePreviewBlob(audioBlob);
+        const action = recordingActionRef.current;
         stream.getTracks().forEach(track => track.stop());
+
+        if (action === 'delete') {
+          setVoicePreviewBlob(null);
+          setRecordingDuration(0);
+          return;
+        }
+
+        if (action === 'send') {
+          const audioFile = new File([audioBlob], "voice_message.webm", { type: 'audio/webm' });
+          const formData = new FormData();
+          formData.append('file', audioFile);
+          try {
+            const res = await fetch(`${API_URL}/chat/upload`, {
+              method: 'POST',
+              body: formData
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const dur = recordingStartTimeRef.current ? Math.floor((Date.now() - recordingStartTimeRef.current) / 1000) : 1;
+              setVoicePreviewBlob(null);
+              setRecordingDuration(0);
+              handleSendMessage({
+                isVoice: true,
+                attachmentUrl: data.url,
+                attachmentName: "Voice Message",
+                voiceDuration: dur || 1
+              });
+            }
+          } catch (err) {
+            console.error("Error uploading voice message:", err);
+            toast.error("Failed to upload voice message");
+          }
+          return;
+        }
+
+        setVoicePreviewBlob(audioBlob);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingDuration(0);
+      recordingActionRef.current = 'preview';
+      recordingStartTimeRef.current = Date.now();
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
       }, 1000);
@@ -3409,7 +4163,7 @@ export default function ChatPage() {
                                 <span>{drafts[chat.id]}</span>
                               </>
                             ) : (
-                              employees.find(e => e.id === chat.id)?.customStatus || chat.lastMessage
+                              employees.find(e => e.id === chat.id)?.customStatus || stripFormatting(chat.lastMessage)
                             )}
                           </p>
                         </div>
@@ -3483,7 +4237,7 @@ export default function ChatPage() {
                               <span>{drafts[group.id]}</span>
                             </>
                           ) : (
-                            group.lastMessage || "No messages yet"
+                            stripFormatting(group.lastMessage) || "No messages yet"
                           )}
                         </p>
                         {(user?.role === 'Admin' || user?.role === 'HR' || group.createdBy === user?.id) && (
@@ -3578,7 +4332,7 @@ export default function ChatPage() {
                               <span>{drafts[channel.id]}</span>
                             </>
                           ) : (
-                            channel.lastMessage || channel.description
+                            stripFormatting(channel.lastMessage) || channel.description
                           )}
                         </p>
                         {(user?.role === "Admin" || user?.role === "HR") && (
@@ -3810,7 +4564,13 @@ export default function ChatPage() {
         )}
       >
         {isDragging && selectedChat && (
-          <div className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200">
+          <div 
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className="absolute inset-0 bg-brand-teal/10 backdrop-blur-md z-50 flex flex-col items-center justify-center border-2 border-dashed border-brand-teal/40 m-4 rounded-2xl animate-in fade-in duration-200"
+          >
             <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 border border-brand-teal/20 scale-100 transition-all">
               <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center animate-bounce">
                 <Paperclip className="w-8 h-8 text-brand-teal" />
@@ -4276,7 +5036,7 @@ export default function ChatPage() {
                   <div
                     ref={scrollRef}
                     onScroll={handleScroll}
-                    className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent custom-scrollbar"
+                    className="flex-1 overflow-y-auto px-3 py-2 sm:px-6 sm:py-4 space-y-0.5 custom-scrollbar"
                   >
                     <div className="flex justify-center">
                       <span className="px-3 py-1 bg-white border border-border rounded-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider shadow-sm">
@@ -4357,7 +5117,7 @@ export default function ChatPage() {
                           >
                             {isSelectionMode && (
                               <div className={cn(
-                                "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-2 transition-all",
+                                "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all self-center",
                                 selectedMessageIds.includes(msg.id)
                                   ? "bg-brand-teal border-brand-teal"
                                   : "border-slate-300 bg-white"
@@ -4406,9 +5166,47 @@ export default function ChatPage() {
                                 </div>
                               ) : (
                                 <div className="relative group/msg max-w-full w-fit">
+                                  {(() => {
+                                    const isAudioMsg = msg.isVoice || (msg.attachmentName && !msg.isVoice && /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName));
+                                    const isMp4 = msg.attachmentName && !msg.isVoice && /\.mp4$/i.test(msg.attachmentName);
+
+                                    if (isAudioMsg) {
+                                      return (
+                                        <div className={cn(
+                                          msg.isMe ? "ml-auto" : "mr-auto",
+                                          "w-fit"
+                                        )}>
+                                          {msg.isVoice ? (
+                                            <VoiceMessagePlayer msg={msg} isMe={msg.isMe} />
+                                          ) : (
+                                            <AudioMessagePlayer msg={msg} isMe={msg.isMe} />
+                                          )}
+                                        </div>
+                                      );
+                                    }
+
+                                    if (isMp4) {
+                                      return (
+                                        <div className={cn(
+                                          msg.isMe ? "ml-auto" : "mr-auto",
+                                          "w-fit"
+                                        )}>
+                                          <SmartMediaAttachment msg={msg} isMe={msg.isMe} setPreviewImageMsgId={setPreviewImageMsgId} />
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
                                   <div
                                     className={cn(
-                                      "whatsapp-bubble text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text w-fit relative flow-root",
+                                      "whatsapp-bubble text-[14.2px] leading-[19px] whitespace-pre-wrap break-words [word-break:break-word] select-text relative flow-root",
+                                      (msg.attachmentName && !msg.isVoice && /\.(mov|mkv)$/i.test(msg.attachmentName))
+                                        ? "w-[280px] sm:w-[360px]"
+                                        : (msg.attachmentName && !msg.isVoice && /\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) || imageGroups[msg.id]
+                                          ? "w-[280px] sm:w-[360px]"
+                                          : (msg.attachmentName && !msg.isVoice)
+                                            ? "w-[280px] sm:w-[320px]"
+                                            : "w-fit",
                                       (msg.attachmentName || imageGroups[msg.id])
                                         ? (
                                           (msg.text || (imageGroups[msg.id] && imageGroups[msg.id].some(g => g.text && g.text.trim())))
@@ -4478,7 +5276,7 @@ export default function ChatPage() {
                                                   `${API_URL}${msg.attachmentUrl}`
                                             }
                                             alt={msg.attachmentName}
-                                            className="max-w-[280px] sm:max-w-[360px] max-h-[300px] w-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                                            className="max-w-[280px] sm:max-w-[360px] max-h-[300px] object-contain cursor-pointer hover:opacity-95 transition-opacity bg-slate-50 border border-slate-100 rounded-lg"
                                             onLoad={() => scrollToBottom(true)}
                                             onClick={() => setPreviewImageMsgId(msg.id)}
                                           />
@@ -4489,74 +5287,28 @@ export default function ChatPage() {
                                               {renderCheckmarks(msg, true)}
                                             </div>
                                           )}
+                                          {/* Upload loader overlay if optimistic */}
+                                          {msg._optimistic && (
+                                            <div className="absolute inset-0 bg-black/45 flex flex-col items-center justify-center backdrop-blur-xs select-none">
+                                              <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                                              <span className="text-white text-[10px] font-bold mt-1.5">Uploading...</span>
+                                            </div>
+                                          )}
                                         </div>
                                       )
                                     )}
 
-                                    {/* File Attachment */}
-                                    {msg.attachmentName && !msg.isVoice && !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) && (
-                                      <div className={cn(
-                                        "rounded-xl overflow-hidden mb-1.5 border w-[280px] sm:w-[320px]",
-                                        msg.isMe ? "bg-[#d9fdd3] border-[#c3ebbc]" : "bg-white border-[#e2e5e7]"
-                                      )}>
-                                        {/* PDF Thumbnail Preview */}
-                                        {isPdf && (
-                                          <div className="w-full h-[140px] overflow-hidden bg-slate-50 relative border-b border-black/5 select-none">
-                                            <iframe
-                                              src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                                              className="w-[116%] h-full pointer-events-none border-none origin-top"
-                                              scrolling="no"
-                                              style={{ overflow: 'hidden' }}
-                                              title="PDF Preview"
-                                            />
-                                            <div className="absolute inset-0 bg-transparent z-10" />
-                                          </div>
-                                        )}
-
-                                        {/* File Info Box */}
-                                        <div className="flex items-center gap-3 p-3">
-                                          <div className="p-2 rounded-lg bg-rose-50 border border-rose-100 shrink-0">
-                                            <FileIcon className="w-6 h-6 text-rose-500 fill-rose-100" />
-                                          </div>
-                                          <div className="min-w-0 flex-1">
-                                            <p className="font-bold text-xs truncate text-[#111b21]">{cleanAttachmentName}</p>
-                                            <div className="flex items-center justify-between mt-1">
-                                              <p className="text-[10px] text-[#667781] truncate">
-                                                {isPdf ? "PDF Document" : "Click to download"}
-                                              </p>
-                                              {(!msg.text || isDefaultSentFileText) && (
-                                                <span className="text-[9px] text-[#667781] ml-2 flex items-center gap-1 select-none whitespace-nowrap">
-                                                  {dayjs(msg.timestamp).format("hh:mm A")}
-                                                  {renderCheckmarks(msg, false)}
-                                                </span>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        {/* Action Buttons (Open / Save As) */}
-                                        <div className="grid grid-cols-2 border-t border-black/5 text-xs text-[#00a884] font-bold text-center select-none bg-black/[0.01]">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleOpenAttachment(msg.attachmentUrl, msg.attachmentName)}
-                                            className="py-2.5 hover:bg-black/5 transition-colors border-r border-black/5 cursor-pointer active:bg-black/10"
-                                          >
-                                            Open
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDownload(msg.attachmentUrl, msg.attachmentName)}
-                                            className="py-2.5 hover:bg-black/5 transition-colors cursor-pointer active:bg-black/10"
-                                          >
-                                            Save as...
-                                          </button>
-                                        </div>
-                                      </div>
+                                    {/* Video Attachment */}
+                                    {msg.attachmentName && !msg.isVoice && /\.(mov|mkv)$/i.test(msg.attachmentName) && (
+                                      <VideoAttachment msg={msg} setPreviewImageMsgId={setPreviewImageMsgId} />
                                     )}
 
-                                    {/* Voice Message */}
-                                    {msg.isVoice && (
-                                      <VoiceMessagePlayer msg={msg} isMe={msg.isMe} />
+                                    {/* File Attachment */}
+                                    {msg.attachmentName && !msg.isVoice && 
+                                      !(/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.attachmentName)) && 
+                                      !(/\.(mp4|mov|mkv)$/i.test(msg.attachmentName)) && 
+                                      !(/\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName)) && (
+                                      <FileAttachment msg={msg} handleOpenAttachment={handleOpenAttachment} renderCheckmarks={renderCheckmarks} />
                                     )}
 
                                     {/* Poll */}
@@ -4634,34 +5386,46 @@ export default function ChatPage() {
                                                       </div>
                                                     </div>
                                                   </button>
-
-                                                  {voterEmployees.length > 0 && (
-                                                    <div className="flex items-center gap-1 mt-1 pl-2 animate-in fade-in duration-200">
-                                                      <div className="flex -space-x-1">
-                                                        {voterEmployees.slice(0, 3).map((voter: any, vi: number) => (
-                                                          <div
-                                                            key={voter.id || vi}
-                                                            className="w-4 h-4 rounded-full border border-white overflow-hidden shrink-0 bg-slate-100"
-                                                            title={voter.name || "User"}
-                                                          >
-                                                            {voter.profilePhoto ? (
-                                                              <img src={getAvatarUrl(voter.profilePhoto)} alt="" className="w-full h-full object-cover" />
-                                                            ) : (
-                                                              <div className="w-full h-full flex items-center justify-center text-[7px] font-bold text-slate-500 bg-slate-200">
-                                                                {(voter.name || "?")[0].toUpperCase()}
-                                                              </div>
-                                                            )}
-                                                          </div>
-                                                        ))}
-                                                      </div>
-                                                      <span className="text-[9px] font-medium truncate max-w-[180px] text-slate-400">
-                                                        {voterEmployees.length <= 2
-                                                          ? voterEmployees.map((v: any) => v.name || "User").join(", ")
-                                                          : `${voterEmployees.slice(0, 2).map((v: any) => v.name || "User").join(", ")} +${voterEmployees.length - 2}`
-                                                        }
-                                                      </span>
-                                                    </div>
-                                                  )}
+                                                   {voterEmployees.length > 0 && (
+                                                     <div className="flex flex-col gap-1.5 mt-1.5 pl-2 animate-in fade-in duration-200">
+                                                       <button
+                                                         type="button"
+                                                         onClick={(e) => {
+                                                           e.stopPropagation();
+                                                           const key = `${msg.id}-${option.id}`;
+                                                           setExpandedVoterOptionId(prev => prev === key ? null : key);
+                                                         }}
+                                                         className="flex items-center gap-2 hover:opacity-85 transition-opacity cursor-pointer text-left w-fit"
+                                                       >
+                                                         <div className="flex -space-x-1">
+                                                           {voterEmployees.slice(0, 3).map((voter: any, vi: number) => (
+                                                             <div
+                                                               key={voter.id || vi}
+                                                               className="w-4 h-4 rounded-full border border-white overflow-hidden shrink-0 bg-slate-100 shadow-2xs"
+                                                               title={voter.name || "User"}
+                                                             >
+                                                               {voter.profilePhoto ? (
+                                                                 <img src={getAvatarUrl(voter.profilePhoto)} alt="" className="w-full h-full object-cover" />
+                                                               ) : (
+                                                                 <div className="w-full h-full flex items-center justify-center text-[7px] font-bold text-slate-500 bg-slate-200">
+                                                                   {(voter.name || "?")[0].toUpperCase()}
+                                                                 </div>
+                                                               )}
+                                                             </div>
+                                                           ))}
+                                                         </div>
+                                                         <span className="text-[9px] font-bold text-slate-400 hover:text-brand-teal transition-colors">
+                                                           {voterEmployees.length} {voterEmployees.length === 1 ? "vote" : "votes"}
+                                                         </span>
+                                                       </button>
+                                                       
+                                                       {expandedVoterOptionId === `${msg.id}-${option.id}` && (
+                                                         <div className="text-[9px] font-semibold text-slate-500 leading-normal bg-slate-50/80 p-1.5 rounded-md border border-slate-200/50">
+                                                           {voterEmployees.map((v: any) => v.name || "User").join(", ")}
+                                                         </div>
+                                                       )}
+                                                     </div>
+                                                   )}
                                                 </div>
                                               );
                                             })}
@@ -4721,7 +5485,11 @@ export default function ChatPage() {
                                       msg.text &&
                                       msg.text !== `Poll: ${msg.poll?.question}` &&
                                       !isDefaultSentFileText && (
-                                        <div className={cn("inline-block text-[#111b21] max-w-full")}>
+                                        <div className={cn(
+                                          (msg.replyToText || msg.attachmentName || imageGroups[msg.id]) ? "block w-full" : "inline-block",
+                                          (msg.attachmentName || imageGroups[msg.id]) ? "px-2.5 pt-1.5 pb-1" : "",
+                                          "text-[#111b21] max-w-full"
+                                        )}>
                                           <MessageText
                                             text={msg.text}
                                             isMeBubble={msg.isMe}
@@ -4756,6 +5524,8 @@ export default function ChatPage() {
                                         )
                                       )}
                                   </div>
+                                  );
+                                  })()}
 
                                   {/* Reactions Display */}
                                   {msg.reactions && Object.keys(msg.reactions).length > 0 && (
@@ -4918,9 +5688,9 @@ export default function ChatPage() {
                       onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
                       className="w-full flex items-end gap-3 bg-transparent px-2"
                     >
-                      <div className="flex-1 flex flex-col bg-white rounded-[24px] border border-slate-200 shadow-xs overflow-hidden">
+                      <div className="flex-1 flex flex-col bg-white rounded-[24px] border border-slate-200 shadow-xs">
                         {replyingTo && (
-                          <div className="relative flex items-center justify-between bg-slate-50/70 p-2.5 border-l-4 border-brand-teal border-b border-slate-100 animate-in slide-in-from-bottom-2">
+                          <div className="relative flex items-center justify-between bg-slate-50/70 p-2.5 border-l-4 border-brand-teal border-b border-slate-100 animate-in slide-in-from-bottom-2 rounded-t-[24px]">
                             <div className="min-w-0 flex-1 pl-2">
                               <p className="text-[11px] font-bold text-brand-teal uppercase">
                                 Replying to {replyingTo.isMe ? "Yourself" : (replyingTo.sender || selectedChat.name)}
@@ -4941,48 +5711,71 @@ export default function ChatPage() {
 
                         <div className="flex items-end gap-2 px-3 py-2 min-h-[44px]">
                           {voicePreviewBlob ? (
-                            <div className="flex-1 flex items-center justify-between bg-emerald-50/50 px-3 py-1.5 rounded-xl border border-emerald-100/50 animate-in fade-in duration-300">
+                            <VoicePreviewPlayer
+                              blob={voicePreviewBlob}
+                              duration={recordingDuration}
+                              onDelete={() => { setVoicePreviewBlob(null); setRecordingDuration(0); }}
+                            />
+                          ) : isRecording ? (
+                            <div className="flex-1 flex items-center gap-2 animate-in fade-in duration-300">
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-red-500 hover:bg-red-100 rounded-full shrink-0"
-                                onClick={() => { setVoicePreviewBlob(null); setRecordingDuration(0); }}
+                                className="h-9 w-9 text-red-500 hover:bg-red-50 rounded-full shrink-0"
+                                onClick={() => { recordingActionRef.current = 'delete'; stopRecording(); }}
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-[18px] h-[18px]" />
                               </Button>
-                              <div className="flex-1 px-4 flex items-center justify-center max-w-[250px] mx-auto">
-                                <audio controls src={URL.createObjectURL(voicePreviewBlob)} className="h-8 w-full" />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono font-bold text-emerald-600 tabular-nums">
-                                  {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
-                                </span>
-                              </div>
-                            </div>
-                          ) : isRecording ? (
-                            <div className="flex-1 flex items-center justify-between bg-red-50/50 px-3 py-1.5 rounded-xl border border-red-100/50 animate-in fade-in duration-300">
-                              <div className="flex items-center gap-2">
-                                <span className="flex h-2 w-2 relative">
+
+                              <div className="flex items-center gap-1.5">
+                                <span className="flex h-2 w-2 relative shrink-0">
                                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                                 </span>
-                                <span className="text-[12px] font-bold text-red-500">Recording audio note...</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono font-bold text-red-500 tabular-nums">
+                                <span className="text-[12px] font-bold text-red-500 tabular-nums">
                                   {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
                                 </span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-red-500 hover:bg-red-100 rounded-full shrink-0"
-                                  onClick={stopRecording}
-                                >
-                                  <Square className="w-4 h-4 fill-current" />
-                                </Button>
                               </div>
+
+                              <div className="flex-1 flex items-center justify-center overflow-hidden">
+                                <div className="flex items-center gap-[2px] h-6">
+                                  {Array.from({ length: 30 }).map((_, i) => (
+                                    <div
+                                      key={i}
+                                      className="w-[3px] bg-red-400 rounded-full animate-pulse"
+                                      style={{
+                                        height: `${Math.max(4, Math.sin(Date.now() / 200 + i * 0.5) * 12 + 14)}px`,
+                                        animationDelay: `${i * 50}ms`,
+                                        opacity: 0.7
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 text-[#54656f] hover:bg-slate-100 rounded-full shrink-0"
+                                onClick={() => { recordingActionRef.current = 'preview'; stopRecording(); }}
+                              >
+                                <Pause className="w-5 h-5 fill-current" />
+                              </Button>
+
+                              <span className="text-[11px] font-mono font-bold text-red-500 tabular-nums shrink-0">
+                                {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+                              </span>
+
+                              <Button
+                                type="button"
+                                size="icon"
+                                className="h-9 w-9 bg-[#00a884] hover:bg-[#008f72] text-white rounded-full shrink-0 shadow-sm"
+                                onClick={() => { recordingActionRef.current = 'send'; stopRecording(); }}
+                              >
+                                <Send className="w-4 h-4 fill-current ml-0.5" />
+                              </Button>
                             </div>
                           ) : (
                             <>
@@ -5039,8 +5832,8 @@ export default function ChatPage() {
                                     </div>
                                     <div className="space-y-0.5">
                                       {filteredEmployees.map((emp, idx) => {
-                                        const empName = emp.name || `${emp.firstName} ${emp.lastName}`;
-                                        const initials = empName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                                        const empName = emp.name || [emp.firstName, emp.lastName].filter(Boolean).join(' ') || "Employee";
+                                        const initials = empName.split(' ').filter(Boolean).map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
                                         const isActive = idx === activeTagIndex;
                                         return (
                                           <button
@@ -6113,33 +6906,54 @@ export default function ChatPage() {
             )}
 
             {currentPreviewMsg && (
-              <img
-                src={
-                  currentPreviewMsg.attachmentUrl?.startsWith('blob:') ? currentPreviewMsg.attachmentUrl :
-                    currentPreviewMsg.attachmentUrl?.startsWith('http') ? currentPreviewMsg.attachmentUrl :
-                      `${API_URL}${currentPreviewMsg.attachmentUrl}`
-                }
-                alt={currentPreviewMsg.attachmentName}
-                className="max-w-full max-h-[75vh] object-contain select-none shadow-2xl rounded-sm"
-              />
+              currentPreviewMsg.isVoice || (currentPreviewMsg.attachmentName && /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(currentPreviewMsg.attachmentName)) ? (
+                <div className="flex flex-col items-center justify-center w-full max-w-lg">
+                  <AudioMessagePlayer msg={currentPreviewMsg} isMe={currentPreviewMsg.isMe || false} />
+                </div>
+              ) : (currentPreviewMsg.attachmentName && /\.mp4$/i.test(currentPreviewMsg.attachmentName)) ? (
+                <SmartPreviewAttachment msg={currentPreviewMsg} />
+              ) : (currentPreviewMsg.attachmentName && /\.(mov|mkv)$/i.test(currentPreviewMsg.attachmentName)) ? (
+                <video
+                  src={
+                    currentPreviewMsg.attachmentUrl?.startsWith('blob:') ? currentPreviewMsg.attachmentUrl :
+                      currentPreviewMsg.attachmentUrl?.startsWith('http') ? currentPreviewMsg.attachmentUrl :
+                        `${API_URL}${currentPreviewMsg.attachmentUrl}`
+                  }
+                  controls
+                  autoPlay
+                  className="max-w-full max-h-[75vh] object-contain shadow-2xl rounded-sm"
+                />
+              ) : (
+                <img
+                  src={
+                    currentPreviewMsg.attachmentUrl?.startsWith('blob:') ? currentPreviewMsg.attachmentUrl :
+                      currentPreviewMsg.attachmentUrl?.startsWith('http') ? currentPreviewMsg.attachmentUrl :
+                        `${API_URL}${currentPreviewMsg.attachmentUrl}`
+                  }
+                  alt={currentPreviewMsg.attachmentName}
+                  className="max-w-full max-h-[75vh] object-contain select-none shadow-2xl rounded-sm"
+                />
+              )
             )}
 
             {/* Right Nav Arrow */}
-            {currentPreviewIndex < imageMessages.length - 1 && (
-              <button
-                onClick={handleNextImage}
-                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
-              >
-                <ChevronLeft className="w-6 h-6 rotate-180" />
-              </button>
+            {currentPreviewIndex < mediaMessages.length - 1 && (
+               <button
+                 onClick={handleNextImage}
+                 className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/80 hover:bg-white text-slate-700 shadow-md border border-slate-200 rounded-full flex items-center justify-center transition z-50"
+               >
+                 <ChevronLeft className="w-6 h-6 rotate-180" />
+               </button>
             )}
           </div>
 
           {/* Bottom Thumbnail Strip Carousel */}
-          {imageMessages.length > 1 && (
+          {mediaMessages.length > 1 && (
             <div className="h-20 bg-[#f0f2f5] border-t border-slate-200 flex items-center justify-center gap-2 p-2 shrink-0 overflow-x-auto">
-              {imageMessages.map((msg) => {
+              {mediaMessages.map((msg) => {
                 const isSelected = msg.id === previewImageMsgId;
+                const isVideo = msg.attachmentName && /\.(mov|mkv)$/i.test(msg.attachmentName);
+                const isAudio = msg.isVoice || (msg.attachmentName && /\.(mp3|wav|m4a|ogg|aac|flac|webm)$/i.test(msg.attachmentName));
                 const thumbUrl = msg.attachmentUrl?.startsWith('blob:') ? msg.attachmentUrl :
                   msg.attachmentUrl?.startsWith('http') ? msg.attachmentUrl :
                     `${API_URL}${msg.attachmentUrl}`;
@@ -6152,7 +6966,20 @@ export default function ChatPage() {
                       isSelected ? "border-brand-teal scale-105" : "border-slate-300 opacity-50 hover:opacity-100"
                     )}
                   >
-                    <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                    {isVideo ? (
+                      <div className="relative w-full h-full bg-slate-900 flex items-center justify-center">
+                        <video src={thumbUrl} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/35 flex items-center justify-center text-white">
+                          <Play className="w-4 h-4 fill-current" />
+                        </div>
+                      </div>
+                    ) : isAudio ? (
+                      <div className="relative w-full h-full bg-amber-500 flex items-center justify-center">
+                        <Headphones className="w-5 h-5 text-white" />
+                      </div>
+                    ) : (
+                      <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                    )}
                   </div>
                 );
               })}
@@ -6168,11 +6995,13 @@ export default function ChatPage() {
             <DialogTitle className="text-sm font-bold text-slate-800 truncate pr-8">{pdfViewerTitle}</DialogTitle>
           </DialogHeader>
           <div className="flex-1 w-full h-full bg-slate-50 relative">
-            <iframe
-              src={pdfViewerUrl || ""}
-              className="w-full h-full border-none"
-              title="PDF Viewer"
-            />
+            {pdfViewerUrl && (
+              <iframe
+                src={pdfViewerUrl}
+                className="w-full h-full border-none"
+                title="PDF Viewer"
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -6364,6 +7193,23 @@ export default function ChatPage() {
                           ? contextMenu.msg.attachmentUrl
                           : `${API_URL}${contextMenu.msg.attachmentUrl}`;
 
+                        try {
+                          const response = await fetch(fullUrl);
+                          const originalBlob = await response.blob();
+                          if (originalBlob.type === 'image/png') {
+                            await navigator.clipboard.write([
+                              new ClipboardItem({
+                                [originalBlob.type]: originalBlob
+                              })
+                            ]);
+                            toast.success("Image copied to clipboard!");
+                            setContextMenu(null);
+                            return;
+                          }
+                        } catch (fetchErr) {
+                          console.warn("Direct image copy failed, using canvas fallback", fetchErr);
+                        }
+
                         const img = new Image();
                         img.crossOrigin = "anonymous";
                         img.src = fullUrl;
@@ -6463,6 +7309,57 @@ export default function ChatPage() {
               >
                 <Download className="w-4 h-4 text-slate-400" />
                 Save as
+              </button>
+
+              <DropdownMenuSeparator className="my-1" />
+
+              <button
+                type="button"
+                onClick={() => { handleToggleStarMessage(contextMenu.msg.id); setContextMenu(null); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <Star className="w-4 h-4 text-slate-400" />
+                Star
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { handleShareMessage(contextMenu.msg); setContextMenu(null); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <Share2 className="w-4 h-4 text-slate-400" />
+                Share
+              </button>
+
+              {contextMenu.msg.attachmentUrl && (
+                <button
+                  type="button"
+                  onClick={() => { handleOpenWith(contextMenu.msg); setContextMenu(null); }}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4 text-slate-400" />
+                  Open with
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => { handleReportMessage(contextMenu.msg.id); setContextMenu(null); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg text-left transition-colors"
+              >
+                <Flag className="w-4 h-4 text-slate-400" />
+                Report
+              </button>
+
+              <DropdownMenuSeparator className="my-1" />
+
+              <button
+                type="button"
+                onClick={() => { handleDeleteMessage(contextMenu.msg); setContextMenu(null); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg text-left transition-colors"
+              >
+                <Trash2 className="w-4 h-4 text-red-500" />
+                Delete
               </button>
             </>
           )}

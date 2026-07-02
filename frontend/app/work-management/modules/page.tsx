@@ -5,7 +5,11 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+<<<<<<< HEAD
 import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, Hand, CheckCircle, XCircle } from "lucide-react";
+=======
+import { Briefcase, Loader2, Plus, ArrowLeft, ChevronRight, User, Calendar, Filter, Pencil, Trash2, BookOpen, MessageSquare, Send, Eye, SlidersHorizontal, Key, Link2, History, Shuffle } from "lucide-react";
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -79,11 +83,11 @@ export default function ModulesPage() {
   const [loading, setLoading] = useState(true);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  const selectedProj = projects.find(p => p.id === selectedProjectId);
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
   const canManageModule = Boolean(user && (
     ['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') ||
     user.designation?.toLowerCase() === 'team leader' ||
-    selectedProj?.teamLeaderId === user.id ||
+    selectedProject?.teamLeaderId === user.id ||
     projects.some((p: any) => p.teamLeaderId === user.id)
   ));
 
@@ -96,7 +100,7 @@ export default function ModulesPage() {
   const [formData, setFormData] = useState({
     title: "",
     dueDate: "",
-    assignedToId: "",
+    assignedToId: user?.id || "",
     stage: "todo",
     priority: "medium",
     estimatedHours: 0
@@ -120,11 +124,189 @@ export default function ModulesPage() {
   const [notebookContent, setNotebookContent] = useState("");
   const [newCommentText, setNewCommentText] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
-  const [isSavingNotebook, setIsSavingNotebook] = useState(false);
+   const [isSavingNotebook, setIsSavingNotebook] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteContent, setEditNoteContent] = useState("");
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [projectLogs, setProjectLogs] = useState<any[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
   // Filters State
   const [filterPhase, setFilterPhase] = useState<string>("all");
   const [filterAssignee, setFilterAssignee] = useState<string>("all");
+
+  // Inline Editing State
+  const [editingCell, setEditingCell] = useState<{moduleName: string, phaseName: string | null, field: string} | null>(null);
+  const [quickAddModule, setQuickAddModule] = useState({
+    name: "",
+    phaseName: "",
+    stage: "todo",
+    priority: "medium",
+    estimatedHours: 0,
+    assignedToId: "",
+    dueDate: ""
+  });
+
+  const handleInlineUpdateModule = async (originalModule: any, field: string, value: any) => {
+    if (!selectedProject) return;
+    
+    const updatedModule = { ...originalModule };
+    
+    if (field === "assignedToId") {
+      const assignee = employees.find(emp => emp.id === value);
+      updatedModule.assignedToId = value === "unassigned" ? "" : value;
+      updatedModule.assignedToName = assignee ? `${assignee.firstName} ${assignee.lastName}` : null;
+    } else if (field === "name") {
+      if (!value.trim()) {
+        toast.error("Module name cannot be empty");
+        return;
+      }
+      updatedModule.name = value.trim();
+    } else {
+      updatedModule[field] = value;
+    }
+
+    if (field === "dueDate" && value) {
+      const moduleDate = new Date(value);
+      const phase = selectedProject.phases?.find((p: any) => p.name === updatedModule.phaseName);
+      if (phase && phase.endDate) {
+        if (moduleDate > new Date(phase.endDate)) {
+          toast.error("Module deadline cannot exceed Phase deadline");
+          return;
+        }
+      } else {
+        const referenceDeadlineStr = selectedProject.teamDeadline || selectedProject.endDate;
+        if (referenceDeadlineStr) {
+          if (moduleDate > new Date(referenceDeadlineStr)) {
+            toast.error(`Module deadline cannot exceed Project deadline`);
+            return;
+          }
+        }
+      }
+    }
+
+    const updatedModules = (selectedProject.modules || []).map((m: any) => 
+      (m.name === originalModule.name && m.phaseName === originalModule.phaseName) 
+        ? updatedModule 
+        : m
+    );
+
+    try {
+      const res = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...selectedProject,
+          modules: updatedModules,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        })
+      });
+      if (res.ok) {
+        toast.success("Module updated");
+        fetchData();
+      } else {
+        toast.error("Failed to update module");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error updating module");
+    }
+    setEditingCell(null);
+  };
+
+  const [quickAddInputs, setQuickAddInputs] = useState<Record<string, any>>({});
+
+  const updateQuickAddInput = (phaseKey: string, field: string, value: any) => {
+    setQuickAddInputs(prev => ({
+      ...prev,
+      [phaseKey]: {
+        ...(prev[phaseKey] || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  const handleQuickAddModule = async (phaseName: string | null) => {
+    if (!selectedProject) return;
+    const phaseKey = phaseName || "general";
+    const input = quickAddInputs[phaseKey] || {};
+    
+    if (!input.name?.trim()) {
+      toast.error("Module name is required");
+      return;
+    }
+
+    const project = selectedProject;
+    if (input.dueDate) {
+      const moduleDate = new Date(input.dueDate);
+      const phase = project.phases?.find((p: any) => p.name === phaseName);
+      if (phase && phase.endDate) {
+        if (moduleDate > new Date(phase.endDate)) {
+          toast.error("Module deadline cannot exceed Phase deadline");
+          return;
+        }
+      } else {
+        const referenceDeadlineStr = project.teamDeadline || project.endDate;
+        if (referenceDeadlineStr) {
+          if (moduleDate > new Date(referenceDeadlineStr)) {
+            toast.error(`Module deadline cannot exceed Project deadline`);
+            return;
+          }
+        }
+      }
+    }
+
+    const finalAssignedId = input.assignedToId || user?.id || "";
+    const assignee = employees.find(emp => emp.id === finalAssignedId);
+    const creatorName = user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || null;
+    
+    const newModule = {
+      name: input.name.trim(),
+      phaseName: phaseName || null,
+      dueDate: input.dueDate || null,
+      assignedToId: finalAssignedId,
+      assignedToName: assignee ? `${assignee.firstName} ${assignee.lastName}` : (finalAssignedId === user?.id ? creatorName : null),
+      stage: input.stage || "todo",
+      priority: input.priority || "medium",
+      estimatedHours: input.estimatedHours || 0
+    };
+
+    const updatedModules = [...(project.modules || []), newModule];
+
+    try {
+      const res = await fetch(`${API_URL}/projects/${project.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...project,
+          modules: updatedModules,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        })
+      });
+      if (res.ok) {
+        toast.success("Module added successfully");
+        setQuickAddInputs(prev => ({
+          ...prev,
+          [phaseKey]: {
+            name: "",
+            stage: "todo",
+            priority: "medium",
+            estimatedHours: 0,
+            assignedToId: "",
+            dueDate: ""
+          }
+        }));
+        fetchData();
+      } else {
+        toast.error("Failed to add module");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error adding module");
+    }
+  };
 
   // Credentials & Links State
   const [credModalOpen, setCredModalOpen] = useState(false);
@@ -141,21 +323,21 @@ export default function ModulesPage() {
   const [requestsSheetOpen, setRequestsSheetOpen] = useState(false);
 
   const handleOpenCreds = () => {
-    if (!selectedProj) return;
-    setCredFrontendLink(selectedProj.frontendLink || "");
-    setCredIntegrations(selectedProj.thirdPartyIntegrations || []);
+    if (!selectedProject) return;
+    setCredFrontendLink(selectedProject.frontendLink || "");
+    setCredIntegrations(selectedProject.thirdPartyIntegrations || []);
     setCredModalOpen(true);
   };
 
   const handleSaveCreds = async () => {
-    if (!selectedProj) return;
+    if (!selectedProject) return;
     setIsSavingCreds(true);
     try {
-      const res = await fetch(`${API_URL}/projects/${selectedProj.id}`, {
+      const res = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...selectedProj,
+          ...selectedProject,
           frontendLink: credFrontendLink,
           thirdPartyIntegrations: credIntegrations,
           performedBy: user?.id || "Unknown",
@@ -189,11 +371,19 @@ export default function ModulesPage() {
       ]);
       
       if (pRes.ok) {
+<<<<<<< HEAD
         let data = await pRes.json();
         data = data.filter((p: any) => p.department === 'Development');
         setProjects(data);
         if (data.length > 0 && !selectedProjectId) {
           setSelectedProjectId(data[0].id);
+=======
+        const data = await pRes.json();
+        const devProjects = data.filter((p: any) => p.department === "Development");
+        setProjects(devProjects);
+        if (devProjects.length > 0 && !selectedProjectId) {
+          setSelectedProjectId(devProjects[0].id);
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb
         }
       }
       
@@ -333,9 +523,101 @@ export default function ModulesPage() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (user?.id && !formData.assignedToId) {
+      setFormData(prev => ({ ...prev, assignedToId: user.id }));
+    }
+  }, [user]);
+
+  const projectTeamMembers = React.useMemo(() => {
+    if (!selectedProject) return [];
+    const ids = new Set<string>();
+    if (selectedProject.assignedEmployeeId) ids.add(selectedProject.assignedEmployeeId);
+    if (Array.isArray(selectedProject.assignedTeamIds)) {
+      selectedProject.assignedTeamIds.forEach((id: string) => ids.add(id));
+    }
+    if (Array.isArray(selectedProject.phases)) {
+      selectedProject.phases.forEach((p: any) => {
+        if (p.assignedToId) ids.add(p.assignedToId);
+        if (Array.isArray(p.assignedToIds)) p.assignedToIds.forEach((id: string) => ids.add(id));
+      });
+    }
+    return employees.filter(e => ids.has(e.id));
+  }, [selectedProject, employees]);
+
+  const handleAutoDistributeModules = async () => {
+    if (!selectedProject || !selectedProject.modules || selectedProject.modules.length === 0) {
+      toast.error("No modules to distribute");
+      return;
+    }
+    if (projectTeamMembers.length === 0) {
+      toast.error("No team members found for this project");
+      return;
+    }
+
+    // Sort modules by estimatedHours descending (Longest Processing Time first)
+    // Use 1 as a fallback weight if hours are not entered
+    const sortedModules = [...selectedProject.modules].sort((a, b) => {
+      const aHrs = a.estimatedHours || 1;
+      const bHrs = b.estimatedHours || 1;
+      return bHrs - aHrs;
+    });
+
+    // Initialize workload tracking
+    const team = projectTeamMembers;
+    const workload: Record<string, number> = {};
+    team.forEach(member => {
+      workload[member.id] = 0;
+    });
+
+    // Greedy assignment
+    const updatedModules = sortedModules.map(m => {
+      let lowestMember = team[0];
+      let lowestHours = Infinity;
+      
+      team.forEach(member => {
+        if (workload[member.id] < lowestHours) {
+          lowestHours = workload[member.id];
+          lowestMember = member;
+        }
+      });
+
+      const weight = m.estimatedHours || 1;
+      workload[lowestMember.id] += weight;
+      return {
+        ...m,
+        assignedToId: lowestMember.id,
+        assignedToName: `${lowestMember.firstName} ${lowestMember.lastName}`
+      };
+    });
+
+    try {
+      const res = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...selectedProject,
+          modules: updatedModules,
+          performedBy: user?.id,
+          userName: user?.name || `${user?.firstName} ${user?.lastName}`,
+        })
+      });
+
+      if (res.ok) {
+        toast.success("Modules successfully distributed and balanced across the team!");
+        fetchData();
+      } else {
+        toast.error("Failed to save distributed modules");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error distributing modules");
+    }
+  };
+
   const openAddModal = (phase: any = null) => {
     setActivePhase(phase);
-    setFormData({ title: "", dueDate: "", assignedToId: "", stage: "todo", priority: "medium" });
+    setFormData({ title: "", dueDate: "", assignedToId: user?.id || "", stage: "todo", priority: "medium", estimatedHours: 0 });
     setIsModalOpen(true);
   };
 
@@ -375,14 +657,16 @@ export default function ModulesPage() {
 
     setIsSubmitting(true);
     try {
-      const assignee = employees.find(emp => emp.id === formData.assignedToId);
+      const finalAssignedId = formData.assignedToId || user?.id || "";
+      const assignee = employees.find(emp => emp.id === finalAssignedId);
+      const creatorName = user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || null;
       
       const newModule = { 
         name: formData.title.trim(), 
         phaseName: activePhase ? activePhase.name : null,
         dueDate: formData.dueDate,
-        assignedToId: formData.assignedToId,
-        assignedToName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
+        assignedToId: finalAssignedId,
+        assignedToName: assignee ? `${assignee.firstName} ${assignee.lastName}` : (finalAssignedId === user?.id ? creatorName : null),
         stage: formData.stage,
         priority: formData.priority,
         estimatedHours: formData.estimatedHours || 0,
@@ -558,18 +842,76 @@ export default function ModulesPage() {
         })
       });
       if (res.ok) {
-        toast.success("Research notebook updated!");
-        setSelectedModule((prev: any) => ({ ...prev, researchWork: notebookContent }));
+        toast.success("Research note added!");
+        const updatedProj = await res.json();
+        const updatedModule = updatedProj.modules?.find((m: any) => m.name === selectedModule.name && m.phaseName === selectedModule.phaseName);
+        if (updatedModule) {
+          setSelectedModule(updatedModule);
+        }
+        setNotebookContent("");
         setIsEditingNotebook(false);
         fetchData();
       } else {
-        toast.error("Failed to update notebook");
+        toast.error("Failed to add research note");
       }
     } catch (err) {
-      console.error("Error updating notebook:", err);
+      console.error("Error adding research note:", err);
       toast.error("An error occurred");
     } finally {
       setIsSavingNotebook(false);
+    }
+  };
+
+  const handleSaveEditedNote = async (noteId: string) => {
+    if (!selectedModule || !selectedProjectId) return;
+    setIsSavingNotebook(true);
+    try {
+      const res = await fetch(`${API_URL}/projects/${selectedProjectId}/modules/notebook`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          moduleName: selectedModule.name,
+          phaseName: selectedModule.phaseName || null,
+          researchWork: editNoteContent,
+          performedBy: user?.id || (user as any)?.employeeId || "Unknown",
+          userName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || "User",
+          noteId: noteId
+        })
+      });
+      if (res.ok) {
+        toast.success("Research note updated!");
+        const updatedProj = await res.json();
+        const updatedModule = updatedProj.modules?.find((m: any) => m.name === selectedModule.name && m.phaseName === selectedModule.phaseName);
+        if (updatedModule) {
+          setSelectedModule(updatedModule);
+        }
+        setEditingNoteId(null);
+        setEditNoteContent("");
+        fetchData();
+      } else {
+        toast.error("Failed to update research note");
+      }
+    } catch (err) {
+      console.error("Error updating research note:", err);
+      toast.error("An error occurred");
+    } finally {
+      setIsSavingNotebook(false);
+    }
+  };
+
+  const fetchProjectLogs = async () => {
+    if (!selectedProjectId) return;
+    setIsLoadingLogs(true);
+    setLogsOpen(true);
+    try {
+      const res = await fetch(`${API_URL}/task-logs?projectId=${selectedProjectId}`);
+      if (res.ok) {
+        setProjectLogs(await res.json());
+      }
+    } catch (err) {
+      console.error("Error fetching project logs:", err);
+    } finally {
+      setIsLoadingLogs(false);
     }
   };
 
@@ -617,8 +959,11 @@ export default function ModulesPage() {
     }
   };
 
+<<<<<<< HEAD
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const visibleProjects = projects;
+=======
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb
 
   return (
     <div className="space-y-4 h-[calc(100vh-140px)] flex flex-col">
@@ -703,6 +1048,24 @@ export default function ModulesPage() {
                         >
                           <Key className="w-3.5 h-3.5 text-brand-teal" /> Integrations & Credentials {(selectedProject.thirdPartyIntegrations?.length || 0) > 0 && `(${selectedProject.thirdPartyIntegrations.length})`}
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={fetchProjectLogs}
+                          className="h-7 text-xs font-bold gap-1.5 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
+                        >
+                          <History className="w-3.5 h-3.5 text-brand-teal" /> View Activity Logs
+                        </Button>
+                        {canManageModule && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleAutoDistributeModules}
+                            className="h-7 text-xs font-bold gap-1.5 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
+                          >
+                            <Shuffle className="w-3.5 h-3.5 text-brand-teal" /> Auto-Distribute Modules
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -729,6 +1092,7 @@ export default function ModulesPage() {
                       </Select>
                     )}
 
+<<<<<<< HEAD
                     {user?.role !== "Employee" && user?.role !== "Intern" && (
                       <Select value={filterAssignee} onValueChange={setFilterAssignee}>
                         <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
@@ -745,6 +1109,22 @@ export default function ModulesPage() {
                         </SelectContent>
                       </Select>
                     )}
+=======
+                    <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+                      <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
+                        <SelectValue placeholder="All Assignees" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Assignees</SelectItem>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {projectTeamMembers.map(emp => (
+                          <SelectItem key={emp.id} value={emp.id}>
+                            {emp.firstName} {emp.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb
 
                     {((selectedProject?.phases?.length > 0) || (user?.role !== "Employee" && user?.role !== "Intern")) && (
                       <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
@@ -774,46 +1154,253 @@ export default function ModulesPage() {
                       </div>
                     )}
                   </div>
-                </div>
+                </div>                <div className="flex-1 bg-slate-50/30 overflow-y-auto min-h-0 custom-scrollbar">
+                  {(() => {
+                    const phases = selectedProject.phases || [];
+                    const modules = selectedProject.modules || [];
+                    
+                    const renderPhaseTable = (phaseName: string | null, displayName: string) => {
+                      const phaseModules = modules.filter((m: any) => {
+                        const matchPhase = phaseName === null ? !m.phaseName : m.phaseName === phaseName;
+                        const matchAssignee = filterAssignee === "all" || 
+                          (filterAssignee === "unassigned" ? !m.assignedToId : m.assignedToId === filterAssignee);
+                        return matchPhase && matchAssignee;
+                      });
 
-                <div className="flex-1 bg-slate-50/30 overflow-y-auto min-h-0">
-                  {(selectedProject.modules && selectedProject.modules.length > 0) ? (
-                    <div className="p-6 pt-4">
-                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                        <Table>
-                          <TableHeader className="bg-slate-50/80">
-                            <TableRow className="hover:bg-transparent">
-                              <TableHead className="font-bold text-slate-700 h-12">Module Name</TableHead>
-                              {selectedProject.phases?.length > 0 && (
-                                <TableHead className="font-bold text-slate-700 h-12">Phase</TableHead>
+                      // If there are no modules in this phase, and user cannot manage modules, hide the slab
+                      if (!canManageModule && phaseModules.length === 0) {
+                        return null;
+                      }
+
+                      const phaseKey = phaseName || "general";
+                      const input = quickAddInputs[phaseKey] || {
+                        name: "",
+                        stage: "todo",
+                        priority: "medium",
+                        estimatedHours: 0,
+                        assignedToId: "",
+                        dueDate: ""
+                      };
+
+                      return (
+                        <div key={phaseKey} className="p-6 pb-2">
+                          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+                            <div className="p-4 px-5 border-b border-slate-200 bg-slate-50/60 flex items-center justify-between">
+                              <h3 className="font-extrabold text-sm text-slate-800 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-brand-teal" />
+                                {displayName}
+                              </h3>
+                              {phaseName && (
+                                <span className="text-[10px] font-extrabold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-md shadow-2xs">
+                                  {phases.find((p: any) => p.name === phaseName)?.startDate} to {phases.find((p: any) => p.name === phaseName)?.endDate}
+                                </span>
                               )}
-                              <TableHead className="font-bold text-slate-700 h-12">Stage</TableHead>
-                              <TableHead className="font-bold text-slate-700 h-12">Priority</TableHead>
-                              <TableHead className="font-bold text-slate-700 h-12">Hours</TableHead>
-                              <TableHead className="font-bold text-slate-700 h-12">Assigned To</TableHead>
-                              <TableHead className="font-bold text-slate-700 h-12">Due Date</TableHead>
-                              <TableHead className="font-bold text-slate-700 h-12 w-24 text-center">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {(() => {
-                              const filteredModules = selectedProject.modules.filter((m: any) => {
-                                const matchPhase = filterPhase === "all" || m.phaseName === filterPhase;
-                                const matchAssignee = filterAssignee === "all" || 
-                                  (filterAssignee === "unassigned" ? !m.assignedToId : m.assignedToId === filterAssignee);
-                                return matchPhase && matchAssignee;
-                              });
+                            </div>
 
-                              if (filteredModules.length === 0) {
-                                return (
-                                  <TableRow>
-                                    <TableCell colSpan={selectedProject.phases?.length > 0 ? 8 : 7} className="h-24 text-center text-slate-500">
-                                      No modules match the selected filters.
+                            <Table>
+                              <TableHeader className="bg-slate-50/30">
+                                <TableRow className="hover:bg-transparent">
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Module Name</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Stage</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Priority</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Hours</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Assigned To</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2">Due Date</TableHead>
+                                  <TableHead className="font-bold text-slate-700 h-10 py-2 w-24 text-center">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {phaseModules.map((m: any, idx: number) => (
+                                  <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                    <TableCell className="font-bold text-slate-800 py-3">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "name" ? (
+                                        <Input
+                                          defaultValue={m.name}
+                                          onBlur={(e) => handleInlineUpdateModule(m, "name", e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") handleInlineUpdateModule(m, "name", (e.target as any).value);
+                                          }}
+                                          autoFocus
+                                          className="h-8 text-xs font-bold"
+                                        />
+                                      ) : (
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-brand-teal" />
+                                          <span 
+                                            onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "name" })}
+                                            className={canManageModule ? "cursor-pointer hover:underline" : ""}
+                                          >
+                                            {m.name}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </TableCell>
+
+                                    <TableCell className="py-3">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "stage" ? (
+                                        <Select 
+                                          defaultValue={m.stage || "todo"} 
+                                          onValueChange={(val) => handleInlineUpdateModule(m, "stage", val)}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs bg-white">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="todo">To Do</SelectItem>
+                                            <SelectItem value="in_progress">In Progress</SelectItem>
+                                            <SelectItem value="completed">Completed</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "stage" })}
+                                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold capitalize ${
+                                            m.stage === "completed" 
+                                              ? "bg-green-100 text-green-800" 
+                                              : m.stage === "in_progress" 
+                                              ? "bg-blue-100 text-blue-800" 
+                                              : "bg-slate-100 text-slate-800"
+                                          } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
+                                        >
+                                          {(m.stage || "todo").replace("_", " ")}
+                                        </span>
+                                      )}
+                                    </TableCell>
+
+                                    <TableCell className="py-3">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "priority" ? (
+                                        <Select 
+                                          defaultValue={m.priority || "medium"} 
+                                          onValueChange={(val) => handleInlineUpdateModule(m, "priority", val)}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs bg-white">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="low">Low</SelectItem>
+                                            <SelectItem value="medium">Medium</SelectItem>
+                                            <SelectItem value="high">High</SelectItem>
+                                            <SelectItem value="urgent">Urgent</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "priority" })}
+                                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
+                                            m.priority === "urgent"
+                                              ? "bg-red-100 text-red-800"
+                                              : m.priority === "high"
+                                              ? "bg-orange-100 text-orange-800"
+                                              : m.priority === "medium"
+                                              ? "bg-blue-100 text-blue-800"
+                                              : "bg-slate-100 text-slate-800"
+                                          } ${canManageModule ? "cursor-pointer hover:opacity-80" : ""}`}
+                                        >
+                                          {m.priority || "medium"}
+                                        </span>
+                                      )}
+                                    </TableCell>
+
+                                    <TableCell className="py-3 font-semibold text-xs text-slate-600">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "estimatedHours" ? (
+                                        <Input
+                                          type="number"
+                                          defaultValue={m.estimatedHours || 0}
+                                          onBlur={(e) => handleInlineUpdateModule(m, "estimatedHours", parseFloat(e.target.value) || 0)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") handleInlineUpdateModule(m, "estimatedHours", parseFloat((e.target as any).value) || 0);
+                                          }}
+                                          autoFocus
+                                          className="h-8 text-xs w-20"
+                                        />
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "estimatedHours" })}
+                                          className={canManageModule ? "cursor-pointer hover:underline" : ""}
+                                        >
+                                          {m.estimatedHours ? `${m.estimatedHours} hrs` : "—"}
+                                        </span>
+                                      )}
+                                    </TableCell>
+
+                                    <TableCell className="py-3">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "assignedToId" ? (
+                                        <Select 
+                                          defaultValue={m.assignedToId || "unassigned"} 
+                                          onValueChange={(val) => handleInlineUpdateModule(m, "assignedToId", val)}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs bg-white w-32">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                                            {projectTeamMembers.map(emp => (
+                                              <SelectItem key={emp.id} value={emp.id}>
+                                                {emp.firstName} {emp.lastName}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "assignedToId" })}
+                                          className={`text-xs font-bold ${m.assignedToName ? "text-slate-700" : "text-slate-400 italic"} ${canManageModule ? "cursor-pointer hover:underline" : ""}`}
+                                        >
+                                          {m.assignedToName || "Unassigned"}
+                                        </span>
+                                      )}
+                                    </TableCell>
+
+                                    <TableCell className="py-3 text-xs font-semibold text-slate-600">
+                                      {editingCell?.moduleName === m.name && editingCell?.phaseName === m.phaseName && editingCell?.field === "dueDate" ? (
+                                        <Input
+                                          type="date"
+                                          defaultValue={m.dueDate || ""}
+                                          onBlur={(e) => handleInlineUpdateModule(m, "dueDate", e.target.value || null)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") handleInlineUpdateModule(m, "dueDate", (e.target as any).value || null);
+                                          }}
+                                          autoFocus
+                                          className="h-8 text-xs w-32"
+                                        />
+                                      ) : (
+                                        <span 
+                                          onClick={() => canManageModule && setEditingCell({ moduleName: m.name, phaseName: m.phaseName, field: "dueDate" })}
+                                          className={canManageModule ? "cursor-pointer hover:underline" : ""}
+                                        >
+                                          {m.dueDate || "Not set"}
+                                        </span>
+                                      )}
+                                    </TableCell>
+
+                                    <TableCell className="py-3 text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          onClick={() => openEditModule(m, phases.find((p: any) => p.name === m.phaseName) || null)}
+                                          className="w-7 h-7 text-brand-teal hover:bg-brand-teal/10 rounded-md cursor-pointer"
+                                          title="Open Notebook"
+                                        >
+                                          <BookOpen className="w-3.5 h-3.5" />
+                                        </Button>
+                                        {canManageModule && (
+                                          <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={(e) => handleDeleteModule(e, m)}
+                                            className="w-7 h-7 text-red-500 hover:bg-red-50 rounded-md cursor-pointer"
+                                            title="Delete Module"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </Button>
+                                        )}
+                                      </div>
                                     </TableCell>
                                   </TableRow>
-                                );
-                              }
+                                ))}
 
+<<<<<<< HEAD
                               return filteredModules.map((m: any, i: number) => {
                                 const phase = selectedProject.phases?.find((p: any) => p.name === m.phaseName);
                                 return (
@@ -892,24 +1479,149 @@ export default function ModulesPage() {
                             })()}
                           </TableBody>
                         </Table>
+=======
+                                {canManageModule && (
+                                  <TableRow className="bg-slate-50/10 hover:bg-slate-50/20 border-t border-dashed border-slate-200">
+                                    <TableCell className="py-2.5">
+                                      <Input
+                                        placeholder="Add module..."
+                                        value={input.name || ""}
+                                        onChange={(e) => updateQuickAddInput(phaseKey, "name", e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleQuickAddModule(phaseName);
+                                        }}
+                                        className="h-8 text-xs font-semibold bg-white"
+                                      />
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Select 
+                                        value={input.stage || "todo"} 
+                                        onValueChange={(val) => updateQuickAddInput(phaseKey, "stage", val)}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs bg-white">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="todo">To Do</SelectItem>
+                                          <SelectItem value="in_progress">In Progress</SelectItem>
+                                          <SelectItem value="completed">Completed</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Select 
+                                        value={input.priority || "medium"} 
+                                        onValueChange={(val) => updateQuickAddInput(phaseKey, "priority", val)}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs bg-white">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="low">Low</SelectItem>
+                                          <SelectItem value="medium">Medium</SelectItem>
+                                          <SelectItem value="high">High</SelectItem>
+                                          <SelectItem value="urgent">Urgent</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Input
+                                        type="number"
+                                        placeholder="Hrs"
+                                        value={input.estimatedHours === undefined ? "" : input.estimatedHours}
+                                        onChange={(e) => updateQuickAddInput(phaseKey, "estimatedHours", parseFloat(e.target.value) || 0)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleQuickAddModule(phaseName);
+                                        }}
+                                        className="h-8 text-xs font-semibold bg-white w-20"
+                                      />
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Select 
+                                        value={input.assignedToId || "unassigned"} 
+                                        onValueChange={(val) => updateQuickAddInput(phaseKey, "assignedToId", val)}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs bg-white w-32">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="unassigned">Unassigned</SelectItem>
+                                          {projectTeamMembers.map(emp => (
+                                            <SelectItem key={emp.id} value={emp.id}>
+                                              {emp.firstName} {emp.lastName}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5">
+                                      <Input
+                                        type="date"
+                                        value={input.dueDate || ""}
+                                        onChange={(e) => updateQuickAddInput(phaseKey, "dueDate", e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleQuickAddModule(phaseName);
+                                        }}
+                                        className="h-8 text-xs font-medium bg-white"
+                                      />
+                                    </TableCell>
+
+                                    <TableCell className="py-2.5 text-center">
+                                      <Button
+                                        type="button"
+                                        onClick={() => handleQuickAddModule(phaseName)}
+                                        className="h-8 px-3 bg-brand-teal text-white hover:bg-brand-teal-light text-xs font-bold cursor-pointer"
+                                      >
+                                        Add
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      );
+                    };
+
+                    const hasModulesOrPhases = (selectedProject.modules && selectedProject.modules.length > 0) || (phases.length > 0);
+
+                    if (!hasModulesOrPhases) {
+                      return (
+                        <div className="flex flex-col items-center justify-center h-full py-16">
+                          <div className="bg-white p-8 rounded-2xl border border-dashed border-slate-300 flex flex-col items-center max-w-md text-center">
+                            <Briefcase className="w-12 h-12 text-slate-300 mb-4" />
+                            <h3 className="text-xl font-bold text-slate-700 mb-2">No Modules Found</h3>
+                            <p className="text-sm text-slate-500 mb-6">This project does not have any modules set up yet. Get started by adding your first module.</p>
+                            <Button 
+                              onClick={() => openAddModal(null)}
+                              className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-11 px-6 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4 mr-1.5" /> Add Module
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="pb-8 space-y-2">
+                        {/* Render table for each phase */}
+                        {phases.map((p: any) => renderPhaseTable(p.name, p.name))}
+                        
+                        {/* Render General/Unassigned modules slab */}
+                        {((modules.some((m: any) => !m.phaseName) || phases.length === 0)) && 
+                          renderPhaseTable(null, "General / Unassigned Modules")
+                        }
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full py-16">
-                      <div className="bg-white p-8 rounded-2xl border border-dashed border-slate-300 flex flex-col items-center max-w-md text-center">
-                        <Briefcase className="w-12 h-12 text-slate-300 mb-4" />
-                        <h3 className="text-xl font-bold text-slate-700 mb-2">No Modules Found</h3>
-                        <p className="text-sm text-slate-500 mb-6">This project does not have any modules set up yet. Get started by adding your first module.</p>
-                        <Button 
-                          onClick={() => openAddModal(null)}
-                          className="bg-brand-teal hover:bg-brand-teal-light text-white font-bold h-11 px-6"
-                        >
-                          <Plus className="w-5 h-5 mr-2" />
-                          Add First Module
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </>
             ) : (
@@ -988,7 +1700,7 @@ export default function ModulesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {employees.map(emp => (
+                  {projectTeamMembers.map(emp => (
                     <SelectItem key={emp.id} value={emp.id}>
                       {emp.firstName} {emp.lastName}
                     </SelectItem>
@@ -1012,7 +1724,6 @@ export default function ModulesPage() {
                     <SelectItem value="in-progress">In Progress</SelectItem>
                     <SelectItem value="bugs">Bugs</SelectItem>
                     <SelectItem value="onhold">On Hold</SelectItem>
-                    <SelectItem value="fix-bugs">Fix Bugs</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1131,13 +1842,7 @@ export default function ModulesPage() {
 
             <TabsContent value="notebook" className="flex-1 min-h-0 p-6 m-0 overflow-hidden focus-visible:outline-none focus-visible:ring-0">
               {(() => {
-                const isAssignee = user && selectedModule && (
-                  selectedModule.assignedToId === user.id || 
-                  selectedModule.assignedToId === (user as any).employeeId
-                );
-                const isUnassigned = selectedModule && !selectedModule.assignedToId;
-                const isAdminOrTL = canManageModule;
-                const canEditResearch = Boolean(isAssignee || isUnassigned || isAdminOrTL);
+                const canEditResearch = true;
 
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-6 h-full min-h-0">
@@ -1152,34 +1857,30 @@ export default function ModulesPage() {
                           <Button 
                             size="sm" 
                             variant="outline" 
-                            onClick={() => setIsEditingNotebook(true)}
+                            onClick={() => {
+                              setNotebookContent("");
+                              setIsEditingNotebook(true);
+                            }}
                             className="h-8 text-xs font-bold text-brand-teal border-brand-teal/30 hover:bg-brand-teal/5 cursor-pointer"
                           >
-                            <Pencil className="w-3 h-3 mr-1.5" />
-                            {selectedModule?.researchWork ? "Edit Notes" : "Add Notes"}
+                            <Plus className="w-3 h-3 mr-1.5" />
+                            Add Note
                           </Button>
                         )}
                         {isEditingNotebook && (
                           <div className="flex items-center gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => { setIsEditingNotebook(false); setNotebookContent(selectedModule?.researchWork || ""); }} className="h-8 text-xs font-semibold text-slate-500 cursor-pointer">
+                            <Button size="sm" variant="ghost" onClick={() => { setIsEditingNotebook(false); setNotebookContent(""); }} className="h-8 text-xs font-semibold text-slate-500 cursor-pointer">
                               Cancel
                             </Button>
                             <Button size="sm" onClick={handleSaveNotebook} disabled={isSavingNotebook} className="h-8 text-xs font-bold bg-brand-teal hover:bg-brand-teal/90 text-white shadow-sm cursor-pointer">
                               {isSavingNotebook && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
-                              Save Notes
+                              Save Note
                             </Button>
                           </div>
                         )}
                       </div>
 
                       <div className="flex-1 overflow-y-auto p-5 min-h-0 custom-scrollbar relative">
-                        {!canEditResearch && (
-                          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-amber-800 text-xs mb-4 shadow-2xs">
-                            <Eye className="w-4 h-4 text-amber-600 shrink-0" />
-                            <span>You have <strong>view-only access</strong> to this research work. You can collaborate by adding comments on the right.</span>
-                          </div>
-                        )}
-
                         {isEditingNotebook ? (
                           <div className="h-full flex flex-col -mx-2">
                             <style>{`
@@ -1196,27 +1897,89 @@ export default function ModulesPage() {
                               className="flex-1 flex flex-col notebook-editor"
                             />
                           </div>
+                        ) : (selectedModule?.researchNotes && selectedModule.researchNotes.length > 0) ? (
+                          <div className="space-y-4">
+                            {selectedModule.researchNotes.map((note: any, idx: number) => {
+                              const isOwnNote = user && (note.userId === user.id || note.userId === (user as any).employeeId);
+                              return (
+                                <div key={note.id || idx} className="p-4 bg-slate-50/40 border border-slate-200 rounded-xl shadow-xs">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 rounded-full bg-brand-teal/10 text-brand-teal flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                                        {note.userName ? note.userName[0] : 'U'}
+                                      </div>
+                                      <span className="font-bold text-xs text-slate-800">{note.userName}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-[10px] text-slate-400 font-semibold">
+                                        {note.createdAt} {note.editedAt && `(Edited ${note.editedAt})`}
+                                      </span>
+                                      {isOwnNote && editingNoteId !== note.id && (
+                                        <button 
+                                          onClick={() => {
+                                            setEditingNoteId(note.id);
+                                            setEditNoteContent(note.content);
+                                          }}
+                                          className="text-xs font-bold text-brand-teal hover:underline cursor-pointer"
+                                        >
+                                          Edit
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {editingNoteId === note.id ? (
+                                    <div className="space-y-3 mt-2">
+                                      <ReactQuill
+                                        theme="snow"
+                                        modules={quillModules}
+                                        value={editNoteContent}
+                                        onChange={setEditNoteContent}
+                                        className="bg-white rounded-lg"
+                                      />
+                                      <div className="flex justify-end gap-2">
+                                        <Button size="sm" variant="ghost" onClick={() => setEditingNoteId(null)} className="h-7 text-xs font-semibold">
+                                          Cancel
+                                        </Button>
+                                        <Button size="sm" onClick={() => handleSaveEditedNote(note.id)} disabled={isSavingNotebook} className="h-7 text-xs font-bold bg-brand-teal text-white">
+                                          {isSavingNotebook && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                                          Save
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="ql-container ql-snow border-none !font-sans">
+                                      <div 
+                                        className="ql-editor !p-0 text-slate-800 text-sm leading-relaxed whitespace-pre-wrap select-text"
+                                        dangerouslySetInnerHTML={{ __html: note.content }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         ) : selectedModule?.researchWork ? (
-                          <div className="ql-container ql-snow border-none !font-sans">
-                            <div 
-                              className="ql-editor !p-0 text-slate-800 text-sm leading-relaxed whitespace-pre-wrap select-text"
-                              dangerouslySetInnerHTML={{ __html: selectedModule.researchWork }}
-                            />
+                          <div className="p-4 bg-slate-50/40 border border-slate-200 rounded-xl shadow-xs">
+                            <div className="ql-container ql-snow border-none !font-sans">
+                              <div 
+                                className="ql-editor !p-0 text-slate-800 text-sm leading-relaxed whitespace-pre-wrap select-text"
+                                dangerouslySetInnerHTML={{ __html: selectedModule.researchWork }}
+                              />
+                            </div>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center justify-center h-full text-center py-16 text-slate-400">
                             <BookOpen className="w-12 h-12 stroke-1 mb-3 opacity-40 text-slate-300" />
-                            <p className="text-sm font-semibold text-slate-600">No Research Work Added</p>
+                            <p className="text-sm font-semibold text-slate-600">No Research Notes Added</p>
                             <p className="text-xs text-slate-400 mt-1 max-w-xs">Research notes, links, and documentation will appear here once added.</p>
-                            {canEditResearch && (
-                              <Button 
-                                size="sm" 
-                                onClick={() => setIsEditingNotebook(true)}
-                                className="mt-5 bg-brand-teal hover:bg-brand-teal/90 text-white font-bold text-xs h-9 px-4 shadow-sm cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5 mr-1.5" /> Start Research Work
-                              </Button>
-                            )}
+                            <Button 
+                              size="sm" 
+                              onClick={() => setIsEditingNotebook(true)}
+                              className="mt-5 bg-brand-teal hover:bg-brand-teal/90 text-white font-bold text-xs h-9 px-4 shadow-sm cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5 mr-1.5" /> Start Research Notes
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -1317,7 +2080,7 @@ export default function ModulesPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unassigned" className="text-xs">Unassigned</SelectItem>
-                          {employees.map(emp => (
+                          {projectTeamMembers.map(emp => (
                             <SelectItem key={emp.id} value={emp.id} className="text-xs">
                               {emp.firstName} {emp.lastName}
                             </SelectItem>
@@ -1341,7 +2104,6 @@ export default function ModulesPage() {
                             <SelectItem value="in-progress" className="text-xs">In Progress</SelectItem>
                             <SelectItem value="bugs" className="text-xs">Bugs</SelectItem>
                             <SelectItem value="onhold" className="text-xs">On Hold</SelectItem>
-                            <SelectItem value="fix-bugs" className="text-xs">Fix Bugs</SelectItem>
                             <SelectItem value="completed" className="text-xs">Completed</SelectItem>
                           </SelectContent>
                         </Select>
@@ -1524,6 +2286,7 @@ export default function ModulesPage() {
         </DialogContent>
       </Dialog>
 
+<<<<<<< HEAD
       {/* Assignment Request Modal */}
       <Dialog open={assignmentModalOpen} onOpenChange={setAssignmentModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
@@ -1602,13 +2365,70 @@ export default function ModulesPage() {
                         </Button>
                       </div>
                     )}
+=======
+      {/* Activity Logs Dialog */}
+      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 gap-0 bg-slate-50 border-slate-200 shadow-2xl">
+          <div className="p-6 pb-4 bg-white border-b border-slate-200 shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2.5">
+                  <History className="w-5 h-5 text-brand-teal" />
+                  Project Activity Logs
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500 mt-1">
+                  Historical record of all module and notebook changes for this project.
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+            {isLoadingLogs ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                <Loader2 className="w-8 h-8 animate-spin text-brand-teal mb-3" />
+                <p className="text-sm font-medium">Loading activity history...</p>
+              </div>
+            ) : projectLogs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
+                <History className="w-12 h-12 stroke-1 mb-3 opacity-40 text-slate-300" />
+                <p className="text-sm font-semibold text-slate-600">No Activity Logs Found</p>
+                <p className="text-xs text-slate-400 mt-1">Activities such as creating modules, updating stages, and adding research notes will be logged here.</p>
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {projectLogs.map((log: any) => (
+                  <div key={log.id} className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs transition-all hover:border-slate-300">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-brand-teal/10 text-brand-teal border border-brand-teal/20">
+                        {log.action}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-bold">{log.timestamp}</span>
+                    </div>
+                    <p className="text-sm text-slate-800 font-medium leading-relaxed">{log.details}</p>
+                    <div className="mt-2.5 pt-2 border-t border-slate-100/60 flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold">
+                      <span>Performed by:</span>
+                      <strong className="text-slate-700">{log.userName}</strong>
+                    </div>
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb
                   </div>
                 ))}
               </div>
             )}
           </div>
+<<<<<<< HEAD
         </SheetContent>
       </Sheet>
+=======
+
+          <div className="p-4 border-t border-slate-200 bg-white flex justify-end shrink-0">
+            <Button variant="outline" onClick={() => setLogsOpen(false)} className="font-bold text-xs h-9 px-4 cursor-pointer">
+              Close History
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb
     </div>
   );
 }

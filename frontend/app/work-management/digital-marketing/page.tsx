@@ -33,6 +33,8 @@ import {
   FileSpreadsheet,
   FileX,
   Settings,
+  Maximize,
+  Minimize,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
@@ -40,6 +42,7 @@ import { exportToPDF, exportToExcel } from "@/lib/export-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -79,6 +82,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { useUser } from "@/hooks/useUser";
 import { API_URL } from "@/lib/config";
 import { toast } from "sonner";
@@ -220,6 +224,7 @@ export default function MarketingReportsPage() {
   const [activeTab, setActiveTab] = useState("daily");
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [projectRemarks, setProjectRemarks] = useState<any[]>([]);
+  const [showAddForm, setShowAddForm] = useState(true);
   const [editingRemarks, setEditingRemarks] = useState<string[]>([]);
 
   const handleUpdateProjectRemark = async (projectId: string, dateStr: string, remark: string, clientId?: string) => {
@@ -356,7 +361,7 @@ export default function MarketingReportsPage() {
   >(null);
 
   const isActiveClientOnHold = clients?.find((c: any) => c.id === selectedClientForCampaigns)?.status === "on-hold";
-  const [selectedClientFilter, setSelectedClientFilter] = useState("all");
+  const [selectedClientFilter, setSelectedClientFilter] = useState("");
   // Pagination State
   const [dailyPage, setDailyPage] = useState(1);
   const [dailyItemsPerPage, setDailyItemsPerPage] = useState(10);
@@ -375,61 +380,77 @@ export default function MarketingReportsPage() {
     [key: string]: string;
   }>({});
 
-  const [paymentProject, setPaymentProject] = useState<any>(null);
-  const [paymentSettingsOpen, setPaymentSettingsOpen] = useState(false);
-  const [paymentStartDate, setPaymentStartDate] = useState<string>("");
-  const [paymentDurationMonths, setPaymentDurationMonths] = useState<string>("");
-  const [isPaymentReceived, setIsPaymentReceived] = useState<boolean>(false);
+  const [dailyMetricsProject, setDailyMetricsProject] = useState<any>(null);
+  const [dailyMetricsOpen, setDailyMetricsOpen] = useState(false);
+  const [isDailyFullScreen, setIsDailyFullScreen] = useState(false);
+  const [taskFilterType, setTaskFilterType] = useState<"my" | "all">("all");
+  const [dailyMetricsData, setDailyMetricsData] = useState({
+    revenue: 0,
+    followers: 0,
+    userRemark: "",
+    clientRemark: "",
+    remark: ""
+  });
+  const [projectEndDate, setProjectEndDate] = useState<string>("");
+  const [isSavingDailyMetrics, setIsSavingDailyMetrics] = useState(false);
   
   const [systemSettings, setSystemSettings] = useState<any>(null);
 
-  const handleSavePaymentSettings = async () => {
-    if (!paymentProject) return;
+  const fetchDailyMetricsData = async (projectId: string, dateStr: string) => {
     try {
-      const startDate = paymentStartDate ? new Date(paymentStartDate) : null;
-      let endDateStr = null;
-      
-      if (startDate && paymentDurationMonths) {
-        const months = parseInt(paymentDurationMonths, 10);
-        if (!isNaN(months) && months > 0) {
-           const endDate = new Date(startDate);
-           endDate.setMonth(endDate.getMonth() + months);
-           
-           // Calculate on-hold days using existing function
-           const days = calculateProjectDays(paymentProject);
-           if (days.onHold > 0) {
-             endDate.setDate(endDate.getDate() + days.onHold);
-           }
-           
-           endDateStr = endDate.toISOString().split('T')[0];
+      const res = await fetch(`${API_URL}/marketing/project-remarks?projectId=${projectId}&startDate=${dateStr}&endDate=${dateStr}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const m = data[0];
+          setDailyMetricsData({
+            revenue: m.revenue || 0,
+            followers: m.followers || 0,
+            userRemark: m.userRemark || "",
+            clientRemark: m.clientRemark || "",
+            remark: m.remark || ""
+          });
+        } else {
+          setDailyMetricsData({ revenue: 0, followers: 0, userRemark: "", clientRemark: "", remark: "" });
         }
       }
-      
-      const payload: any = {
-        paymentStartDate: paymentStartDate || null,
-        paymentDurationMonths: paymentDurationMonths ? parseInt(paymentDurationMonths, 10) : null,
-        paymentEndDate: endDateStr,
-        isPaymentReceived: isPaymentReceived,
-        performedBy: user?.id,
-        userName: user?.name
-      };
-      
-      const res = await fetch(`${API_URL}/projects/${paymentProject.id}`, {
-        method: "PUT",
+    } catch (error) {
+      console.error("Failed to fetch daily metrics", error);
+    }
+  };
+
+  const handleSaveDailyMetrics = async () => {
+    if (!dailyMetricsProject || !dateRange?.from) return;
+    setIsSavingDailyMetrics(true);
+    try {
+      const dateStr = format(dateRange.from, "yyyy-MM-dd");
+      const res = await fetch(`${API_URL}/marketing/project-remarks`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          projectId: dailyMetricsProject.id,
+          clientId: dailyMetricsProject.clientId,
+          date: dateStr,
+          revenue: dailyMetricsData.revenue,
+          followers: dailyMetricsData.followers,
+          userRemark: dailyMetricsData.userRemark,
+          clientRemark: dailyMetricsData.clientRemark,
+          remark: dailyMetricsData.remark
+        })
       });
-      
       if (res.ok) {
-        toast.success("Payment settings saved successfully");
-        fetchProjects();
-        setPaymentSettingsOpen(false);
+        toast.success("Daily metrics saved successfully");
+        setDailyMetricsOpen(false);
+        fetchData();
+        fetchClients();
       } else {
-        toast.error("Failed to save payment settings");
+        toast.error("Failed to save metrics");
       }
     } catch (error) {
       console.error(error);
-      toast.error("An error occurred while saving payment settings");
+      toast.error("An error occurred while saving metrics");
+    } finally {
+      setIsSavingDailyMetrics(false);
     }
   };
 
@@ -602,8 +623,24 @@ export default function MarketingReportsPage() {
     spend: 0,
     cpl: 0,
     remarks: "",
+    leadsFileUrl: "",
     campaignOptimization: false,
   });
+
+  const [quickAddData, setQuickAddData] = useState({
+    date: "",
+    projectId: "",
+    projectName: "",
+    campaignName: "",
+    reach: 0,
+    impression: 0,
+    leads: 0,
+    spend: 0,
+    cpl: 0,
+    remarks: "",
+    leadsFileUrl: "",
+  });
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
 
   const [monthlyFormData, setMonthlyFormData] = useState({
     projectId: "",
@@ -631,169 +668,7 @@ export default function MarketingReportsPage() {
     }
   }, [router, permissionsLoading, canViewMarketing]);
 
-  const hasGeneratedForDateRef = useRef<string>("");
   const fetchedDateRef = useRef<string>("");
-
-  useEffect(() => {
-    if (activeTab !== "daily" || !dateRange || clients.length === 0 || loading)
-      return;
-
-    // Do not auto-generate for future dates
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    const todayStr = `${year}-${month}-${day}`;
-    const yesterdayDate = subDays(startOfToday(), 1);
-    const yesterdayStr = format(yesterdayDate, "yyyy-MM-dd");
-
-    // Check if yesterday is in the selected date range
-    let inRange = false;
-    if (dateRange?.from) {
-      const fromD = dateRange.from;
-      const toD = dateRange.to || dateRange.from;
-      if (yesterdayDate >= fromD && yesterdayDate <= toD) {
-        inRange = true;
-      }
-    }
-
-    if (!inRange) return;
-
-    const startStr = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
-    const endStr = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
-    const fetchKey = `${startStr}_${endStr}`;
-
-    if (fetchedDateRef.current !== fetchKey) return; // Wait until data for this range is fetched
-
-    if (hasGeneratedForDateRef.current === yesterdayStr) return;
-
-    hasGeneratedForDateRef.current = yesterdayStr;
-
-    const checkAndGenerate = async () => {
-      const datesToCheck = [yesterdayStr];
-      const today = new Date();
-      // Also check past 2 days to ensure weekends are covered
-      for (let i = 2; i <= 3; i++) {
-        const pastD = new Date(today);
-        pastD.setDate(today.getDate() - i);
-        const pastStr = pastD.toISOString().split("T")[0];
-        if (!datesToCheck.includes(pastStr)) datesToCheck.push(pastStr);
-      }
-
-      const missingCampaigns: any[] = [];
-      datesToCheck.forEach((checkDate) => {
-        clients.forEach((client) => {
-          if (client.status === "active" || client.status === "Active") {
-            const campaigns = client.campaigns || [];
-            campaigns.forEach((camp: any) => {
-              const campName = typeof camp === "string" ? camp : camp.name;
-              const isActive = typeof camp === "string" ? true : camp.isActive;
-              if (isActive && campName) {
-                const createdAt = typeof camp === "string" ? undefined : camp.createdAt;
-                if (createdAt) {
-                  const createdDateStr = createdAt.split("T")[0];
-                  if (checkDate < createdDateStr) {
-                    return; // skip generating for this campaign on dates prior to its creation
-                  }
-                }
-
-                const exists = dailyReports.some(
-                  (r) =>
-                    r.clientId === client.id &&
-                    r.campaignName === campName &&
-                    normalizeDate(r.date) === checkDate,
-                );
-                const alreadyMissing = missingCampaigns.some(
-                  (c) =>
-                    c.clientId === client.id &&
-                    c.campaignName === campName &&
-                    c.date === checkDate,
-                );
-                
-                if (!exists && !alreadyMissing) {
-                  // Try to find an associated project for this client
-                  const project = projects.find(p => p.clientId === client.id);
-                  
-                  // Check if project was on-hold on the specific checkDate
-                  let wasOnHoldOnDate = false;
-                  if (project) {
-                    if (!project.statusHistory || project.statusHistory.length === 0) {
-                      wasOnHoldOnDate = project.status === "on-hold";
-                    } else {
-                      const history = [...project.statusHistory].sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-                      const targetTime = new Date(`${checkDate}T23:59:59.999Z`).getTime();
-                      let statusAtDate = project.status;
-                      let found = false;
-                      for (let i = history.length - 1; i >= 0; i--) {
-                        const logTime = new Date(history[i].timestamp).getTime();
-                        if (logTime <= targetTime) {
-                          statusAtDate = history[i].status;
-                          found = true;
-                          break;
-                        }
-                      }
-                      if (found) {
-                        wasOnHoldOnDate = statusAtDate === "on-hold";
-                      } else {
-                        wasOnHoldOnDate = false;
-                      }
-                    }
-                  }
-                  
-                  if (wasOnHoldOnDate) {
-                    return;
-                  }
-
-                  missingCampaigns.push({
-                    projectId: project ? project.id : "",
-                    projectName: project ? project.title : "",
-                    clientId: client.id,
-                    clientName: client.companyName || "",
-                    date: checkDate,
-                    campaignName: campName,
-                    reach: 0,
-                    impression: 0,
-                    leads: 0,
-                    followers: 0,
-                    spend: 0,
-                    cpl: 0,
-                    remarks: "",
-                  });
-                }
-              }
-            });
-          }
-        });
-      });
-
-      if (missingCampaigns.length > 0) {
-        try {
-          const promises = missingCampaigns.map((campaign) =>
-            fetch(`${API_URL}/marketing/reports/daily`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(campaign),
-            }).then((res) => (res.ok ? res.json() : null)),
-          );
-          const results = await Promise.all(promises);
-          const newReports = results.filter((r) => r !== null);
-          if (newReports.length > 0) {
-            setDailyReports((prev) => {
-              const existingIds = new Set(prev.map((r: any) => String(r.id)));
-              const uniqueNew = newReports.filter(
-                (r: any) => !existingIds.has(String(r.id)),
-              );
-              return [...prev, ...uniqueNew];
-            });
-          }
-        } catch (err) {
-          console.error("Failed to auto-generate", err);
-        }
-      }
-    };
-
-    checkAndGenerate();
-  }, [activeTab, dateRange, clients, dailyReports, loading]);
 
   useEffect(() => {
     if (permissionsLoading || userLoading || !canViewMarketing) return;
@@ -862,17 +737,17 @@ export default function MarketingReportsPage() {
     setLoading(true);
     try {
       let endpoint =
-        activeTab === "daily"
+        activeTab === "daily" || activeTab === "analysis"
           ? "/marketing/reports/daily"
           : "/marketing/reports/monthly";
       const params = new URLSearchParams();
-      if (selectedClientFilter !== "all")
+      if (selectedClientFilter !== "all" && selectedClientFilter !== "")
         params.append("client_id", selectedClientFilter);
       if (user) {
         params.append("userId", user.id);
         params.append("role", user.role);
       }
-      if (activeTab === "daily") {
+      if (activeTab === "daily" || activeTab === "analysis") {
         if (dateRange?.from) {
           const startStr = format(dateRange.from, "yyyy-MM-dd");
           const endStr = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : startStr;
@@ -919,6 +794,79 @@ export default function MarketingReportsPage() {
       toast.error("Failed to load reports");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickAddSubmit = async (clientId: string, clientName: string) => {
+    const chosenDate = quickAddData.date || (dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : "");
+    if (!quickAddData.campaignName || !chosenDate) {
+      toast.error("Please enter a campaign name and ensure a date is selected.");
+      return;
+    }
+
+    const clientProjects = projects.filter((p: any) => p.clientId === clientId);
+    const projectId = quickAddData.projectId || (clientProjects.length > 0 ? clientProjects[0].id : "");
+    const projectName = quickAddData.projectName || (clientProjects.length > 0 ? clientProjects[0].title : "");
+
+    const project = projects.find(p => p.id === projectId);
+    if (project && project.status === "on-hold") {
+      toast.error("Cannot add daily report because the associated project is on hold.");
+      return;
+    }
+
+    setIsQuickAdding(true);
+    try {
+      let submitDateStr = new Date().toISOString();
+      if (chosenDate) {
+         const parsed = new Date(chosenDate);
+         submitDateStr = new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())).toISOString();
+      }
+
+      const response = await fetch(`${API_URL}/marketing/reports/daily`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...quickAddData,
+          clientId,
+          clientName,
+          projectId,
+          projectName,
+          date: submitDateStr,
+          revenue: 0,
+          followers: 0,
+          campaignOptimization: false,
+          performedBy: user?.id,
+          userName: user?.name || user?.firstName || "Unknown User",
+        }),
+      });
+
+      if (response.ok) {
+        toast.success("Daily report added successfully");
+        setQuickAddData({
+          date: quickAddData.date,
+          projectId: quickAddData.projectId,
+          projectName: quickAddData.projectName,
+          campaignName: "",
+          reach: 0,
+          impression: 0,
+          leads: 0,
+          spend: 0,
+          cpl: 0,
+          remarks: "",
+          leadsFileUrl: "",
+        });
+        fetchData();
+        fetchClients();
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || "Failed to add report");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "An error occurred");
+    } finally {
+      setIsQuickAdding(false);
     }
   };
 
@@ -980,6 +928,7 @@ export default function MarketingReportsPage() {
           spend: 0,
           cpl: 0,
           remarks: "",
+          leadsFileUrl: "",
           campaignOptimization: false,
         });
         toast.success(
@@ -1189,6 +1138,65 @@ export default function MarketingReportsPage() {
     }
   };
 
+  const handleUploadLeadsForm = async (e: React.ChangeEvent<HTMLInputElement>, target: "quick" | "edit") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size should be smaller than 10 MB");
+      e.target.value = '';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const uploadRes = await fetch(`${API_URL}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        toast.error("Failed to upload file");
+        return;
+      }
+
+      const { url } = await uploadRes.json();
+      if (target === "quick") {
+        setQuickAddData(prev => ({ ...prev, leadsFileUrl: url }));
+      } else {
+        setDailyFormData(prev => ({ ...prev, leadsFileUrl: url }));
+      }
+      toast.success("Leads file uploaded successfully");
+    } catch (err) {
+      toast.error("An error occurred during upload");
+    }
+  };
+
+  const handleRemoveLeadsFileForm = async (target: "quick" | "edit") => {
+    const fileUrl = target === "quick" ? quickAddData.leadsFileUrl : dailyFormData.leadsFileUrl;
+    try {
+      if (fileUrl) {
+        const parts = fileUrl.split('/uploads/');
+        if (parts.length > 1) {
+          const filename = parts[1];
+          await fetch(`${API_URL}/upload/${filename}`, {
+            method: "DELETE",
+          });
+        }
+      }
+      if (target === "quick") {
+        setQuickAddData(prev => ({ ...prev, leadsFileUrl: "" }));
+      } else {
+        setDailyFormData(prev => ({ ...prev, leadsFileUrl: "" }));
+      }
+      toast.success("Leads file removed successfully");
+    } catch (err) {
+      toast.error("Failed to remove leads file");
+    }
+  };
+
   const handleBulkDeleteLeadsFiles = async () => {
     if (selectedLeadsIds.length === 0) return;
     if (!window.confirm(`Are you sure you want to delete the leads files for ${selectedLeadsIds.length} selected reports?`)) return;
@@ -1202,7 +1210,7 @@ export default function MarketingReportsPage() {
       if (res.ok) {
         toast.success("Selected leads files deleted successfully");
         setSelectedLeadsIds([]);
-        fetchDailyReports();
+        fetchData();
       } else {
         toast.error("Failed to bulk delete leads files");
       }
@@ -1478,12 +1486,7 @@ export default function MarketingReportsPage() {
       isZeroOrEmpty(r.cpl) &&
       isZeroOrEmpty(r.remarks);
 
-    // Hide inactive or on-hold rows for today or future dates, OR if they are unsubmitted empty placeholder rows for past dates
-    if (!isCurrentlyActive && (reportDate >= todayStr || isTrulyEmpty)) {
-      return false;
-    }
-
-    // Hide empty rows if the campaign/project is no longer active or was deleted (orphaned)
+    // Hide empty placeholder rows if the campaign/project is inactive, on-hold, or deleted
     if (!isCurrentlyActive && isTrulyEmpty) {
       return false;
     }
@@ -1522,15 +1525,24 @@ export default function MarketingReportsPage() {
       matchesDate = true;
     }
 
-    const matchesMonth =
-      isPendingRow || isDueRow || monthFilter.includes("all") ||
-      (r.date && monthFilter.some(m => normalizeDate(r.date).split("-")[1] === monthMap[m]));
+    const matchesMonth = true;
       
     const isDMProject = r.projectId 
       ? projects.some(p => p.id === r.projectId) 
       : true;
 
-    return matchesSearch && matchesClient && matchesDate && matchesMonth && isDMProject;
+    // Filter by User's assigned projects if "My Tasks" is selected
+    let matchesTaskType = true;
+    if (taskFilterType === "my" && user?.id) {
+      const assocProj = projects.find(p => String(p.id) === String(r.projectId));
+      if (assocProj) {
+        matchesTaskType = assocProj.assignedEmployeeId === user.id;
+      } else {
+        matchesTaskType = false;
+      }
+    }
+
+    return matchesSearch && matchesClient && matchesDate && matchesMonth && isDMProject && matchesTaskType;
   });
 
   const filteredMonthly = monthlyReports.filter((r) => {
@@ -1990,12 +2002,7 @@ export default function MarketingReportsPage() {
             >
               Monthly Reports
             </TabsTrigger>
-            <TabsTrigger
-              value="clients"
-              className="px-6 py-2 rounded-md transition-all"
-            >
-              Clients
-            </TabsTrigger>
+            
             <TabsTrigger
               value="tasks"
               className="px-6 py-2 rounded-md transition-all"
@@ -2010,6 +2017,14 @@ export default function MarketingReportsPage() {
                 Analysis
               </TabsTrigger>
             )}
+            {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'team leader') && (
+              <TabsTrigger
+                value="all_clients"
+                className="px-6 py-2 rounded-md transition-all"
+              >
+                All Clients
+              </TabsTrigger>
+            )}
             {!isAdmin && (
               <TabsTrigger
                 value="progress"
@@ -2021,7 +2036,7 @@ export default function MarketingReportsPage() {
           </TabsList>
         </div>
 
-        {activeTab !== "clients" && activeTab !== "tasks" && activeTab !== "analysis" && activeTab !== "progress" && (
+        {activeTab !== "clients" && activeTab !== "tasks" && activeTab !== "analysis" && activeTab !== "progress" && activeTab !== "all_clients" && !isDailyFullScreen && (
           <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border shadow-sm mb-6">
             <div className="flex-1 min-w-[200px] max-w-md space-y-1.5">
               <Label className="text-xs text-slate-500">
@@ -2037,6 +2052,28 @@ export default function MarketingReportsPage() {
                 />
               </div>
             </div>
+            {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Task Scope</Label>
+                <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
+                  <button
+                    type="button"
+                    onClick={() => setTaskFilterType("my")}
+                    className={`px-3 text-xs font-bold rounded-md transition-all cursor-pointer ${taskFilterType === "my" ? "bg-white text-brand-teal shadow-2xs" : "text-slate-500 hover:text-slate-700"}`}
+                  >
+                    My Tasks
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaskFilterType("all")}
+                    className={`px-3 text-xs font-bold rounded-md transition-all cursor-pointer ${taskFilterType === "all" ? "bg-white text-brand-teal shadow-2xs" : "text-slate-500 hover:text-slate-700"}`}
+                  >
+                    All Tasks
+                  </button>
+                </div>
+              </div>
+            )}
+            {activeTab !== "daily" && activeTab !== "analysis" && (
             <div className="w-[200px] space-y-1.5">
               <Label className="text-xs text-slate-500">Filter by Client</Label>
               <Select
@@ -2062,6 +2099,7 @@ export default function MarketingReportsPage() {
                 </SelectContent>
               </Select>
             </div>
+            )}
             {activeTab === "daily" && (
               <div className="w-[300px] space-y-1.5 flex flex-col gap-1.5">
                 <Label className="text-xs text-slate-500">Filter by Date</Label>
@@ -2163,6 +2201,24 @@ export default function MarketingReportsPage() {
                   </Button>
                 </>
               )}
+              {activeTab === "daily" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-brand-teal hover:bg-brand-teal/5"
+                  onClick={() => setIsDailyFullScreen(!isDailyFullScreen)}
+                >
+                  {isDailyFullScreen ? (
+                    <>
+                      <Minimize className="w-4 h-4 mr-1.5" /> Minimize
+                    </>
+                  ) : (
+                    <>
+                      <Maximize className="w-4 h-4 mr-1.5" /> Maximize
+                    </>
+                  )}
+                </Button>
+              )}
               {activeTab === "monthly" && filteredMonthly.length > 0 && (
                 <>
                   <Button
@@ -2187,7 +2243,7 @@ export default function MarketingReportsPage() {
                   </Button>
                 </>
               )}
-              {(selectedClientFilter !== "all" ||
+              {(selectedClientFilter !== "" ||
                 !(dateRange?.from && isSameDay(dateRange.from, subDays(startOfToday(), 1)) && dateRange?.to && isSameDay(dateRange.to, subDays(startOfToday(), 1))) ||
                 searchQuery !== "" ||
                 !(monthFilter.length === 1 && monthFilter[0] === getLocalMonthString())) && (
@@ -2196,7 +2252,7 @@ export default function MarketingReportsPage() {
                   size="sm"
                   className="h-9 px-3 text-xs text-brand-teal hover:text-brand-teal/80 hover:bg-brand-teal/5 bg-brand-teal/10 ml-2"
                   onClick={() => {
-                    setSelectedClientFilter("all");
+                    setSelectedClientFilter("");
                     setDateRange({ from: subDays(startOfToday(), 1), to: subDays(startOfToday(), 1) });
                     setMonthFilter([getLocalMonthString()]);
                     setSearchQuery("");
@@ -2210,13 +2266,107 @@ export default function MarketingReportsPage() {
           </div>
         )}
 
+                
         <TabsContent
-          value="clients"
-          className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"
+          value="daily"
+          className={isDailyFullScreen ? "fixed inset-0 z-50 bg-slate-100 flex flex-col p-6 overflow-hidden" : "mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"}
         >
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex min-h-0">
+          {isDailyFullScreen && (
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm shrink-0">
+              <div className="flex items-center gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">Daily Marketing Reports</h2>
+                  <p className="text-xs text-slate-500">Full Screen View</p>
+                </div>
+              </div>
+
+              {/* Filters inline in the header */}
+              <div className="flex flex-wrap items-center gap-4 flex-1 justify-center max-w-4xl">
+                <div className="flex-1 min-w-[200px] max-w-xs relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    placeholder="Filter reports..."
+                    className="pl-10 h-9 bg-white"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg border h-9">
+                    <button
+                      type="button"
+                      onClick={() => setTaskFilterType("my")}
+                      className={`px-3 text-xs font-bold rounded-md transition-all cursor-pointer ${taskFilterType === "my" ? "bg-white text-brand-teal shadow-2xs" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      My Tasks
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTaskFilterType("all")}
+                      className={`px-3 text-xs font-bold rounded-md transition-all cursor-pointer ${taskFilterType === "all" ? "bg-white text-brand-teal shadow-2xs" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      All Tasks
+                    </button>
+                  </div>
+                )}
+                
+                <div className="w-[280px]">
+                  <DateRangePicker
+                    value={dateRange}
+                    onChange={setDateRange}
+                  />
+                </div>
+
+                {(searchQuery || (dateRange?.from && dateRange?.to)) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 px-2 text-slate-500 hover:text-slate-700 cursor-pointer"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setDateRange({ from: new Date(), to: new Date() });
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {filteredDaily.length > 0 && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-brand-teal hover:bg-brand-teal/5"
+                      onClick={() => exportToPDF(getDailyExportData(), `Daily_Marketing_Report_${getTodayStr()}`)}
+                    >
+                      <Download className="w-4 h-4 mr-1.5" /> PDF
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 px-3 text-xs font-medium text-slate-700 hover:text-[#107c41] hover:bg-[#107c41]/5"
+                      onClick={() => exportToExcel(getDailyExportData(), `Daily_Marketing_Report_${getTodayStr()}`)}
+                    >
+                      <Download className="w-4 h-4 mr-1.5" /> Excel
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-3 text-xs font-bold text-slate-700 hover:text-brand-teal hover:bg-brand-teal/5"
+                  onClick={() => setIsDailyFullScreen(false)}
+                >
+                  <Minimize className="w-4 h-4 mr-1.5" /> Minimize
+                </Button>
+              </div>
+            </div>
+          )}
+          <ResizablePanelGroup direction="horizontal" className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 min-h-0">
             {/* Left Column: Client List */}
-            <div className="w-1/3 min-w-[280px] max-w-[350px] border-r border-slate-200 flex flex-col bg-slate-50/50">
+            <ResizablePanel defaultSize={25} minSize={15} maxSize={40} className="border-r border-slate-200 flex flex-col bg-slate-50/50">
               <div className="p-4 border-b border-slate-200 bg-white">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2231,350 +2381,116 @@ export default function MarketingReportsPage() {
               <div className="overflow-auto flex-1 custom-scrollbar p-3 space-y-2">
                 {(() => {
                   const filteredClients = clients.filter((c) => {
-                    const matchesSearch = c.companyName.toLowerCase().includes(searchQuery.toLowerCase());
-                    const hasProject = isEmployee ? projects.some((p: any) => p.clientId === c.id) : true;
-                    return matchesSearch && hasProject;
+                    const matchesSearch = c.companyName?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
+                    const clientProjs = projects.filter((p) => p.clientId === c.id && p.department === "Digital Marketing");
+                    const filteredProjs = clientProjs.filter((p) => {
+                      if (p.status === "on-hold") return false;
+                      if (taskFilterType === "my" && user?.id) {
+                        return p.assignedEmployeeId === user.id;
+                      }
+                      return true;
+                    });
+                    return matchesSearch && filteredProjs.length > 0;
                   });
-                  if (filteredClients.length === 0) {
-                    return (
-                      <div className="text-center py-8 text-sm text-slate-400 italic">
-                        No clients found
-                      </div>
-                    );
-                  }
-                  // Auto-select first client if none selected
-                  if (
-                    !selectedClientForCampaigns &&
-                    filteredClients.length > 0
-                  ) {
-                    setTimeout(
-                      () =>
-                        setSelectedClientForCampaigns(filteredClients[0].id),
-                      0,
-                    );
-                  }
+                  
+                  return (
+                    <>
 
-                  return filteredClients.map((client) => {
-                    const isSelected = selectedClientForCampaigns === client.id;
-                    const activeCount =
-                      client.campaigns?.filter((c: any) =>
-                        typeof c === "string" ? true : c.isActive,
-                      ).length || 0;
+                      {filteredClients.length === 0 ? (
+                        <div className="text-center py-8 text-sm text-slate-400 italic">No clients found</div>
+                      ) : (
+                        filteredClients.map((client) => {
+                          const isSelected = selectedClientFilter === client.id;
 
-                    const clientProjects = projects.filter((p: any) => p.clientId === client.id);
-                    const projectNames = clientProjects.map((p: any) => p.title).join(", ");
+                          const clientProjects = projects.filter((p: any) => p.clientId === client.id);
 
-                    return (
-                      <div
-                        key={client.id}
-                        onClick={() => setSelectedClientForCampaigns(client.id)}
-                        className={`p-3 rounded-lg cursor-pointer transition-all duration-200 border ${isSelected ? "bg-white border-brand-teal shadow-sm ring-1 ring-brand-teal/20" : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors ${isSelected ? "bg-brand-teal text-white shadow-md shadow-brand-teal/20" : "bg-brand-teal/10 text-brand-teal"}`}
-                          >
-                            <Users className="w-4 h-4" />
-                          </div>
-                          <div className="overflow-hidden">
+                          return (
                             <div
-                              className={`font-semibold truncate ${isSelected ? "text-brand-teal" : "text-slate-700"}`}
-                              title={client.companyName}
+                              key={client.id}
+                              onClick={() => setSelectedClientFilter(client.id)}
+                              className={`p-3 rounded-lg cursor-pointer transition-all duration-200 border ${isSelected ? "bg-white border-brand-teal shadow-sm ring-1 ring-brand-teal/20" : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"}`}
                             >
-                              {client.companyName}
-                            </div>
-                            {clientProjects.length > 0 && (
-                              <div className="mt-1 space-y-1">
-                                {clientProjects.map((p: any) => {
-                                  const days = calculateProjectDays(p);
-                                  return (
-                                    <div key={p.id} className="text-[10px] text-slate-500 flex items-start group py-0.5 w-full">
-                                      <div className="flex-1 overflow-hidden" title={`${p.title} (${days.active}d active)`}>
-                                        <div className="flex items-center justify-between w-full pr-1">
-                                          <div className="truncate">
-                                            <span className="font-medium text-[11px]">{p.title}</span>: 
-                                            <span className="text-emerald-600 font-medium ml-1">{days.active}d active</span>
-                                            {days.onHold > 0 || p.status === 'on-hold' ? (
-                                              <span className="text-amber-600 font-medium ml-1">({days.onHold}d hold)</span>
-                                            ) : null}
-                                          </div>
-                                          {canEditMarketing && (
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setPaymentProject(p);
-                                                setPaymentStartDate(p.paymentStartDate ? p.paymentStartDate.split('T')[0] : "");
-                                                setPaymentDurationMonths(p.paymentDurationMonths ? String(p.paymentDurationMonths) : "");
-                                                setIsPaymentReceived(p.isPaymentReceived || false);
-                                                setPaymentSettingsOpen(true);
-                                              }}
-                                              className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all shrink-0"
-                                              title="Payment Settings"
-                                            >
-                                              <Settings className="w-[18px] h-[18px]" />
-                                            </button>
-                                          )}
-                                        </div>
-                                        {p.paymentEndDate && (() => {
-                                          const paymentDate = new Date(p.paymentEndDate);
-                                          const thresholdDays = systemSettings?.paymentDueDays || 0;
-                                          paymentDate.setDate(paymentDate.getDate() - thresholdDays);
-                                          const isPaymentDue = paymentDate <= new Date() && !p.isPaymentReceived;
-
-                                          return (
-                                            <div className={`font-medium ${isPaymentDue ? 'text-rose-600 font-bold bg-rose-50 px-1 py-0.5 rounded inline-flex items-center gap-1 border border-rose-100' : 'text-brand-teal'}`} title="Auto-calculated Payment End Date">
-                                              Payment End: {format(new Date(p.paymentEndDate), 'dd MMM yyyy')}
-                                              {isPaymentDue && <span className="text-[9px] uppercase tracking-wider">(Due)</span>}
-                                              {p.isPaymentReceived && <span className="text-[9px] uppercase tracking-wider text-emerald-600 ml-1">(Done)</span>}
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors ${isSelected ? "bg-brand-teal text-white shadow-md shadow-brand-teal/20" : "bg-brand-teal/10 text-brand-teal"}`}
+                                >
+                                  <Users className="w-4 h-4" />
+                                </div>
+                                <div className="overflow-hidden">
+                                  <div
+                                    className={`font-semibold truncate ${isSelected ? "text-brand-teal" : "text-slate-700"}`}
+                                    title={client.companyName}
+                                  >
+                                    {client.companyName}
+                                  </div>
+                                  {clientProjects.length > 0 && (
+                                    <div className="mt-1 space-y-1">
+                                      {clientProjects.map((p: any) => {
+                                        const days = calculateProjectDays(p);
+                                        return (
+                                          <div key={p.id} className="text-[10px] text-slate-500 flex items-start group py-0.5 w-full">
+                                            <div className="flex-1 overflow-hidden" title={`${p.title} (${days.active}d active)`}>
+                                              <div className="flex items-center justify-between w-full pr-1">
+                                                <div className="truncate">
+                                                  <span className="font-medium text-[11px]">{p.title}</span>: 
+                                                  <span className="text-emerald-600 font-medium ml-1">{days.active}d active</span>
+                                                  {days.onHold > 0 || p.status === 'on-hold' ? (
+                                                    <span className="text-amber-600 font-medium ml-1">({days.onHold}d hold)</span>
+                                                  ) : null}
+                                                </div>
+                                                {canEditMarketing && (
+                                                  <div className="flex items-center gap-1 shrink-0">
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        fetchLogs(p, "project-remark");
+                                                      }}
+                                                      className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
+                                                      title="View Logs"
+                                                    >
+                                                      <History className="w-[18px] h-[18px]" />
+                                                    </button>
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setDailyMetricsProject(p);
+                                                        setProjectEndDate(p.endDate ? p.endDate.split('T')[0] : "");
+                                                        const dateStr = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : new Date().toISOString().split("T")[0];
+                                                        fetchDailyMetricsData(p.id, dateStr);
+                                                        setDailyMetricsOpen(true);
+                                                      }}
+                                                      className="p-1.5 text-slate-500 hover:text-brand-teal hover:bg-brand-teal/10 rounded transition-all"
+                                                      title="Daily Project Metrics"
+                                                    >
+                                                      <Settings className="w-[18px] h-[18px]" />
+                                                    </button>
+                                                  </div>
+                                                )}
+                                              </div>
                                             </div>
-                                          );
-                                        })()}
-                                      </div>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-                                  );
-                                })}
+                                  )}
+                                </div>
                               </div>
-                            )}
-                            <div className="text-xs text-slate-500 mt-0.5">
-                              {activeCount} active campaign(s)
                             </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  });
+                          );
+                        })
+                      )}
+                    </>
+                  );
                 })()}
               </div>
-            </div>
+            </ResizablePanel>
 
-            {/* Right Column: Campaigns for Selected Client */}
-            <div className="flex-1 flex flex-col bg-white overflow-hidden">
-              {(() => {
-                const activeClient = clients.find(
-                  (c) => c.id === selectedClientForCampaigns,
-                );
-                if (!activeClient) {
-                  return (
-                    <div className="flex-1 flex items-center justify-center flex-col gap-3 text-slate-400 bg-slate-50/30">
-                      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
-                        <Users className="w-8 h-8 text-slate-300" />
-                      </div>
-                      <p>Select a client to view their campaigns</p>
-                    </div>
-                  );
-                }
+            <ResizableHandle withHandle />
 
-                const activeClientProjects = projects.filter((p: any) => p.clientId === activeClient.id);
-                const activeProjectNames = activeClientProjects.map((p: any) => p.title).join(", ");
+            {/* Right Column: Daily Reports Table */}
+            <ResizablePanel defaultSize={75} className="flex flex-col bg-white overflow-hidden">
 
-                return (
-                  <>
-                    <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
-                      <div>
-                        <h2 className="text-xl font-bold text-slate-800">
-                          {activeClient.companyName}
-                        </h2>
-                        <p className="text-sm text-slate-500 mt-1">
-                          Manage digital marketing campaigns {activeProjectNames ? `for ${activeProjectNames}` : ""}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-                          onClick={() =>
-                            fetchLogs(
-                              {
-                                id: activeClient.id,
-                                companyName: activeClient.companyName,
-                              },
-                              "client",
-                            )
-                          }
-                        >
-                          <History className="w-4 h-4 mr-2" />
-                          View Logs
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-brand-teal border-brand-teal hover:bg-brand-teal/5"
-                          onClick={() =>
-                            handleViewClientReports(activeClient.id)
-                          }
-                        >
-                          <TrendingUp className="w-4 h-4 mr-2" />
-                          View Reports
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-50/30">
-                      <div className="max-w-3xl space-y-6">
-                        {/* Campaigns List */}
-                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-                          <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-brand-teal"></span>
-                            Active & Inactive Campaigns
-                          </h3>
-
-                          {activeClient.campaigns?.length ? (
-                            <div className="space-y-2">
-                              {activeClient.campaigns.map((campRaw: any) => {
-                                const campName =
-                                  typeof campRaw === "string"
-                                    ? campRaw
-                                    : campRaw.name;
-                                const isActive =
-                                  typeof campRaw === "string"
-                                    ? true
-                                    : campRaw.isActive;
-                                return (
-                                  <div
-                                    key={campName}
-                                    className={`group flex items-center justify-between p-3.5 rounded-xl border transition-all ${isActive ? "bg-white border-slate-200 hover:border-brand-teal/30 hover:shadow-sm" : "bg-slate-50 border-slate-100"}`}
-                                  >
-                                    <div className="flex items-center gap-3.5">
-                                      <div
-                                        className={`w-2.5 h-2.5 rounded-full ${isActive ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-300"}`}
-                                      ></div>
-                                      <span
-                                        className={`font-medium ${!isActive ? "text-slate-400 line-through" : "text-slate-700"}`}
-                                      >
-                                        {campName}
-                                      </span>
-                                      <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-slate-100 text-slate-500 border border-slate-200">
-                                        {typeof campRaw === "object" &&
-                                        campRaw.metric
-                                          ? campRaw.metric
-                                          : "CPL"}
-                                      </span>
-                                    </div>
-
-                                    {canEditMarketing && (
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2">
-                                          <span
-                                            className={`text-xs font-medium ${isActive ? "text-brand-teal" : "text-slate-400"}`}
-                                          >
-                                            {isActive ? "Active" : "Inactive"}
-                                          </span>
-                                          <Switch
-                                            checked={isActive}
-                                            onCheckedChange={() =>
-                                              handleToggleCampaignStatus(
-                                                activeClient.id,
-                                                campName,
-                                              )
-                                            }
-                                            className={
-                                              isActive
-                                                ? "data-[state=checked]:bg-brand-teal"
-                                                : ""
-                                            }
-                                          />
-                                        </div>
-                                        <button
-                                          onClick={() =>
-                                            handleRemoveCampaign(
-                                              activeClient.id,
-                                              campName,
-                                            )
-                                          }
-                                          className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                          title="Remove Campaign"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="py-10 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                              <span className="text-sm text-slate-400">
-                                No campaigns found for this client.
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Add New Campaign */}
-                        {canAddMarketing && (
-                          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-                            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                              <Plus className="w-4 h-4 text-brand-teal" />
-                              Add New Campaign
-                            </h3>
-                            <div className="flex items-center gap-3">
-                              <div className="relative flex-1 flex gap-2">
-                                <Input
-                                  placeholder="Enter campaign name..."
-                                  className="h-11 flex-1 bg-slate-50 border-slate-200 focus:bg-white focus:border-brand-teal focus:ring-brand-teal/20 transition-all rounded-lg"
-                                  value={newCampaignName[activeClient.id] || ""}
-                                  onChange={(e) =>
-                                    setNewCampaignName((prev) => ({
-                                      ...prev,
-                                      [activeClient.id]: e.target.value,
-                                    }))
-                                  }
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter")
-                                      handleAddCampaign(activeClient.id);
-                                  }}
-                                />
-                                <Select
-                                  value={
-                                    newCampaignMetric[activeClient.id] || "CPL"
-                                  }
-                                  onValueChange={(val) =>
-                                    setNewCampaignMetric((prev) => ({
-                                      ...prev,
-                                      [activeClient.id]: val,
-                                    }))
-                                  }
-                                >
-                                  <SelectTrigger className="w-24 h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-brand-teal focus:ring-brand-teal/20">
-                                    <SelectValue placeholder="Metric" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="CPL">CPL</SelectItem>
-                                    <SelectItem value="CPR">CPR</SelectItem>
-                                    <SelectItem value="CPC">CPC</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <Button
-                                className="h-11 px-6 rounded-lg bg-brand-teal hover:bg-teal-700 text-white font-medium shadow-md shadow-brand-teal/20"
-                                onClick={() =>
-                                  handleAddCampaign(activeClient.id)
-                                }
-                                disabled={isActiveClientOnHold}
-                                title={isActiveClientOnHold ? "Cannot add campaigns to on-hold clients" : ""}
-                              >
-                                Create Campaign
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent
-          value="daily"
-          className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"
-        >
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
-            <div className="overflow-auto flex-1 custom-scrollbar">
+              <div className="overflow-y-auto overflow-x-hidden flex-1 custom-scrollbar">
               <DragDropContext onDragEnd={handleDragEndDaily}>
                 <Table>
                   <TableHeader>
@@ -2604,11 +2520,8 @@ export default function MarketingReportsPage() {
                       <TableHead className="w-12 text-center font-bold text-slate-700">
                         S.N
                       </TableHead>
-                      <TableHead className="font-bold text-slate-700">
+                      <TableHead className="font-bold text-slate-700 w-28">
                         Date
-                      </TableHead>
-                      <TableHead className="font-bold text-slate-700">
-                        Project
                       </TableHead>
                       <TableHead className="font-bold text-slate-700">
                         Campaign Name
@@ -2651,7 +2564,7 @@ export default function MarketingReportsPage() {
                         {loading ? (
                           <TableRow>
                             <TableCell
-                              colSpan={15}
+                              colSpan={14}
                               className="text-center py-20"
                             >
                               <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
@@ -2662,15 +2575,13 @@ export default function MarketingReportsPage() {
                           </TableRow>
                         ) : (
                           <>
-                            {/* Integrated Quick Add Row Removed as per user request */}
-
                             {filteredDaily.length === 0 ? (
                               <TableRow>
                                 <TableCell
-                                  colSpan={16}
+                                  colSpan={15}
                                   className="text-center py-20 text-slate-400 italic"
                                 >
-                                  No daily reports found.
+                                  {selectedClientFilter === "" ? "Please select a client from the left sidebar to view daily reports." : "No daily reports found."}
                                 </TableCell>
                               </TableRow>
                             ) : (
@@ -2766,18 +2677,15 @@ export default function MarketingReportsPage() {
                                                   <TableCell className="text-center text-slate-400">
                                                     {globalIdx}
                                                   </TableCell>
-
-                                                  <TableCell className="font-medium text-slate-600">
-                                                    {normalizeDate(report.date)}
-                                                  </TableCell>
-
-                                                  <TableCell className="font-semibold text-slate-600">
-                                                    <div className="flex flex-col items-start gap-1">
-                                                      <span>{getProjectNameForReport(report)}</span>
-                                                      {projects.find((p: any) => p.id === report.projectId)?.status === 'on-hold' && (
-                                                        <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 px-1 py-0 shadow-none font-semibold">ON HOLD</Badge>
-                                                      )}
-                                                    </div>
+                                                  <TableCell className="text-slate-600 font-semibold text-xs whitespace-nowrap">
+                                                    {report.date ? (() => {
+                                                      try {
+                                                        const parsed = new Date(report.date);
+                                                        return format(parsed, "dd MMM yyyy");
+                                                      } catch (e) {
+                                                        return report.date;
+                                                      }
+                                                    })() : "N/A"}
                                                   </TableCell>
 
                                                   <TableCell className="text-slate-600">
@@ -3006,24 +2914,17 @@ export default function MarketingReportsPage() {
                                                   >
                                                     {editingRowId ===
                                                     report.id ? (
-                                                      <Select
+                                                      <Input
+                                                        className="h-8 text-xs bg-white"
+                                                        placeholder="Remark"
                                                         value={editFormData.remarks || ""}
-                                                        onValueChange={(val) =>
+                                                        onChange={(e) =>
                                                           setEditFormData({
                                                             ...editFormData,
-                                                            remarks: val,
+                                                            remarks: e.target.value,
                                                           })
                                                         }
-                                                      >
-                                                        <SelectTrigger className="h-8 text-xs">
-                                                          <SelectValue placeholder="Select" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                          <SelectItem value="Positive">Positive</SelectItem>
-                                                          <SelectItem value="Neutral">Neutral</SelectItem>
-                                                          <SelectItem value="Negative">Negative</SelectItem>
-                                                        </SelectContent>
-                                                      </Select>
+                                                      />
                                                     ) : (
                                                       report.remarks || "-"
                                                     )}
@@ -3104,34 +3005,16 @@ export default function MarketingReportsPage() {
                                                             <History className="w-4 h-4" />
                                                           </Button>
 
-                                                          <input 
-                                                            type="file" 
-                                                            className="hidden" 
-                                                            id={`upload-leads-${report.id}`} 
-                                                            accept=".xlsx,.xls,.csv"
-                                                            onChange={(e) => handleUploadLeads(e, report.id, "daily", report.leadsFileUrl)}
-                                                          />
-                                                          <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                                                            title="Upload Leads"
-                                                            onClick={() => document.getElementById(`upload-leads-${report.id}`)?.click()}
-                                                          >
-                                                            <Upload className="w-4 h-4" />
-                                                          </Button>
                                                           {report.leadsFileUrl && (
-                                                            <>
-                                                              <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                                                title="Download Leads"
-                                                                onClick={() => handleDownloadLeads(report.leadsFileUrl)}
-                                                              >
-                                                                <FileSpreadsheet className="w-4 h-4" />
-                                                              </Button>
-                                                            </>
+                                                            <Button
+                                                              variant="ghost"
+                                                              size="icon"
+                                                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                              title="Download Leads"
+                                                              onClick={() => handleDownloadLeads(report.leadsFileUrl)}
+                                                            >
+                                                              <FileSpreadsheet className="w-4 h-4" />
+                                                            </Button>
                                                           )}
 
                                                           {canDeleteMarketing && (
@@ -3296,6 +3179,7 @@ export default function MarketingReportsPage() {
                       </TableBody>
                     )}
                   </Droppable>
+
                   {filteredDaily.length > 0 && (
                     <tfoot className="sticky bottom-0 z-20 bg-brand-teal/10 border-t-2 border-brand-teal/20 backdrop-blur-md shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                       <TableRow className="hover:bg-transparent">
@@ -3339,7 +3223,197 @@ export default function MarketingReportsPage() {
                   )}
                 </Table>
               </DragDropContext>
+              
+              {selectedClientFilter !== "all" && selectedClientFilter !== "" && canAddMarketing && (
+                <div className="border-t border-slate-200 mt-2 bg-slate-50/30">
+                  {!showAddForm ? (
+                    <div className="p-4 flex justify-center">
+                      <Button variant="outline" className="border-dashed bg-slate-50/50 hover:bg-slate-50 text-brand-teal w-full max-w-sm" onClick={() => setShowAddForm(true)}>
+                        <Plus className="w-4 h-4 mr-2" /> Add New Entry
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="p-5 m-4 bg-white rounded-xl shadow-sm border border-slate-200">
+                      <div className="space-y-6">
+                        <div className="flex justify-between items-center border-b pb-3">
+                          <h3 className="text-lg font-semibold text-slate-800">New Daily Report</h3>
+                          <Button variant="ghost" size="icon" onClick={() => setShowAddForm(false)}>
+                            <X className="w-5 h-5"/>
+                          </Button>
+                        </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div className="space-y-2">
+                        <Label>Date</Label>
+                        <Input 
+                          type="date"
+                          className="h-10 bg-white text-xs font-bold text-slate-700" 
+                          value={quickAddData.date || (dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : "")}
+                          onChange={(e) => {
+                            const newDateStr = e.target.value;
+                            setQuickAddData({...quickAddData, date: newDateStr});
+                            if (newDateStr) {
+                              const newDateObj = new Date(newDateStr);
+                              setDateRange({ from: newDateObj, to: newDateObj });
+                            }
+                          }}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Project</Label>
+                        {(() => {
+                          const clientProjs = projects.filter((p: any) => p.clientId === selectedClientFilter);
+                          return clientProjs.length > 1 ? (
+                            <Select
+                              value={quickAddData.projectId}
+                              onValueChange={(val) => {
+                                const p = clientProjs.find((x: any) => x.id === val);
+                                if (p) setQuickAddData({...quickAddData, projectId: p.id, projectName: p.title});
+                              }}
+                            >
+                              <SelectTrigger className="h-10 bg-white"><SelectValue placeholder="Project"/></SelectTrigger>
+                              <SelectContent>
+                                {clientProjs.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <div className="truncate font-medium text-slate-600 px-3 py-2 h-10 bg-slate-50 rounded-md border border-slate-200 flex items-center">
+                              {clientProjs[0]?.title || "N/A"}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Campaign Name</Label>
+                        <Input 
+                          className="h-10 bg-white" 
+                          placeholder="e.g. Awareness Campaign"
+                          value={quickAddData.campaignName}
+                          onChange={(e) => setQuickAddData({...quickAddData, campaignName: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Reach</Label>
+                        <Input 
+                          type="number"
+                          className="h-10 bg-white" 
+                          placeholder="0"
+                          value={quickAddData.reach || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, reach: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Impressions</Label>
+                        <Input 
+                          type="number"
+                          className="h-10 bg-white" 
+                          placeholder="0"
+                          value={quickAddData.impression || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, impression: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Leads</Label>
+                        <Input 
+                          type="number"
+                          className="h-10 bg-white" 
+                          placeholder="0"
+                          value={quickAddData.leads || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, leads: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Spend (₹)</Label>
+                        <Input 
+                          type="number" step="0.01"
+                          className="h-10 bg-white" 
+                          placeholder="0.00"
+                          value={quickAddData.spend || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, spend: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Cost Metric</Label>
+                        <Input 
+                          type="number" step="0.01"
+                          className="h-10 bg-white" 
+                          placeholder="0.00"
+                          value={quickAddData.cpl || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, cpl: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Remark</Label>
+                        <Input
+                          className="h-10 bg-white" 
+                          placeholder="Remark"
+                          value={quickAddData.remarks || ""}
+                          onChange={(e) => setQuickAddData({...quickAddData, remarks: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Leads File (Optional)</Label>
+                        {quickAddData.leadsFileUrl ? (
+                          <div className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg h-10">
+                            <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span className="text-xs font-semibold text-emerald-800 truncate flex-1">
+                              Leads File Uploaded
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                handleRemoveLeadsFileForm("quick");
+                              }}
+                              className="h-6 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-[10px] font-bold"
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <input 
+                              type="file" 
+                              id="quick-upload-leads"
+                              className="hidden" 
+                              accept=".xlsx,.xls,.csv"
+                              onChange={(e) => handleUploadLeadsForm(e, "quick")}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => document.getElementById("quick-upload-leads")?.click()}
+                              className="w-full h-10 border-dashed bg-white hover:bg-slate-50 text-slate-500 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <Upload className="w-4 h-4 text-slate-400" /> Upload Leads (.xlsx, .xls, .csv)
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-4 flex justify-end gap-3 border-t">
+                      <Button variant="outline" onClick={() => setShowAddForm(false)}>Cancel</Button>
+                      <Button 
+                         className="bg-brand-teal hover:bg-brand-teal/90 text-white" 
+                         disabled={!quickAddData.campaignName || isQuickAdding} 
+                         onClick={() => {
+                           const activeClient = clients.find((c: any) => c.id === selectedClientFilter);
+                           handleQuickAddSubmit(selectedClientFilter, activeClient?.companyName || "");
+                         }}
+                      >
+                        {isQuickAdding ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : null}
+                        Submit Entry
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+          )}
+        </div>
             <TablePagination
               totalItems={filteredDaily.length}
               itemsPerPage={dailyItemsPerPage}
@@ -3348,14 +3422,16 @@ export default function MarketingReportsPage() {
               onItemsPerPageChange={setDailyItemsPerPage}
               itemName="daily reports"
             />
-          </div>
-        </TabsContent>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+      </TabsContent>
+
         <TabsContent
           value="monthly"
           className="mt-0 flex-1 flex flex-col overflow-hidden data-[state=active]:flex-1 data-[state=active]:flex data-[state=active]:flex-col min-h-0"
         >
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
-            <div className="overflow-auto flex-1 custom-scrollbar">
+            <div className="overflow-y-auto overflow-x-hidden flex-1 custom-scrollbar">
               <DragDropContext onDragEnd={handleDragEndMonthly}>
                 <Table>
                   <TableHeader>
@@ -3664,15 +3740,39 @@ export default function MarketingReportsPage() {
           <TabsContent value="analysis" className="flex-1 overflow-y-auto mt-0 px-1 pb-10">
             <div className="space-y-6">
               {/* Date Filter */}
-              <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+              <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100 gap-4">
                 <h3 className="font-bold text-slate-800 text-lg">Marketing Analysis Dashboard</h3>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-slate-500">Date Range:</span>
-                  <DateRangePicker
-                    value={dateRange}
-                    onChange={setDateRange}
-                    className="w-[280px]"
-                  />
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-500 whitespace-nowrap">Filter by Brand:</span>
+                    <Select
+                      value={selectedClientFilter}
+                      onValueChange={setSelectedClientFilter}
+                    >
+                      <SelectTrigger className="w-[200px] h-9 bg-white">
+                        <SelectValue placeholder="All Brands" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Brands</SelectItem>
+                        {clients.map((client) => {
+                          const displayName = client.companyName || client.name || "Unknown";
+                          return (
+                            <SelectItem key={client.id} value={client.id}>
+                              {displayName} {client.name && client.companyName ? `(${client.name})` : ""}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-500 whitespace-nowrap">Date Range:</span>
+                    <DateRangePicker
+                      value={dateRange}
+                      onChange={setDateRange}
+                      className="w-[280px]"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -3773,6 +3873,62 @@ export default function MarketingReportsPage() {
             </div>
           </TabsContent>
         )}
+        {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'team leader' || user?.designation?.toLowerCase() === 'team leader') && (
+          <TabsContent value="all_clients" className="m-0 flex-1 overflow-auto h-full mt-4 px-1 pb-10">
+            <div className="bg-white rounded-xl shadow-sm border p-5">
+              <h3 className="font-bold text-slate-800 text-lg mb-4">All Clients & Projects (Digital Marketing)</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-slate-500 uppercase font-semibold text-xs border-b">
+                    <tr>
+                      <th className="px-4 py-3">Company Name</th>
+                      <th className="px-4 py-3">Project</th>
+                      <th className="px-4 py-3">End Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {projects
+                      .filter(p => p.department === "Digital Marketing")
+                      .sort((a, b) => {
+                        if (!a.endDate && !b.endDate) return 0;
+                        if (!a.endDate) return 1;
+                        if (!b.endDate) return -1;
+                        return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+                      })
+                      .map(p => {
+                        const client = clients.find(c => c.id === p.clientId);
+                      
+                      let calculatedEndStr = "-";
+                      if (p.endDate) {
+                        const days = calculateProjectDays(p);
+                        const endObj = new Date(p.endDate);
+                        if (systemSettings?.addHoldDaysToEndDate !== false && days.onHold > 0) {
+                          endObj.setDate(endObj.getDate() + days.onHold);
+                          calculatedEndStr = format(endObj, 'dd MMM yyyy') + ` (+${days.onHold} days)`;
+                        } else {
+                          calculatedEndStr = format(endObj, 'dd MMM yyyy');
+                        }
+                      }
+                      
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-medium text-slate-800">{client?.companyName || client?.name || p.clientName || 'Unknown'}</td>
+                          <td className="px-4 py-3 text-slate-600">{p.title}</td>
+                          <td className="px-4 py-3 font-medium text-brand-teal">{calculatedEndStr}</td>
+                        </tr>
+                      );
+                    })}
+                    {projects.filter(p => p.department === "Digital Marketing").length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="px-4 py-8 text-center text-slate-500">No projects found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+        )}
         {!isAdmin && (
           <TabsContent value="progress" className="m-0 flex-1 overflow-auto h-full mt-4 pb-10">
             <DailyProgressView defaultDepartment="Digital Marketing" />
@@ -3794,9 +3950,14 @@ export default function MarketingReportsPage() {
                 <Input
                   type="date"
                   value={dailyFormData.date}
-                  onChange={(e) =>
-                    setDailyFormData({ ...dailyFormData, date: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const newDateStr = e.target.value;
+                    setDailyFormData({ ...dailyFormData, date: newDateStr });
+                    if (newDateStr) {
+                      const newDateObj = new Date(newDateStr);
+                      setDateRange({ from: newDateObj, to: newDateObj });
+                    }
+                  }}
                   required
                 />
               </div>
@@ -3932,24 +4093,16 @@ export default function MarketingReportsPage() {
 
               <div className="space-y-2">
                 <Label>Remarks</Label>
-                <Select
+                <Input
+                  placeholder="Add remark..."
                   value={dailyFormData.remarks || ""}
-                  onValueChange={(val) =>
+                  onChange={(e) =>
                     setDailyFormData({
                       ...dailyFormData,
-                      remarks: val,
+                      remarks: e.target.value,
                     })
                   }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select remark" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Positive">Positive</SelectItem>
-                    <SelectItem value="Neutral">Neutral</SelectItem>
-                    <SelectItem value="Negative">Negative</SelectItem>
-                  </SelectContent>
-                </Select>
+                />
               </div>
             </div>
             <DialogFooter>
@@ -4180,76 +4333,86 @@ export default function MarketingReportsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={paymentSettingsOpen} onOpenChange={setPaymentSettingsOpen}>
+      <Dialog open={dailyMetricsOpen} onOpenChange={setDailyMetricsOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Payment Settings - {paymentProject?.title}</DialogTitle>
+            <DialogTitle>Daily Metrics - {dailyMetricsProject?.title}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Start Date</Label>
+              <Label>Revenue (₹)</Label>
               <Input
-                type="date"
-                value={paymentStartDate}
-                onChange={(e) => setPaymentStartDate(e.target.value)}
+                type="number"
+                value={dailyMetricsData.revenue || ""}
+                onChange={(e) => setDailyMetricsData({...dailyMetricsData, revenue: parseFloat(e.target.value) || 0})}
               />
             </div>
             <div className="space-y-2">
-              <Label>Duration (Months)</Label>
+              <Label>Followers</Label>
               <Input
                 type="number"
-                min="1"
-                placeholder="e.g. 6"
-                value={paymentDurationMonths}
-                onChange={(e) => setPaymentDurationMonths(e.target.value)}
+                value={dailyMetricsData.followers || ""}
+                onChange={(e) => setDailyMetricsData({...dailyMetricsData, followers: parseInt(e.target.value) || 0})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>User Remark</Label>
+              <Textarea
+                rows={2}
+                placeholder="Add user remark..."
+                value={dailyMetricsData.userRemark || ""}
+                onChange={(e) => setDailyMetricsData({...dailyMetricsData, userRemark: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Client Remark</Label>
+              <Textarea
+                rows={2}
+                placeholder="Add client remark..."
+                value={dailyMetricsData.clientRemark || ""}
+                onChange={(e) => setDailyMetricsData({...dailyMetricsData, clientRemark: e.target.value})}
+              />
+            </div>
+            
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <Label>Base End Date (Project Level)</Label>
+              <Input
+                type="text"
+                readOnly
+                className="bg-slate-50 cursor-not-allowed font-medium text-slate-700 h-10"
+                value={dailyMetricsProject?.endDate ? format(new Date(dailyMetricsProject.endDate), 'dd MMM yyyy') : "Not Set"}
               />
             </div>
             {(() => {
-              if (!paymentProject || !paymentStartDate || !paymentDurationMonths) return null;
-              const months = parseInt(paymentDurationMonths, 10);
-              if (isNaN(months) || months <= 0) return null;
+              if (!dailyMetricsProject || !dailyMetricsProject.endDate) return null;
               
-              const endDate = new Date(paymentStartDate);
-              endDate.setMonth(endDate.getMonth() + months);
+              const endDateObj = new Date(dailyMetricsProject.endDate);
+              const days = calculateProjectDays(dailyMetricsProject);
               
-              const days = calculateProjectDays(paymentProject);
-              let holdText = "";
-              if (days.onHold > 0) {
-                endDate.setDate(endDate.getDate() + days.onHold);
-                holdText = ` (+ ${days.onHold} days on hold)`;
+              if (systemSettings?.addHoldDaysToEndDate !== false && days.onHold > 0) {
+                endDateObj.setDate(endDateObj.getDate() + days.onHold);
+                return (
+                  <div className="space-y-2">
+                    <Label className="text-brand-teal font-bold">Calculated End Date (Added {days.onHold} On-Hold Days)</Label>
+                    <Input
+                      type="text"
+                      readOnly
+                      className="bg-emerald-50 cursor-not-allowed font-medium text-brand-teal border-emerald-200 h-10"
+                      value={format(endDateObj, 'dd MMM yyyy')}
+                    />
+                  </div>
+                );
               }
-              
-              return (
-                <div className="space-y-2">
-                  <Label>Calculated End Date</Label>
-                  <Input
-                    type="text"
-                    readOnly
-                    className="bg-slate-50 cursor-not-allowed"
-                    value={`${format(endDate, 'dd MMM yyyy')}${holdText}`}
-                  />
-                </div>
-              );
+              return null;
             })()}
-            <div className="flex items-center space-x-2 mt-4 pt-4 border-t border-slate-100">
-              <input
-                type="checkbox"
-                id="isPaymentReceived"
-                checked={isPaymentReceived}
-                onChange={(e) => setIsPaymentReceived(e.target.checked)}
-                className="w-4 h-4 text-brand-teal border-gray-300 rounded focus:ring-brand-teal cursor-pointer"
-              />
-              <Label htmlFor="isPaymentReceived" className="cursor-pointer font-medium text-slate-700">
-                Payment Received / Done
-              </Label>
-            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPaymentSettingsOpen(false)}>
+            <Button variant="outline" onClick={() => setDailyMetricsOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSavePaymentSettings} className="bg-brand-teal text-white hover:bg-brand-teal/90">
-              Save Settings
+            <Button onClick={handleSaveDailyMetrics} disabled={isSavingDailyMetrics} className="bg-brand-teal text-white hover:bg-brand-teal/90">
+              {isSavingDailyMetrics ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Save Metrics
             </Button>
           </DialogFooter>
         </DialogContent>

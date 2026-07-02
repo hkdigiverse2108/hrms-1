@@ -33,6 +33,8 @@ export function PendingWorkEmbedded({
   const [clientProjects, setClientProjects] = useState<Record<string, any>>({});
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [workScope, setWorkScope] = useState<'my' | 'all'>('my');
 
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterStage, setFilterStage] = useState<string>('all');
@@ -98,6 +100,14 @@ export function PendingWorkEmbedded({
   };
 
   useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch (err) {
+        console.error("Failed to parse user from localStorage", err);
+      }
+    }
     fetchData();
   }, []);
 
@@ -149,7 +159,9 @@ export function PendingWorkEmbedded({
     }
   };
 
-  const allPendingTasks = useMemo(() => {
+  const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
+
+  const preFilteredTasks = useMemo(() => {
     const tasks: any[] = [];
     const storedUser = localStorage.getItem('user');
     const user = storedUser ? JSON.parse(storedUser) : null;
@@ -170,23 +182,32 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') assigneeId = project.assignedScriptwriterId || client?.assignedScriptwriterId;
         if (stage === 'Shoot') assigneeId = project.assignedShooterId || client?.assignedShooterId;
-        if (stage === 'Editing') assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
+        if (stage === 'Editing') {
+          if (entry.postReel === 'Post') {
+            assigneeId = project.assignedPostDesignerId || client?.assignedPostDesignerId;
+          } else {
+            assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId;
+          }
+        }
         if (stage === 'Approval') assigneeId = project.assignedApproverId || client?.assignedApproverId;
         if (stage === 'Posting') assigneeId = project.assignedPosterId || client?.assignedPosterId;
 
         const assignee = employees.find((e: any) => e.id === assigneeId);
         const assigner = employees.find((e: any) => e.id === assignerId);
 
+        const finalStage = (stage === 'Editing' && entry.postReel === 'Post') ? 'Post/Graphics' : stage;
         return {
           ...entry,
           clientDisplayName: displayName,
           clientId: entry.clientId,
-          stage,
+          stage: finalStage,
           deadline,
           type,
           taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`),
           assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
           assignerName: assigner ? `${assigner.firstName} ${assigner.lastName}` : null,
+          assigneeId: assigneeId,
+          assignerId: assignerId,
         };
       };
 
@@ -197,18 +218,25 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') return (project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
         if (stage === 'Shoot') return (project.assignedShooterId || client?.assignedShooterId) === uId;
-        if (stage === 'Editing') return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId || (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+        if (stage === 'Editing') {
+          if (entry.postReel === 'Post') {
+            return (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+          } else {
+            return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId;
+          }
+        }
         if (stage === 'Approval') return (project.assignedApproverId || client?.assignedApproverId) === uId;
         if (stage === 'Posting') return (project.assignedPosterId || client?.assignedPosterId) === uId;
         
         return true;
       };
 
-      if (entry.scriptDate && !entry.scriptLink && canSeeTask('Script')) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
-      if (entry.shootDate && !entry.shootLink && canSeeTask('Shoot')) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
-      if (entry.editingStart && !entry.finalReelLink && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
+      if (entry.postReel !== 'Post' && entry.scriptDate && !entry.scriptLink && canSeeTask('Script')) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
+      if (entry.postReel !== 'Post' && entry.shootDate && !entry.shootLink && canSeeTask('Shoot')) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
+      const isEditingPending = entry.editingStart && (entry.postReel === 'Post' ? !entry.finalPostLink : !entry.finalReelLink);
+      if (isEditingPending && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       if (entry.approval && entry.isApproved !== 'Yes' && canSeeTask('Approval')) tasks.push(enrich('Approval', entry.approval, 'approvals'));
-      if (entry.postingDate && entry.status !== 'Posted' && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
+      if (entry.postingDate && !entry.postingLinkOfIg && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
 
     otherWorkEntries.forEach(ow => {
@@ -246,8 +274,14 @@ export function PendingWorkEmbedded({
       }
     });
 
-    // Apply Project Filter
+    // Apply Scope Filter (My Work vs All Work)
     let filteredTasks = tasks;
+    if (workScope === 'my') {
+      const uId = user?.id || user?._id;
+      filteredTasks = filteredTasks.filter(t => t.assigneeId === uId);
+    }
+
+    // Apply Project Filter
     if (filterProject !== 'all') {
       filteredTasks = filteredTasks.filter(t => t.clientId === filterProject);
     }
@@ -263,19 +297,17 @@ export function PendingWorkEmbedded({
       }
     }
 
-    // Apply Stage Filter
-    if (filterStage !== 'all') {
-      filteredTasks = filteredTasks.filter(t => t.stage.toLowerCase() === filterStage.toLowerCase());
-    }
+
 
     // Apply Assigner Filter
-    if (filterAssigner !== 'all') {
-      filteredTasks = filteredTasks.filter(t => t.assignerName && t.assignerName === filterAssigner);
+    const assignerFilterName = filterAssigner !== 'all' ? (filterAssigner.includes('|') ? filterAssigner.split('|')[0] : filterAssigner) : 'all';
+    if (assignerFilterName !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.assignerName && t.assignerName === assignerFilterName);
     }
-
-    // Apply Assignee Filter
-    if (filterAssignee !== 'all') {
-      filteredTasks = filteredTasks.filter(t => t.assigneeName && t.assigneeName === filterAssignee);
+    
+    const assigneeFilterName = filterAssignee !== 'all' ? (filterAssignee.includes('|') ? filterAssignee.split('|')[0] : filterAssignee) : 'all';
+    if (assigneeFilterName !== 'all') {
+      filteredTasks = filteredTasks.filter(t => t.assigneeName && t.assigneeName === assigneeFilterName);
     }
 
     // Apply Search Query
@@ -344,7 +376,26 @@ export function PendingWorkEmbedded({
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees]);
+  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees, workScope]);
+
+  const allPendingTasks = useMemo(() => {
+    if (filterStage === 'all') return preFilteredTasks;
+    return preFilteredTasks.filter(t => t.stage.toLowerCase() === filterStage.toLowerCase());
+  }, [preFilteredTasks, filterStage]);
+
+  const availableStages = useMemo(() => {
+    const defaultStages = ['script', 'shoot', 'editing', 'post/graphics', 'approval', 'posting'];
+    if (isAdminOrTL) {
+      return defaultStages;
+    }
+    const stages = new Set<string>();
+    preFilteredTasks.forEach(t => {
+      if (t.stage) {
+        stages.add(t.stage.toLowerCase());
+      }
+    });
+    return defaultStages.filter(s => stages.has(s));
+  }, [preFilteredTasks, isAdminOrTL]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
@@ -373,10 +424,32 @@ export function PendingWorkEmbedded({
         {/* Bottom Filters Row */}
         <div className="px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <div className="flex items-center gap-2 min-w-max">
-            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm mr-2">
-              <Filter className="w-4 h-4 text-slate-400 mx-2" />
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider pr-2">Filters</span>
-            </div>
+
+
+            {isAdminOrTL && (
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/60 mr-2 shadow-sm">
+                <button
+                  onClick={() => setWorkScope('my')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    workScope === 'my'
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  My Work
+                </button>
+                <button
+                  onClick={() => setWorkScope('all')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    workScope === 'all'
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  All Work
+                </button>
+              </div>
+            )}
 
             <div className="relative w-[150px]">
               <Input 
@@ -418,11 +491,12 @@ export function PendingWorkEmbedded({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Stages</SelectItem>
-                  <SelectItem value="script">Script</SelectItem>
-                  <SelectItem value="shoot">Shoot</SelectItem>
-                  <SelectItem value="editing">Editing</SelectItem>
-                  <SelectItem value="approval">Approval</SelectItem>
-                  <SelectItem value="posting">Posting</SelectItem>
+                  {availableStages.includes('script') && <SelectItem value="script">Script</SelectItem>}
+                  {availableStages.includes('shoot') && <SelectItem value="shoot">Shoot</SelectItem>}
+                  {availableStages.includes('editing') && <SelectItem value="editing">Editing</SelectItem>}
+                  {availableStages.includes('post/graphics') && <SelectItem value="post/graphics">Post/Graphics</SelectItem>}
+                  {availableStages.includes('approval') && <SelectItem value="approval">Approval</SelectItem>}
+                  {availableStages.includes('posting') && <SelectItem value="posting">Posting</SelectItem>}
                 </SelectContent>
               </Select>
             )}
@@ -445,33 +519,43 @@ export function PendingWorkEmbedded({
               </Select>
             )}
 
-            <Select value={filterAssigner} onValueChange={setFilterAssigner}>
-              <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                <SelectValue placeholder="Assigned By" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Assigned By: All</SelectItem>
-                {employees.map(emp => (
-                  <SelectItem key={`assigner-${emp.id}`} value={`${emp.firstName} ${emp.lastName}`}>
-                    {emp.firstName} {emp.lastName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isAdminOrTL && (
+              <>
+                <Select value={filterAssigner} onValueChange={setFilterAssigner}>
+                  <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                    <SelectValue placeholder="Assigned By" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Assigned By: All</SelectItem>
+                    {employees.map(emp => {
+                      const empName = `${emp.firstName} ${emp.lastName}`;
+                      return (
+                        <SelectItem key={`assigner-${emp.id}`} value={`${empName}|${emp.id}`}>
+                          {empName}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
 
-            <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-              <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
-                <SelectValue placeholder="Assigned To" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Assigned To: All</SelectItem>
-                {employees.map(emp => (
-                  <SelectItem key={`assignee-${emp.id}`} value={`${emp.firstName} ${emp.lastName}`}>
-                    {emp.firstName} {emp.lastName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+                  <SelectTrigger className="w-[160px] h-9 text-sm bg-white rounded-md border-slate-200 focus:ring-brand-teal">
+                    <SelectValue placeholder="Assigned To" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Assigned To: All</SelectItem>
+                    {employees.map(emp => {
+                      const empName = `${emp.firstName} ${emp.lastName}`;
+                      return (
+                        <SelectItem key={`assignee-${emp.id}`} value={`${empName}|${emp.id}`}>
+                          {empName}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
           </div>
         </div>
       </div>

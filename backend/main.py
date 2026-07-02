@@ -412,18 +412,41 @@ async def lifespan(app):
     except Exception as e:
         print(f"[PC Registration] Failed to register PC: {e}")
 
-    # Ensure database indexes for chat messages are created to speed up loading
+    # Ensure database indexes are created to speed up loading across high-traffic collections
     try:
         from database import db
-        print("[Chat Indexing] Ensuring database indexes for chat messages...", flush=True)
-        # Index for group/general chats
+        print("[Database Indexing] Ensuring indexes for high-traffic collections...", flush=True)
+        # Chat Messages
         await db.messages.create_index([("groupId", 1), ("timestamp", 1)])
-        # Indexes for personal chats
         await db.messages.create_index([("senderId", 1), ("receiverId", 1), ("timestamp", 1)])
         await db.messages.create_index([("receiverId", 1), ("senderId", 1), ("timestamp", 1)])
-        print("[Chat Indexing] Chat message indexes verified/created successfully.", flush=True)
+        
+        # Work Management Tasks
+        await db.wm_tasks.create_index([("department", 1), ("status", 1)])
+        await db.wm_tasks.create_index([("assignedToId", 1), ("status", 1)])
+        await db.wm_tasks.create_index([("projectId", 1)])
+        await db.wm_tasks.create_index([("dueDate", 1)])
+        await db.wm_tasks.create_index([("postingDate", 1)])
+        
+        # Projects
+        await db.projects.create_index([("department", 1), ("status", 1)])
+        await db.projects.create_index([("clientId", 1)])
+        await db.projects.create_index([("teamLeaderId", 1)])
+        
+        # Employees & Attendance
+        await db.employees.create_index([("email", 1)])
+        await db.employees.create_index([("department", 1)])
+        await db.attendance.create_index([("employeeId", 1), ("date", -1)])
+        await db.attendance.create_index([("date", -1)])
+        
+        # Logs & Clients
+        await db.task_logs.create_index([("taskId", 1), ("timestamp", -1)])
+        await db.task_logs.create_index([("projectId", 1), ("timestamp", -1)])
+        await db.clients.create_index([("department", 1)])
+        
+        print("[Database Indexing] All database indexes verified/created successfully.", flush=True)
     except Exception as e:
-        print(f"[Chat Indexing] Failed to create chat indexes: {e}", flush=True)
+        print(f"[Database Indexing] Failed to create indexes: {e}", flush=True)
 
     reminder_task = asyncio.create_task(content_calendar_reminder_task())
     feedback_task = asyncio.create_task(feedback_reminder_task())
@@ -1289,10 +1312,37 @@ async def read_wm_tasks(userId: Optional[str] = None, role: Optional[str] = None
 
 @app.post("/wm-tasks", response_model=schemas.WMTask)
 async def create_wm_task(task: schemas.WMTaskCreate, db=Depends(get_db)):
+    if task.status == "pending" and (not task.reasonForPending or not task.reasonForPending.strip()):
+        raise HTTPException(status_code=400, detail="Reason for pending is required when marking a task as pending")
+    if task.status == "in-progress" and task.assignedToId:
+        existing = await db.wm_tasks.find_one({"assignedToId": task.assignedToId, "status": "in-progress"})
+        if existing:
+            raise HTTPException(status_code=400, detail="already a task in progress")
     return await crud.create_wm_task(db, task=task)
 
 @app.put("/wm-tasks/{task_id}", response_model=schemas.WMTask)
 async def update_wm_task(task_id: str, task_update: schemas.WMTaskUpdate, db=Depends(get_db)):
+    from bson import ObjectId
+    if task_update.status == "pending":
+        reason = task_update.reasonForPending
+        if not reason or not reason.strip():
+            # Check existing task in db
+            existing = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+            if not existing or not existing.get("reasonForPending") or not existing.get("reasonForPending").strip():
+                raise HTTPException(status_code=400, detail="Reason for pending is required when marking a task as pending")
+                
+    if task_update.status == "in-progress":
+        current_task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+        assignee_id = task_update.assignedToId or (current_task.get("assignedToId") if current_task else None)
+        if assignee_id:
+            existing = await db.wm_tasks.find_one({
+                "assignedToId": assignee_id,
+                "status": "in-progress",
+                "_id": {"$ne": ObjectId(task_id)}
+            })
+            if existing:
+                raise HTTPException(status_code=400, detail="already a task in progress")
+
     updated = await crud.update_wm_task(db, task_id, task_update)
     if not updated:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -1412,10 +1462,12 @@ async def upsert_project_daily_remark(remark: schemas.ProjectDailyRemarkCreate, 
     return crud.fix_id(saved)
 
 @app.get("/marketing/project-remarks", response_model=List[schemas.ProjectDailyRemark])
-async def get_project_daily_remarks(clientId: Optional[str] = None, startDate: Optional[str] = None, endDate: Optional[str] = None, db=Depends(get_db)):
+async def get_project_daily_remarks(clientId: Optional[str] = None, projectId: Optional[str] = None, startDate: Optional[str] = None, endDate: Optional[str] = None, db=Depends(get_db)):
     query = {}
     if clientId:
         query["clientId"] = clientId
+    if projectId:
+        query["projectId"] = projectId
     if startDate and endDate:
         query["date"] = {"$gte": startDate, "$lte": endDate}
     elif startDate:
@@ -2115,8 +2167,8 @@ async def create_invoice(invoice: schemas.InvoiceCreate, db=Depends(get_db)):
     return await crud.create_invoice(db, invoice)
 
 @app.get("/invoices", response_model=List[schemas.Invoice])
-async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db)):
-    return await crud.get_invoices(db, skip=skip, limit=limit)
+async def read_invoices(skip: int = 0, limit: int = 10000, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    return await crud.get_invoices(db, current_user, skip=skip, limit=limit)
 
 @app.get("/invoices/next-number")
 async def get_next_number(type: str = "Tax Invoice", taxType: str = "CGST+SGST", db=Depends(get_db)):
@@ -2124,8 +2176,8 @@ async def get_next_number(type: str = "Tax Invoice", taxType: str = "CGST+SGST",
     return {"nextInvoiceNumber": next_num}
 
 @app.get("/invoices/{invoice_id}", response_model=schemas.Invoice)
-async def read_invoice(invoice_id: str, db=Depends(get_db)):
-    db_invoice = await crud.get_invoice(db, invoice_id)
+async def read_invoice(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    db_invoice = await crud.get_invoice(db, invoice_id, current_user)
     if db_invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return db_invoice
@@ -2138,8 +2190,8 @@ async def update_invoice(invoice_id: str, invoice_update: schemas.InvoiceUpdate,
     return updated
 
 @app.post("/invoices/{invoice_id}/convert-to-tax", response_model=schemas.Invoice)
-async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db)):
-    db_invoice = await crud.get_invoice(db, invoice_id)
+async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
+    db_invoice = await crud.get_invoice(db, invoice_id, current_user)
     if not db_invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     if db_invoice.get("invoiceType") != "Proforma Invoice":
@@ -2162,7 +2214,7 @@ async def convert_invoice_to_tax(invoice_id: str, db=Depends(get_db)):
     return created_invoice
 
 @app.delete("/invoices/{invoice_id}")
-async def delete_invoice(invoice_id: str, db=Depends(get_db)):
+async def delete_invoice(invoice_id: str, db=Depends(get_db), current_user=Depends(auth.get_current_user_token)):
     success = await crud.delete_invoice(db, invoice_id)
     if not success:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -3127,4 +3179,4 @@ async def update_assignment_request_status(request_id: str, request_update: sche
 if __name__ == "__main__":
     port = int(os.environ.get("BACKEND_PORT", os.environ.get("PORT", 8000)))
     print(f"Starting HRMS Backend on http://127.0.0.1:{port}")
-    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=False)

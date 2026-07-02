@@ -94,7 +94,17 @@ export function EmployeeModal({
         }
       }
       if (!Array.isArray(reqDocs)) reqDocs = [];
-      setFormData({ ...initialData, ...employee, requiredDocuments: reqDocs })
+      let startTime = employee.startTime || '';
+      let endTime = employee.endTime || '';
+      if (startTime.includes(':')) {
+        const parts = startTime.split(':');
+        startTime = `${parts[0]}:${parts[1]}`;
+      }
+      if (endTime.includes(':')) {
+        const parts = endTime.split(':');
+        endTime = `${parts[0]}:${parts[1]}`;
+      }
+      setFormData({ ...initialData, ...employee, startTime, endTime, requiredDocuments: reqDocs })
     } else {
       setFormData(initialData)
     }

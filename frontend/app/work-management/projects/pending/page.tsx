@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Plus, Loader2, ArrowLeft } from "lucide-react";
+import { Plus, Loader2, ArrowLeft, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProjectForm, ProjectFormData } from "@/components/hrms/ProjectForm";
@@ -11,11 +11,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+<<<<<<< HEAD
 import { useConfirm } from "@/context/ConfirmContext";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Trash2, Search } from "lucide-react";
+=======
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useConfirm } from "@/context/ConfirmContext";
+import { toast } from "sonner";
+>>>>>>> 05a67139838a6aade9cb9c17ee6e6b06e40b2eeb
 
 export default function PendingProjectsPage() {
   const { user } = useUser();
@@ -207,7 +214,7 @@ export default function PendingProjectsPage() {
                 placeholder="Search pending projects..." 
                 className="pl-10 h-10"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e: any) => setSearchTerm(e.target.value)}
               />
             </div>
             

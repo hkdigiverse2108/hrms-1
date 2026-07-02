@@ -61,6 +61,12 @@ export default function ClientsPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
+    if (!isAdmin && user?.department) {
+      setActiveTab(user.department.toLowerCase());
+    }
+  }, [isAdmin, user]);
+
+  useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, activeTab]);
   
@@ -189,7 +195,13 @@ export default function ClientsPage() {
     }
   };
 
-  const filteredClients = clients.filter(c => {
+  const allowedClients = clients.filter(c => {
+    if (isAdmin) return true;
+    if (!user?.department) return true;
+    return c.department && c.department.toLowerCase().includes(user.department.toLowerCase());
+  });
+
+  const filteredClients = allowedClients.filter(c => {
     const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           c.industry?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -299,14 +311,16 @@ export default function ClientsPage() {
       />
       
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col">
-        <TabsList className="bg-white border mb-4 self-start">
-          <TabsTrigger value="all" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">All Clients</TabsTrigger>
-          {departments.map(dept => (
-            <TabsTrigger key={dept} value={dept.toLowerCase()} className="data-[state=active]:bg-brand-teal data-[state=active]:text-white uppercase text-[10px] font-bold">
-              {dept}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        {isAdmin && (
+          <TabsList className="bg-white border mb-4 self-start">
+            <TabsTrigger value="all" className="data-[state=active]:bg-brand-teal data-[state=active]:text-white">All Clients</TabsTrigger>
+            {departments.map(dept => (
+              <TabsTrigger key={dept} value={dept.toLowerCase()} className="data-[state=active]:bg-brand-teal data-[state=active]:text-white uppercase text-[10px] font-bold">
+                {dept}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        )}
 
         <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-border shadow-sm mb-6">
           <div className="relative flex-1 w-full md:max-w-md">
@@ -340,177 +354,6 @@ export default function ClientsPage() {
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <Loader2 className="w-8 h-8 text-brand-teal animate-spin" />
               <p className="text-muted-foreground font-medium">Loading clients...</p>
-            </div>
-          ) : activeTab === "creative" || activeTab === "development" || departments.map(d=>d.toLowerCase()).includes(activeTab) ? (
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden flex flex-col flex-1">
-              <style dangerouslySetInnerHTML={{ __html: noScrollbarStyle }} />
-              <div className="overflow-x-auto flex-1 no-scrollbar">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50 hover:bg-slate-50 border-b border-slate-200">
-                      <TableHead className="w-12 text-center font-bold text-slate-700">S.N</TableHead>
-                      {activeTab === "development" ? (
-                        <>
-                          <TableHead className="min-w-[180px] text-left font-bold text-slate-700">Company Name</TableHead>
-                          <TableHead className="min-w-[150px] text-left font-bold text-slate-700">Contact Person</TableHead>
-                          <TableHead className="min-w-[180px] text-left font-bold text-slate-700">Email Address</TableHead>
-                          <TableHead className="min-w-[120px] text-left font-bold text-slate-700">Phone Number</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Status</TableHead>
-                        </>
-                      ) : activeTab === "digital marketing" ? (
-                        <>
-                          <TableHead className="min-w-[150px] text-left font-bold text-slate-700">Client Name</TableHead>
-                          <TableHead className="min-w-[150px] text-left font-bold text-slate-700">Services</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Sales Focused</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Daily Budget</TableHead>
-                          <TableHead className="min-w-[200px] text-left font-bold text-slate-700">Remarks</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Active/Inactive</TableHead>
-                          <TableHead className="min-w-[200px] text-left font-bold text-slate-700">Assigned Employee</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Daily Followup</TableHead>
-                        </>
-                      ) : (
-                        <>
-                          <TableHead className="min-w-[180px] text-left font-bold text-slate-700">Company Name</TableHead>
-                          <TableHead className="min-w-[120px] text-center font-bold text-slate-700">Department</TableHead>
-                          <TableHead className="min-w-[150px] text-left font-bold text-slate-700">Contact Person</TableHead>
-                          <TableHead className="min-w-[180px] text-left font-bold text-slate-700">Email Address</TableHead>
-                          <TableHead className="min-w-[120px] text-left font-bold text-slate-700">Phone Number</TableHead>
-                          <TableHead className="min-w-[150px] text-left font-bold text-slate-700">Services</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Festival Post</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Graph Req</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Post Req</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Post Count</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Reel Req</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Reel Count</TableHead>
-                          <TableHead className="text-center font-bold text-slate-700">Status</TableHead>
-                        </>
-                      )}
-                      <TableHead className="text-center font-bold text-slate-700">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedClients.map((client, index) => (
-                      <TableRow key={client.id} className="group border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                        <TableCell className="text-center text-slate-400">{(currentPage - 1) * itemsPerPage + index + 1}</TableCell>
-                        
-                        {/* Inline Editable Fields based on Dept */}
-                        {(activeTab === "development" ? [
-                          { key: 'companyName', type: 'text', font: 'bold', align: 'left' },
-                          { key: 'name', type: 'text', align: 'left' },
-                          { key: 'email', type: 'text', align: 'left' },
-                          { key: 'phone', type: 'text', align: 'left' },
-                          { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
-                        ] : activeTab === "digital marketing" ? [
-                          { key: 'name', type: 'text', font: 'bold', align: 'left' },
-                          { key: 'services', type: 'text', align: 'left' },
-                          { key: 'salesFocused', type: 'text', align: 'left' },
-                          { key: 'dailyBudget', type: 'number', align: 'center' },
-                          { key: 'remarks', type: 'text', align: 'left' },
-                          { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
-                          { key: 'assignedEmployeeId', labelKey: 'assignedEmployeeName', type: 'select', options: employees.map(e => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })), align: 'left' },
-                          { key: 'dailyFollowup', type: 'select', options: ['Yes', 'No'], align: 'center' },
-                        ] : [
-                          { key: 'companyName', type: 'text', font: 'bold', align: 'left' },
-                          { key: 'department', type: 'select', options: departments, align: 'center' },
-                          { key: 'name', type: 'text', align: 'left' },
-                          { key: 'email', type: 'text', align: 'left' },
-                          { key: 'phone', type: 'text', align: 'left' },
-                          { key: 'services', type: 'text', align: 'left' },
-                          { key: 'festivalPost', type: 'select', options: ['Yes', 'No'], align: 'center' },
-                          { key: 'graphicsRequired', type: 'select', options: ['Yes', 'No'], align: 'center' },
-                          { key: 'postRequired', type: 'select', options: ['Yes', 'No'], align: 'center' },
-                          { key: 'post', type: 'number', align: 'center' },
-                          { key: 'reelRequired', type: 'select', options: ['Yes', 'No'], align: 'center' },
-                          { key: 'reel', type: 'number', align: 'center' },
-                          { key: 'status', type: 'select', options: ['active', 'inactive', 'on-hold'], align: 'center' },
-                        ]).map(col => (
-                          <TableCell 
-                            key={col.key as string} 
-                            className={`${col.type !== 'readonly' && canEditClients ? 'cursor-text hover:bg-slate-50' : ''}`}
-                            onClick={() => col.type !== 'readonly' && canEditClients && setInlineEditing({ id: client.id, field: col.key })}
-                          >
-                            {inlineEditing?.id === client.id && inlineEditing?.field === col.key ? (
-                              col.type === 'select' ? (
-                                <div className="flex justify-center">
-                                  <select 
-                                    autoFocus
-                                    className="w-full border rounded px-1 py-0.5 outline-none"
-                                    defaultValue={client[col.key]}
-                                    onBlur={(e) => handleInlineUpdate(client.id, col.key, e.target.value)}
-                                    onChange={(e) => handleInlineUpdate(client.id, col.key, e.target.value)}
-                                  >
-                                    {col.options?.filter((o: any) => {
-                                      if (col.key !== 'assignedEmployeeId' || !client.department) return true;
-                                      if (typeof o !== 'object' || o === null) return true;
-                                      const emp = employees.find(e => e.id === o.value);
-                                      if (!emp) return true;
-                                      const selectedDepts = client.department.split(',').map((d: string) => d.trim().toLowerCase()).filter(Boolean);
-                                      return selectedDepts.includes(emp.department?.toLowerCase() || '');
-                                    }).map((o: any) => typeof o === 'object' && o !== null ? <option key={o.value} value={o.value}>{o.label}</option> : <option key={o as string} value={o as string}>{o as string}</option>)}
-                                  </select>
-                                </div>
-                              ) : (
-                                <input 
-                                  autoFocus
-                                  type={col.type}
-                                  className={`w-full border rounded px-2 py-1 outline-none ${col.align === 'center' ? 'text-center' : ''}`}
-                                  defaultValue={client[col.key]}
-                                  onBlur={(e) => handleInlineUpdate(client.id, col.key, e.target.value)}
-                                  onKeyDown={(e) => e.key === 'Enter' && handleInlineUpdate(client.id, col.key, e.currentTarget.value)}
-                                />
-                              )
-                            ) : (
-                              <div className={`text-[12px] ${col.font === 'bold' ? 'font-bold' : ''} ${col.align === 'center' ? 'text-center' : 'text-left'}`}>
-                                {col.type === 'select' ? (
-                                  col.key === 'assignedEmployeeId' ? (
-                                    <span className="font-medium text-slate-700">{client.assignedEmployeeName || "Unassigned"}</span>
-                                  ) : (
-                                  <Badge variant={
-                                    client[col.key] === "Yes" || client[col.key] === "active" 
-                                      ? "success" 
-                                      : client[col.key] === "on-hold"
-                                        ? "warning"
-                                        : "secondary"
-                                  }>
-                                    {client[col.key] === "on-hold" ? "On Hold" : client[col.key] || (col.key === 'status' ? 'active' : 'No')}
-                                  </Badge>
-                                  )
-                                ) : col.key === 'phone' ? (
-                                  <div className="flex flex-col">
-                                    <span>{client[col.key] || "-"}</span>
-                                    {client.state && (
-                                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-slate-50 text-slate-600 border-slate-200 mt-0.5 w-fit">
-                                        State: {client.state}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                ) : (
-                                  client[col.key] || (col.type === 'number' ? '0' : "-")
-                                )}
-                              </div>
-                            )}
-                          </TableCell>
-                        ))}
-
-                        <TableCell>
-                          <div className="flex gap-1 justify-center">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => fetchLogs(client)}><History className="w-3.5 h-3.5" /></Button>
-                            {canEditClients && (
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingClient(client); setModalOpen(true); }}><Pencil className="w-3.5 h-3.5" /></Button>
-                            )}
-                            {canDeleteClients && (
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(client.id)}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {filteredClients.length === 0 && (
-                      <TableRow><TableCell colSpan={12} className="h-24 text-center text-muted-foreground">No client found.</TableCell></TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
             </div>
           ) : filteredClients.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -569,61 +412,6 @@ export default function ClientsPage() {
                             <span className="text-slate-700 font-bold">
                               {INDIAN_STATES.find(s => s.code === client.state)?.name || client.state}
                             </span>
-                          </div>
-                        )}
-                        
-                        {/* Additional Details */}
-                        {(client.services || client.assignedEmployeeName || Number(client.post) > 0 || Number(client.reel) > 0 || Number(client.dailyBudget) > 0 || client.festivalPost === "Yes" || client.salesFocused) && (
-                          <div className="pt-3 mt-3 border-t border-dashed border-border/60 space-y-2">
-                            {client.services && (
-                              <div className="flex flex-col gap-0.5 text-xs">
-                                <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Services</span>
-                                <span className="text-slate-700 font-medium">{client.services}</span>
-                              </div>
-                            )}
-                            {client.assignedEmployeeName && (
-                              <div className="flex flex-col gap-0.5 text-xs">
-                                <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Assigned Employee / Team Leader</span>
-                                <span className="text-brand-teal font-semibold">{client.assignedEmployeeName}</span>
-                              </div>
-                            )}
-                            <div className="grid grid-cols-2 gap-2">
-                              {Number(client.post) > 0 && (
-                                <div className="flex flex-col gap-0.5 text-xs">
-                                  <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Posts</span>
-                                  <span className="text-slate-700 font-medium">{client.post}</span>
-                                </div>
-                              )}
-                              {Number(client.reel) > 0 && (
-                                <div className="flex flex-col gap-0.5 text-xs">
-                                  <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Reels</span>
-                                  <span className="text-slate-700 font-medium">{client.reel}</span>
-                                </div>
-                              )}
-                              {Number(client.dailyBudget) > 0 && (
-                                <div className="flex flex-col gap-0.5 text-xs">
-                                  <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Daily Budget</span>
-                                  <span className="text-slate-700 font-medium">₹{client.dailyBudget}</span>
-                                </div>
-                              )}
-                              {client.salesFocused && (
-                                <div className="flex flex-col gap-0.5 text-xs">
-                                  <span className="font-semibold text-slate-500 uppercase tracking-wider text-[9px]">Sales Focused</span>
-                                  <span className="text-slate-700 font-medium">{client.salesFocused}</span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap gap-1 pt-1">
-                              {client.festivalPost === "Yes" && (
-                                <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-600 border-amber-200">Festival Post</Badge>
-                              )}
-                              {client.graphicsRequired === "Yes" && (
-                                <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-600 border-blue-200">Graphics Req</Badge>
-                              )}
-                              {client.dailyFollowup === "Yes" && (
-                                <Badge variant="outline" className="text-[9px] bg-purple-50 text-purple-600 border-purple-200">Daily Follow-up</Badge>
-                              )}
-                            </div>
                           </div>
                         )}
                       </div>

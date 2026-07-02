@@ -49,6 +49,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [deptInput, setDeptInput] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -131,6 +132,24 @@ export default function SettingsPage() {
     }
   };
 
+  const handleToggleShowNamesInRemarksToAdmin = async (checked: boolean) => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`${API_URL}/system-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showNamesInRemarksToAdmin: checked })
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleUpdateShiftSettings = async (key: string, value: any) => {
     setIsUpdating(true);
     try {
@@ -175,6 +194,7 @@ export default function SettingsPage() {
           taxInvoicePrefix: settings?.taxInvoicePrefix || "INV",
           proformaInvoicePrefix: settings?.proformaInvoicePrefix || "PINV",
           noTaxInvoicePrefix: settings?.noTaxInvoicePrefix || "NINV",
+          invoiceClientDepartments: deptInput !== null ? deptInput.split(",").map(s => s.trim()).filter(Boolean) : (settings?.invoiceClientDepartments || []),
           companyLetterheadUrl: settings?.companyLetterheadUrl || null,
           companySignatureUrl: settings?.companySignatureUrl || null,
           invoiceColor1: settings?.invoiceColor1 || "#08304b",
@@ -184,7 +204,7 @@ export default function SettingsPage() {
           defaultShootDateOffset: settings?.defaultShootDateOffset !== undefined ? settings.defaultShootDateOffset : null,
           defaultEditingStartOffset: settings?.defaultEditingStartOffset !== undefined ? settings.defaultEditingStartOffset : null,
           defaultApprovalOffset: settings?.defaultApprovalOffset !== undefined ? settings.defaultApprovalOffset : null,
-          paymentDueDays: settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0
+          addHoldDaysToEndDate: settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true
         })
       });
       if (res.ok) {
@@ -357,6 +377,27 @@ export default function SettingsPage() {
                         <Switch 
                           checked={settings?.dailyProgressRejectDeductionEnabled ?? false}
                           onCheckedChange={handleToggleDailyProgressRejectDeduction}
+                          disabled={isUpdating || !canEditSettings}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/30 mt-4">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[14px] font-bold">Show Names in Remarks to Admins</Label>
+                          <Badge variant="outline" className="text-[9px] h-4 font-bold bg-white">REMARKS</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground max-w-[400px]">
+                          When disabled, employee names will be hidden (anonymous) in the remarks logs, even for Admins.
+                        </p>
+                      </div>
+                      {isLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-brand-teal" />
+                      ) : (
+                        <Switch 
+                          checked={settings?.showNamesInRemarksToAdmin ?? true}
+                          onCheckedChange={handleToggleShowNamesInRemarksToAdmin}
                           disabled={isUpdating || !canEditSettings}
                         />
                       )}
@@ -828,17 +869,34 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-bold">Digital Marketing Payment Due Threshold (Days)</Label>
-                    <p className="text-[10px] text-muted-foreground mb-1">Show "Payment Due" this many days before the actual payment date in the Digital Marketing module.</p>
-                    <input 
-                      type="number" 
-                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
-                      value={settings?.paymentDueDays !== undefined ? settings.paymentDueDays : 0}
-                      onChange={(e) => setSettings({...settings, paymentDueDays: parseInt(e.target.value) || 0})}
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+                    <div>
+                      <Label className="text-sm font-bold">Add on-hold days to Digital Marketing Department Project End Date</Label>
+                      <p className="text-[10px] text-muted-foreground">Automatically add on-hold days to the calculated end date (Digital Marketing only).</p>
+                    </div>
+                    <Switch
+                      checked={settings?.addHoldDaysToEndDate !== undefined ? settings.addHoldDaysToEndDate : true}
+                      onCheckedChange={(checked) => setSettings({...settings, addHoldDaysToEndDate: checked})}
                       disabled={isUpdating || !canEditSettings}
-                      placeholder="e.g. 5"
-                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-1 md:col-span-2 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold">Client Departments (Comma Separated)</Label>
+                    <p className="text-[10px] text-muted-foreground mb-1">These departments will appear in a dropdown when creating or editing an Invoice.</p>
+                    <input 
+                      type="text" 
+                      className="w-full h-10 px-3 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-brand-teal text-sm font-bold"
+                      value={deptInput !== null ? deptInput : (settings?.invoiceClientDepartments || []).join(", ")}
+                      onChange={(e) => setDeptInput(e.target.value)}
+                      onBlur={(e) => {
+                        setSettings({...settings, invoiceClientDepartments: e.target.value.split(",").map(s => s.trim()).filter(Boolean)});
+                        setDeptInput(null);
+                      }}
+                      disabled={isUpdating || !canEditSettings}
+                      placeholder="e.g. Billing Department, Support, Sales"
                     />
                   </div>
                 </div>

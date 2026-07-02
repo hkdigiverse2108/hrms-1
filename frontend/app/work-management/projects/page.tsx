@@ -46,6 +46,12 @@ export default function ProjectsPage() {
   const [selectedCompany, setSelectedCompany] = useState("all");
 
   useEffect(() => {
+    if (!isAdmin && user?.department) {
+      setSelectedDept(user.department.toLowerCase().trim());
+    }
+  }, [isAdmin, user]);
+
+  useEffect(() => {
     if (!permissionsLoading && !canViewProjects) {
       setTimeout(() => {
         router.push("/");
@@ -475,12 +481,20 @@ export default function ProjectsPage() {
     return missing;
   });
 
-  const filteredProjects = projects.filter(p => {
+  const allowedProjects = projects.filter(p => {
+    if (isAdmin) return true;
+    if (!user?.department) return true;
+    const userDept = user.department.toLowerCase().trim();
+    return p.department && p.department.toLowerCase().includes(userDept);
+  });
+
+  const filteredProjects = allowedProjects.filter(p => {
     const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           p.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           p.department?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesDept = selectedDept === "all" || p.department?.toLowerCase() === selectedDept.toLowerCase();
+    const selectedDeptTrimmed = selectedDept.toLowerCase().trim();
+    const matchesDept = selectedDept === "all" || (p.department && p.department.toLowerCase().includes(selectedDeptTrimmed));
     const matchesStatus = selectedStatus === "all" || p.status?.toLowerCase() === selectedStatus.toLowerCase();
     const matchesPriority = selectedPriority === "all" || p.priority?.toLowerCase() === selectedPriority.toLowerCase();
     const matchesCompany = selectedCompany === "all" || p.clientName === selectedCompany;
@@ -1025,17 +1039,19 @@ export default function ProjectsPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          <Select value={selectedDept} onValueChange={setSelectedDept}>
-            <SelectTrigger className="w-[160px] h-10 font-medium">
-              <SelectValue placeholder="Department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              <SelectItem value="Development">Development</SelectItem>
-              <SelectItem value="Creative">Creative</SelectItem>
-              <SelectItem value="Digital Marketing">Digital Marketing</SelectItem>
-            </SelectContent>
-          </Select>
+          {isAdmin && (
+            <Select value={selectedDept} onValueChange={setSelectedDept}>
+              <SelectTrigger className="w-[160px] h-10 font-medium">
+                <SelectValue placeholder="Department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {["Development", "Creative", "Digital Marketing"].map(dept => (
+                  <SelectItem key={dept} value={dept.toLowerCase()}>{dept}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <Select value={selectedStatus} onValueChange={setSelectedStatus}>
             <SelectTrigger className="w-[140px] h-10 font-medium">
@@ -1046,7 +1062,12 @@ export default function ProjectsPage() {
               <SelectItem value="planning">Planning</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="on-hold">On Hold</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
+              {(selectedDept === "all" || selectedDept.toLowerCase() === "development" || selectedDept.toLowerCase().includes("dev")) && (
+                <>
+                  <SelectItem value="testing">Testing</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </>
+              )}
             </SelectContent>
           </Select>
 
@@ -1126,6 +1147,7 @@ export default function ProjectsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => {
             const progress = calculateProgress(project.id);
+            const isDevProject = !project.department || project.department.toLowerCase() === "development" || project.department.toLowerCase().includes("dev");
             const overdue = isOverdue(project.endDate, project.status, progress);
             const isManagementOrTL = isAdmin || user?.role === "HR" || project.teamLeaderId === user?.id;
             
@@ -1138,7 +1160,7 @@ export default function ProjectsPage() {
                     <div className="flex flex-col">
                       <div className="flex gap-2 items-center mb-2">
                         <Badge variant={getStatusColor(project.status, progress)} className="capitalize">
-                          {progress === 100 ? 'Completed' : project.status.replace('-', ' ')}
+                          {isDevProject && progress === 100 ? 'Completed' : project.status.replace('-', ' ')}
                         </Badge>
                         {overdue && (
                           <Badge variant="destructive" className="text-[10px] font-bold h-5 flex items-center gap-1">
@@ -1294,8 +1316,8 @@ export default function ProjectsPage() {
                       </div>
                     )}
 
-                    {/* Testing Phase / Shift to Testing Action */}
-                    {project.status === "testing" ? (
+                    {/* Testing Phase / Shift to Testing Action - Only for Development Projects */}
+                    {isDevProject && (project.status === "testing" ? (
                       <div className="pt-3 border-t border-dashed border-indigo-200">
                         <Button 
                           type="button"
@@ -1329,7 +1351,7 @@ export default function ProjectsPage() {
                           </div>
                         )}
                       </div>
-                    ) : null}
+                    ) : null)}
 
                     <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[12px] text-muted-foreground">
                       {isAdmin ? (

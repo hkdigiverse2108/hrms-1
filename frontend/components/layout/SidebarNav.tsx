@@ -88,7 +88,7 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
     const isTL = Boolean(user && (user.role?.toLowerCase() === 'team leader' || user.designation?.toLowerCase() === 'team leader'));
     if (isAdmin || isTL || checkPermission('tasks', 'canView') || checkPermission('development', 'canView')) {
-      workManagementChildren.push(getItem(<Link href="/work-management/tasks">Development</Link>, "/work-management/tasks"));
+      workManagementChildren.push(getItem(<Link href="/work-management/development">Development</Link>, "/work-management/development"));
     }
     const isHRUser = user?.role === 'HR' || user?.department?.toLowerCase() === 'hr';
     if (isAdmin || isHRUser || checkPermission('daily-progress', 'canView')) {
@@ -200,11 +200,11 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
     }
     
     if (isAdmin || checkPermission('remarks', 'canView')) {
-      menuItems.push(getItem(<Link href="/remarks">Penalty</Link>, "/remarks", <MessagesSquare className="w-5 h-5" />));
+      menuItems.push(getItem(<Link href="/penalty">Penalty</Link>, "/penalty", <MessagesSquare className="w-5 h-5" />));
     }
 
     if (isAdmin || checkPermission('review', 'canView')) {
-      menuItems.push(getItem(<Link href="/review">Remarks</Link>, "/review", <Star className="w-5 h-5" />));
+      menuItems.push(getItem(<Link href="/remarks">Remarks</Link>, "/remarks", <Star className="w-5 h-5" />));
     }
 
     if (isAdmin || checkPermission('activity-tracker', 'canView')) {
@@ -231,10 +231,10 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
       ));
     }
 
-    if (isAdmin || checkPermission('personal-tasks', 'canView')) {
+    if (isAdmin || checkPermission('personal-tasks', 'canView') || checkPermission('tasks', 'canView')) {
       menuItems.push(getItem(
-        <Link href="/task">Tasks</Link>,
-        "/task",
+        <Link href="/tasks">Tasks</Link>,
+        "/tasks",
         <ClipboardList className="w-5 h-5" />
       ));
     }
@@ -268,9 +268,9 @@ export function SidebarNav({ collapsed = false, toggleCollapse }: { collapsed?: 
 
     if (pathname.startsWith("/attendance")) return ["/attendance"];
     if (pathname.startsWith("/schedule")) return ["/schedule"];
-    if (pathname.startsWith("/task")) return ["/task"];
+    if (pathname.startsWith("/tasks")) return ["/tasks"];
+    if (pathname.startsWith("/penalty")) return ["/penalty"];
     if (pathname.startsWith("/remarks")) return ["/remarks"];
-    if (pathname.startsWith("/review")) return ["/review"];
     if (pathname.startsWith("/activity-tracker")) return ["/activity-tracker"];
     if (pathname.startsWith("/invoice")) {
       if (pathname === "/invoice/create" && searchParams.get("type") === "Proforma") {

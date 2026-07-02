@@ -261,6 +261,26 @@ def run_app():
         )
 
     processes["backend"]  = start_backend()
+
+    # Wait for backend to be ready
+    print(f"\nWaiting for backend on port {backend_port} to start listening...")
+    import socket
+    def wait_for_port(port, host="127.0.0.1", timeout=30):
+        start_time = time.time()
+        while True:
+            try:
+                with socket.create_connection((host, port), timeout=1):
+                    return True
+            except (ConnectionRefusedError, OSError):
+                time.sleep(0.5)
+                if time.time() - start_time > timeout:
+                    return False
+    
+    if wait_for_port(int(backend_port), host=app_host):
+        print("[OK] Backend is ready and listening.")
+    else:
+        print("[WARN] Backend did not start listening within timeout. Starting frontend anyway...")
+
     processes["frontend"] = start_frontend()
 
     # ── Signal handling ───────────────────────────────────────

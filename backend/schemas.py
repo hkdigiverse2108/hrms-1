@@ -718,6 +718,8 @@ class ReviewBase(BaseModel):
     summary: str
     rating: int
     date: Optional[RobustDate] = None
+    logs: Optional[List[dict]] = None
+    updatedBy: Optional[str] = None
 
 class ReviewCreate(ReviewBase):
     pass
@@ -725,6 +727,7 @@ class ReviewCreate(ReviewBase):
 class ReviewUpdate(BaseModel):
     summary: Optional[str] = None
     rating: Optional[int] = None
+    updatedBy: Optional[str] = None
 
 class Review(ReviewBase):
     id: str
@@ -1165,6 +1168,7 @@ class ModuleNotebookUpdate(BaseModel):
     researchWork: str
     performedBy: Optional[str] = None
     userName: Optional[str] = None
+    noteId: Optional[str] = None
 
 class ModuleCommentCreate(BaseModel):
     moduleName: str
@@ -1231,6 +1235,8 @@ class WMTaskBase(BaseModel):
     priority: Optional[str] = "medium" # low, medium, high, urgent
     estimatedHours: Optional[float] = 0
     remarks: Optional[str] = None
+    reasonForPending: Optional[str] = None
+    isApproved: Optional[bool] = False
     createdBy: Optional[str] = None
     performedBy: Optional[str] = None
     userName: Optional[str] = None
@@ -1276,6 +1282,8 @@ class WMTaskUpdate(BaseModel):
     priority: Optional[str] = None
     estimatedHours: Optional[float] = None
     remarks: Optional[str] = None
+    reasonForPending: Optional[str] = None
+    isApproved: Optional[bool] = None
     
     # Phase & Hierarchy Fields
     phase: Optional[str] = None
@@ -1428,7 +1436,9 @@ class SystemSettingsBase(BaseModel):
     defaultShootDateOffset: Optional[int] = None
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
-    paymentDueDays: Optional[int] = 0
+    addHoldDaysToEndDate: Optional[bool] = True
+    invoiceClientDepartments: Optional[List[str]] = []
+    showNamesInRemarksToAdmin: Optional[bool] = True
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1462,7 +1472,9 @@ class SystemSettingsUpdate(BaseModel):
     defaultShootDateOffset: Optional[int] = None
     defaultEditingStartOffset: Optional[int] = None
     defaultApprovalOffset: Optional[int] = None
-    paymentDueDays: Optional[int] = None
+    addHoldDaysToEndDate: Optional[bool] = None
+    invoiceClientDepartments: Optional[List[str]] = None
+    showNamesInRemarksToAdmin: Optional[bool] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str
@@ -1475,12 +1487,20 @@ class ProjectDailyRemarkBase(BaseModel):
     clientId: Optional[str] = None
     date: RobustDate
     remark: Optional[str] = None
+    revenue: float = 0
+    followers: int = 0
+    userRemark: Optional[str] = None
+    clientRemark: Optional[str] = None
 
 class ProjectDailyRemarkCreate(ProjectDailyRemarkBase):
     pass
 
 class ProjectDailyRemarkUpdate(BaseModel):
     remark: Optional[str] = None
+    revenue: Optional[float] = None
+    followers: Optional[int] = None
+    userRemark: Optional[str] = None
+    clientRemark: Optional[str] = None
 
 class ProjectDailyRemark(ProjectDailyRemarkBase):
     id: str
@@ -1930,6 +1950,11 @@ class InvoiceLineItem(BaseModel):
     discountRate: Optional[float] = 0.0
     discountType: Optional[str] = "amount"
 
+class InvoiceIncentive(BaseModel):
+    employeeId: str
+    employeeName: str
+    amount: float
+
 class InvoiceBase(BaseModel):
     clientName: str
     clientAddress: Optional[str] = None
@@ -1959,6 +1984,12 @@ class InvoiceBase(BaseModel):
     incentiveAmountBase: Optional[float] = None
     createdBy: Optional[str] = None
     createdById: Optional[str] = None
+    endDate: Optional[str] = None
+    followUp: Optional[str] = None
+    sharedWith: Optional[List[str]] = []
+    accessManaged: Optional[bool] = False
+    totalIncentiveAmount: Optional[float] = 0.0
+    incentives: Optional[List[InvoiceIncentive]] = []
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -1990,6 +2021,12 @@ class InvoiceUpdate(BaseModel):
     incentiveAmountBase: Optional[float] = None
     createdBy: Optional[str] = None
     createdById: Optional[str] = None
+    endDate: Optional[str] = None
+    followUp: Optional[str] = None
+    sharedWith: Optional[List[str]] = []
+    accessManaged: Optional[bool] = False
+    totalIncentiveAmount: Optional[float] = None
+    incentives: Optional[List[InvoiceIncentive]] = None
 
 class Invoice(InvoiceBase):
     id: str
