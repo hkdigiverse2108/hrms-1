@@ -162,6 +162,7 @@ export default function ReviewPage() {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sysSettings, setSysSettings] = useState<any>(null);
 
   useEffect(() => {
     if (user !== undefined) {
@@ -179,12 +180,14 @@ export default function ReviewPage() {
     setIsLoading(true);
     try {
       const employeeIdParam = (!isAdmin && user) ? `?employeeId=${user.id || user._id || ''}` : '';
-      const [revRes, empRes] = await Promise.all([
+      const [revRes, empRes, settingsRes] = await Promise.all([
         fetch(`${API_URL}/reviews${employeeIdParam}`),
-        fetch(`${API_URL}/employees`)
+        fetch(`${API_URL}/employees`),
+        fetch(`${API_URL}/system-settings`)
       ]);
       if (revRes.ok) setReviews(await revRes.json());
       if (empRes.ok) setEmployees(await empRes.json());
+      if (settingsRes.ok) setSysSettings(await settingsRes.json());
     } catch (err) {
       console.error("Error fetching review data:", err);
     } finally {
@@ -451,25 +454,32 @@ export default function ReviewPage() {
                   </td>
                 </tr>
               ) : (
-                paginatedReviews.map((review, idx) => (
-                  <tr key={review.id} className="hover:bg-gray-50/50 transition-colors group">
-                    <td className="px-6 py-4 font-semibold text-slate-500">
-                      {((currentPage - 1) * itemsPerPage + idx + 1).toString().padStart(2, '0')}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-10 h-10 border border-border rounded-lg overflow-hidden">
-                          <AvatarImage src={review.avatar} className="object-cover" />
-                          <AvatarFallback className="bg-brand-light text-brand-teal text-xs font-bold">
-                            {review.employeeName?.split(' ').map((n:any) => n[0]).join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-bold text-foreground text-[14px] leading-tight">{review.employeeName}</div>
-                          <div className="text-[12px] text-muted-foreground font-medium mt-0.5">{review.role}</div>
+                paginatedReviews.map((review, idx) => {
+                  const shouldHideNames = isAdmin && sysSettings && sysSettings.showNamesInRemarksToAdmin === false;
+                  const displayName = shouldHideNames ? "Anonymous" : review.employeeName;
+                  const displayRole = shouldHideNames ? "Employee" : review.role;
+                  const displayAvatarFallback = shouldHideNames ? "A" : review.employeeName?.split(' ').map((n:any) => n[0]).join('');
+                  const displayAvatarSrc = shouldHideNames ? "" : review.avatar;
+
+                  return (
+                    <tr key={review.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="px-6 py-4 font-semibold text-slate-500">
+                        {((currentPage - 1) * itemsPerPage + idx + 1).toString().padStart(2, '0')}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-10 h-10 border border-border rounded-lg overflow-hidden">
+                            <AvatarImage src={displayAvatarSrc} className="object-cover" />
+                            <AvatarFallback className="bg-brand-light text-brand-teal text-xs font-bold">
+                              {displayAvatarFallback}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-bold text-foreground text-[14px] leading-tight">{displayName}</div>
+                            <div className="text-[12px] text-muted-foreground font-medium mt-0.5">{displayRole}</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
                     <td className="px-6 py-4 font-medium text-slate-600">
                       {review.department}
                     </td>
@@ -506,8 +516,9 @@ export default function ReviewPage() {
                         )}
                       </div>
                     </td>
-                  </tr>
-                ))
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -1438,6 +1438,7 @@ class SystemSettingsBase(BaseModel):
     defaultApprovalOffset: Optional[int] = None
     addHoldDaysToEndDate: Optional[bool] = True
     invoiceClientDepartments: Optional[List[str]] = []
+    showNamesInRemarksToAdmin: Optional[bool] = True
 
 class SystemSettingsUpdate(BaseModel):
     clientVisibilityAdminOnly: Optional[bool] = None
@@ -1473,6 +1474,7 @@ class SystemSettingsUpdate(BaseModel):
     defaultApprovalOffset: Optional[int] = None
     addHoldDaysToEndDate: Optional[bool] = None
     invoiceClientDepartments: Optional[List[str]] = None
+    showNamesInRemarksToAdmin: Optional[bool] = None
 
 class SystemSettings(SystemSettingsBase):
     id: str

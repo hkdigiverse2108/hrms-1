@@ -4024,7 +4024,8 @@ async def get_system_settings(db):
             "proformaInvoicePrefix": "PINV",
             "invoiceColor1": "#08304b",
             "invoiceColor2": "#08304b",
-            "defaultSac": ""
+            "defaultSac": "",
+            "showNamesInRemarksToAdmin": True
         }
         result = await db.system_settings.insert_one(default_settings)
         settings = await db.system_settings.find_one({"_id": result.inserted_id})
