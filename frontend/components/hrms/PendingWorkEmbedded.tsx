@@ -159,7 +159,9 @@ export function PendingWorkEmbedded({
     }
   };
 
-  const allPendingTasks = useMemo(() => {
+  const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
+
+  const preFilteredTasks = useMemo(() => {
     const tasks: any[] = [];
     const storedUser = localStorage.getItem('user');
     const user = storedUser ? JSON.parse(storedUser) : null;
@@ -295,10 +297,7 @@ export function PendingWorkEmbedded({
       }
     }
 
-    // Apply Stage Filter
-    if (filterStage !== 'all') {
-      filteredTasks = filteredTasks.filter(t => t.stage.toLowerCase() === filterStage.toLowerCase());
-    }
+
 
     // Apply Assigner Filter
     const assignerFilterName = filterAssigner !== 'all' ? (filterAssigner.includes('|') ? filterAssigner.split('|')[0] : filterAssigner) : 'all';
@@ -377,9 +376,26 @@ export function PendingWorkEmbedded({
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees, workScope]);
+  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees, workScope]);
 
-  const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
+  const allPendingTasks = useMemo(() => {
+    if (filterStage === 'all') return preFilteredTasks;
+    return preFilteredTasks.filter(t => t.stage.toLowerCase() === filterStage.toLowerCase());
+  }, [preFilteredTasks, filterStage]);
+
+  const availableStages = useMemo(() => {
+    const defaultStages = ['script', 'shoot', 'editing', 'post/graphics', 'approval', 'posting'];
+    if (isAdminOrTL) {
+      return defaultStages;
+    }
+    const stages = new Set<string>();
+    preFilteredTasks.forEach(t => {
+      if (t.stage) {
+        stages.add(t.stage.toLowerCase());
+      }
+    });
+    return defaultStages.filter(s => stages.has(s));
+  }, [preFilteredTasks, isAdminOrTL]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
@@ -475,12 +491,12 @@ export function PendingWorkEmbedded({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Stages</SelectItem>
-                  <SelectItem value="script">Script</SelectItem>
-                  <SelectItem value="shoot">Shoot</SelectItem>
-                  <SelectItem value="editing">Editing</SelectItem>
-                  <SelectItem value="post/graphics">Post/Graphics</SelectItem>
-                  <SelectItem value="approval">Approval</SelectItem>
-                  <SelectItem value="posting">Posting</SelectItem>
+                  {availableStages.includes('script') && <SelectItem value="script">Script</SelectItem>}
+                  {availableStages.includes('shoot') && <SelectItem value="shoot">Shoot</SelectItem>}
+                  {availableStages.includes('editing') && <SelectItem value="editing">Editing</SelectItem>}
+                  {availableStages.includes('post/graphics') && <SelectItem value="post/graphics">Post/Graphics</SelectItem>}
+                  {availableStages.includes('approval') && <SelectItem value="approval">Approval</SelectItem>}
+                  {availableStages.includes('posting') && <SelectItem value="posting">Posting</SelectItem>}
                 </SelectContent>
               </Select>
             )}
