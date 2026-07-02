@@ -84,6 +84,11 @@ interface WMTaskFormProps {
 
 export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment }: WMTaskFormProps) {
   const { user } = useUser();
+  const [projects, setProjects] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [isLoadingMeta, setIsLoadingMeta] = useState(true);
+  const [distributedList, setDistributedList] = useState<any[]>([]);
+
   const isExistingTask = Boolean((initialData as any)?.id || (initialData as any)?._id);
   const isAdmin = user?.role?.toLowerCase() === "admin" || user?.name === "Admin Admin";
   const isTeamLeader = projects.some(p => p.teamLeaderId === user?.id) || 
@@ -97,10 +102,6 @@ export function WMTaskForm({ initialData, onSubmit, isSubmitting, userDepartment
     assignedToId: defaultAssignee,
     ...initialData,
   });
-  const [projects, setProjects] = useState<any[]>([]);
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [isLoadingMeta, setIsLoadingMeta] = useState(true);
-  const [distributedList, setDistributedList] = useState<any[]>([]);
 
   useEffect(() => {
     fetchMetadata();
