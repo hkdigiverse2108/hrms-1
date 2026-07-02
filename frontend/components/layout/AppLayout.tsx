@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ReactNode } from "react";
-import { Layout, Modal } from "antd";
+import { Layout, Modal, App } from "antd";
 import { useAppEvent } from "@/hooks/useAppEvent";
 import { useUserContext } from "@/context/UserContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -68,6 +68,7 @@ function getRequiredModuleForPath(pathname: string): string | null {
 }
  
 export function AppLayout({ children }: { children: ReactNode }) {
+  const { modal } = App.useApp();
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading, logout } = useUserContext();
@@ -246,7 +247,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
         return;
       }
 
-      const isCurrentlyPunchedIn = statusData && statusData.checkIn && statusData.checkIn !== "--" && statusData.checkIn !== "--:--" && !statusData.checkOut;
+      const recordDate = statusData?.date ? dayjs(statusData.date).format("YYYY-MM-DD") : null;
+      const todayStr = dayjs().format("YYYY-MM-DD");
+      const isCurrentlyPunchedIn = statusData && statusData.checkIn && statusData.checkIn !== "--" && statusData.checkIn !== "--:--" && !statusData.checkOut && recordDate === todayStr;
       if (!isCurrentlyPunchedIn) return;
 
       const dateStr = typeof statusData.date === "string" ? statusData.date.split("T")[0] : dayjs(statusData.date).format("YYYY-MM-DD");
@@ -260,7 +263,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
       }
 
       // 2. Check for active scheduled meeting overlap
-      const todayStr = dayjs().format("YYYY-MM-DD");
       const schedRes = await fetch(`${API_URL}/schedules?employeeId=${user.id || user.employeeId}&date=${todayStr}`);
       let hasActiveMeeting = false;
       if (schedRes.ok) {
@@ -361,7 +363,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
       const statusRes = await fetch(`${API_URL}/attendance/status/${user.id || user.employeeId}`);
       if (statusRes.ok) {
         const statusData = await statusRes.json();
-        isCurrentlyPunchedIn = statusData && statusData.checkIn && statusData.checkIn !== "--" && statusData.checkIn !== "--:--" && !statusData.checkOut;
+        const recordDate = statusData?.date ? dayjs(statusData.date).format("YYYY-MM-DD") : null;
+        const todayStr = dayjs().format("YYYY-MM-DD");
+        isCurrentlyPunchedIn = statusData && statusData.checkIn && statusData.checkIn !== "--" && statusData.checkIn !== "--:--" && !statusData.checkOut && recordDate === todayStr;
         isCurrentlyOnBreak = statusData && statusData.status === "On Break";
 
         if (isCurrentlyOnBreak) {
@@ -659,7 +663,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       (window as any).electronAPI.focusWindow();
     }
-    Modal.warning({
+    modal.warning({
       title: data.title || "System Announcement",
       content: data.message,
       okText: "Dismiss",
