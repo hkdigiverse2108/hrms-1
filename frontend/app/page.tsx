@@ -104,6 +104,7 @@ export default function DashboardPage() {
   const [totalBreakTime, setTotalBreakTime] = useState("0h 0m");
   const [currentTime, setCurrentTime] = useState(getISTNow());
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
+  const [forgotRecord, setForgotRecord] = useState<any>(null);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [interns, setInterns] = useState<any[]>([]);
@@ -389,9 +390,18 @@ export default function DashboardPage() {
       const res = await fetch(`${API_URL}/attendance/status/${user?.id}`);
       if (res.ok) {
         const data = await res.json();
-        // If data has checkIn and no checkOut, it's an active punch-in
+        // If data has checkIn and no checkOut, check if it is today's session
         if (data && data.checkIn && data.checkIn !== "--" && data.checkIn !== "--:--" && data.checkOut === null) {
-          setAttendanceStatus({ isPunchedIn: true, record: data });
+          const recordDate = data.date ? dayjs(data.date).format("YYYY-MM-DD") : null;
+          const todayStr = dayjs().format("YYYY-MM-DD");
+          if (recordDate === todayStr) {
+            setAttendanceStatus({ isPunchedIn: true, record: data });
+          } else {
+            // Yesterday's record was left open
+            setAttendanceStatus({ isPunchedIn: false, record: null });
+            setForgotRecord(data);
+            setIsRequestDialogOpen(true);
+          }
         } else {
           setAttendanceStatus({ isPunchedIn: false, record: data });
         }
@@ -602,13 +612,18 @@ export default function DashboardPage() {
  
       <RequestPunchOutDialog 
         open={isRequestDialogOpen}
-        onOpenChange={setIsRequestDialogOpen}
+        onOpenChange={(open) => {
+          setIsRequestDialogOpen(open);
+          if (!open) setForgotRecord(null);
+        }}
         isPunchedIn={attendanceStatus?.isPunchedIn || false}
-        punchInTime={formatTime12h(attendanceStatus?.record?.checkIn) || "Not Started"}
+        punchInTime={formatTime12h(forgotRecord ? forgotRecord.checkIn : attendanceStatus?.record?.checkIn) || "Not Started"}
         employeeId={user?.id || ""}
         employeeName={user?.name || ""}
+        date={forgotRecord ? forgotRecord.date : undefined}
         onGoToPunchOut={() => {
           setIsRequestDialogOpen(false);
+          setForgotRecord(null);
           punchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }}
       />

@@ -3,12 +3,12 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { AppLayout } from "@/components/layout/AppLayout"
 import { AntdRegistry } from '@ant-design/nextjs-registry';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, App } from 'antd';
 import { UserProvider } from '@/context/UserContext';
 import { ChatProvider } from '@/context/ChatContext';
 import { ConfirmProvider } from '@/context/ConfirmContext';
 import { Toaster } from "@/components/ui/sonner";
-
+ 
  
 export const metadata: Metadata = {
   title: 'HRMS - Human Resource Management System',
@@ -54,9 +54,11 @@ export default function RootLayout({
             >
               <ConfirmProvider>
                 <ChatProvider>
-                  <AppLayout>
-                    {children}
-                  </AppLayout>
+                  <App>
+                    <AppLayout>
+                      {children}
+                    </AppLayout>
+                  </App>
                 </ChatProvider>
                 <Toaster position="top-right" expand={true} richColors />
               </ConfirmProvider>

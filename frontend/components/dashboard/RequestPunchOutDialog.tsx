@@ -38,9 +38,10 @@ interface RequestPunchOutDialogProps {
   onGoToPunchOut: () => void;
   employeeId: string;
   employeeName: string;
+  date?: string;
 }
  
-export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchInTime, onGoToPunchOut, employeeId, employeeName }: RequestPunchOutDialogProps) {
+export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchInTime, onGoToPunchOut, employeeId, employeeName, date }: RequestPunchOutDialogProps) {
   const [formData, setFormData] = useState({
     punchOutTime: "18:30",
     reason: "forgot",
@@ -51,8 +52,9 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchIn
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const startObj = dayjs(`${dayjs().format("YYYY-MM-DD")} ${punchInTime}`);
-      const endObj = dayjs(`${dayjs().format("YYYY-MM-DD")} ${formData.punchOutTime}`);
+      const targetDate = date ? dayjs(date).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
+      const startObj = dayjs(`${targetDate} ${punchInTime}`);
+      const endObj = dayjs(`${targetDate} ${formData.punchOutTime}`);
       let diffMins = 0;
       if (startObj.isValid() && endObj.isValid()) {
         diffMins = endObj.diff(startObj, 'minute');
@@ -65,11 +67,11 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchIn
         body: JSON.stringify({
           employee_id: employeeId,
           employee_name: employeeName,
-          date: dayjs().format("YYYY-MM-DD"),
+          date: targetDate,
           late_minutes: 0,
           recovery_minutes: diffMins,
           recovery_type: "work",
-          start_time: punchInTime.includes(":") ? (punchInTime.split(" ").length > 1 ? dayjs(`${dayjs().format("YYYY-MM-DD")} ${punchInTime}`).format("HH:mm:ss") : punchInTime) : `${punchInTime}:00`,
+          start_time: punchInTime.includes(":") ? (punchInTime.split(" ").length > 1 ? dayjs(`${targetDate} ${punchInTime}`).format("HH:mm:ss") : punchInTime) : `${punchInTime}:00`,
           end_time: `${formData.punchOutTime}:00`,
           reason: `Forgot Punch-Out. Actual Punch-Out: ${formData.punchOutTime}. Reason: ${formData.reason === 'other' ? formData.otherReason : formData.reason}`,
           status: "pending"
@@ -188,7 +190,7 @@ export function RequestPunchOutDialog({ open, onOpenChange, isPunchedIn, punchIn
                     <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#9CA3AF]" />
                     <Input 
                       disabled 
-                      value={dayjs().format("MMMM DD, YYYY")} 
+                      value={dayjs(date || undefined).format("MMMM DD, YYYY")} 
                       className="pl-11 h-[52px] bg-[#F9FAFB] border-[#F3F4F6] rounded-xl text-[#374151] font-medium text-[15px] disabled:opacity-100" 
                     />
                   </div>

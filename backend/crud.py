@@ -5873,13 +5873,52 @@ def recalculate_attendance_seconds(punches: list, breaks: list) -> tuple:
         except Exception:
             return 0
 
-    # Sort breaks
-    sorted_breaks = sorted(breaks, key=lambda b: parse_time(b.get("startTime") or "00:00:00"))
-    for b in sorted_breaks:
-        if b.get("startTime") and len(b["startTime"].split(':')) == 2:
-            b["startTime"] = f"{b['startTime']}:00"
-        if b.get("endTime") and len(b["endTime"].split(':')) == 2:
-            b["endTime"] = f"{b['endTime']}:00"
+    # Sort and normalize breaks
+    temp_breaks = []
+    for b in breaks:
+        b_copy = dict(b)
+        st = b_copy.get("startTime")
+        et = b_copy.get("endTime")
+        if st:
+            if len(st.split(':')) == 2:
+                b_copy["startTime"] = f"{st}:00"
+        else:
+            b_copy["startTime"] = "00:00:00"
+        if et:
+            if len(et.split(':')) == 2:
+                b_copy["endTime"] = f"{et}:00"
+        else:
+            b_copy["endTime"] = "23:59:59"
+        temp_breaks.append(b_copy)
+        
+    sorted_temp_breaks = sorted(temp_breaks, key=lambda b: parse_time(b.get("startTime") or "00:00:00"))
+    
+    # Merge overlapping/contiguous breaks
+    merged_breaks = []
+    for b in sorted_temp_breaks:
+        if not merged_breaks:
+            merged_breaks.append(b)
+            continue
+        last = merged_breaks[-1]
+        last_end = parse_time(last.get("endTime"))
+        curr_start = parse_time(b.get("startTime"))
+        
+        if curr_start <= last_end:
+            # Overlap or contiguous! Merge them.
+            curr_end = parse_time(b.get("endTime"))
+            if curr_end > last_end:
+                last["endTime"] = b.get("endTime")
+            # Recalculate duration
+            last_start_sec = parse_time(last.get("startTime"))
+            last_end_sec = parse_time(last.get("endTime"))
+            dur = last_end_sec - last_start_sec
+            if dur < 0:
+                dur += 86400
+            last["duration"] = str(int(dur // 60))
+        else:
+            merged_breaks.append(b)
+            
+    sorted_breaks = merged_breaks
 
     # 1. Sort punches by punchIn
     sorted_punches = sorted(punches, key=lambda p: parse_time(p.get("punchIn") or "00:00:00"))
@@ -6109,10 +6148,9 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                                 b_end_mins = int(b_end_parts[0]) * 60 + int(b_end_parts[1])
                                 
                                 overlaps = max(req_start_mins, b_start_mins) < min(req_end_mins, b_end_mins)
-                                close_start = abs(b_start_mins - req_start_mins) <= 30
-                                close_end = abs(b_end_mins - req_end_mins) <= 30
+                                is_correction = abs(b_start_mins - req_start_mins) <= 15 and abs(b_end_mins - req_end_mins) <= 15
                                 
-                                if overlaps or close_start or close_end:
+                                if overlaps or is_correction:
                                     best_break = b
                                     break
                             except Exception:
@@ -6276,10 +6314,9 @@ async def update_time_recovery_status(db, recovery_id: str, status: str):
                                         b_end = 23 * 60 + 59  # default to end of day if active
                                         
                                     overlaps = max(req_start, b_start) < min(req_end, b_end)
-                                    close_start = abs(b_start - req_start) <= 30
-                                    close_end = b_end is not None and abs(b_end - req_end) <= 30
+                                    is_correction = abs(b_start - req_start) <= 15 and b_end is not None and abs(b_end - req_end) <= 15
                                     
-                                    if overlaps or close_start or close_end:
+                                    if overlaps or is_correction:
                                         best_break = b
                                         break
                                 except Exception:
