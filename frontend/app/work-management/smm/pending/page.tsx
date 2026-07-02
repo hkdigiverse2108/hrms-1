@@ -120,22 +120,9 @@ export default function PendingWorkPage() {
         type
       });
 
-      const isReel = (entry.postReel || "").toLowerCase() === 'reel';
-      const isPost = (entry.postReel || "").toLowerCase() === 'post';
-
       if (entry.scriptDate && !entry.scriptLink) clientsMap[clientId].tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
       if (entry.shootDate && !entry.shootLink) clientsMap[clientId].tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
-      
-      if (entry.editingStart && isReel && !entry.finalReelLink) {
-        clientsMap[clientId].tasks.push(enrich('Reel / Editing', entry.editingStart, 'edits'));
-      }
-      if (entry.editingStart && isPost && !entry.finalPostLink) {
-        clientsMap[clientId].tasks.push(enrich('Post / Graphics', entry.editingStart, 'edits'));
-      }
-      if (entry.editingStart && !isReel && !isPost && !entry.finalReelLink && !entry.finalPostLink) {
-        clientsMap[clientId].tasks.push(enrich('Reel / Editing', entry.editingStart, 'edits'));
-      }
-
+      if (entry.editingStart && !entry.finalReelLink) clientsMap[clientId].tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       if (entry.approval && entry.isApproved !== 'Yes') clientsMap[clientId].tasks.push(enrich('Approval', entry.approval, 'approvals'));
       if (entry.postingDate && !entry.postingLinkOfIg) clientsMap[clientId].tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
