@@ -34,6 +34,7 @@ export function PendingWorkEmbedded({
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [workScope, setWorkScope] = useState<'my' | 'all'>('my');
 
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterStage, setFilterStage] = useState<string>('all');
@@ -203,6 +204,8 @@ export function PendingWorkEmbedded({
           taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`),
           assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
           assignerName: assigner ? `${assigner.firstName} ${assigner.lastName}` : null,
+          assigneeId: assigneeId,
+          assignerId: assignerId,
         };
       };
 
@@ -269,8 +272,14 @@ export function PendingWorkEmbedded({
       }
     });
 
-    // Apply Project Filter
+    // Apply Scope Filter (My Work vs All Work)
     let filteredTasks = tasks;
+    if (workScope === 'my') {
+      const uId = user?.id || user?._id;
+      filteredTasks = filteredTasks.filter(t => t.assigneeId === uId);
+    }
+
+    // Apply Project Filter
     if (filterProject !== 'all') {
       filteredTasks = filteredTasks.filter(t => t.clientId === filterProject);
     }
@@ -368,7 +377,7 @@ export function PendingWorkEmbedded({
 
     filteredTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     return filteredTasks;
-  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees]);
+  }, [entries, otherWorkEntries, clients, clientProjects, filterProject, filterStage, filterTaskType, filterAssigner, filterAssignee, searchQuery, filterDate, type, employees, workScope]);
 
   const isAdminOrTL = currentUser?.role === 'Team Leader' || currentUser?.role?.toLowerCase() === 'admin' || currentUser?.name === 'Admin Admin';
 
@@ -399,10 +408,32 @@ export function PendingWorkEmbedded({
         {/* Bottom Filters Row */}
         <div className="px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <div className="flex items-center gap-2 min-w-max">
-            <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm mr-2">
-              <Filter className="w-4 h-4 text-slate-400 mx-2" />
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider pr-2">Filters</span>
-            </div>
+
+
+            {isAdminOrTL && (
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/60 mr-2 shadow-sm">
+                <button
+                  onClick={() => setWorkScope('my')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    workScope === 'my'
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  My Work
+                </button>
+                <button
+                  onClick={() => setWorkScope('all')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    workScope === 'all'
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  All Work
+                </button>
+              </div>
+            )}
 
             <div className="relative w-[150px]">
               <Input 
