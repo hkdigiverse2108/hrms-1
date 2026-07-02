@@ -205,7 +205,7 @@ export default function ClientDetailsPage() {
         </div>
       </div>
 
-      <ContentCalendarTable clientId={params.id as string} />
+      <ContentCalendarTable clientId={params.id as string} clientName={client.companyName} />
 
       <ActivityLogDialog 
         open={logsOpen} 
