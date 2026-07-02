@@ -170,7 +170,13 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') assigneeId = project.assignedScriptwriterId || client?.assignedScriptwriterId;
         if (stage === 'Shoot') assigneeId = project.assignedShooterId || client?.assignedShooterId;
-        if (stage === 'Editing') assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
+        if (stage === 'Editing') {
+          if (entry.postReel === 'Post') {
+            assigneeId = project.assignedPostDesignerId || client?.assignedPostDesignerId;
+          } else {
+            assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId;
+          }
+        }
         if (stage === 'Approval') assigneeId = project.assignedApproverId || client?.assignedApproverId;
         if (stage === 'Posting') assigneeId = project.assignedPosterId || client?.assignedPosterId;
 
@@ -198,7 +204,13 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') return (project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
         if (stage === 'Shoot') return (project.assignedShooterId || client?.assignedShooterId) === uId;
-        if (stage === 'Editing') return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId || (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+        if (stage === 'Editing') {
+          if (entry.postReel === 'Post') {
+            return (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+          } else {
+            return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId;
+          }
+        }
         if (stage === 'Approval') return (project.assignedApproverId || client?.assignedApproverId) === uId;
         if (stage === 'Posting') return (project.assignedPosterId || client?.assignedPosterId) === uId;
         
