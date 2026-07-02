@@ -7545,3 +7545,124 @@ async def delete_other_work(db, work_id: str):
         return False
     res = await db.other_work.delete_one({"_id": ObjectId(work_id)})
     return res.deleted_count > 0
+
+async def create_transfer_request(db, request_data: dict):
+    # Check if there is already a Pending request for the same taskId and stage
+    existing = await db.work_transfer_requests.find_one({
+        "taskId": request_data["taskId"],
+        "stage": request_data["stage"],
+        "status": "Pending"
+    })
+    if existing:
+        raise ValueError("A pending transfer request already exists for this task stage.")
+        
+    request_data["createdDate"] = datetime.now(IST).isoformat()
+    request_data["status"] = "Pending"
+    
+    res = await db.work_transfer_requests.insert_one(request_data)
+    doc = await db.work_transfer_requests.find_one({"_id": res.inserted_id})
+
+    # Create and broadcast notification to receiver
+    try:
+        await create_notification(db, schemas.NotificationCreate(
+            employee_id=request_data["receiverId"],
+            title="New Task Transfer Request",
+            message=f"{request_data['senderName']} requested to transfer task '{request_data['taskName']}' ({request_data['stage']}) to you.",
+            type="work_transfer",
+            reference_id=str(res.inserted_id)
+        ))
+    except Exception as e:
+        print(f"Error creating transfer notification: {e}")
+        
+    return fix_id(doc)
+
+async def get_incoming_transfer_requests(db, receiver_id: str):
+    cursor = db.work_transfer_requests.find({"receiverId": receiver_id}).sort("createdDate", -1)
+    rows = await cursor.to_list(length=1000)
+    return [fix_id(row) for row in rows]
+
+async def get_outgoing_transfer_requests(db, sender_id: str):
+    cursor = db.work_transfer_requests.find({"senderId": sender_id}).sort("createdDate", -1)
+    rows = await cursor.to_list(length=1000)
+    return [fix_id(row) for row in rows]
+
+async def respond_to_transfer_request(db, request_id: str, status: str):
+    if not ObjectId.is_valid(request_id):
+        return None
+        
+    req = await db.work_transfer_requests.find_one({"_id": ObjectId(request_id)})
+    if not req:
+        return None
+        
+    await db.work_transfer_requests.update_one(
+        {"_id": ObjectId(request_id)},
+        {"$set": {"status": status}}
+    )
+    
+    if status == "Accepted":
+        task_id = req.get("taskId")
+        stage = req.get("stage")
+        receiver_id = req.get("receiverId")
+        
+        if req.get("taskType") == "content-calendar":
+            if ObjectId.is_valid(task_id):
+                update_field = None
+                if stage == "Script":
+                    update_field = "assignedScriptwriterId"
+                elif stage == "Shoot":
+                    update_field = "assignedShooterId"
+                elif stage == "Editing":
+                    entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
+                    if entry and entry.get("postReel") == "Post":
+                        update_field = "assignedPostDesignerId"
+                    else:
+                        update_field = "assignedReelEditorId"
+                elif stage == "Post/Graphics":
+                    update_field = "assignedPostDesignerId"
+                elif stage == "Approval":
+                    update_field = "assignedApproverId"
+                elif stage == "Posting":
+                    update_field = "assignedPosterId"
+                
+                if update_field:
+                    entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
+                    logs = entry.get("logs", []) if entry else []
+                    logs.append({
+                        "timestamp": datetime.now(IST).isoformat(),
+                        "action": "Task Transferred",
+                        "details": f"Stage '{stage}' transferred from {req.get('senderName')} to {req.get('receiverName')}.",
+                        "userName": "System"
+                    })
+                    await db.content_calendar_entries.update_one(
+                        {"_id": ObjectId(task_id)},
+                        {"$set": {update_field: receiver_id, "logs": logs}}
+                    )
+        elif req.get("taskType") == "other-work":
+            if ObjectId.is_valid(task_id):
+                entry = await db.other_work.find_one({"_id": ObjectId(task_id)})
+                logs = entry.get("logs", []) if entry else []
+                logs.append({
+                    "timestamp": datetime.now(IST).isoformat(),
+                    "action": "Task Transferred",
+                    "details": f"Task transferred from {req.get('senderName')} to {req.get('receiverName')}.",
+                    "userName": "System"
+                })
+                await db.other_work.update_one(
+                    {"_id": ObjectId(task_id)},
+                    {"$set": {"assigneeId": receiver_id, "logs": logs}}
+                )
+
+    # Create and broadcast notification to sender
+    try:
+        await create_notification(db, schemas.NotificationCreate(
+            employee_id=req["senderId"],
+            title=f"Task Transfer {status}",
+            message=f"{req['receiverName']} has {status.lower()} your request to transfer task '{req['taskName']}' ({req['stage']}).",
+            type="work_transfer",
+            reference_id=request_id
+        ))
+    except Exception as e:
+        print(f"Error creating transfer response notification: {e}")
+                
+    updated = await db.work_transfer_requests.find_one({"_id": ObjectId(request_id)})
+    return fix_id(updated)

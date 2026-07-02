@@ -21,9 +21,10 @@ import dayjs from "dayjs";
 
 interface ContentCalendarTableProps {
   clientId: string;
+  clientName?: string;
 }
 
-export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
+export function ContentCalendarTable({ clientId, clientName }: ContentCalendarTableProps) {
   const searchParams = useSearchParams();
   const highlightTask = searchParams.get('highlightTask');
   const [entries, setEntries] = useState<any[]>([]);
@@ -48,6 +49,26 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const { confirm } = useConfirm();
   const { user } = useUserContext();
+
+  const [companyName, setCompanyName] = useState(clientName || "Harikrushn Digiverse LLP");
+
+  useEffect(() => {
+    if (clientName) {
+      setCompanyName(clientName);
+    } else if (clientId) {
+      fetch(`${API_URL}/clients/${clientId}`)
+        .then(res => {
+          if (res.ok) return res.json();
+          throw new Error("Failed to fetch client");
+        })
+        .then(data => {
+          if (data && data.companyName) {
+            setCompanyName(data.companyName);
+          }
+        })
+        .catch(err => console.error(err));
+    }
+  }, [clientId, clientName]);
 
   const currentMonthDate = React.useMemo(() => {
     if (!monthYear) return new Date();
@@ -585,9 +606,80 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       toast.error("Please select at least one column");
       return;
     }
+    exportPdf();
+  };
 
+  const exportPdf = () => {
     const doc = new jsPDF("landscape");
     
+    const formatDateToDDMMYY = (dateStr: string) => {
+      if (!dateStr) return "";
+      const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (match) {
+        const [_, year, month, day] = match;
+        return `${day}-${month}-${year.slice(-2)}`;
+      }
+      return dateStr;
+    };
+
+    const formatMonthYearToMMYY = (myStr: string) => {
+      if (!myStr) return "";
+      const match = myStr.match(/^(\d{4})-(\d{2})$/);
+      if (match) {
+        const [_, year, month] = match;
+        return `${month}-${year.slice(-2)}`;
+      }
+      return myStr;
+    };
+
+    const columnsToRender = [...selectedColumnsForPdf].sort((a, b) => tableHeaders.indexOf(a) - tableHeaders.indexOf(b));
+    const indicesToRender = columnsToRender.map(col => tableHeaders.indexOf(col));
+
+    const filteredEntries = entries.filter(entry => {
+      const matchesType = typeFilter === "all" || entry.postReel === typeFilter;
+      return matchesType;
+    });
+
+    if (filteredEntries.length === 0) {
+      toast.error(`No entries with posting dates in ${monthYear} to download`);
+      return;
+    }
+
+    // Determine the calendar start date's month and year dynamically
+    let monthLabel = "";
+    let headerMonthStr = formatMonthYearToMMYY(monthYear);
+
+    if (filteredEntries.length > 0 && filteredEntries[0].postingDate) {
+      const parts = filteredEntries[0].postingDate.split("-");
+      if (parts.length >= 2) {
+        const year = parts[0];
+        const monthNum = parseInt(parts[1], 10);
+        headerMonthStr = `${parts[1]}-${parts[0].slice(-2)}`;
+        
+        const monthNames = [
+          "January", "February", "March", "April", "May", "June",
+          "July", "August", "September", "October", "November", "December"
+        ];
+        if (monthNum >= 1 && monthNum <= 12) {
+          monthLabel = `${monthNames[monthNum - 1]}`;
+        }
+      }
+    }
+
+    if (!monthLabel) {
+      const [year, month] = monthYear.split("-");
+      const monthNum = parseInt(month, 10);
+      const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      if (monthNum >= 1 && monthNum <= 12) {
+        monthLabel = `${monthNames[monthNum - 1]}`;
+      } else {
+        monthLabel = monthYear;
+      }
+    }
+
     const pageWidth = doc.internal.pageSize.width;
 
     // Corporate Letterhead Style
@@ -595,7 +687,7 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     doc.setFontSize(22);
     doc.setTextColor(13, 148, 136); // Brand teal
     doc.setFont("helvetica", "bold");
-    doc.text("Harikrushna Digiverse LLP", 14, 20);
+    doc.text(companyName, 14, 20);
 
     // Document Title
     doc.setFontSize(14);
@@ -607,32 +699,21 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.setFont("helvetica", "normal");
-    doc.text(`Month: ${monthYear}`, pageWidth - 14, 20, { align: "right" });
+    doc.text(`Month: ${headerMonthStr}`, pageWidth - 14, 20, { align: "right" });
 
     // Decorative separator line
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.5);
     doc.line(14, 38, pageWidth - 14, 38);
 
-    const columnsToRender = [...selectedColumnsForPdf].sort((a, b) => tableHeaders.indexOf(a) - tableHeaders.indexOf(b));
-    const indicesToRender = columnsToRender.map(col => tableHeaders.indexOf(col));
-
-    const filteredEntries = entries.filter(entry => {
-      if (!entry.postingDate) return false;
-      const matchesMonth = entry.postingDate.startsWith(monthYear);
-      const matchesType = typeFilter === "all" || entry.postReel === typeFilter;
-      return matchesMonth && matchesType;
-    });
-
-    if (filteredEntries.length === 0) {
-      toast.error(`No entries with posting dates in ${monthYear} to download`);
-      return;
-    }
-
+    const dateFields = ["postingDate", "scriptDate", "shootDate", "editingStart", "actualPostingDate"];
     const tableData = filteredEntries.map(entry => {
       return indicesToRender.map(idx => {
         const key = fieldKeys[idx];
         let val = entry[key] || "";
+        if (dateFields.includes(key)) {
+          val = formatDateToDDMMYY(val);
+        }
         return val;
       });
     });
@@ -676,10 +757,11 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
       doc.setPage(i);
       doc.setFontSize(8);
       doc.setTextColor(150, 150, 150);
-      doc.text(`Page ${i} of ${pageCount}  |  Harikrushna Digiverse LLP`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: "center" });
+      doc.text(`Page ${i} of ${pageCount}  |  ${companyName}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: "center" });
     }
 
-    doc.save(`Content-Calendar-${monthYear}.pdf`);
+    const safeCompanyName = companyName.replace(/[\\/:*?"<>|]/g, "");
+    doc.save(`${safeCompanyName} ${monthLabel} Content Calendar.pdf`);
     setIsPdfDialogOpen(false);
   };
 

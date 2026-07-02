@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList, X, Check, Edit2, History } from 'lucide-react';
+import { Loader2, AlertCircle, CalendarIcon, ArrowRight, Filter, Search, ClipboardList, X, Check, Edit2, History, ArrowLeftRight, ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +47,14 @@ export function PendingWorkEmbedded({
   const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null);
   const [editingRemarkValue, setEditingRemarkValue] = useState<string>('');
   const [editingIsClientIssue, setEditingIsClientIssue] = useState<boolean>(false);
+  
+  const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [viewingTransferRequests, setViewingTransferRequests] = useState(false);
+  const [requestsTab, setRequestsTab] = useState<'incoming' | 'outgoing'>('incoming');
+  const [transferringTask, setTransferringTask] = useState<any>(null);
+  const [selectedReceiverId, setSelectedReceiverId] = useState<string>('');
   
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<any[]>([]);
@@ -99,6 +107,75 @@ export function PendingWorkEmbedded({
     }
   };
 
+  const handleOpenTransferModal = (task: any) => {
+    setTransferringTask(task);
+    setSelectedReceiverId('');
+    setIsTransferModalOpen(true);
+  };
+
+  const handleSendTransferRequest = async () => {
+    if (!selectedReceiverId) {
+      toast.error("Please select an employee to transfer this task to.");
+      return;
+    }
+    const receiver = employees.find((e: any) => e.id === selectedReceiverId);
+    if (!receiver) {
+      toast.error("Selected employee not found.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/work-transfer-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: transferringTask.id,
+          taskType: transferringTask.isOtherWork ? "other-work" : "content-calendar",
+          taskName: transferringTask.taskName,
+          stage: transferringTask.stage,
+          senderId: currentUser.id,
+          senderName: currentUser.name || `${currentUser.firstName} ${currentUser.lastName || ''}`.trim(),
+          receiverId: receiver.id,
+          receiverName: `${receiver.firstName} ${receiver.lastName || ''}`.trim(),
+        }),
+      });
+      if (response.ok) {
+        toast.success("Transfer request sent successfully.");
+        setIsTransferModalOpen(false);
+        fetchData();
+      } else {
+        const err = await response.json();
+        toast.error(err.detail || "Failed to send transfer request.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send transfer request.");
+    }
+  };
+
+  const handleRespondRequest = async (requestId: string, status: 'Accepted' | 'Rejected') => {
+    try {
+      const response = await fetch(`${API_URL}/work-transfer-requests/${requestId}/respond`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (response.ok) {
+        toast.success(`Transfer request ${status.toLowerCase()} successfully.`);
+        fetchData();
+      } else {
+        const err = await response.json();
+        toast.error(err.detail || `Failed to ${status.toLowerCase()} request.`);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(`Failed to ${status.toLowerCase()} request.`);
+    }
+  };
+
+  const getPendingTransferRequest = (item: any) => {
+    return outgoingRequests.find(r => r.taskId === item.id && r.stage === item.stage && r.status === 'Pending');
+  };
+
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
@@ -124,6 +201,19 @@ export function PendingWorkEmbedded({
         fetch(`${API_URL}/other-work/all`),
         fetch(`${API_URL}/employees`)
       ]);
+
+      if (user?.id) {
+        const [incomingRes, outgoingRes] = await Promise.all([
+          fetch(`${API_URL}/work-transfer-requests/incoming/${user.id}`),
+          fetch(`${API_URL}/work-transfer-requests/outgoing/${user.id}`)
+        ]);
+        if (incomingRes.ok) {
+          setIncomingRequests(await incomingRes.json());
+        }
+        if (outgoingRes.ok) {
+          setOutgoingRequests(await outgoingRes.json());
+        }
+      }
       
       if (entriesRes.ok && clientsRes.ok) {
         const fetchedEntries = await entriesRes.json();
@@ -180,17 +270,17 @@ export function PendingWorkEmbedded({
         let assigneeId = null;
         let assignerId = project.teamLeaderId || client?.teamLeaderId;
         
-        if (stage === 'Script') assigneeId = project.assignedScriptwriterId || client?.assignedScriptwriterId;
-        if (stage === 'Shoot') assigneeId = project.assignedShooterId || client?.assignedShooterId;
+        if (stage === 'Script') assigneeId = entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId;
+        if (stage === 'Shoot') assigneeId = entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId;
         if (stage === 'Editing') {
           if (entry.postReel === 'Post') {
-            assigneeId = project.assignedPostDesignerId || client?.assignedPostDesignerId;
+            assigneeId = entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
           } else {
-            assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId;
+            assigneeId = entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId;
           }
         }
-        if (stage === 'Approval') assigneeId = project.assignedApproverId || client?.assignedApproverId;
-        if (stage === 'Posting') assigneeId = project.assignedPosterId || client?.assignedPosterId;
+        if (stage === 'Approval') assigneeId = entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId;
+        if (stage === 'Posting') assigneeId = entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId;
 
         const assignee = employees.find((e: any) => e.id === assigneeId);
         const assigner = employees.find((e: any) => e.id === assignerId);
@@ -216,17 +306,17 @@ export function PendingWorkEmbedded({
         const uId = user?.id;
         if (!uId) return false;
         
-        if (stage === 'Script') return (project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
-        if (stage === 'Shoot') return (project.assignedShooterId || client?.assignedShooterId) === uId;
+        if (stage === 'Script') return (entry.assignedScriptwriterId || project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
+        if (stage === 'Shoot') return (entry.assignedShooterId || project.assignedShooterId || client?.assignedShooterId) === uId;
         if (stage === 'Editing') {
           if (entry.postReel === 'Post') {
-            return (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+            return (entry.assignedPostDesignerId || project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
           } else {
-            return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId;
+            return (entry.assignedReelEditorId || project.assignedReelEditorId || client?.assignedReelEditorId) === uId;
           }
         }
-        if (stage === 'Approval') return (project.assignedApproverId || client?.assignedApproverId) === uId;
-        if (stage === 'Posting') return (project.assignedPosterId || client?.assignedPosterId) === uId;
+        if (stage === 'Approval') return (entry.assignedApproverId || project.assignedApproverId || client?.assignedApproverId) === uId;
+        if (stage === 'Posting') return (entry.assignedPosterId || project.assignedPosterId || client?.assignedPosterId) === uId;
         
         return true;
       };
@@ -399,16 +489,217 @@ export function PendingWorkEmbedded({
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[calc(100vh-250px)] flex flex-col">
-      {/* Filters Bar */}
-      <div className="flex flex-col border-b border-slate-200 bg-slate-50/50">
-        {/* Top Header Row */}
-        <div className="p-4 pb-3 flex flex-col sm:flex-row gap-4 items-center justify-between">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <ClipboardList className="w-5 h-5 text-brand-teal" />
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-              {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : type === 'all' ? 'All Tasks' : 'Pending Work'}
-            </h2>
+      {viewingTransferRequests ? (
+        <div className="flex flex-col flex-1">
+          {/* Header Row */}
+          <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewingTransferRequests(false)}
+                className="h-8 px-2.5 hover:bg-slate-200/60 text-slate-600 rounded-lg flex items-center gap-1.5 font-bold text-xs"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Tasks
+              </Button>
+              <div className="h-4 w-px bg-slate-300" />
+              <div className="flex items-center gap-2">
+                <ArrowLeftRight className="w-5 h-5 text-brand-teal" />
+                <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                  Task Transfer Requests
+                </h2>
+              </div>
+            </div>
           </div>
+
+          {/* Custom Tabs Headers */}
+          <div className="flex border-b border-slate-200 px-6 bg-slate-50/50">
+            <button
+              onClick={() => setRequestsTab('incoming')}
+              className={`py-3 px-4 text-xs font-bold border-b-2 -mb-px transition-all ${
+                requestsTab === 'incoming'
+                  ? 'border-brand-teal text-brand-teal'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Received Requests ({incomingRequests.length})
+            </button>
+            <button
+              onClick={() => setRequestsTab('outgoing')}
+              className={`py-3 px-4 text-xs font-bold border-b-2 -mb-px transition-all ${
+                requestsTab === 'outgoing'
+                  ? 'border-brand-teal text-brand-teal'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Sent Requests ({outgoingRequests.length})
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-x-auto bg-white">
+            {requestsTab === 'incoming' ? (
+              incomingRequests.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
+                  <ArrowLeftRight className="w-8 h-8 text-slate-300 animate-pulse" />
+                  <p className="text-sm font-medium">No received transfer requests.</p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-sm text-slate-600">
+                  <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
+                    <tr>
+                      <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Stage</th>
+                      <th className="px-6 py-4 whitespace-nowrap">From</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Status</th>
+                      <th className="px-6 py-4 text-right whitespace-nowrap">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {incomingRequests.map(req => (
+                      <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
+                          {new Date(req.createdDate).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-slate-800">
+                          {req.taskName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge variant="outline" className="text-xs text-brand-teal border-brand-teal/30 bg-brand-teal/5">
+                            {req.stage}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                          {req.senderName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge 
+                            variant="secondary"
+                            className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
+                              req.status === 'Pending' 
+                                ? 'bg-amber-100 text-amber-700' 
+                                : req.status === 'Accepted'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-rose-100 text-rose-700'
+                            }`}
+                          >
+                            {req.status}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          {req.status === 'Pending' ? (
+                            <div className="flex gap-2 justify-end">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="text-xs h-7 px-3 text-slate-600 border-slate-200 hover:bg-slate-100 rounded-lg font-medium"
+                                onClick={() => handleRespondRequest(req.id, 'Rejected')}
+                              >
+                                Reject
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                className="text-xs h-7 px-3 bg-brand-teal hover:bg-brand-teal/90 text-white rounded-lg font-semibold shadow-xs"
+                                onClick={() => handleRespondRequest(req.id, 'Accepted')}
+                              >
+                                Accept
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400 font-medium italic">Processed</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
+            ) : (
+              outgoingRequests.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
+                  <ArrowLeftRight className="w-8 h-8 text-slate-300 animate-pulse" />
+                  <p className="text-sm font-medium">No sent transfer requests.</p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-sm text-slate-600">
+                  <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
+                    <tr>
+                      <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Stage</th>
+                      <th className="px-6 py-4 whitespace-nowrap">To</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {outgoingRequests.map(req => (
+                      <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
+                          {new Date(req.createdDate).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-slate-800">
+                          {req.taskName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge variant="outline" className="text-xs text-brand-teal border-brand-teal/30 bg-brand-teal/5">
+                            {req.stage}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                          {req.receiverName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge 
+                            variant="secondary"
+                            className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
+                              req.status === 'Pending' 
+                                ? 'bg-amber-100 text-amber-700' 
+                                : req.status === 'Accepted'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-rose-100 text-rose-700'
+                            }`}
+                          >
+                            {req.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Filters Bar */}
+          <div className="flex flex-col border-b border-slate-200 bg-slate-50/50">
+            {/* Top Header Row */}
+            <div className="p-4 pb-3 flex flex-col sm:flex-row gap-4 items-center justify-between">
+              <div className="flex items-center justify-between sm:justify-start gap-4 w-full sm:w-auto">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-brand-teal" />
+                  <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                    {type === 'todays-work' ? "Today's Work" : type === 'upcoming-work' ? 'Upcoming Work' : type === 'completed-work' ? 'Completed Work' : type === 'all' ? 'All Tasks' : 'Pending Work'}
+                  </h2>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewingTransferRequests(true)}
+                  className="bg-white border-slate-200 hover:bg-slate-50 text-slate-700 rounded-full flex items-center gap-1.5 font-semibold text-xs shadow-sm h-8"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-slate-500" />
+                  Transfer Requests
+                  {incomingRequests.filter(r => r.status === 'Pending').length > 0 && (
+                    <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-black">
+                      {incomingRequests.filter(r => r.status === 'Pending').length}
+                    </span>
+                  )}
+                </Button>
+              </div>
           
           <div className="relative w-full sm:w-72">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -585,8 +876,9 @@ export function PendingWorkEmbedded({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {allPendingTasks.map((item, idx) => {
+               {allPendingTasks.map((item, idx) => {
                 const isOverdue = new Date(item.deadline) < new Date(new Date().setHours(0,0,0,0));
+                const transferReq = incomingRequests.find(r => r.taskId === item.id && (item.type === 'other-work' || r.stage === item.stage) && r.status === 'Accepted');
                 return (
                   <tr key={`${item.id}-${item.type}-${idx}`} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -595,7 +887,7 @@ export function PendingWorkEmbedded({
                       </Badge>
                     </td>
                     <td className="px-6 py-4 font-medium text-slate-800">
-                      {item.clientDisplayName}
+                       {item.clientDisplayName}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant="outline" className="text-xs text-brand-teal border-brand-teal/30 bg-brand-teal/5">
@@ -604,11 +896,17 @@ export function PendingWorkEmbedded({
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-slate-800">{item.taskName}</span>
                           {item.monthYear && (
                             <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
                               {item.monthYear}
+                            </span>
+                          )}
+                          {transferReq && (
+                            <span className="text-[10px] text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-indigo-100/60">
+                              <ArrowLeftRight className="w-2.5 h-2.5" />
+                              Transferred from {transferReq.senderName}
                             </span>
                           )}
                         </div>
@@ -720,6 +1018,23 @@ export function PendingWorkEmbedded({
                                 </Button>
                               </>
                             )}
+                            {getPendingTransferRequest(item) ? (
+                              <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded font-semibold whitespace-nowrap">
+                                Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
+                              </span>
+                            ) : (
+                              item.assigneeId === currentUser?.id && (
+                                <Button
+                                  onClick={() => handleOpenTransferModal(item)}
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Transfer Task"
+                                  className="h-8 w-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                                >
+                                  <ArrowLeftRight className="w-4 h-4" />
+                                </Button>
+                              )
+                            )}
                             <Button
                               onClick={() => handleOpenLogs(item)}
                               variant="ghost"
@@ -732,6 +1047,23 @@ export function PendingWorkEmbedded({
                           </>
                         ) : (
                           <>
+                            {getPendingTransferRequest(item) ? (
+                              <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded font-semibold whitespace-nowrap">
+                                Pending Transfer to {getPendingTransferRequest(item)?.receiverName}
+                              </span>
+                            ) : (
+                              item.assigneeId === currentUser?.id && (
+                                <Button
+                                  onClick={() => handleOpenTransferModal(item)}
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Transfer Task"
+                                  className="h-8 w-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                                >
+                                  <ArrowLeftRight className="w-4 h-4" />
+                                </Button>
+                              )
+                            )}
                             <Button
                               onClick={() => handleOpenLogs(item)}
                               variant="ghost"
@@ -760,6 +1092,8 @@ export function PendingWorkEmbedded({
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
 
       <Dialog open={logsDialogOpen} onOpenChange={setLogsDialogOpen}>
@@ -838,6 +1172,59 @@ export function PendingWorkEmbedded({
           <div className="p-4 bg-white border-t border-slate-200 flex justify-end">
             <Button onClick={() => setLogsDialogOpen(false)} className="bg-brand-teal hover:bg-brand-teal/90 text-white px-8 rounded-lg font-bold shadow-sm h-10">
               Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <ArrowLeftRight className="w-5 h-5 text-brand-teal" />
+              Transfer Task
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs space-y-1.5">
+              <div>Task Name: <span className="font-semibold text-slate-800">{transferringTask?.taskName}</span></div>
+              <div>Stage: <span className="font-semibold text-slate-800">{transferringTask?.stage}</span></div>
+              <div>Client: <span className="font-semibold text-slate-800">{transferringTask?.clientDisplayName}</span></div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700 block">Select Employee to Transfer To</label>
+              <Select value={selectedReceiverId} onValueChange={setSelectedReceiverId}>
+                <SelectTrigger className="w-full focus:ring-brand-teal focus:border-brand-teal">
+                  <SelectValue placeholder="Choose employee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees
+                    .filter((emp: any) => {
+                      if (emp.id === currentUser?.id) return false;
+                      if (!currentUser?.department) return true;
+                      return emp.department?.toLowerCase() === currentUser?.department?.toLowerCase();
+                    })
+                    .map((emp: any) => {
+                      const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
+                      return (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {name} ({emp.role || 'Employee'})
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <Button variant="outline" onClick={() => setIsTransferModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal/90 text-white font-semibold"
+              onClick={handleSendTransferRequest}
+            >
+              Send Request
             </Button>
           </div>
         </DialogContent>
