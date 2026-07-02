@@ -120,9 +120,10 @@ export default function PendingWorkPage() {
         type
       });
 
-      if (entry.scriptDate && !entry.scriptLink) clientsMap[clientId].tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
-      if (entry.shootDate && !entry.shootLink) clientsMap[clientId].tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
-      if (entry.editingStart && !entry.finalReelLink) clientsMap[clientId].tasks.push(enrich('Editing', entry.editingStart, 'edits'));
+      if (entry.postReel !== 'Post' && entry.scriptDate && !entry.scriptLink) clientsMap[clientId].tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
+      if (entry.postReel !== 'Post' && entry.shootDate && !entry.shootLink) clientsMap[clientId].tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
+      const isEditingPending = entry.editingStart && (entry.postReel === 'Post' ? !entry.finalPostLink : !entry.finalReelLink);
+      if (isEditingPending) clientsMap[clientId].tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       if (entry.approval && entry.isApproved !== 'Yes') clientsMap[clientId].tasks.push(enrich('Approval', entry.approval, 'approvals'));
       if (entry.postingDate && !entry.postingLinkOfIg) clientsMap[clientId].tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
@@ -298,7 +299,7 @@ export default function PendingWorkPage() {
                 <div className="flex flex-col gap-2">
                   {renderTaskGroup("Pending Scripts", <FileText className="w-4 h-4" />, groupedTasks.scripts, 'scripts')}
                   {renderTaskGroup("Pending Shoots", <Camera className="w-4 h-4" />, groupedTasks.shoots, 'shoots')}
-                  {renderTaskGroup("Pending Edits", <Scissors className="w-4 h-4" />, groupedTasks.edits, 'edits')}
+                  {renderTaskGroup("Pending Edits / Graphics", <Scissors className="w-4 h-4" />, groupedTasks.edits, 'edits')}
                   {renderTaskGroup("Pending Approvals", <CheckSquare className="w-4 h-4" />, groupedTasks.approvals, 'approvals')}
                   {renderTaskGroup("Pending Posts", <Send className="w-4 h-4" />, groupedTasks.posts, 'posts')}
                 </div>
