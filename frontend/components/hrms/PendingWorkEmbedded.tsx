@@ -170,18 +170,25 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') assigneeId = project.assignedScriptwriterId || client?.assignedScriptwriterId;
         if (stage === 'Shoot') assigneeId = project.assignedShooterId || client?.assignedShooterId;
-        if (stage === 'Editing') assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId || project.assignedPostDesignerId || client?.assignedPostDesignerId;
+        if (stage === 'Editing') {
+          if (entry.postReel === 'Post') {
+            assigneeId = project.assignedPostDesignerId || client?.assignedPostDesignerId;
+          } else {
+            assigneeId = project.assignedReelEditorId || client?.assignedReelEditorId;
+          }
+        }
         if (stage === 'Approval') assigneeId = project.assignedApproverId || client?.assignedApproverId;
         if (stage === 'Posting') assigneeId = project.assignedPosterId || client?.assignedPosterId;
 
         const assignee = employees.find((e: any) => e.id === assigneeId);
         const assigner = employees.find((e: any) => e.id === assignerId);
 
+        const finalStage = (stage === 'Editing' && entry.postReel === 'Post') ? 'Post/Graphics' : stage;
         return {
           ...entry,
           clientDisplayName: displayName,
           clientId: entry.clientId,
-          stage,
+          stage: finalStage,
           deadline,
           type,
           taskName: entry.concept || entry.topic || (entry.postReel ? `${entry.postReel} Content` : `Task for ${entry.postingDate || entry.monthYear || 'Unknown Date'}`),
@@ -197,16 +204,23 @@ export function PendingWorkEmbedded({
         
         if (stage === 'Script') return (project.assignedScriptwriterId || client?.assignedScriptwriterId) === uId;
         if (stage === 'Shoot') return (project.assignedShooterId || client?.assignedShooterId) === uId;
-        if (stage === 'Editing') return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId || (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+        if (stage === 'Editing') {
+          if (entry.postReel === 'Post') {
+            return (project.assignedPostDesignerId || client?.assignedPostDesignerId) === uId;
+          } else {
+            return (project.assignedReelEditorId || client?.assignedReelEditorId) === uId;
+          }
+        }
         if (stage === 'Approval') return (project.assignedApproverId || client?.assignedApproverId) === uId;
         if (stage === 'Posting') return (project.assignedPosterId || client?.assignedPosterId) === uId;
         
         return true;
       };
 
-      if (entry.scriptDate && !entry.scriptLink && canSeeTask('Script')) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
-      if (entry.shootDate && !entry.shootLink && canSeeTask('Shoot')) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
-      if (entry.editingStart && !entry.finalReelLink && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
+      if (entry.postReel !== 'Post' && entry.scriptDate && !entry.scriptLink && canSeeTask('Script')) tasks.push(enrich('Script', entry.scriptDate, 'scripts'));
+      if (entry.postReel !== 'Post' && entry.shootDate && !entry.shootLink && canSeeTask('Shoot')) tasks.push(enrich('Shoot', entry.shootDate, 'shoots'));
+      const isEditingPending = entry.editingStart && (entry.postReel === 'Post' ? !entry.finalPostLink : !entry.finalReelLink);
+      if (isEditingPending && canSeeTask('Editing')) tasks.push(enrich('Editing', entry.editingStart, 'edits'));
       if (entry.approval && entry.isApproved !== 'Yes' && canSeeTask('Approval')) tasks.push(enrich('Approval', entry.approval, 'approvals'));
       if (entry.postingDate && !entry.postingLinkOfIg && canSeeTask('Posting')) tasks.push(enrich('Posting', entry.postingDate, 'posts'));
     });
@@ -422,6 +436,7 @@ export function PendingWorkEmbedded({
                   <SelectItem value="script">Script</SelectItem>
                   <SelectItem value="shoot">Shoot</SelectItem>
                   <SelectItem value="editing">Editing</SelectItem>
+                  <SelectItem value="post/graphics">Post/Graphics</SelectItem>
                   <SelectItem value="approval">Approval</SelectItem>
                   <SelectItem value="posting">Posting</SelectItem>
                 </SelectContent>
