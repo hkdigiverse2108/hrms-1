@@ -352,7 +352,7 @@ export default function EmployeeListPage() {
                   onChange={(e) => setFilterDept(e.target.value)}
                 >
                   <option>All Departments</option>
-                  {departments.map(dept => (
+                  {departments.map((dept: any) => (
                     <option key={dept}>{dept}</option>
                   ))}
                 </select>
@@ -363,7 +363,7 @@ export default function EmployeeListPage() {
                     onChange={(e) => setFilterRole(e.target.value)}
                   >
                     <option>All Roles</option>
-                    {roles.map(role => (
+                    {roles.map((role: any) => (
                       <option key={role}>{role}</option>
                     ))}
                   </select>

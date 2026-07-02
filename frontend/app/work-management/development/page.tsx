@@ -71,7 +71,8 @@ export default function TasksPage() {
   const [logFilter, setLogFilter] = useState<{taskId?: string, taskTitle?: string}>({});
   const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [showAllTasks, setShowAllTasks] = useState(false);
+  const [taskScope, setTaskScope] = useState<"my" | "all">("all");
+  const [showOnlyToday, setShowOnlyToday] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -98,7 +99,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedDepartment, selectedEmployeeId, selectedProjectId, dateFilter, showAllTasks]);
+  }, [searchTerm, selectedDepartment, selectedEmployeeId, selectedProjectId, dateFilter, taskScope, showOnlyToday]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -508,7 +509,7 @@ export default function TasksPage() {
     if (isAdmin) {
       isVisible = true;
     } else if (isTeamLeader) {
-      isVisible = true;
+      isVisible = isProjectTL || t.assignedToId === user?.id || t.performedBy === user?.id;
     } else {
       isVisible = t.assignedToId === user?.id || t.performedBy === user?.id;
     }
@@ -538,8 +539,13 @@ export default function TasksPage() {
     
     if (!matchesSearch) return false;
 
+    // Scope Filter
+    if ((taskScope === "my" || isRegularEmployee) && user?.id) {
+      if (t.assignedToId !== user.id && t.performedBy !== user.id) return false;
+    }
+
     // Date Filtering
-    if (!showAllTasks) {
+    if (showOnlyToday) {
       const taskDate = showTableView ? t.postingDate : t.dueDate;
       if (taskDate !== dateFilter && !isDueTask(t)) return false;
     }
@@ -867,22 +873,32 @@ export default function TasksPage() {
               </Popover>
             );
           })()}
-          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
-            <button 
-              type="button"
-              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${!showAllTasks ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
-              onClick={() => setShowAllTasks(false)}
-            >
-              Today
-            </button>
-            <button 
-              type="button"
-              className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${showAllTasks ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
-              onClick={() => setShowAllTasks(true)}
-            >
-              All Tasks
-            </button>
-          </div>
+          {user && (['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader') && (
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
+              <button 
+                type="button"
+                className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${taskScope === 'my' ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
+                onClick={() => setTaskScope('my')}
+              >
+                My Tasks
+              </button>
+              <button 
+                type="button"
+                className={`h-7 text-xs font-extrabold px-3 rounded-md transition-all ${taskScope === 'all' ? 'bg-brand-teal text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}`}
+                onClick={() => setTaskScope('all')}
+              >
+                All Tasks
+              </button>
+            </div>
+          )}
+
+          <button 
+            type="button"
+            className={`h-9 px-4 text-xs font-extrabold rounded-lg border transition-all ${showOnlyToday ? 'bg-brand-teal text-white border-brand-teal shadow-sm' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+            onClick={() => setShowOnlyToday(!showOnlyToday)}
+          >
+            📅 Today
+          </button>
 
           <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 gap-1">
             <button 
