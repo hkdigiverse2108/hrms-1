@@ -7651,6 +7651,33 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                     {"_id": ObjectId(task_id)},
                     {"$set": {"assigneeId": receiver_id, "logs": logs}}
                 )
+        elif req.get("taskType") in ["wm-task", "wm-tasks"]:
+            if ObjectId.is_valid(task_id):
+                old_task = await db.wm_tasks.find_one({"_id": ObjectId(task_id)})
+                if old_task:
+                    await db.wm_tasks.update_one(
+                        {"_id": ObjectId(task_id)},
+                        {"$set": {
+                            "assignedToId": receiver_id,
+                            "assignedToName": req.get("receiverName")
+                        }}
+                    )
+                    try:
+                        await log_task_activity(
+                            db, 
+                            task_id, 
+                            "Updated", 
+                            "System", 
+                            "System", 
+                            f"Task assigned to {req.get('receiverName')} via transfer from {req.get('senderName')}.",
+                            diffs=[{
+                                "field": "assignedToName",
+                                "old": old_task.get("assignedToName"),
+                                "new": req.get("receiverName")
+                            }]
+                        )
+                    except Exception as e_log:
+                        print(f"Error logging task activity for wm-task transfer: {e_log}")
 
     # Create and broadcast notification to sender
     try:

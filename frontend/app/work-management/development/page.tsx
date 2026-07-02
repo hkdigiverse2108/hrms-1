@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown, ChevronLeft } from "lucide-react";
+import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown, ChevronLeft, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DailyProgressView } from "@/components/hrms/DailyProgressView";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -94,6 +94,13 @@ export default function TasksPage() {
   const [quickAddProjectId, setQuickAddProjectId] = useState<string>("");
   const [quickAddPhase, setQuickAddPhase] = useState<string>("");
   const [viewMode, setViewMode] = useState<"board" | "table" | null>(null);
+  const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<any[]>([]);
+  const [viewingTransferRequests, setViewingTransferRequests] = useState(false);
+  const [requestsTab, setRequestsTab] = useState<'incoming' | 'outgoing'>('incoming');
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferringTask, setTransferringTask] = useState<any>(null);
+  const [selectedReceiverId, setSelectedReceiverId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<"tasks" | "progress">("tasks");
   const isRealAdmin = user?.role?.toLowerCase() === "admin";
 
@@ -132,7 +139,96 @@ export default function TasksPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+    if (user?.id) {
+      fetchTransferRequests();
+    }
+  }, [user?.id]);
+
+  const fetchTransferRequests = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/task-transfers?userId=${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setIncomingRequests(data.incoming || []);
+        setOutgoingRequests(data.outgoing || []);
+      }
+    } catch (e) {
+      console.error("Error fetching transfer requests:", e);
+    }
+  };
+
+  const getPendingTransferRequest = (item: any) => {
+    return outgoingRequests.find(r => r.taskId === item.id && r.status === 'Pending');
+  };
+
+  const getAcceptedTransferRequest = (item: any) => {
+    return incomingRequests.find(r => r.taskId === item.id && r.status === 'Accepted');
+  };
+
+  const handleOpenTransferModal = (task: any) => {
+    setTransferringTask(task);
+    setSelectedReceiverId('');
+    setIsTransferModalOpen(true);
+  };
+
+  const handleSendTransferRequest = async () => {
+    if (!transferringTask || !selectedReceiverId) return;
+    const receiver = employees.find(e => e.id === selectedReceiverId);
+    const receiverName = receiver ? `${receiver.firstName} ${receiver.lastName || ''}`.trim() : 'Unknown';
+    try {
+      const payload = {
+        taskId: transferringTask.id,
+        taskType: 'wm-task',
+        taskName: transferringTask.title,
+        stage: transferringTask.status || 'todo',
+        senderId: user?.id,
+        senderName: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown',
+        receiverId: selectedReceiverId,
+        receiverName: receiverName
+      };
+
+      const res = await fetch(`${API_URL}/task-transfers/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        toast.success(`Transfer request sent to ${receiverName}`);
+        setIsTransferModalOpen(false);
+        setTransferringTask(null);
+        setSelectedReceiverId('');
+        fetchTransferRequests();
+        fetchData();
+      } else {
+        const err = await res.json();
+        toast.error(err.detail || "Failed to send transfer request");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to connect to server");
+    }
+  };
+
+  const handleRespondRequest = async (requestId: string, status: 'Accepted' | 'Rejected') => {
+    try {
+      const res = await fetch(`${API_URL}/task-transfers/${requestId}/respond?status=${status}`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        toast.success(`Task transfer request ${status.toLowerCase()} successfully`);
+        fetchTransferRequests();
+        fetchData();
+      } else {
+        const err = await res.json();
+        toast.error(err.detail || `Failed to respond to request`);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to connect to the server");
+    }
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -159,6 +255,9 @@ export default function TasksPage() {
           });
         }
         setEmployees(emps);
+      }
+      if (user?.id) {
+        fetchTransferRequests();
       }
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -596,6 +695,20 @@ export default function TasksPage() {
             </Button>
           )}
 
+          <Button
+            variant="outline"
+            onClick={() => setViewingTransferRequests(true)}
+            className="gap-2 border-brand-teal text-brand-teal hover:bg-brand-teal/10 font-bold"
+          >
+            <ArrowLeftRight className="w-4 h-4" />
+            Transfer Requests
+            {incomingRequests.filter(r => r.status === 'Pending').length > 0 && (
+              <span className="bg-brand-teal text-white text-[9px] px-1.5 py-0.5 rounded-full font-black">
+                {incomingRequests.filter(r => r.status === 'Pending').length}
+              </span>
+            )}
+          </Button>
+
           <Button variant="outline" onClick={() => router.push('/work-management/modules')} className="gap-2 border-brand-teal text-brand-teal hover:bg-brand-teal-light hover:text-white font-bold">
             <Briefcase className="w-4 h-4" />
             Project Modules
@@ -715,7 +828,189 @@ export default function TasksPage() {
           <DailyProgressView defaultDepartment={user?.department || "Development"} />
         </div>
       ) : (
-        <>
+        viewingTransferRequests ? (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden min-h-[500px]">
+            {/* Header / Back button */}
+            <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row gap-4 items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setViewingTransferRequests(false)}
+                  className="text-slate-600 hover:text-slate-900 font-bold flex items-center gap-1.5 h-8 px-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Back to Tasks
+                </Button>
+                <div className="h-4 w-px bg-slate-200" />
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <ArrowLeftRight className="w-4 h-4 text-brand-teal" />
+                  Task Transfer Requests
+                </h3>
+              </div>
+            </div>
+
+            {/* Custom Tabs */}
+            <div className="flex border-b border-slate-200 px-6 bg-slate-50/50">
+              <button
+                onClick={() => setRequestsTab('incoming')}
+                className={`py-3 px-4 text-xs font-bold border-b-2 -mb-px transition-all ${
+                  requestsTab === 'incoming'
+                    ? 'border-brand-teal text-brand-teal'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Received Requests ({incomingRequests.length})
+              </button>
+              <button
+                onClick={() => setRequestsTab('outgoing')}
+                className={`py-3 px-4 text-xs font-bold border-b-2 -mb-px transition-all ${
+                  requestsTab === 'outgoing'
+                    ? 'border-brand-teal text-brand-teal'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Sent Requests ({outgoingRequests.length})
+              </button>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-x-auto bg-white">
+              {requestsTab === 'incoming' ? (
+                incomingRequests.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
+                    <ArrowLeftRight className="w-8 h-8 text-slate-300 animate-pulse" />
+                    <p className="text-sm font-medium">No received transfer requests.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
+                      <tr>
+                        <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Stage</th>
+                        <th className="px-6 py-4 whitespace-nowrap">From</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Status</th>
+                        <th className="px-6 py-4 text-right whitespace-nowrap">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {incomingRequests.map(req => (
+                        <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap text-slate-500">
+                            {new Date(req.createdDate).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-slate-800">
+                            {req.taskName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <Badge variant="outline" className="text-xs text-brand-teal border-brand-teal/30 bg-brand-teal/5">
+                              {STAGES.find(s => s.id === req.stage)?.label || req.stage}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                            {req.senderName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <Badge 
+                              variant="secondary"
+                              className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
+                                req.status === 'Pending' 
+                                  ? 'bg-amber-100 text-amber-700' 
+                                  : req.status === 'Accepted'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-rose-100 text-rose-700'
+                              }`}
+                            >
+                              {req.status}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            {req.status === 'Pending' ? (
+                              <div className="flex gap-2 justify-end">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  className="text-xs h-7 px-3 text-slate-600 border-slate-200 hover:bg-slate-100 rounded-lg font-medium"
+                                  onClick={() => handleRespondRequest(req.id, 'Rejected')}
+                                >
+                                  Reject
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  className="text-xs h-7 px-3 bg-brand-teal hover:bg-brand-teal/90 text-white rounded-lg font-semibold shadow-xs"
+                                  onClick={() => handleRespondRequest(req.id, 'Accepted')}
+                                >
+                                  Accept
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 font-medium italic">Processed</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              ) : (
+                outgoingRequests.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
+                    <ArrowLeftRight className="w-8 h-8 text-slate-300 animate-pulse" />
+                    <p className="text-sm font-medium">No sent transfer requests.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
+                      <tr>
+                        <th className="px-6 py-4 whitespace-nowrap">Date</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Task Name</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Stage</th>
+                        <th className="px-6 py-4 whitespace-nowrap">To</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {outgoingRequests.map(req => (
+                        <tr key={req.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap text-slate-500">
+                            {new Date(req.createdDate).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-slate-800">
+                            {req.taskName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <Badge variant="outline" className="text-xs text-brand-teal border-brand-teal/30 bg-brand-teal/5">
+                              {STAGES.find(s => s.id === req.stage)?.label || req.stage}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-700">
+                            {req.receiverName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <Badge 
+                              variant="secondary"
+                              className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
+                                req.status === 'Pending' 
+                                  ? 'bg-amber-100 text-amber-700' 
+                                  : req.status === 'Accepted'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-rose-100 text-rose-700'
+                              }`}
+                            >
+                              {req.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
           <div className="flex items-center gap-4">
         <div className="flex-1 flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-slate-200 shadow-sm">
           <Search className="h-4 w-4 text-slate-400" />
@@ -1044,6 +1339,16 @@ export default function TasksPage() {
                                     </span>
                                   )}
                                   <span className="font-bold text-slate-800">{task[col.key]}</span>
+                                  {getPendingTransferRequest(task) && (
+                                    <span className="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                      Pending Transfer to {getPendingTransferRequest(task)?.receiverName}
+                                    </span>
+                                  )}
+                                  {getAcceptedTransferRequest(task) && (
+                                    <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                      Transferred from {getAcceptedTransferRequest(task)?.senderName}
+                                    </span>
+                                  )}
                                 </div>
                               ) : col.key === 'projectId' || col.key === 'assignedToId' ? (
                                 <span className={`${col.key === 'projectId' ? 'text-brand-teal' : 'text-slate-600'} font-medium`}>
@@ -1080,9 +1385,18 @@ export default function TasksPage() {
                                 )}
                               </td>
                             ))}
-                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                             <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-center gap-2">
                                 <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1.5 hover:bg-brand-teal/10 rounded-md text-brand-teal transition-colors" title="View History"><History className="w-3.5 h-3.5" /></button>
+                                {task.assignedToId === user?.id && !getPendingTransferRequest(task) && (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleOpenTransferModal(task); }} 
+                                    className="p-1.5 hover:bg-indigo-50 rounded-md text-indigo-600 hover:text-indigo-700 transition-colors" 
+                                    title="Transfer Task"
+                                  >
+                                    <ArrowLeftRight className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 {canEditTask && <button onClick={() => { setEditingTask(task); setModalOpen(true); }} className="p-1.5 hover:bg-slate-100 rounded-md text-blue-600 transition-colors" title="Edit Task"><Pencil className="w-3.5 h-3.5" /></button>}
                                 {canDeleteTask && <button onClick={() => handleDelete(task.id)} className="p-1.5 hover:bg-red-50 rounded-md text-red-500 transition-colors" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>}
                               </div>
@@ -1205,6 +1519,15 @@ export default function TasksPage() {
                                 <div className="min-h-[24px] relative">
                                   <div className="float-right ml-2 -mt-1 flex items-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={(e) => { e.stopPropagation(); fetchLogs(task.id, task.title); }} className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-brand-teal" title="View Logs"><History className="w-3.5 h-3.5" /></button>
+                                    {task.assignedToId === user?.id && !getPendingTransferRequest(task) && (
+                                      <button 
+                                        onClick={(e) => { e.stopPropagation(); handleOpenTransferModal(task); }} 
+                                        className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-indigo-600" 
+                                        title="Transfer Task"
+                                      >
+                                        <ArrowLeftRight className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                     {canDeleteTask && (
                                       <button onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }} className="p-1 hover:bg-red-50 rounded-md text-red-400 hover:text-red-500" title="Delete Task"><Trash2 className="w-3.5 h-3.5" /></button>
                                     )}
@@ -1229,6 +1552,20 @@ export default function TasksPage() {
                                   <h4 className="font-medium text-[14.5px] text-slate-800 leading-snug break-words whitespace-pre-wrap">
                                     {task.title}
                                   </h4>
+                                  {(getPendingTransferRequest(task) || getAcceptedTransferRequest(task)) && (
+                                    <div className="mt-1.5 flex flex-wrap gap-1">
+                                      {getPendingTransferRequest(task) && (
+                                        <span className="text-[9px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                          Pending Transfer to {getPendingTransferRequest(task)?.receiverName}
+                                        </span>
+                                      )}
+                                      {getAcceptedTransferRequest(task) && (
+                                        <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                          Transferred from {getAcceptedTransferRequest(task)?.senderName}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                   {task.projectName && (
                                     <div className="mt-2 flex items-center gap-2 flex-wrap">
                                       <span className="text-[10px] font-bold text-brand-teal bg-brand-teal/5 px-1.5 py-0.5 rounded border border-brand-teal/10 truncate max-w-full">
@@ -1381,8 +1718,62 @@ export default function TasksPage() {
     </DragDropContext>
         )}
       </div>
-    </>
-  )}
+          </>
+        )
+      )}
+
+      <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <ArrowLeftRight className="w-5 h-5 text-brand-teal" />
+              Transfer Task
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs space-y-1.5">
+              <div>Task Name: <span className="font-semibold text-slate-800">{transferringTask?.title}</span></div>
+              <div>Stage: <span className="font-semibold text-slate-800">{STAGES.find(s => s.id === transferringTask?.status)?.label || transferringTask?.status}</span></div>
+              <div>Project: <span className="font-semibold text-slate-800">{transferringTask?.projectName}</span></div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700 block">Select Employee to Transfer To</label>
+              <Select value={selectedReceiverId} onValueChange={setSelectedReceiverId}>
+                <SelectTrigger className="w-full focus:ring-brand-teal focus:border-brand-teal">
+                  <SelectValue placeholder="Choose employee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees
+                    .filter((emp: any) => {
+                      if (emp.id === user?.id) return false;
+                      if (!user?.department) return true;
+                      return emp.department?.toLowerCase() === user?.department?.toLowerCase();
+                    })
+                    .map((emp: any) => {
+                      const name = `${emp.firstName} ${emp.lastName || ''}`.trim();
+                      return (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {name} ({emp.role || 'Employee'})
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <Button variant="outline" onClick={() => setIsTransferModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-brand-teal hover:bg-brand-teal/90 text-white font-semibold"
+              onClick={handleSendTransferRequest}
+            >
+              Send Request
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
