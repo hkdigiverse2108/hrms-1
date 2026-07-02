@@ -62,6 +62,11 @@ export function ActivityLogDialog({
     if (title === "Client Activity History" && log.action === "Updated") {
       derivedAction = "CLIENT UPDATED";
     }
+    if (log.action === "Remark created") {
+      derivedAction = "REMARK CREATED";
+    } else if (log.action === "Remark updated") {
+      derivedAction = "REMARK UPDATED";
+    }
 
     if (!log.details) return { ...log, processedDetails: [], derivedAction };
     

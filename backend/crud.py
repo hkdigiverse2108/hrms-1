@@ -1634,8 +1634,74 @@ async def create_review(db, review: schemas.ReviewCreate):
     review_dict = review.dict()
     if not review_dict.get("date"):
         review_dict["date"] = get_now().strftime("%Y-%m-%d")
+    updated_by = review_dict.pop("updatedBy", "Unknown User") or "Unknown User"
+    review_dict["logs"] = [{
+        "timestamp": datetime.now(IST).isoformat(),
+        "action": "Remark created",
+        "details": f"Summary: '{review_dict.get('summary')}', Rating: {review_dict.get('rating')} stars",
+        "userName": updated_by
+    }]
     return await create_item(db, "reviews", review_dict)
-async def update_review(db, review_id: str, update: schemas.ReviewUpdate): return await update_item(db, "reviews", review_id, update.dict(exclude_unset=True))
+
+async def update_review(db, review_id: str, update: schemas.ReviewUpdate):
+    if not ObjectId.is_valid(review_id):
+        return None
+        
+    existing = await db.reviews.find_one({"_id": ObjectId(review_id)})
+    if not existing:
+        return None
+        
+    update_data = update.dict(exclude_unset=True)
+    changes = []
+    updated_by = update_data.pop("updatedBy", "Unknown User") or "Unknown User"
+    
+    for key, val in update_data.items():
+        if key not in ["logs", "id", "_id", "updated_at", "created_at", "updatedAt", "createdAt"]:
+            old_val = existing.get(key)
+            if old_val != val:
+                if key == "summary":
+                    changes.append(f"Summary updated to '{val}'")
+                elif key == "rating":
+                    changes.append(f"Rating updated to {val} stars")
+                else:
+                    changes.append(f"'{key}' updated to '{val}'")
+                
+    if changes:
+        logs = existing.get("logs")
+        if not logs:
+            orig_date = existing.get("date")
+            if hasattr(orig_date, "isoformat"):
+                timestamp = orig_date.isoformat()
+            elif isinstance(orig_date, str):
+                timestamp = orig_date
+            else:
+                timestamp = datetime.now(IST).isoformat()
+                
+            creation_log = {
+                "timestamp": timestamp,
+                "action": "Remark created",
+                "details": f"Remark created. Summary: '{existing.get('summary')}', Rating: {existing.get('rating')} stars",
+                "userName": "System"
+            }
+            logs = [creation_log]
+        else:
+            logs = list(logs)
+            
+        new_log = {
+            "timestamp": datetime.now(IST).isoformat(),
+            "action": "Remark updated",
+            "details": ", ".join(changes),
+            "userName": updated_by
+        }
+        logs.append(new_log)
+        update_data["logs"] = logs
+        
+    await db.reviews.update_one(
+        {"_id": ObjectId(review_id)},
+        {"$set": update_data}
+    )
+    updated = await db.reviews.find_one({"_id": ObjectId(review_id)})
+    return fix_id(updated)
 async def delete_review(db, review_id: str): return await delete_item(db, "reviews", review_id)
 
 async def get_remarks(db, skip: int = 0, limit: int = 100):

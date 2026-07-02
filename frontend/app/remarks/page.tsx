@@ -8,7 +8,8 @@ import {
   Trash2, 
   Star,
   StarHalf,
-  Loader2
+  Loader2,
+  History
 } from "lucide-react";
 import { API_URL } from "@/lib/config";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/common/PageHeader";
+import { ActivityLogDialog } from "@/components/common/ActivityLogDialog";
 import { TablePagination } from "@/components/common/TablePagination";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/hooks/useUser";
@@ -122,6 +124,14 @@ export default function ReviewPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [logsDialogOpen, setLogsDialogOpen] = useState(false);
+  const [selectedReviewForLogs, setSelectedReviewForLogs] = useState<any>(null);
+
+  const openLogsModal = (review: any) => {
+    if (!isAdmin) return;
+    setSelectedReviewForLogs(review);
+    setLogsDialogOpen(true);
+  };
   
   useEffect(() => {
     setCurrentPage(1);
@@ -187,6 +197,10 @@ export default function ReviewPage() {
     
     setIsSubmitting(true);
     try {
+      const storedUser = localStorage.getItem('user');
+      const currentUser = storedUser ? JSON.parse(storedUser) : null;
+      const currentUserName = currentUser?.name || (currentUser?.firstName ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() : null) || "Unknown User";
+
       let payload;
       if (!isAdmin && user) {
         payload = {
@@ -196,7 +210,8 @@ export default function ReviewPage() {
           avatar: user.profilePhoto || "",
           department: user.department || "N/A",
           summary: newReview.summary,
-          rating: newReview.rating
+          rating: newReview.rating,
+          updatedBy: currentUserName
         };
       } else {
         const emp = employees.find(e => e.id === newReview.employeeId || e.employeeId === newReview.employeeId);
@@ -205,7 +220,8 @@ export default function ReviewPage() {
           employeeName: emp?.name || "Unknown",
           role: emp?.designation || "Staff",
           avatar: emp?.profilePhoto || "",
-          department: emp?.department || "N/A"
+          department: emp?.department || "N/A",
+          updatedBy: currentUserName
         };
       }
 
@@ -233,12 +249,17 @@ export default function ReviewPage() {
     
     setIsSubmitting(true);
     try {
+      const storedUser = localStorage.getItem('user');
+      const currentUser = storedUser ? JSON.parse(storedUser) : null;
+      const currentUserName = currentUser?.name || (currentUser?.firstName ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() : null) || "Unknown User";
+
       const res = await fetch(`${API_URL}/reviews/${selectedReview.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           summary: selectedReview.summary,
-          rating: selectedReview.rating
+          rating: selectedReview.rating,
+          updatedBy: currentUserName
         })
       });
 
@@ -412,20 +433,20 @@ export default function ReviewPage() {
                 <th className="px-6 py-4">Department</th>
                 <th className="px-6 py-4">Remarks</th>
                 <th className="px-6 py-4">Rating</th>
-                {(canEditReviews || canDeleteReviews) && <th className="px-6 py-4 text-right">Action</th>}
+                <th className="px-6 py-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={(canEditReviews || canDeleteReviews) ? 6 : 5} className="px-6 py-10 text-center">
+                  <td colSpan={6} className="px-6 py-10 text-center">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-teal" />
                     <p className="text-sm text-muted-foreground mt-2">Loading remarks...</p>
                   </td>
                 </tr>
               ) : filteredReviews.length === 0 ? (
                 <tr>
-                  <td colSpan={(canEditReviews || canDeleteReviews) ? 6 : 5} className="px-6 py-10 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">
                     No remarks found.
                   </td>
                 </tr>
@@ -460,22 +481,31 @@ export default function ReviewPage() {
                     <td className="px-6 py-4">
                       <RatingStars rating={review.rating} />
                     </td>
-                    {(canEditReviews || canDeleteReviews) && (
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {canEditReviews && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(review)}>
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                          {canDeleteReviews && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" onClick={() => handleDeleteReview(review.id)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    )}
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {isAdmin && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-brand-teal" 
+                            onClick={() => openLogsModal(review)}
+                            title="View History"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {canEditReviews && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-teal" onClick={() => openEditModal(review)}>
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        {canDeleteReviews && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" onClick={() => handleDeleteReview(review.id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -536,6 +566,37 @@ export default function ReviewPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Logs Dialog */}
+      <ActivityLogDialog
+        open={logsDialogOpen}
+        onOpenChange={setLogsDialogOpen}
+        title="Remark Activity History"
+        subtitle={selectedReviewForLogs?.employeeName ? `Remark history for ${selectedReviewForLogs.employeeName}` : undefined}
+        logs={(() => {
+          const allLogs: any[] = [];
+          
+          // Prepend synthetic creation log if there is no explicit creation log in the array
+          const hasCreationLog = selectedReviewForLogs?.logs?.some((l: any) => l.action?.toLowerCase().includes('create'));
+          if (selectedReviewForLogs?.date && !hasCreationLog) {
+            allLogs.push({
+              timestamp: new Date(selectedReviewForLogs.date).toISOString(),
+              action: "Remark created",
+              details: `Remark created. Summary: '${selectedReviewForLogs.summary}', Rating: ${selectedReviewForLogs.rating} stars`,
+              userName: "System"
+            });
+          }
+
+          if (selectedReviewForLogs?.logs) {
+            allLogs.push(...selectedReviewForLogs.logs);
+          }
+          return allLogs.sort((a, b) => {
+            const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return timeB - timeA;
+          });
+        })()}
+      />
     </div>
   );
 }
