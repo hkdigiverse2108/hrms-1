@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
-import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown } from "lucide-react";
+import { ClipboardList, Plus, Pencil, Trash2, Calendar, User, Loader2, Search, Briefcase, CheckCircle2, Circle, History, AlertTriangle, MoreHorizontal, X, FilePlus, Check, ChevronsUpDown, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DailyProgressView } from "@/components/hrms/DailyProgressView";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { WMTaskForm, WMTaskFormData } from "@/components/hrms/WMTaskForm";
@@ -92,6 +93,8 @@ export default function TasksPage() {
   const [quickAddProjectId, setQuickAddProjectId] = useState<string>("");
   const [quickAddPhase, setQuickAddPhase] = useState<string>("");
   const [viewMode, setViewMode] = useState<"board" | "table" | null>(null);
+  const [activeTab, setActiveTab] = useState<"tasks" | "progress">("tasks");
+  const isRealAdmin = user?.role?.toLowerCase() === "admin";
 
   useEffect(() => {
     setCurrentPage(1);
@@ -577,12 +580,22 @@ export default function TasksPage() {
         description="Manage software & web development sprints. Click any card to update details."
       >
         <div className="flex gap-2">
+          {activeTab === "tasks" && !isRealAdmin && (
+            <Button 
+              variant="default" 
+              className="gap-2 bg-brand-teal text-white hover:bg-brand-teal-light font-bold"
+              onClick={() => setActiveTab('progress')}
+            >
+              Daily Progress
+            </Button>
+          )}
+
           <Button variant="outline" onClick={() => router.push('/work-management/modules')} className="gap-2 border-brand-teal text-brand-teal hover:bg-brand-teal-light hover:text-white font-bold">
             <Briefcase className="w-4 h-4" />
             Project Modules
           </Button>
-          
-          {canAddTask && (
+
+          {canAddTask && activeTab === "tasks" && (
             <Button onClick={() => { setEditingTask(null); setModalOpen(true); }} className="bg-brand-teal text-white hover:bg-brand-teal-light font-bold">
               <Plus className="w-4 h-4 mr-2" />
               Assign Task
@@ -682,7 +695,22 @@ export default function TasksPage() {
         isLoading={isLoadingLogs}
       />
       
-      <div className="flex items-center gap-4">
+      {activeTab === "progress" ? (
+        <div className="space-y-4 flex-1 flex flex-col">
+          <div className="flex items-center">
+            <Button 
+              variant="ghost" 
+              className="gap-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-bold"
+              onClick={() => setActiveTab('tasks')}
+            >
+              <ChevronLeft className="w-4 h-4" /> Back to Board
+            </Button>
+          </div>
+          <DailyProgressView defaultDepartment={user?.department || "Development"} />
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-4">
         <div className="flex-1 flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-slate-200 shadow-sm">
           <Search className="h-4 w-4 text-slate-400" />
           <Input 
@@ -1337,6 +1365,8 @@ export default function TasksPage() {
     </DragDropContext>
         )}
       </div>
+    </>
+  )}
     </div>
   );
 }
