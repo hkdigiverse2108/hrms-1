@@ -7561,6 +7561,19 @@ async def create_transfer_request(db, request_data: dict):
     
     res = await db.work_transfer_requests.insert_one(request_data)
     doc = await db.work_transfer_requests.find_one({"_id": res.inserted_id})
+
+    # Create and broadcast notification to receiver
+    try:
+        await create_notification(db, schemas.NotificationCreate(
+            employee_id=request_data["receiverId"],
+            title="New Task Transfer Request",
+            message=f"{request_data['senderName']} requested to transfer task '{request_data['taskName']}' ({request_data['stage']}) to you.",
+            type="work_transfer",
+            reference_id=str(res.inserted_id)
+        ))
+    except Exception as e:
+        print(f"Error creating transfer notification: {e}")
+        
     return fix_id(doc)
 
 async def get_incoming_transfer_requests(db, receiver_id: str):
@@ -7599,7 +7612,7 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                 elif stage == "Shoot":
                     update_field = "assignedShooterId"
                 elif stage == "Editing":
-                    entry = await db.content_calendar.find_one({"_id": ObjectId(task_id)})
+                    entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
                     if entry and entry.get("postReel") == "Post":
                         update_field = "assignedPostDesignerId"
                     else:
@@ -7612,7 +7625,7 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                     update_field = "assignedPosterId"
                 
                 if update_field:
-                    entry = await db.content_calendar.find_one({"_id": ObjectId(task_id)})
+                    entry = await db.content_calendar_entries.find_one({"_id": ObjectId(task_id)})
                     logs = entry.get("logs", []) if entry else []
                     logs.append({
                         "timestamp": datetime.now(IST).isoformat(),
@@ -7620,7 +7633,7 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                         "details": f"Stage '{stage}' transferred from {req.get('senderName')} to {req.get('receiverName')}.",
                         "userName": "System"
                     })
-                    await db.content_calendar.update_one(
+                    await db.content_calendar_entries.update_one(
                         {"_id": ObjectId(task_id)},
                         {"$set": {update_field: receiver_id, "logs": logs}}
                     )
@@ -7638,6 +7651,18 @@ async def respond_to_transfer_request(db, request_id: str, status: str):
                     {"_id": ObjectId(task_id)},
                     {"$set": {"assigneeId": receiver_id, "logs": logs}}
                 )
+
+    # Create and broadcast notification to sender
+    try:
+        await create_notification(db, schemas.NotificationCreate(
+            employee_id=req["senderId"],
+            title=f"Task Transfer {status}",
+            message=f"{req['receiverName']} has {status.lower()} your request to transfer task '{req['taskName']}' ({req['stage']}).",
+            type="work_transfer",
+            reference_id=request_id
+        ))
+    except Exception as e:
+        print(f"Error creating transfer response notification: {e}")
                 
     updated = await db.work_transfer_requests.find_one({"_id": ObjectId(request_id)})
     return fix_id(updated)
