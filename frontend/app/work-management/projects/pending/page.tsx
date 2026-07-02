@@ -181,8 +181,9 @@ export default function PendingProjectsPage() {
         <Button 
           variant="outline" 
           size="icon" 
-          onClick={() => router.push('/work-management/projects')} 
+          onClick={() => router.back()} 
           className="mt-1 shrink-0"
+          title="Back"
         >
           <ArrowLeft className="w-4 h-4 text-slate-700" />
         </Button>

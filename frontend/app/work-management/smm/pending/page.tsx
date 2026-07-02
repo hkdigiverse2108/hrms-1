@@ -229,7 +229,7 @@ export default function PendingWorkPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={() => router.push('/work-management/smm')} className="shrink-0 bg-white">
+        <Button variant="outline" size="icon" onClick={() => router.back()} className="shrink-0 bg-white" title="Back">
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4">

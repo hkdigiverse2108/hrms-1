@@ -63,11 +63,9 @@ export default function AddEmployeePage() {
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-10">
       <div className="flex items-center gap-4">
-        <Link href="/employees">
-          <Button className="bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg h-10 w-10 p-0 shadow-md">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </Link>
+        <Button onClick={() => router.back()} className="bg-brand-teal hover:bg-brand-teal-light text-white rounded-lg h-10 w-10 p-0 shadow-md" title="Back">
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
         <div className="flex flex-col">
           <h1 className="text-2xl font-bold text-gray-800">Add New Employee</h1>
           <p className="text-sm text-gray-500 font-medium">Create a new employee profile with full details.</p>

@@ -130,7 +130,7 @@ export default function ClientDetailsPage() {
       <style>{noScrollbarStyle}</style>
       <div className="space-y-6 w-full max-w-full px-2 md:px-6 mx-auto pb-10">
         <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={() => router.push("/work-management/smm")} className="text-slate-600 bg-white hover:bg-slate-50 h-9 w-9 shadow-sm shrink-0 rounded-full">
+        <Button variant="outline" size="icon" onClick={() => router.back()} className="text-slate-600 bg-white hover:bg-slate-50 h-9 w-9 shadow-sm shrink-0 rounded-full" title="Back">
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div>
@@ -210,7 +210,7 @@ export default function ClientDetailsPage() {
       <ActivityLogDialog 
         open={logsOpen} 
         onOpenChange={setLogsOpen}
-        clientName={client.companyName}
+        title={`Activity Logs: ${client.companyName}`}
         logs={clientLogs}
         isLoading={isLoadingLogs}
       />
@@ -223,7 +223,7 @@ export default function ClientDetailsPage() {
           <ClientForm
             initialData={client}
             onSubmit={handleUpdateClient}
-            isLoading={isSubmitting}
+            isSubmitting={isSubmitting}
           />
         </DialogContent>
       </Dialog>
