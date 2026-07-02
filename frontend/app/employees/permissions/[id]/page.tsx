@@ -277,7 +277,8 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ id: 
   const filteredEmployees = employees.filter(emp => 
     (emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.employeeId?.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    emp.role?.toLowerCase() !== 'admin'
+    emp.role?.toLowerCase() !== 'admin' &&
+    emp.status?.toLowerCase() !== 'inactive'
   )
 
   return (
