@@ -85,24 +85,24 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
   // Combine employees with their report status for the selected date
   const displayData = useMemo(() => {
-    let filteredEmployees = [...employees]
+    let filteredEmployees = employees.filter((e: any) => e.status?.toLowerCase() !== 'inactive')
     
     if (!isAdmin && !isTeamLeader && !isHRUser) {
-       filteredEmployees = filteredEmployees.filter(e => e.id === user?.id)
+       filteredEmployees = filteredEmployees.filter((e: any) => e.id === user?.id)
     } else {
        const deptToFilter = isTeamLeader ? user?.department : activeDeptTab
        if (deptToFilter) {
-         filteredEmployees = filteredEmployees.filter(e => e.department?.toLowerCase() === deptToFilter.toLowerCase())
+         filteredEmployees = filteredEmployees.filter((e: any) => e.department?.toLowerCase() === deptToFilter.toLowerCase())
        }
 
         if (isAdmin || isHRUser) {
           if (activeRoleTab === 'Team Leaders') {
-            filteredEmployees = filteredEmployees.filter(e => ['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role || '') || e.department?.toLowerCase() === 'hr')
+            filteredEmployees = filteredEmployees.filter((e: any) => ['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role || '') || e.department?.toLowerCase() === 'hr')
           } else {
-            filteredEmployees = filteredEmployees.filter(e => !['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role || '') && e.department?.toLowerCase() !== 'hr' && e.role?.toLowerCase() !== 'admin')
+            filteredEmployees = filteredEmployees.filter((e: any) => !['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role || '') && e.department?.toLowerCase() !== 'hr' && e.role?.toLowerCase() !== 'admin')
           }
         } else if (isTeamLeader) {
-         filteredEmployees = filteredEmployees.filter(e => e.id === user?.id || (!['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role || '') && e.role?.toLowerCase() !== 'admin'))
+         filteredEmployees = filteredEmployees.filter((e: any) => e.id === user?.id || (!['Team Leader', 'Manager', 'Social Media Manager'].includes(e.role || '') && e.role?.toLowerCase() !== 'admin'))
        }
     }
 
@@ -117,7 +117,7 @@ export function DailyProgressView({ defaultDepartment }: DailyProgressViewProps)
 
     const mapped = datesToMap.flatMap(dateObj => {
       const dateStr = format(dateObj, "yyyy-MM-dd")
-      return filteredEmployees.map(emp => {
+      return filteredEmployees.map((emp: any) => {
         const report = allReports.find((r: any) => r.employeeId === emp.id && r.date === dateStr)
         let responsiblePerson = ''
         if (['Team Leader', 'Manager', 'Social Media Manager'].includes(emp.role || '') || emp.role?.toLowerCase() === 'admin') {

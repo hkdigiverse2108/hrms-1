@@ -195,6 +195,7 @@ export default function MarketingReportsPage() {
   }, [user]);
 
   const isEmployee = user && !["Admin", "Manager", "HR"].includes(user.role) && !hasFullDMAccess;
+  const isRegularEmployee = !user || !(['admin', 'super admin', 'superadmin', 'team leader'].includes(user.role?.toLowerCase() || '') || user.designation?.toLowerCase() === 'team leader');
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -1533,7 +1534,7 @@ export default function MarketingReportsPage() {
 
     // Filter by User's assigned projects if "My Tasks" is selected
     let matchesTaskType = true;
-    if (taskFilterType === "my" && user?.id) {
+    if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
       const assocProj = projects.find(p => String(p.id) === String(r.projectId));
       if (assocProj) {
         matchesTaskType = assocProj.assignedEmployeeId === user.id;
@@ -1554,7 +1555,18 @@ export default function MarketingReportsPage() {
       selectedClientFilter === "all" || r.clientId === selectedClientFilter;
     const matchesMonth =
       monthFilter.includes("all") || monthFilter.includes(r.month);
-    return matchesSearch && matchesClient && matchesMonth;
+
+    let matchesTaskType = true;
+    if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
+      const assocProj = projects.find(p => String(p.id) === String(r.projectId));
+      if (assocProj) {
+        matchesTaskType = assocProj.assignedEmployeeId === user.id;
+      } else {
+        matchesTaskType = false;
+      }
+    }
+
+    return matchesSearch && matchesClient && matchesMonth && matchesTaskType;
   });
 
   // Pagination Logic
@@ -2385,7 +2397,7 @@ export default function MarketingReportsPage() {
                     const clientProjs = projects.filter((p) => p.clientId === c.id && p.department === "Digital Marketing");
                     const filteredProjs = clientProjs.filter((p) => {
                       if (p.status === "on-hold") return false;
-                      if (taskFilterType === "my" && user?.id) {
+                      if ((taskFilterType === "my" || isRegularEmployee) && user?.id) {
                         return p.assignedEmployeeId === user.id;
                       }
                       return true;
