@@ -963,7 +963,7 @@ export default function RemarksPage() {
                         {remark.type}
                       </span>
                     </td>
-                    <td className="px-6 py-4 max-w-[350px]">
+                    <td className="px-6 py-4 max-w-[350px]" title={remark.details}>
                       <div className="text-[13px] text-slate-600 leading-relaxed whitespace-normal line-clamp-2">
                         {remark.details}
                       </div>

@@ -473,7 +473,7 @@ export default function ReviewPage() {
                     <td className="px-6 py-4 font-medium text-slate-600">
                       {review.department}
                     </td>
-                    <td className="px-6 py-4 max-w-[400px]">
+                    <td className="px-6 py-4 max-w-[400px]" title={review.summary}>
                       <div className="text-[13px] text-slate-600 leading-relaxed whitespace-normal line-clamp-2">
                         {review.summary}
                       </div>
