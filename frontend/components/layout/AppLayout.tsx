@@ -209,6 +209,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Trigger retroactive punch-out due to inactivity
   const handleInactivityPunchOut = useCallback(async () => {
     if (!user || showRecoveryModal) return;
+    const userRole = user?.role?.toLowerCase() || "employee";
+    const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
+    if (isAdmin) return;
+
     if (!systemSettings?.inactivityTimeoutEnabled) return;
     const timeoutMs = (systemSettings?.inactivityTimeoutMins || 5) * 60 * 1000;
 
@@ -348,9 +352,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // Sync ref with the actual callback
   resetInactivityTimerRef.current = resetInactivityTimer;
 
-  // Check pending recovery status on mount and window focus
   const checkPendingRecovery = useCallback(async () => {
     if (!user || isPublicPage) return;
+
+    const userRole = user?.role?.toLowerCase() || "employee";
+    const isAdmin = ['admin', 'super admin', 'superadmin', 'administrator', 'founder'].includes(userRole.trim());
+    if (isAdmin) return;
 
 
     // Fetch employee's current attendance status to check punch-in and break status first
