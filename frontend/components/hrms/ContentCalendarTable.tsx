@@ -32,6 +32,12 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   });
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+
+  const filteredEntries = React.useMemo(() => {
+    if (typeFilter === "all") return entries;
+    return entries.filter(e => e.postReel === typeFilter);
+  }, [entries, typeFilter]);
   const monthYear = selectedDate ? selectedDate.substring(0, 7) : (() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -260,7 +266,8 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
         body: JSON.stringify({
           clientId,
           monthYear,
-          updatedBy: userName
+          updatedBy: userName,
+          postReel: typeFilter !== "all" ? typeFilter : undefined
         }),
       });
       if (res.ok) {
@@ -283,7 +290,8 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
         clientId,
         monthYear,
         postingDate: dateString,
-        updatedBy: userName
+        updatedBy: userName,
+        postReel: typeFilter !== "all" ? typeFilter : undefined
       };
 
       try {
@@ -611,7 +619,9 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
 
     const filteredEntries = entries.filter(entry => {
       if (!entry.postingDate) return false;
-      return entry.postingDate.startsWith(monthYear);
+      const matchesMonth = entry.postingDate.startsWith(monthYear);
+      const matchesType = typeFilter === "all" || entry.postReel === typeFilter;
+      return matchesMonth && matchesType;
     });
 
     if (filteredEntries.length === 0) {
@@ -834,6 +844,16 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
                 <span className="font-bold text-orange-900">{overallMaxDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
               </div>
             )}
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-[120px] h-9 text-xs bg-white border border-slate-200">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="Post">Post</SelectItem>
+                <SelectItem value="Reel">Reel</SelectItem>
+              </SelectContent>
+            </Select>
             <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
               <PopoverTrigger asChild>
               <Button variant="outline" className="w-[180px] justify-start text-left font-normal h-9 bg-white">
@@ -1185,14 +1205,16 @@ export function ContentCalendarTable({ clientId }: ContentCalendarTableProps) {
               </tr>
             </thead>
             <tbody>
-              {entries.length === 0 ? (
+              {filteredEntries.length === 0 ? (
                 <tr>
                   <td colSpan={tableHeaders.length} className="px-4 py-8 text-center text-slate-500">
-                    No entries for this month. Click "Add Row" or "Select Dates" to start planning.
+                    {entries.length === 0 
+                      ? "No entries for this month. Click \"Add Row\" or \"Select Dates\" to start planning."
+                      : "No entries found matching the selected filter."}
                   </td>
                 </tr>
               ) : (
-                entries.map((entry) => {
+                filteredEntries.map((entry) => {
                   const isEditing = editingId === entry.id;
                   
                   let isDue = false;
